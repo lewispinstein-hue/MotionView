@@ -286,11 +286,22 @@
   .poseItem.selected { outline: 2px solid rgba(255,255,255,0.35); outline-offset:-2px; background: rgba(255,255,255,.03); }
 
   /* === Help modal === */
-  .modal { position:fixed; inset:0; z-index:80; }
-  .modalBackdrop { position:absolute; inset:0; background:rgba(0,0,0,0.55); }
+  .modal { position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center; }
+  .modal[hidden] { display:none !important; }
+  .modal.hidden { display:none !important; }
+  .modalBackdrop { 
+    position:absolute; 
+    inset:0; 
+    background:rgba(0,0,0,0.65); 
+    backdrop-filter: blur(6px); 
+    -webkit-backdrop-filter: blur(6px);
+    z-index:1;
+  }
   .modalCard { position:relative; width:min(720px, calc(100vw - 28px)); max-height:calc(100vh - 28px);
                margin:14px auto; background:var(--panel); border:1px solid var(--line);
-               border-radius:14px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.45); }
+               border-radius:14px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.65); z-index:81; 
+               outline:none; }
+  .modalCard:focus { outline:2px solid rgba(110,168,255,0.6); outline-offset:2px; }
   .modalHeader { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid var(--line); }
   .modalBody { padding:12px; overflow:auto; color:var(--text); }
   .modalBody a { color:#9fd1ff; text-decoration:none; }

@@ -3,18 +3,138 @@ import asyncio
 import os
 import signal
 import sys
+import shutil
 from pathlib import Path
-from typing import Optional, Set
+from typing import Optional, Set, List
+import platform
+import re
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.websockets import WebSocket
 from starlette.middleware.cors import CORSMiddleware
 import uvicorn
 
+# PROS_PROJECT_DIR can be updated via API
+PROS_PROJECT_DIR = Path("/Users/David/Documents/VEXcode Robot/")
+# Lock will be created when needed (can't create Lock outside async context)
+PROS_PROJECT_DIR_LOCK = None
 
-# ----------------------------
+def _get_lock():
+    """Get or create the lock for PROS_PROJECT_DIR updates."""
+    global PROS_PROJECT_DIR_LOCK
+    if PROS_PROJECT_DIR_LOCK is None:
+        try:
+            loop = asyncio.get_running_loop()
+            PROS_PROJECT_DIR_LOCK = asyncio.Lock()
+        except RuntimeError:
+            # No event loop running, create new lock
+            PROS_PROJECT_DIR_LOCK = asyncio.Lock()
+    return PROS_PROJECT_DIR_LOCK
+
+def _candidate_vscode_install_bases() -> List[Path]:
+    """
+    Returns candidate base directories that should contain:
+      .../User/globalStorage/sigbots.pros/install
+    across VS Code stable/insiders and VSCodium.
+    """
+    sys = platform.system()
+
+    if sys == "Darwin":
+        app_support = Path.home() / "Library" / "Application Support"
+        roots = [
+            app_support / "Code",
+            app_support / "Code - Insiders",
+            app_support / "VSCodium",
+        ]
+        return [r / "User" / "globalStorage" / "sigbots.pros" / "install" for r in roots]
+
+    if sys == "Windows":
+        # APPDATA points at: C:\Users\<you>\AppData\Roaming
+        appdata = os.environ.get("APPDATA", "")
+        if not appdata:
+            return []
+        roots = [
+            Path(appdata) / "Code",
+            Path(appdata) / "Code - Insiders",
+            Path(appdata) / "VSCodium",
+        ]
+        return [r / "User" / "globalStorage" / "sigbots.pros" / "install" for r in roots]
+
+    # Linux
+    # Common locations: ~/.config/Code, ~/.config/Code - Insiders, ~/.config/VSCodium
+    config = Path.home() / ".config"
+    roots = [
+        config / "Code",
+        config / "Code - Insiders",
+        config / "VSCodium",
+    ]
+    return [r / "User" / "globalStorage" / "sigbots.pros" / "install" for r in roots]
+
+def _prepend_path(p: Path):
+    if not p.is_dir():
+        return
+    cur = os.environ.get("PATH", "")
+    sep = ";" if platform.system() == "Windows" else ":"
+    parts = cur.split(sep) if cur else []
+    s = str(p)
+    if s not in parts:
+        os.environ["PATH"] = s + (sep + cur if cur else "")
+
+def configure_pros_env_from_vscode() -> Optional[str]:
+    """
+    If PROS is installed by the sigbots.pros VS Code extension, configure PATH/PROS_TOOLCHAIN
+    similarly to "PROS: Integrated Terminal", and return absolute path to pros executable.
+    """
+    sys = platform.system()
+
+    for base in _candidate_vscode_install_bases():
+        if not base.is_dir():
+            continue
+
+        if sys == "Darwin":
+            pros_dir = base / "pros-cli-macos"
+            toolchain_dir = base / "pros-toolchain-macos"
+            vexcom_dir = base / "vex-vexcom-macos"
+            pros_exe = pros_dir / "pros"
+        elif sys == "Windows":
+            pros_dir = base / "pros-cli-windows"
+            toolchain_dir = base / "pros-toolchain-windows"
+            vexcom_dir = base / "vex-vexcom-windows"
+            pros_exe = pros_dir / "pros.exe"
+        else:
+            pros_dir = base / "pros-cli-linux"
+            toolchain_dir = base / "pros-toolchain-linux"
+            vexcom_dir = base / "vex-vexcom-linux"
+            pros_exe = pros_dir / "pros"
+
+        if not pros_exe.exists():
+            continue
+
+        # PROS_TOOLCHAIN matches what the extension typically sets
+        if toolchain_dir.is_dir():
+            os.environ["PROS_TOOLCHAIN"] = str(toolchain_dir)
+
+        # PATH entries (order matters: prepend)
+        if sys == "Windows":
+            # On Windows the toolchain binaries commonly live under ...\usr\bin
+            _prepend_path(vexcom_dir)
+            _prepend_path(toolchain_dir / "usr" / "bin")
+            _prepend_path(pros_dir)
+        else:
+            _prepend_path(vexcom_dir)
+            _prepend_path(toolchain_dir / "bin")
+            _prepend_path(pros_dir)
+
+        return str(pros_exe)
+
+    return None
+
+# Prefer VS Code-managed PROS if present; else fall back to PATH lookup
+PROS_EXE = configure_pros_env_from_vscode() or shutil.which("pros") or shutil.which("pros.exe")
+if not PROS_EXE:
+    raise RuntimeError(f"'pros' not found. PATH={os.environ.get('PATH','')}")
 # Resource paths (PyInstaller-friendly)
 # ----------------------------
 def resource_base_dir() -> Path:
@@ -26,6 +146,24 @@ def resource_base_dir() -> Path:
         return Path(getattr(sys, "_MEIPASS")).resolve()
     return Path(__file__).resolve().parent
 
+# Matches common ANSI escape sequences:
+# - CSI: ESC [ ... command
+# - OSC: ESC ] ... BEL or ST (ESC \)
+# - 2-char escapes: ESC <char>
+_ANSI_RE = re.compile(
+    r"""
+    \x1B  # ESC
+    (?:
+        \[[0-?]*[ -/]*[@-~]            # CSI ... Cmd
+      | \][^\x07]*(?:\x07|\x1B\\)      # OSC ... BEL or ST
+      | [@-Z\\-_]                      # 2-char sequences
+    )
+    """,
+    re.VERBOSE,
+)
+
+def strip_ansi(s: str) -> str:
+    return _ANSI_RE.sub("", s)
 
 BASE_DIR = resource_base_dir()
 VIEWER_HTML = BASE_DIR / "Viewer.html"
@@ -40,7 +178,6 @@ app = FastAPI()
 
 # If you load the UI from Tauri's bundled files (tauri://localhost) instead of from this server,
 # you may need CORS. Since we bind to 127.0.0.1, allowing all origins is usually OK.
-# Tighten this later if you want.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -58,7 +195,7 @@ else:
 async def index():
     if VIEWER_HTML.exists() and VIEWER_HTML.is_file():
         return FileResponse(str(VIEWER_HTML))
-    return Response(status_code=404)
+    return Response(status_code=404)          
 
 @app.get("/robot_image.png")
 async def robot_image():
@@ -89,6 +226,8 @@ async def ws_endpoint(websocket: WebSocket):
             clients.discard(websocket)
 
 async def broadcast(line: str):
+    line = strip_ansi(line)
+
     async with _clients_lock:
         current = list(clients)
 
@@ -236,14 +375,19 @@ class ProsTerminalRunner:
         def _preexec():
             os.setsid()
 
+        # Get current PROS_PROJECT_DIR (may have been updated)
+        lock = _get_lock()
+        async with lock:
+            pros_dir = str(PROS_PROJECT_DIR)
+        os.system(f"cd {pros_dir}")
         # Spawn `pros terminal` with stdio attached to PTY slave
         self.proc = await asyncio.create_subprocess_exec(
-            "pros", "terminal",
+            PROS_EXE, "terminal",
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,
             preexec_fn=_preexec,
-            cwd=str(BASE_DIR),
+            cwd=pros_dir
         )
 
         # Parent closes slave; we only read from master
@@ -282,12 +426,16 @@ class ProsTerminalRunner:
             except Exception:
                 creationflags = 0
 
+        # Get current PROS_PROJECT_DIR (may have been updated)
+        lock = _get_lock()
+        async with lock:
+            pros_dir = str(PROS_PROJECT_DIR)
         self.proc = await asyncio.create_subprocess_exec(
-            "pros", "terminal",
+            PROS_EXE, "terminal",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             stdin=asyncio.subprocess.DEVNULL,
-            cwd=str(BASE_DIR),
+            cwd=pros_dir,
             creationflags=creationflags,
         )
 
@@ -346,13 +494,49 @@ async def api_kill():
 
 @app.get("/api/status")
 async def api_status():
+    lock = _get_lock()
+    async with lock:
+        pros_dir = str(PROS_PROJECT_DIR)
     return {
         "running": runner.running,
         "pid": runner.pid,
         "clients": len(clients),
         "assets_dir": str(ASSETS_DIR),
         "viewer_html": str(VIEWER_HTML),
+        "pros_dir": pros_dir,
     }
+
+@app.get("/api/pros-dir")
+async def api_get_pros_dir():
+    """Get the current PROS project directory."""
+    lock = _get_lock()
+    async with lock:
+        return {"ok": True, "dir": str(PROS_PROJECT_DIR)}
+
+@app.post("/api/pros-dir")
+async def api_set_pros_dir(request: Request):
+    """Set the PROS project directory. Expects JSON body with 'dir' field."""
+    try:
+        body = await request.json()
+        dir_path = body.get("dir")
+        
+        if not dir_path:
+            return {"ok": False, "status": "missing 'dir' field"}
+        
+        path = Path(dir_path).expanduser().resolve()
+        if not path.exists():
+            return {"ok": False, "status": f"path does not exist: {path}"}
+        if not path.is_dir():
+            return {"ok": False, "status": f"path is not a directory: {path}"}
+        
+        lock = _get_lock()
+        async with lock:
+            global PROS_PROJECT_DIR
+            PROS_PROJECT_DIR = path
+        
+        return {"ok": True, "dir": str(PROS_PROJECT_DIR)}
+    except Exception as e:
+        return {"ok": False, "status": f"error: {e}"}
 
 
 # ----------------------------

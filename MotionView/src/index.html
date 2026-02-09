@@ -10,6 +10,8 @@
 <body>
 <header class="">
   <input id="file" type="file" accept=".json" style="display:none" />
+  <input id="robotImageFile" type="file" accept="image/*" style="display:none" />
+  <button id="btnSettings" class="iconBtn" title="Settings">⚙️</button>
   <button id="btnFile" class="iconBtn" title="Open JSON">📄</button>
   <button id="btnPlay" class="iconBtn" title="Play/Pause" disabled>▶</button>
   <div class="chip">
@@ -58,12 +60,126 @@
         <ul style="margin:0;padding-left:18px">
           <li><b>Field view</b>: robot path + pose, watches, hover/click to preview/lock.</li>
           <li><b>Timeline</b>: scrub through time; hover previews, click jumps.</li>
-          <li><b>Sidebar</b>: config, watches list, poses list.</li>
+          <li><b>Sidebar</b>: watches list, poses list.</li>
           <li><b>Floating info window</b>: shows details of hovered point, including closest watch values.</li>
         </ul>
       </div>
       <div style="margin-top:10px" class="muted">
         Tip: Drag the thin handles to resize/collapse the sidebar (left) and timeline (bottom).
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="settingsModal" class="modal" hidden>
+  <div class="modalBackdrop"></div>
+  <div class="modalCard" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" tabindex="-1" style="max-width: 600px;">
+    <div class="modalHeader">
+      <div id="settingsTitle" style="font-weight:900;font-size:16px">Settings</div>
+      <button id="btnSettingsClose" class="iconBtn" title="Close">✕</button>
+    </div>
+    <div class="modalBody">
+      <div style="margin-bottom:20px">
+        <label style="display:block;margin-bottom:6px;font-weight:700">PROS Directory (optional, needed for live viewing)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="prosDirInput" type="text" placeholder="/path/to/pros/project" style="flex:1" />
+          <button id="btnProsDirBrowse" class="iconBtn" style="font-size:12px">Browse</button>
+        </div>
+          <div id="prosDirStatus" class="muted" style="margin-top:4px;font-size:11px">Set the PROS project directory for live viewing functionality</div>
+        </div>
+
+      <div class="divider" style="margin:20px 0;"></div>
+
+      <div style="margin-bottom:20px">
+        <div style="font-weight:800;margin-bottom:12px">Robot Image</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <button id="btnUploadRobotImage" class="iconBtn" style="font-size:12px">Upload Image</button>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input id="robotImageToggle" type="checkbox" style="width:18px;height:18px;cursor:pointer" />
+            <span>Show robot image</span>
+          </label>
+        </div>
+        <div id="settingsRobotImgControls" style="margin-top:12px" hidden>
+          <div class="grid2">
+            <div>
+              <label>Img Scale</label>
+              <input id="settingsRobotImgScale" type="number" step="0.05" value="1" />
+            </div>
+            <div>
+              <label>Img X Off</label>
+              <input id="settingsRobotImgOffX" type="number" step="0.25" value="0" />
+            </div>
+            <div>
+              <label>Img Y Off</label>
+              <input id="settingsRobotImgOffY" type="number" step="0.25" value="0" />
+            </div>
+            <div>
+              <label>Img Rot (°)</label>
+              <input id="settingsRobotImgRot" type="number" step="1" value="0" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider" style="margin:20px 0;"></div>
+
+      <div style="margin-bottom:20px">
+        <div style="font-weight:800;margin-bottom:12px">Units & Robot Size</div>
+        <div class="grid2">
+          <div>
+            <label>Units (interpret input poses as)</label>
+            <select id="settingsUnitsSelect">
+              <option value="in">inches</option>
+              <option value="cm">centimeters</option>
+              <option value="ft">foot</option>
+              <option value="tiles">tiles (24 in)</option>
+            </select>
+          </div>
+          <div>
+            <label>Robot size (inches on field)</label>
+            <div class="grid2">
+              <input id="settingsRobotW" type="number" step="1" value="12" />
+              <input id="settingsRobotH" type="number" step="1" value="12" />
+            </div>
+            <div class="muted" style="margin-top:6px">width / height</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider" style="margin:20px 0;"></div>
+
+      <div style="margin-bottom:20px">
+        <div style="font-weight:800;margin-bottom:12px">Offsets</div>
+        <div class="grid3">
+          <div>
+            <label>X Offset</label>
+            <input id="settingsOffX" type="number" step="0.1" value="0" />
+          </div>
+          <div>
+            <label>Y Offset</label>
+            <input id="settingsOffY" type="number" step="0.1" value="0" />
+          </div>
+          <div>
+            <label>Theta Offset</label>
+            <input id="settingsOffTheta" type="number" step="1" value="0" />
+          </div>
+        </div>
+      </div>
+
+      <div class="divider" style="margin:20px 0;"></div>
+
+      <div style="margin-bottom:20px">
+        <div style="font-weight:800;margin-bottom:12px">Speed Normalization</div>
+        <div class="grid2">
+          <div>
+            <label>Min speed (normalize)</label>
+            <input id="settingsMinSpeed" type="number" title="Minimum speed used for color normalization (red=slow)" step="1" value="0" />
+          </div>
+          <div>
+            <label>Max speed (normalize)</label>
+            <input id="settingsMaxSpeed" type="number" title="Maximum speed used for color normalization (green=fast)" step="1" value="127" />
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -158,92 +274,13 @@
 
     <div id="right">
       <div class="section">
-        <details open id="secGeneral">
-          <summary>
-            <span>Config</span>
-            <span class="pill" id="fmt">no file</span>
-          </summary>
-          <div class="detailsBody">
-            <div style="font-weight:800" id="runName">—</div>
-            <div class="muted" id="runMeta">—</div>
-
-            <div style="margin-top:12px" class="grid2">
-              <div>
-                <label>Units (interpret input poses as)</label>
-                <select id="unitsSelect">
-                  <option value="in">inches</option>
-                  <option value="cm">centimeters</option>
-                  <option value="ft">foot</option>
-                  <option value="tiles">tiles (24 in)</option>
-                </select>
-              </div>
-              <div>
-                <label>Robot size (inches on field)</label>
-                <div class="grid2">
-                  <input id="robotW" type="number" step="1" value="12" />
-                  <input id="robotH" type="number" step="1" value="12" />
-                </div>
-                <div class="muted" style="margin-top:6px">width / height</div>
-              </div>
-            </div>
-            <div class="divider" style="margin:14px 0;"></div>
-            <div id="robotImgControls" style="margin-top:12px" hidden>
-              <div class="grid2">
-                <div>
-                  <label>Img Scale</label>
-                  <input id="robotImgScale" type="number" step="0.05" value="1" />
-                </div>
-                <div>
-                  <label>Img X Off</label>
-                  <input id="robotImgOffX" type="number" step="0.25" value="0" />
-                </div>
-                <div>
-                  <label>Img Y Off</label>
-                  <input id="robotImgOffY" type="number" step="0.25" value="0" />
-                </div>
-                <div>
-                  <label>Img Rot (°)</label>
-                  <input id="robotImgRot" type="number" step="1" value="0" />
-                </div>
-              </div>
-            </div>
-            <div class="divider" style="margin:14px 0;"></div>
-            <div style="margin-top:12px" class="grid3"> 
-              <div>
-                <label>X Offset</label>
-                <input id="offX" type="number" step="0.1" value="0" />
-              </div>
-              <div>
-                <label>Y Offset</label>
-                <input id="offY" type="number" step="0.1" value="0" />
-              </div>
-              <div>
-                <label>Theta Offset</label>
-                <input id="offTheta" type="number" step="1" value="0" />
-              </div>
-            </div>
-              <div class="grid2" style="margin-bottom:10px">
-              <div>
-                <label>Min speed (normalize)</label>
-                <input id="minSpeed" type="number" title="Minimum speed used for color normalization (red=slow)" step="1" value="0" />
-              </div>
-              <div>
-                <label>Max speed (normalize)</label>
-                <input id="maxSpeed" type="number" title="Maximum speed used for color normalization (green=fast)" step="1" value="127" />
-              </div>
-            </div>
-            <div class="divider" style="margin:14px 0;"></div>
-            <div class="statsPanel">
-              <div class="statsHeader">
-                <div class="statsTitle">Stats</div>
-                <div class="statsHint" id="statsMarker">Updates when a path is loaded</div>
-              </div>
-
-              <div class="kvs" id="stats"></div>
-            </div>
-
-</div> 
-        </details>
+        <div class="statsPanel">
+          <div class="statsHeader">
+            <div class="statsTitle">Stats</div>
+            <div class="statsHint" id="statsMarker">Updates when a path is loaded</div>
+          </div>
+          <div class="kvs" id="stats"></div>
+        </div>
       </div>
 
       <div class="section">
