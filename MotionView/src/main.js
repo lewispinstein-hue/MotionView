@@ -234,11 +234,16 @@ let planDragStart = { x: 0, y: 0 };
 let planDragOrig = [];
 let planSelecting = false;
 let planSelectRect = null; // {x0,y0,x1,y1} in screen px
+let planThetaDragging = false;
+let planThetaDragIdx = -1;
 let planPlaying = false;
 let planRaf = null;
 let planPlayDist = 0;
 let planLastWall = null;
 const PLAN_SPEED = 1; // units per second
+const PLAN_POINT_R = 11;
+const PLAN_THETA_HANDLE_R = 6;
+const PLAN_THETA_HANDLE_OFFSET = 25;
 let planScrubbing = false;
 let planOverlayVisible = false;
 let savedPathsSaveTimer = null;
@@ -263,6 +268,10 @@ function applyPlanSnap(v) {
   const step = getPlanSnapStepIn();
   if (!step) return v;
   return Math.round(v / step) * step;
+}
+
+function clampPlanCoord(v) {
+  return clampMax(applyPlanSnap(v), MAX_OFFSET_XY);
 }
 
 function planSetSelection(indices) {
@@ -326,7 +335,10 @@ function planSampleAtDist(d) {
   if (planWaypoints.length === 0) return null;
   if (planWaypoints.length === 1) {
     const p = planWaypoints[0];
-    return { x: p.x, y: p.y, theta: 0 };
+    const thetaPlan = normalizeDeg(p.theta ?? 0);
+    const thetaField = thetaPlan + fieldRotationDeg;
+    const thetaRobot = thetaField - 90;
+    return { x: p.x, y: p.y, theta: thetaRobot };
   }
   let rem = d;
   for (let i = 0; i < planWaypoints.length - 1; i++) {
@@ -337,15 +349,21 @@ function planSampleAtDist(d) {
       const t = clamp(rem / seg, 0, 1);
       const x = a.x + (b.x - a.x) * t;
       const y = a.y + (b.y - a.y) * t;
-      const theta0 = planThetaDegAt(i);
-      const theta1 = planThetaDegAt(i + 1);
-      const theta = angLerpDeg(theta0, theta1, t);
-      return { x, y, theta };
+      const theta0 = normalizeDeg(a.theta ?? 0);
+      const theta1 = normalizeDeg(b.theta ?? 0);
+      const diff = ((theta1 - theta0 + 540) % 360) - 180;
+      const thetaPlan = theta0 + diff * t;
+      const thetaField = thetaPlan + fieldRotationDeg;
+      const thetaRobot = thetaField - 90;
+      return { x, y, theta: thetaRobot };
     }
     rem -= seg;
   }
   const last = planWaypoints[planWaypoints.length - 1];
-  return { x: last.x, y: last.y, theta: planThetaDegAt(planWaypoints.length - 2) };
+  const thetaPlan = normalizeDeg(last.theta ?? 0);
+  const thetaField = thetaPlan + fieldRotationDeg;
+  const thetaRobot = thetaField - 90;
+  return { x: last.x, y: last.y, theta: thetaRobot };
 }
 
 function setPlanDist(d) {
@@ -526,13 +544,49 @@ function planHitTest(mx, my) {
   return (best.idx >= 0 && best.dist2 <= HIT_PX * HIT_PX) ? best.idx : -1;
 }
 
+function planThetaHandlePos(i) {
+  const p = planWaypoints[i];
+  if (!p) return null;
+  const sp = worldToScreen(p.x, p.y);
+  const theta = planThetaDegAt(i) * Math.PI / 180;
+  const dist = PLAN_POINT_R + PLAN_THETA_HANDLE_OFFSET;
+  return {
+    x: sp.x + Math.sin(theta) * dist,
+    y: sp.y - Math.cos(theta) * dist,
+  };
+}
+
+function planThetaHandleHit(mx, my) {
+  for (const i of planSelectedSet) {
+    const hp = planThetaHandlePos(i);
+    if (!hp) continue;
+    const dx = hp.x - mx;
+    const dy = hp.y - my;
+    if (dx * dx + dy * dy <= PLAN_THETA_HANDLE_R * PLAN_THETA_HANDLE_R) return i;
+  }
+  return -1;
+}
+
+function updatePlanThetaFromPointer(idx, mx, my) {
+  const p = planWaypoints[idx];
+  if (!p) return;
+  const sp = worldToScreen(p.x, p.y);
+  const dx = mx - sp.x;
+  const dy = my - sp.y;
+  if (dx === 0 && dy === 0) return;
+  const angle = Math.atan2(dx, -dy) * 180 / Math.PI;
+  p.theta = normalizeDeg(angle - fieldRotationDeg);
+  renderPlanList();
+  updatePlanSelectionPanel();
+  requestDrawAll();
+}
+
 function isInField(w) {
-  const pad = bounds?.pad ?? 0;
   return (
-    w.x >= bounds.minX - pad &&
-    w.x <= bounds.maxX + pad &&
-    w.y >= bounds.minY - pad &&
-    w.y <= bounds.maxY + pad
+    w.x >= FIELD_BOUNDS_IN.minX &&
+    w.x <= FIELD_BOUNDS_IN.maxX &&
+    w.y >= FIELD_BOUNDS_IN.minY &&
+    w.y <= FIELD_BOUNDS_IN.maxY
   );
 }
 
@@ -561,7 +615,7 @@ function drawPlanningOverlay(force = false) {
     const p = planWaypoints[i];
     const sp = worldToScreen(p.x, p.y);
     const isSel = planSelectedSet.has(i);
-    const r = (i === planSelected) ? 8 : 8;
+    const r = PLAN_POINT_R;
     ctx.beginPath();
     ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
     ctx.fillStyle = (i === planSelected) ? "rgba(180,220,255,1)" : (isSel ? "rgba(150,200,255,0.95)" : "rgba(120,180,255,0.9)");
@@ -582,6 +636,26 @@ function drawPlanningOverlay(force = false) {
     ctx.lineTo(0, -len);
     ctx.stroke();
     ctx.restore();
+
+    if (isSel) {
+      const dist = r + PLAN_THETA_HANDLE_OFFSET;
+      const hx = sp.x + Math.sin(theta) * dist;
+      const hy = sp.y - Math.cos(theta) * dist;
+      ctx.save();
+      ctx.strokeStyle = "rgba(0,0,0,0.9)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(sp.x, sp.y);
+      ctx.lineTo(hx, hy);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(hx, hy, PLAN_THETA_HANDLE_R, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(90,160,255,1)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.9)";
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   if (planSelecting && planSelectRect) {
@@ -628,10 +702,12 @@ function setMode(mode) {
 const offsetsIn = { x: 0, y: 0, theta: 0 };
 let unitsToInFactor = 1;
 let currentUnits = "in";
+const MAX_OFFSET_XY = 80;
+const MAX_OFFSET_THETA = 359;
 
 // -------- utilities --------
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-function normalizeDeg(d) { let x = d % 360; if (x < 0) x += 360; return x; }
+function normalizeDeg(d) { let x = d % MAX_OFFSET_THETA; if (x < 0) x += MAX_OFFSET_THETA; return x; }
 function angLerpDeg(a, b, t) {
   a = normalizeDeg(a); b = normalizeDeg(b);
   let diff = (b - a + 540) % 360 - 180;
@@ -651,6 +727,31 @@ function toNumMaybe(v) {
     if (isFinite(n)) return n;
   }
   return null;
+}
+
+function clampMax(v, max) {
+  return v > max ? max : v;
+}
+
+function sanitizeOffsetInputs() {
+  const xRaw = toNumMaybe(offXEl?.value ?? settingsOffX?.value);
+  if (xRaw != null) {
+    const clamped = clamp(xRaw, -MAX_OFFSET_XY, MAX_OFFSET_XY);
+    if (offXEl) offXEl.value = String(clamped);
+    if (settingsOffX) settingsOffX.value = String(clamped);
+  }
+  const yRaw = toNumMaybe(offYEl?.value ?? settingsOffY?.value);
+  if (yRaw != null) {
+    const clamped = clamp(yRaw, -MAX_OFFSET_XY, MAX_OFFSET_XY);
+    if (offYEl) offYEl.value = String(clamped);
+    if (settingsOffY) settingsOffY.value = String(clamped);
+  }
+  const tRaw = toNumMaybe(offThetaEl?.value ?? settingsOffTheta?.value);
+  if (tRaw != null) {
+    const normalized = normalizeDeg(tRaw);
+    if (offThetaEl) offThetaEl.value = String(normalized);
+    if (settingsOffTheta) settingsOffTheta.value = String(normalized);
+  }
 }
 
 function levelStyle(levelRaw) {
@@ -690,6 +791,7 @@ function inferUnitsFromMeta(metaUnits) {
 }
 
 function updateOffsetsFromInputs() {
+  sanitizeOffsetInputs();
   const ux = Number((offXEl ? offXEl.value : settingsOffX ? settingsOffX.value : 0) || 0);
   const uy = Number((offYEl ? offYEl.value : settingsOffY ? settingsOffY.value : 0) || 0);
   const ut = Number((offThetaEl ? offThetaEl.value : settingsOffTheta ? settingsOffTheta.value : 0) || 0);
@@ -2114,7 +2216,16 @@ canvas.addEventListener('pointerdown', (e) => {
     }
     if (e.button !== 0) return;
     const hit = planHitTest(mx, my);
+    const thetaHit = planThetaHandleHit(mx, my);
     const w = screenToWorld(mx, my);
+    if (thetaHit >= 0) {
+      planThetaDragging = true;
+      planThetaDragIdx = thetaHit;
+      planPointerId = e.pointerId;
+      canvas.setPointerCapture(e.pointerId);
+      updatePlanThetaFromPointer(thetaHit, mx, my);
+      return;
+    }
     if (!isInField(w)) {
       // allow panning when clicking outside the field
       panArmed = true;
@@ -2134,7 +2245,7 @@ canvas.addEventListener('pointerdown', (e) => {
         planChanged();
       }
     } else {
-      planWaypoints.push({ x: applyPlanSnap(w.x), y: applyPlanSnap(w.y), theta: 0 });
+      planWaypoints.push({ x: clampPlanCoord(w.x), y: clampPlanCoord(w.y), theta: 0 });
       planSelectSingle(planWaypoints.length - 1);
       planChanged();
     }
@@ -2168,6 +2279,13 @@ canvas.addEventListener('pointerdown', (e) => {
 
 canvas.addEventListener('pointermove', (e) => {
   if (appMode === "planning") {
+    if (planThetaDragging && planPointerId === e.pointerId) {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      updatePlanThetaFromPointer(planThetaDragIdx, mx, my);
+      return;
+    }
     if (planSelecting && planPointerId === e.pointerId && planSelectRect) {
       const rect = canvas.getBoundingClientRect();
       planSelectRect.x1 = e.clientX - rect.left;
@@ -2187,8 +2305,8 @@ canvas.addEventListener('pointermove', (e) => {
       for (const p of planDragOrig) {
         const nx = p.x + dx;
         const ny = p.y + dy;
-        planWaypoints[p.i].x = applyPlanSnap(nx);
-        planWaypoints[p.i].y = applyPlanSnap(ny);
+        planWaypoints[p.i].x = clampPlanCoord(nx);
+        planWaypoints[p.i].y = clampPlanCoord(ny);
       }
       renderPlanList();
       updatePlanSelectionPanel();
@@ -2228,6 +2346,14 @@ canvas.addEventListener('pointermove', (e) => {
 
 function endPan(e) {
   if (appMode === "planning") {
+    if (planThetaDragging && (planPointerId === e.pointerId || planPointerId == null)) {
+      planThetaDragging = false;
+      planThetaDragIdx = -1;
+      try { canvas.releasePointerCapture(planPointerId ?? e.pointerId); } catch {}
+      planPointerId = null;
+      planChanged();
+      return;
+    }
     if (planSelecting && (planPointerId === e.pointerId || planPointerId == null)) {
       planSelecting = false;
       planRectSelect();
@@ -4322,12 +4448,12 @@ function clampDigits(el, maxDigits) {
 bindPlanField(
   planSelXEl,
   () => fmtNum(planWaypoints[planSelected]?.x ?? 0, 2),
-  (v) => { planWaypoints[planSelected].x = applyPlanSnap(v); }
+  (v) => { planWaypoints[planSelected].x = clampPlanCoord(v); }
 );
 bindPlanField(
   planSelYEl,
   () => fmtNum(planWaypoints[planSelected]?.y ?? 0, 2),
-  (v) => { planWaypoints[planSelected].y = applyPlanSnap(v); }
+  (v) => { planWaypoints[planSelected].y = clampPlanCoord(v); }
 );
 bindPlanField(
   planSelThetaEl,
@@ -4409,7 +4535,7 @@ function clearAllPosesAndWatches() {
   try { updateFloatingInfo?.(null, 0); } catch {}
   try { requestDrawAll?.(); } catch {}
 
-  setStatus("Cleared field and console.");
+  setStatus("Cleared Field and Plannd Path")
 }
 
 btnLeftClear?.addEventListener('click', () => {
@@ -4472,18 +4598,16 @@ document.addEventListener('keydown', (e) => {
       planPause();
       planChanged();
       requestDrawAll();
+      setStatus("Cleared Planned Path");
     } else {
       clearAllPosesAndWatches();
       liveWinEl.value = "";
+      setStatus("Cleared Field");
     }
     return;
   }
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 's' || e.key === 'S')) {
     e.preventDefault();
-    // Force kill when connected in viewing mode
-    if (appMode === "viewing") {
-      void stopStreaming(true);
-    }
     return;
   }
   if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
@@ -4546,20 +4670,33 @@ document.addEventListener('keydown', (e) => {
     const step = getPlanMoveStepIn();
     if (planSelectedSet.size) {
       let dx = 0, dy = 0;
-      if (e.key === "ArrowLeft") dx = -step;
-      if (e.key === "ArrowRight") dx = step;
-      if (e.key === "ArrowUp") dy = step;
-      if (e.key === "ArrowDown") dy = -step;
+      if (e.key === "ArrowLeft" && e.shiftKey) dx = -step * 5
+      else if (e.key === "ArrowLeft") dx = -step;
+
+      if (e.key === "ArrowRight" && e.shiftKey) dx = step * 5
+      else if (e.key === "ArrowRight") dx = step;
+
+      if (e.key === "ArrowUp" && e.shiftKey) dy = step * 5
+      else if (e.key === "ArrowUp") dy = step;
+
+      if (e.key === "ArrowDown" && e.shiftKey) dy = -step * 5
+      else if (e.key === "ArrowDown") dy = -step;
       if (dx !== 0 || dy !== 0) {
         e.preventDefault();
+        // Adjust movement for field rotation so arrows follow screen directions.
+        const c = fieldRotationCos;
+        const s = fieldRotationSin;
+        const rdx = dx * c + dy * s;
+        const rdy = -dx * s + dy * c;
         for (const idx of planSelectedSet) {
           if (idx >= 0 && idx < planWaypoints.length) {
-            planWaypoints[idx].x = applyPlanSnap(planWaypoints[idx].x + dx);
-            planWaypoints[idx].y = applyPlanSnap(planWaypoints[idx].y + dy);
+            planWaypoints[idx].x = clampPlanCoord(planWaypoints[idx].x + rdx);
+            planWaypoints[idx].y = clampPlanCoord(planWaypoints[idx].y + rdy);
           }
         }
         planChanged();
         requestDrawAll();
+        sanitizeOffsetInputs();
         return;
       }
     }
