@@ -104,6 +104,8 @@ const settingsMinSpeed = document.getElementById('settingsMinSpeed');
 const settingsMaxSpeed = document.getElementById('settingsMaxSpeed');
 const settingsPlanMoveStep = document.getElementById('settingsPlanMoveStep');
 const settingsPlanSnapStep = document.getElementById('settingsPlanSnapStep');
+const settingsPlanThetaSnapStep = document.getElementById('settingsPlanThetaSnapStep');
+const planSplit = document.getElementById('planSplit');
 const settingsPlanSpeed = document.getElementById('settingsPlanSpeed');
 const planListEl = document.getElementById('planList');
 const planCountEl = document.getElementById('planCount');
@@ -132,9 +134,14 @@ const DEFAULT_FIELD_KEY = FIELD_IMAGES[0].key;
 // Field bounds in INCHES (default view when no Fit)
 const FIELD_BOUNDS_IN = { minX: -72, maxX: 72, minY: -72, maxY: 72, pad: 30 };
 
+const MAX_OFFSET_X = FIELD_BOUNDS_IN.maxX;
+const MAX_OFFSET_Y = FIELD_BOUNDS_IN.maxY;
+const MAX_OFFSET_THETA = 359;
+
 const WATCH_TOL_MS = 40; // Controls the ± time that determines which pose a watch attaches to
 const COLLAPSE_PX_TIMELINE = 140; // When the timeline collapses away
 const COLLAPSE_PX_SIDEBAR = 275; 
+const COLLAPSE_WAYPOINTLIST_PX = 90;
 
 const COLLAPSE_PX_LEFTSIDEBAR = 370; // When the left sidebar collapses away
 const DBLCLICK_COLLAPSE_LEFTSIDEBAR = true;
@@ -142,6 +149,7 @@ const MAX_PX_LIVEWIN = 650; // Max width for left live window panel
 
 const MAX_TIMELINE_H_PX = 350; // Height at which timeline stops growing
 const MAX_SIDEBAR_W_PX = 400; // Width at which sidebar stops growing
+const MAX_PLAN_UNDO = 80;
 
 const HOVER_PIXEL_TOL = 14;
 const TRACK_HOVER_PAD_PX = 12; // How close to the track before snapping on
@@ -258,6 +266,11 @@ function getPlanSnapStepIn() {
   return (isFinite(v) && v > 0) ? v : 0;
 }
 
+function getPlanThetaSnapStepDeg() {
+  const v = Number(settingsPlanThetaSnapStep?.value || 0);
+  return (isFinite(v) && v > 0) ? v : 0;
+}
+
 function getPlanSpeedUnitsPerSec() {
   const pct = clamp(Number(settingsPlanSpeed?.value || 0), 0, 100);
   const { maxV } = getMinMaxSpeed();
@@ -270,8 +283,87 @@ function applyPlanSnap(v) {
   return Math.round(v / step) * step;
 }
 
-function clampPlanCoord(v) {
-  return clampMax(applyPlanSnap(v), MAX_OFFSET_XY);
+function applyPlanThetaSnapDeg(v) {
+  const step = getPlanThetaSnapStepDeg();
+  if (!step) return v;
+  return Math.round(v / step) * step;
+}
+
+function clampPlanCoordX(v) {
+  return clamp(applyPlanSnap(v), -MAX_OFFSET_X, MAX_OFFSET_X);
+}
+
+function clampPlanCoordY(v) {
+  return clamp(applyPlanSnap(v), -MAX_OFFSET_Y, MAX_OFFSET_Y);
+}
+
+let planUndoStack = [];
+let planRedoStack = [];
+let planUndoApplying = false;
+
+function clonePlanState() {
+  return {
+    waypoints: planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0 })),
+    selected: Array.from(planSelectedSet),
+    selectedIndex: planSelected,
+    playDist: planPlayDist,
+  };
+}
+
+function planStatesEqual(a, b) {
+  if (!a || !b) return false;
+  if ((a.playDist ?? 0) !== (b.playDist ?? 0)) return false;
+  if (a.selectedIndex !== b.selectedIndex) return false;
+  if ((a.selected?.length || 0) !== (b.selected?.length || 0)) return false;
+  for (let i = 0; i < (a.selected?.length || 0); i++) {
+    if (a.selected[i] !== b.selected[i]) return false;
+  }
+  if ((a.waypoints?.length || 0) !== (b.waypoints?.length || 0)) return false;
+  for (let i = 0; i < a.waypoints.length; i++) {
+    const ap = a.waypoints[i];
+    const bp = b.waypoints[i];
+    if (!bp) return false;
+    if (ap.x !== bp.x || ap.y !== bp.y || (ap.theta ?? 0) !== (bp.theta ?? 0)) return false;
+  }
+  return true;
+}
+
+function pushPlanUndo() {
+  if (appMode !== "planning" || planUndoApplying) return;
+  const snap = clonePlanState();
+  const last = planUndoStack[planUndoStack.length - 1];
+  if (last && planStatesEqual(last, snap)) return;
+  planUndoStack.push(snap);
+  if (planUndoStack.length > MAX_PLAN_UNDO) planUndoStack.shift();
+  planRedoStack.length = 0;
+}
+
+function applyPlanState(state) {
+  if (!state) return;
+  planUndoApplying = true;
+  planWaypoints = state.waypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0 }));
+  planSetSelection(state.selected || []);
+  planPlayDist = clamp(state.playDist ?? 0, 0, planTotalLength());
+  planPause();
+  planChanged();
+  requestDrawAll();
+  planUndoApplying = false;
+}
+
+function planUndo() {
+  if (appMode !== "planning") return;
+  if (!planUndoStack.length) return;
+  planRedoStack.push(clonePlanState());
+  const prev = planUndoStack.pop();
+  applyPlanState(prev);
+}
+
+function planRedo() {
+  if (appMode !== "planning") return;
+  if (!planRedoStack.length) return;
+  planUndoStack.push(clonePlanState());
+  const next = planRedoStack.pop();
+  applyPlanState(next);
 }
 
 function planSetSelection(indices) {
@@ -575,7 +667,8 @@ function updatePlanThetaFromPointer(idx, mx, my) {
   const dy = my - sp.y;
   if (dx === 0 && dy === 0) return;
   const angle = Math.atan2(dx, -dy) * 180 / Math.PI;
-  p.theta = normalizeDeg(angle - fieldRotationDeg);
+  const thetaPlan = normalizeDeg(angle - fieldRotationDeg);
+  p.theta = normalizeDeg(applyPlanThetaSnapDeg(thetaPlan));
   renderPlanList();
   updatePlanSelectionPanel();
   requestDrawAll();
@@ -702,8 +795,6 @@ function setMode(mode) {
 const offsetsIn = { x: 0, y: 0, theta: 0 };
 let unitsToInFactor = 1;
 let currentUnits = "in";
-const MAX_OFFSET_XY = 80;
-const MAX_OFFSET_THETA = 359;
 
 // -------- utilities --------
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -736,13 +827,13 @@ function clampMax(v, max) {
 function sanitizeOffsetInputs() {
   const xRaw = toNumMaybe(offXEl?.value ?? settingsOffX?.value);
   if (xRaw != null) {
-    const clamped = clamp(xRaw, -MAX_OFFSET_XY, MAX_OFFSET_XY);
+    const clamped = clamp(xRaw, -MAX_OFFSET_X, MAX_OFFSET_X);
     if (offXEl) offXEl.value = String(clamped);
     if (settingsOffX) settingsOffX.value = String(clamped);
   }
   const yRaw = toNumMaybe(offYEl?.value ?? settingsOffY?.value);
   if (yRaw != null) {
-    const clamped = clamp(yRaw, -MAX_OFFSET_XY, MAX_OFFSET_XY);
+    const clamped = clamp(yRaw, -MAX_OFFSET_Y, MAX_OFFSET_Y);
     if (offYEl) offYEl.value = String(clamped);
     if (settingsOffY) settingsOffY.value = String(clamped);
   }
@@ -1875,6 +1966,15 @@ function drawPlanningTimeline() {
   pctx.lineTo(progX, y);
   pctx.stroke();
 
+  // end marker above the blue line
+  pctx.beginPath();
+  pctx.arc(progX, y, 8, 0, Math.PI * 2);
+  pctx.fillStyle = "rgba(90, 162, 250, 0.9)";
+  pctx.fill();
+  pctx.strokeStyle = "rgba(0,0,0,0.9)";
+  pctx.lineWidth = 1.5;
+  pctx.stroke();
+
   // markers at waypoints
   let acc = 0;
   pctx.fillStyle = "rgba(180,220,255,0.9)";
@@ -1914,11 +2014,15 @@ const floatResizer = document.getElementById('floatResizer');
 btnToggleFloat.onclick = (e) => {
   e.stopPropagation(); // Prevents event bubbling
   floatWin.classList.toggle('hidden');
+  btnToggleFloat.classList.toggle('isOn', !floatWin.classList.contains('hidden'));
+  floatWin.classList.toggle('isOn', !floatWin.classList.contains('hidden'));
 };
 
 btnCloseFloat.onclick = (e) => {
   e.stopPropagation();
   floatWin.classList.add('hidden');
+  btnToggleFloat.classList.remove('isOn');
+  floatWin.classList.remove('isOn');
 };
 
 // Dragging Logic
@@ -2219,6 +2323,7 @@ canvas.addEventListener('pointerdown', (e) => {
     const thetaHit = planThetaHandleHit(mx, my);
     const w = screenToWorld(mx, my);
     if (thetaHit >= 0) {
+      pushPlanUndo();
       planThetaDragging = true;
       planThetaDragIdx = thetaHit;
       planPointerId = e.pointerId;
@@ -2240,12 +2345,14 @@ canvas.addEventListener('pointerdown', (e) => {
       return;
     }
     if (hit >= 0) {
+      pushPlanUndo();
       if (!planSelectedSet.has(hit)) {
         planSelectSingle(hit);
         planChanged();
       }
     } else {
-      planWaypoints.push({ x: clampPlanCoord(w.x), y: clampPlanCoord(w.y), theta: 0 });
+      pushPlanUndo();
+      planWaypoints.push({ x: clampPlanCoordX(w.x), y: clampPlanCoordY(w.y), theta: 0 });
       planSelectSingle(planWaypoints.length - 1);
       planChanged();
     }
@@ -2305,8 +2412,8 @@ canvas.addEventListener('pointermove', (e) => {
       for (const p of planDragOrig) {
         const nx = p.x + dx;
         const ny = p.y + dy;
-        planWaypoints[p.i].x = clampPlanCoord(nx);
-        planWaypoints[p.i].y = clampPlanCoord(ny);
+        planWaypoints[p.i].x = clampPlanCoordX(nx);
+        planWaypoints[p.i].y = clampPlanCoordY(ny);
       }
       renderPlanList();
       updatePlanSelectionPanel();
@@ -2903,7 +3010,7 @@ function flushLiveAppend() {
   liveAppendQueue = [];
 
   // keep it responsive (basic cap)
-  const MAX_CHARS = 100_000;
+  const MAX_CHARS = 25000;
   if (liveWinEl.value.length > MAX_CHARS) {
     liveWinEl.value = liveWinEl.value.slice(liveWinEl.value.length - MAX_CHARS);
   }
@@ -3321,6 +3428,9 @@ leftSetUI("");
   let startY = 0;
   let startH = 0;
   let lastTimelineH = 260;
+  let draggingPlanList = false;
+  let startPlanY = 0;
+  let startPlanH = 0;
 
   const getTimelineH = () => {
     const v = getComputedStyle(root).getPropertyValue('--timelineH').trim();
@@ -3340,6 +3450,25 @@ leftSetUI("");
     e.preventDefault();
 
   });
+  const getPlanListH = () => {
+    const v = getComputedStyle(root).getPropertyValue('--planListH').trim();
+    const n = parseFloat(v);
+    return isFinite(n) ? n : 240;
+  };
+  const setPlanListH = (px) => {
+    root.style.setProperty('--planListH', `${px}px`);
+  };
+
+  if (planSplit) {
+    planSplit.addEventListener('mousedown', (e) => {
+      if (appMode !== "planning") return;
+      draggingPlanList = true;
+      startPlanY = e.clientY;
+      startPlanH = getPlanListH();
+      document.body.style.cursor = 'row-resize';
+      e.preventDefault();
+    });
+  }
 
   window.addEventListener('mousemove', (e) => {
     if (draggingVL) {
@@ -3395,13 +3524,30 @@ leftSetUI("");
       resizeTimeline();
       resizeCanvas();
     }
+
+    if (draggingPlanList) {
+      const dy = e.clientY - startPlanY;
+      const rightH = rightEl?.getBoundingClientRect().height || window.innerHeight;
+      const minH = 90;
+      const maxH = Math.max(minH, rightH - 180);
+      let next = clamp(startPlanH + dy, 0, maxH);
+      if (next <= COLLAPSE_WAYPOINTLIST_PX) {
+        next = 0;
+        rightEl?.classList.add('planListCollapsed');
+      } else {
+        if (next < minH) next = minH;
+        rightEl?.classList.remove('planListCollapsed');
+      }
+      setPlanListH(next);
+    }
   });
 
   window.addEventListener('mouseup', () => {
-    if (draggingV || draggingH || draggingVL) {
+    if (draggingV || draggingH || draggingVL || draggingPlanList) {
       draggingV = false;
       draggingH = false;
       draggingVL = false;
+      draggingPlanList = false;
       document.body.style.cursor = '';
       // If user re-expands from collapsed by dragging, restore visibility automatically
       if (getRightSidebarW() > COLLAPSE_PX_SIDEBAR) rightEl.classList.remove('isCollapsed');
@@ -3649,6 +3795,9 @@ async function loadSettings() {
       if (settings.planSnapStep !== undefined && settingsPlanSnapStep) {
         settingsPlanSnapStep.value = settings.planSnapStep;
       }
+      if (settings.planThetaSnapStep !== undefined && settingsPlanThetaSnapStep) {
+        settingsPlanThetaSnapStep.value = settings.planThetaSnapStep;
+      }
       if (settings.planSpeed !== undefined && settingsPlanSpeed) {
         settingsPlanSpeed.value = settings.planSpeed;
       }
@@ -3720,6 +3869,7 @@ async function saveSettings() {
       maxSpeed: maxSpeedEl ? maxSpeedEl.value : '127',
       planMoveStep: settingsPlanMoveStep ? settingsPlanMoveStep.value : '0.5',
       planSnapStep: settingsPlanSnapStep ? settingsPlanSnapStep.value : '0',
+      planThetaSnapStep: settingsPlanThetaSnapStep ? settingsPlanThetaSnapStep.value : '0',
       planSpeed: settingsPlanSpeed ? settingsPlanSpeed.value : '50',
       robotImgScale: robotImgTx.scale,
       robotImgOffX: robotImgTx.offXIn,
@@ -4000,6 +4150,11 @@ if (settingsPlanSnapStep) {
     syncSettingsToMain();
   });
 }
+if (settingsPlanThetaSnapStep) {
+  settingsPlanThetaSnapStep.addEventListener('change', () => {
+    syncSettingsToMain();
+  });
+}
 if (settingsPlanSpeed) {
   settingsPlanSpeed.addEventListener('input', () => {
     syncSettingsToMain();
@@ -4277,6 +4432,10 @@ if (robotImageToggle) {
     if (settingsRobotImgControls) {
       settingsRobotImgControls.hidden = !(robotImageEnabled && robotImgOk);
     }
+    if (robotImageEnabled && !robotImgOk) {
+      if (robotImageDataUrl) loadRobotImageFromDataUrl(robotImageDataUrl);
+      else if (robotImagePath) loadRobotImageFromPath(robotImagePath);
+    }
     requestDrawAll();
     saveSettings();
   });
@@ -4401,6 +4560,11 @@ if (settingsPlanSnapStep) {
     saveSettings();
   });
 }
+if (settingsPlanThetaSnapStep) {
+  settingsPlanThetaSnapStep.addEventListener('change', () => {
+    saveSettings();
+  });
+}
 if (settingsPlanSpeed) {
   settingsPlanSpeed.addEventListener('input', () => {
     saveSettings();
@@ -4412,6 +4576,10 @@ function bindPlanField(el, getter, setter) {
   el.addEventListener('focus', () => {
     // capture last known good value before edits
     el.dataset.lastValid = el.dataset.lastValid ?? String(getter());
+    if (appMode === "planning" && planSelected >= 0 && planSelected < planWaypoints.length && !el.dataset.undoSession) {
+      pushPlanUndo();
+      el.dataset.undoSession = "1";
+    }
   });
   el.addEventListener('input', () => {
     if (planSelected < 0 || planSelected >= planWaypoints.length) return;
@@ -4428,11 +4596,13 @@ function bindPlanField(el, getter, setter) {
     if (!isFinite(v) || el.value.trim() === "") {
       const last = el.dataset.lastValid ?? String(getter());
       el.value = last;
+      delete el.dataset.undoSession;
       return;
     }
     // normalize display on blur
     el.value = String(getter());
     el.dataset.lastValid = el.value;
+    delete el.dataset.undoSession;
   });
 }
 
@@ -4448,12 +4618,12 @@ function clampDigits(el, maxDigits) {
 bindPlanField(
   planSelXEl,
   () => fmtNum(planWaypoints[planSelected]?.x ?? 0, 2),
-  (v) => { planWaypoints[planSelected].x = clampPlanCoord(v); }
+  (v) => { planWaypoints[planSelected].x = clampPlanCoordX(v); }
 );
 bindPlanField(
   planSelYEl,
   () => fmtNum(planWaypoints[planSelected]?.y ?? 0, 2),
-  (v) => { planWaypoints[planSelected].y = clampPlanCoord(v); }
+  (v) => { planWaypoints[planSelected].y = clampPlanCoordY(v); }
 );
 bindPlanField(
   planSelThetaEl,
@@ -4545,6 +4715,7 @@ btnLeftClear?.addEventListener('click', () => {
 
 btnClearField?.addEventListener('click', () => {
   if (appMode === "planning") {
+    pushPlanUndo();
     planWaypoints = [];
     planSetSelection([]);
     planPlayDist = 0;
@@ -4575,6 +4746,7 @@ document.addEventListener('keydown', (e) => {
     // Clear everything across modes
     clearAllPosesAndWatches();
     liveWinEl.value = "";
+    if (appMode === "planning") pushPlanUndo();
     planWaypoints = [];
     planSetSelection([]);
     planPlayDist = 0;
@@ -4592,6 +4764,7 @@ document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'k' || e.key === 'K')) {
     e.preventDefault();
     if (appMode === "planning") {
+      pushPlanUndo();
       planWaypoints = [];
       planSetSelection([]);
       planPlayDist = 0;
@@ -4649,6 +4822,18 @@ document.addEventListener('keydown', (e) => {
     const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
     const isTyping = (tag === "input" || tag === "textarea" || (e.target && e.target.isContentEditable));
     if (isTyping) return;
+    if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+      if (!e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        planUndo();
+        return;
+      }
+      if (e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        planRedo();
+        return;
+      }
+    }
     if (e.code === "Space") {
       e.preventDefault();
       if (planPlaying) planPause();
@@ -4658,6 +4843,7 @@ document.addEventListener('keydown', (e) => {
     }
     if ((e.key === "Delete" || e.key === "Backspace") && planSelectedSet.size) {
       e.preventDefault();
+      pushPlanUndo();
       const toRemove = Array.from(planSelectedSet).sort((a,b) => b - a);
       for (const idx of toRemove) {
         if (idx >= 0 && idx < planWaypoints.length) planWaypoints.splice(idx, 1);
@@ -4683,6 +4869,7 @@ document.addEventListener('keydown', (e) => {
       else if (e.key === "ArrowDown") dy = -step;
       if (dx !== 0 || dy !== 0) {
         e.preventDefault();
+        pushPlanUndo();
         // Adjust movement for field rotation so arrows follow screen directions.
         const c = fieldRotationCos;
         const s = fieldRotationSin;
@@ -4690,8 +4877,8 @@ document.addEventListener('keydown', (e) => {
         const rdy = -dx * s + dy * c;
         for (const idx of planSelectedSet) {
           if (idx >= 0 && idx < planWaypoints.length) {
-            planWaypoints[idx].x = clampPlanCoord(planWaypoints[idx].x + rdx);
-            planWaypoints[idx].y = clampPlanCoord(planWaypoints[idx].y + rdy);
+            planWaypoints[idx].x = clampPlanCoordX(planWaypoints[idx].x + rdx);
+            planWaypoints[idx].y = clampPlanCoordY(planWaypoints[idx].y + rdy);
           }
         }
         planChanged();

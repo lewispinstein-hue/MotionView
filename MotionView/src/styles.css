@@ -2,6 +2,7 @@
       --rightSidebarW: 370px;
       --leftSidebarW: 390px;
       --timelineH: 260px;
+      --planListH: 240px;
       --toolbarH: 54px;
       --topbarH: 50px;
       --planningTimelineH: 90px;
@@ -315,13 +316,15 @@ input[type="text"] {
     display:flex;
     flex-direction:column;
     gap:8px;
-    max-height: 40vh;
+    height: var(--planListH);
+    max-height: none;
     overflow:auto;
     border:1px solid var(--line);
     border-radius:10px;
     padding:8px;
     background: rgba(16,23,32,0.45);
   }
+  #planSplit{ height: 8px; }
   .planItem{
     display:grid;
     grid-template-columns: auto 1fr;
@@ -591,6 +594,11 @@ input[type="text"] {
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   font-size: 12.5px;
   line-height: 1.35;
+}
+
+#floatingInfo.isOn {
+  border-color: rgba(120,220,160,0.55);
+  box-shadow: 0 0 0 1px rgba(120,220,160,0.15) inset, 0 14px 40px rgba(0, 0, 0, 0.55);
 }
 
 /* Header */
@@ -944,4 +952,7 @@ input[type="text"] {
   .iconBtn.isOn{ border-color: rgba(120,220,160,0.55); box-shadow: 0 0 0 1px rgba(120,220,160,0.15) inset; }
   .planSelSection{
     margin-top: auto;
+  }
+  #right.planListCollapsed .planList{
+    display:none;
   }
