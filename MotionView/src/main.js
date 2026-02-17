@@ -36,6 +36,9 @@ const liveWin = document.getElementById('liveWin');
 const btnTogglePlanOverlay = document.getElementById('btnTogglePlanOverlay');
 const helpModal = document.getElementById('helpModal');
 const btnHelpClose = document.getElementById('btnHelpClose');
+const btnHelpKeybinds = document.getElementById('btnHelpKeybinds');
+const keybindsModal = document.getElementById('keybindsModal');
+const btnKeybindsClose = document.getElementById('btnKeybindsClose');
 const speedSelect = document.getElementById('speedSelect');
 const watchSort = document.getElementById('watchSort');
 const vSplit = document.getElementById('vSplit');
@@ -44,6 +47,8 @@ const timePill = document.getElementById('timePill');
 const deltaPill = document.getElementById('deltaPill');
 const pointPill = document.getElementById('pointPill');
 const posePill = document.getElementById('posePill');
+const cursorPill = document.getElementById('cursorPill');
+const planCursorPill = document.getElementById('planCursorPill');
 
 const rightEl = document.getElementById('right');
 const leftEl = document.getElementById('left');
@@ -126,8 +131,8 @@ let prosDirFromSettings = false;
 
 // --- FIELD IMAGES ---
 const FIELD_IMAGES = [
-  { key: "./assets/match_field_2025-2026_pushback.png", label: "Field: Match Field" },
-  { key: "./assets/skills_field_2025-2026_pushback.png", label: "Field: Skills Field" },
+  { key: "./assets/match_field_2025-2026_pushback.png", label: "Match Field" },
+  { key: "./assets/skills_field_2025-2026_pushback.png", label: "Skills Field" },
 ];
 
 // Default field image
@@ -136,14 +141,12 @@ const DEFAULT_FIELD_KEY = FIELD_IMAGES[0].key;
 // Field bounds in INCHES (default view when no Fit)
 const FIELD_BOUNDS_IN = { minX: -72, maxX: 72, minY: -72, maxY: 72, pad: 30 };
 
-const MAX_OFFSET_X = FIELD_BOUNDS_IN.maxX;
-const MAX_OFFSET_Y = FIELD_BOUNDS_IN.maxY;
 const MAX_OFFSET_THETA = 359;
 
 const WATCH_TOL_MS = 40; // Controls the ± time that determines which pose a watch attaches to
 const COLLAPSE_PX_TIMELINE = 140; // When the timeline collapses away
 const COLLAPSE_PX_SIDEBAR = 275; 
-const COLLAPSE_WAYPOINTLIST_PX = 90;
+const COLLAPSE_WAYPOINTLIST_PX = 5;
 
 const COLLAPSE_PX_LEFTSIDEBAR = 370; // When the left sidebar collapses away
 const DBLCLICK_COLLAPSE_LEFTSIDEBAR = true;
@@ -246,6 +249,8 @@ let planSelecting = false;
 let planSelectRect = null; // {x0,y0,x1,y1} in screen px
 let planThetaDragging = false;
 let planThetaDragIdx = -1;
+let planThetaDragBase = null;
+let planThetaDragStart = 0;
 let planPlaying = false;
 let planRaf = null;
 let planPlayDist = 0;
@@ -293,11 +298,11 @@ function applyPlanThetaSnapDeg(v) {
 }
 
 function clampPlanCoordX(v) {
-  return clamp(applyPlanSnap(v), -MAX_OFFSET_X, MAX_OFFSET_X);
+  return clamp(applyPlanSnap(v), FIELD_BOUNDS_IN.minX, FIELD_BOUNDS_IN.maxX);
 }
 
 function clampPlanCoordY(v) {
-  return clamp(applyPlanSnap(v), -MAX_OFFSET_Y, MAX_OFFSET_Y);
+  return clamp(applyPlanSnap(v), FIELD_BOUNDS_IN.minY, FIELD_BOUNDS_IN.maxY);
 }
 
 let planUndoStack = [];
@@ -432,7 +437,7 @@ function planSampleAtDist(d) {
     const p = planWaypoints[0];
     const thetaPlan = normalizeDeg(p.theta ?? 0);
     const thetaField = thetaPlan + fieldRotationDeg;
-    const thetaRobot = thetaField - 90;
+    const thetaRobot = thetaField - 20;
     return { x: p.x, y: p.y, theta: thetaRobot };
   }
   let rem = d;
@@ -456,8 +461,8 @@ function planSampleAtDist(d) {
   }
   const last = planWaypoints[planWaypoints.length - 1];
   const thetaPlan = normalizeDeg(last.theta ?? 0);
-  const thetaField = thetaPlan + fieldRotationDeg;
-  const thetaRobot = thetaField - 90;
+  const thetaField = thetaPlan - fieldRotationDeg;
+  const thetaRobot = thetaField;
   return { x: last.x, y: last.y, theta: thetaRobot };
 }
 
@@ -671,7 +676,15 @@ function updatePlanThetaFromPointer(idx, mx, my) {
   if (dx === 0 && dy === 0) return;
   const angle = Math.atan2(dx, -dy) * 180 / Math.PI;
   const thetaPlan = normalizeDeg(angle - fieldRotationDeg);
-  p.theta = normalizeDeg(applyPlanThetaSnapDeg(thetaPlan));
+  if (planThetaDragBase && planThetaDragBase.length) {
+    const delta = normalizeDeg(thetaPlan - planThetaDragStart);
+    for (const entry of planThetaDragBase) {
+      const next = normalizeDeg(entry.theta + delta);
+      planWaypoints[entry.i].theta = normalizeDeg(applyPlanThetaSnapDeg(next));
+    }
+  } else {
+    p.theta = normalizeDeg(applyPlanThetaSnapDeg(thetaPlan));
+  }
   renderPlanList();
   updatePlanSelectionPanel();
   requestDrawAll();
@@ -1067,6 +1080,22 @@ function screenToWorld(xPx, yPx) {
   };
 }
 
+function setCursorPills(text) {
+  if (cursorPill) cursorPill.textContent = text;
+  if (planCursorPill) planCursorPill.textContent = text;
+}
+
+function updateCursorPillsFromClient(clientX, clientY) {
+  if (!cursorPill && !planCursorPill) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = clientX - rect.left;
+  const my = clientY - rect.top;
+  const w = screenToWorld(mx, my);
+  const ux = w.x / (unitsToInFactor || 1);
+  const uy = w.y / (unitsToInFactor || 1);
+  setCursorPills(`Cursor: X ${fmtNum(ux, 2)}  Y ${fmtNum(uy, 2)} ${currentUnits}`);
+}
+
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
@@ -1116,7 +1145,7 @@ function loadFieldOptions() {
     console.warn('fieldSelect element not found');
     return;
   }
-  fieldSelect.innerHTML = `<option value="no">No field image</option>`;
+  fieldSelect.innerHTML = `<option value="none">No field image</option>`;
   for (const f of FIELD_IMAGES) {
     const opt = document.createElement('option');
     opt.value = f.key;
@@ -1132,7 +1161,7 @@ async function loadFieldImage(filename) {
   img.onerror = () => {
     fieldImg = null; 
     draw(); 
-    if (filename == "no") return; // No field image is 'no'
+    if (filename == "none") return; // No field image is 'no'
     setStatus(`Could not load field image: ${filename}`); 
   };
   img.src = filename;
@@ -1649,7 +1678,7 @@ function drawRobot(pose, alpha=1.0) {
   const center = worldToScreen(pose.x, pose.y);
   const wPx = wIn * scale;
   const hPx = hIn * scale;
-  const thetaDeg = (pose.theta ?? 0) - fieldRotationDeg;
+  const thetaDeg = (pose.theta ?? 0);
   const thetaRad = (thetaDeg) * Math.PI / 180;
 
   ctx.save();
@@ -2333,6 +2362,8 @@ canvas.addEventListener('pointerdown', (e) => {
       planThetaDragging = true;
       planThetaDragIdx = thetaHit;
       planPointerId = e.pointerId;
+      planThetaDragBase = Array.from(planSelectedSet).map((i) => ({ i, theta: normalizeDeg(planWaypoints[i]?.theta ?? 0) }));
+      planThetaDragStart = normalizeDeg(planWaypoints[thetaHit]?.theta ?? 0);
       canvas.setPointerCapture(e.pointerId);
       updatePlanThetaFromPointer(thetaHit, mx, my);
       return;
@@ -2357,6 +2388,12 @@ canvas.addEventListener('pointerdown', (e) => {
         planChanged();
       }
     } else {
+      if (planSelectedSet.size > 1) {
+        planSetSelection([]);
+        planChanged();
+        requestDrawAll();
+        return;
+      }
       pushPlanUndo();
       planWaypoints.push({ x: clampPlanCoordX(w.x), y: clampPlanCoordY(w.y), theta: 0 });
       planSelectSingle(planWaypoints.length - 1);
@@ -2462,6 +2499,7 @@ function endPan(e) {
     if (planThetaDragging && (planPointerId === e.pointerId || planPointerId == null)) {
       planThetaDragging = false;
       planThetaDragIdx = -1;
+      planThetaDragBase = null;
       try { canvas.releasePointerCapture(planPointerId ?? e.pointerId); } catch {}
       planPointerId = null;
       planChanged();
@@ -2798,6 +2836,10 @@ if (planningTimelineCanvas) {
 
 // -------- field interactions --------
 canvas.addEventListener('mousemove', (e) => {
+  updateCursorPillsFromClient(e.clientX, e.clientY);
+});
+
+canvas.addEventListener('mousemove', (e) => {
   if (appMode === "planning") return;
   if (!data || playing || isPanning) return;
 
@@ -2842,6 +2884,7 @@ canvas.addEventListener('mousemove', (e) => {
 });
 
 canvas.addEventListener('mouseleave', () => {
+  setCursorPills("Cursor: —");
   if (appMode === "planning") return;
   hoverWatch = null;
   // ensure timeline hover preview can't 'stick'
@@ -3535,8 +3578,7 @@ leftSetUI("");
     if (draggingPlanList) {
       const dy = e.clientY - startPlanY;
       const rightH = rightEl?.getBoundingClientRect().height || window.innerHeight;
-      const minH = 90;
-      const maxH = Math.max(minH, rightH - 180);
+      const maxH = Math.max(COLLAPSE_WAYPOINTLIST_PX, rightH - 180);
       let next = clamp(startPlanH + dy, 0, maxH);
       if (next <= COLLAPSE_WAYPOINTLIST_PX) {
         next = 0;
@@ -3695,7 +3737,20 @@ async function handleFile(file) {
 btnFile.addEventListener('click', () => fileEl.click());
 fileEl.addEventListener('change', (e) => {
   const file = e.target.files?.[0];
-  if (file) handleFile(file);
+  if (file) {
+    // Validate file extension
+    const validExtensions = ['.txt', '.log', '.json'];
+    const fileName = file.name.toLowerCase();
+    const isValid = validExtensions.some(ext => fileName.endsWith(ext));
+    
+    if (!isValid) {
+      alert('Invalid file type. Please select a .txt, .log, or .json file');
+      e.target.value = ''; // Clear the input
+      return;
+    }
+    
+    handleFile(file);
+  }
 });
 
 
@@ -3712,6 +3767,16 @@ function closeHelp() {
   if (!helpModal) return;
   helpModal.setAttribute('hidden', '');
   helpModal.style.display = 'none';
+}
+function openKeybinds() {
+  if (!keybindsModal) return;
+  keybindsModal.removeAttribute('hidden');
+  keybindsModal.style.display = 'flex';
+}
+function closeKeybinds() {
+  if (!keybindsModal) return;
+  keybindsModal.setAttribute('hidden', '');
+  keybindsModal.style.display = 'none';
 }
 if (btnHelp) {
   btnHelp.addEventListener('click', (e) => {
@@ -3731,6 +3796,20 @@ if (btnHelpClose) {
 } else {
   console.warn('btnHelpClose not found');
 }
+if (btnHelpKeybinds) {
+  btnHelpKeybinds.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openKeybinds();
+  });
+}
+if (btnKeybindsClose) {
+  btnKeybindsClose.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeKeybinds();
+  });
+}
 if (helpModal) {
   helpModal.addEventListener('click', (e) => {
     if (e.target && (e.target.classList.contains('modalBackdrop'))) {
@@ -3739,6 +3818,13 @@ if (helpModal) {
   });
 } else {
   console.warn('helpModal not found');
+}
+if (keybindsModal) {
+  keybindsModal.addEventListener('click', (e) => {
+    if (e.target && (e.target.classList.contains('modalBackdrop'))) {
+      closeKeybinds();
+    }
+  });
 }
 
 // Settings modal and JSON persistence
@@ -4420,6 +4506,14 @@ if (robotImageFile) {
   robotImageFile.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Validate it's an image
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      e.target.value = ''; // Clear the input
+      return;
+    }
+
     robotImagePath = typeof file.path === 'string' && file.path ? file.path : null;
     
     try {
@@ -4980,7 +5074,7 @@ document.addEventListener('keydown', (e) => {
     requestDrawAll();
   }
   if (e.key === "p") {
-    
+
   }
 });
 
@@ -4993,6 +5087,10 @@ setMode("viewing");
 if (helpModal) {
   helpModal.setAttribute('hidden', '');
   helpModal.style.display = 'none';
+}
+if (keybindsModal) {
+  keybindsModal.setAttribute('hidden', '');
+  keybindsModal.style.display = 'none';
 }
 if (settingsModal) {
   settingsModal.setAttribute('hidden', '');
