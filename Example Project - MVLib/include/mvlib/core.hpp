@@ -250,7 +250,7 @@ public:
    */
   struct loggerConfig {
     std::atomic<bool> logToTerminal{true};               ///< @brief Print logs to the terminal.
-    std::atomic<bool> logToSD{true};                     ///< @brief Write logs to SD (locked after start()).
+    std::atomic<bool> logToSD{true};                     ///< @brief Write logs to SD (locked after logger start).
     std::atomic<bool> printWatches{true};                ///< @brief Print registered watches.
   };
 
