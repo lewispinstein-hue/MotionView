@@ -1,4 +1,4 @@
-# MotionView
+# MotionView - Live Robot Visualizer
 
 ## Keybinds
 
@@ -17,13 +17,10 @@
 | Viewing | `T` / `P` | Toggle Planned Overlay |
 | Viewing | `C` | Connect/disconnect |
 | Viewing | `←` / `→` | Step to previous/next pose |
-| Planning | `Space` | Play/Pause plan playback |
+| Planning | `Space / S` | Play/Pause plan playback |
 | Planning | `Delete` / `Backspace` | Delete selected waypoint(s) |
 | Planning | `←` / `→` / `↑` / `↓` | Nudge selected waypoint(s) |
 | Planning | `Shift + ←/→/↑/↓` | Nudge selected waypoint(s) by 5× step |
 | Planning | `Cmd/Ctrl + Z` | Undo |
 | Planning | `Cmd/Ctrl + Shift + Z` | Redo |
 | Planning | `Cmd/Ctrl + K` | Clear planned path |
-
-Notes:
-- Keybinds are disabled while typing in input fields.

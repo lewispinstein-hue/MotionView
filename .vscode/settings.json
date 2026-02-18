@@ -3,6 +3,7 @@
         "pushback",
         "TAURI",
         "tauri",
-        "millis"
+        "millis",
+        "mvlib"
     ]
 }
