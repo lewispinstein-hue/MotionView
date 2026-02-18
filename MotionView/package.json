@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "py:build": "node scripts/build_py.js",
+    "tauri:build": "pnpm py:build && tauri build",
     "tauri": "tauri"
   },
   "devDependencies": {

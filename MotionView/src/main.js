@@ -560,10 +560,15 @@ async function loadSavedPaths() {
           speed_norm: 0,
         }))
         .filter(p => typeof p.x === "number" && typeof p.y === "number");
+      if (Array.isArray(obj?.["watches"])) {
+        watches = normalizeWatches(obj["watches"]);
+      }
       if (poses.length) {
         rawPoses = poses.sort((a,b) => (a.t ?? 0) - (b.t ?? 0));
-        data = { poses: rawPoses, watches: [], meta: {} };
+        data = { poses: rawPoses, watches: watches, meta: {} };
         computeSpeedNorm();
+        recomputeWatchMarkers();
+        rebuildWatchMarkersByTime();
         syncMainToSettings();
         try { renderPoseList?.(); } catch {}
         try { renderWatchList?.(); } catch {}
@@ -591,6 +596,12 @@ function scheduleSavedPathsSave() {
           l_vel: p.l_vel ?? null,
           r_vel: p.r_vel ?? null,
           speed_raw: p.speed_raw ?? 0,
+        })),
+        "watches": watches.map((w) => ({
+          t: w.t ?? null,
+          level: w.level ?? "INFO",
+          label: w.label ?? "",
+          value: w.value ?? "",
         })),
       });
       await invoke('write_saved_paths', { contents: payload });
@@ -693,12 +704,11 @@ function updatePlanThetaFromPointer(idx, mx, my) {
 }
 
 function isInField(w) {
-  return (
-    w.x >= FIELD_BOUNDS_IN.minX &&
-    w.x <= FIELD_BOUNDS_IN.maxX &&
-    w.y >= FIELD_BOUNDS_IN.minY &&
-    w.y <= FIELD_BOUNDS_IN.maxY
-  );
+  if (!w || typeof w.x !== "number" || typeof w.y !== "number") return false;
+  const sp = worldToScreen(w.x, w.y);
+  if (!Number.isFinite(sp.x) || !Number.isFinite(sp.y)) return false;
+  const rect = canvas.getBoundingClientRect();
+  return sp.x >= 0 && sp.x <= rect.width && sp.y >= 0 && sp.y <= rect.height;
 }
 
 function drawPlanningOverlay(force = false) {
@@ -1399,20 +1409,19 @@ function fmtPose(p) {
 
 function showWatchPopup(marker, clickPos) {
   if (!watchPopup || !marker) return;
+  if (!isInsideFieldC(clickPos) && !isInsideTimelineC(clickPos)) return; 
 
   const w = marker.watch || {};
   const pose = marker.pose || interpolatePoseAtTime(marker.t);
   const poseStr = fmtPose(pose);
 
   const tStr = (marker.t != null) ? `${marker.t}ms` : "—";
-  const watchStr = w.watch || w.name || w.key || "watch";
   const labelStr = w.label || "—";
   const valStr = (w.value == null) ? "—" : String(w.value);
 
   watchPopup.innerHTML = `
     <div class="row"><div class="k">time</div><div class="v">${escapeHtml(tStr)}</div></div>
     <div class="row"><div class="k">pose</div><div class="v">${escapeHtml(poseStr)}</div></div>
-    <div class="row"><div class="k">watch</div><div class="v">${escapeHtml(String(watchStr))}</div></div>
     <div class="row"><div class="k">label</div><div class="v">${escapeHtml(String(labelStr))}</div></div>
     <div class="row"><div class="k">value</div><div class="v">${escapeHtml(valStr)}</div></div>
   `;
@@ -1525,7 +1534,8 @@ function selectWatchMarker(marker, fromUserClick=false, clickPos=null) {
     setStatus(`Watch @${marker.t}ms shown via interpolation (no pose within ±${WATCH_TOL_MS}ms).`);
   }
 
-  pause();
+  if (playing)
+    pause();
   hoverTimelineTime = null;
   timelineHoverSaved = null;
 
@@ -1673,7 +1683,7 @@ function drawWatchDots() {
 
     const isHover = (hoverWatch === m);
     const r = isHover ? 5.6 : 4.2;
-    const fillA = isHover ? 0.40 : 0.25;
+    const fillA = 0.40;
 
     ctx.save();
     ctx.fillStyle = st.fill.replace("rgb(", "rgba(").replace(")", `,${fillA})`);
@@ -2082,9 +2092,7 @@ const floatResizer = document.getElementById('floatResizer');
 // Toggle Visibility
 btnToggleFloat.onclick = (e) => {
   e.stopPropagation(); // Prevents event bubbling
-  floatWin.classList.toggle('hidden');
-  btnToggleFloat.classList.toggle('isOn', !floatWin.classList.contains('hidden'));
-  floatWin.classList.toggle('isOn', !floatWin.classList.contains('hidden'));
+  toggleFloatingInfo();
 };
 
 btnCloseFloat.onclick = (e) => {
@@ -2224,6 +2232,12 @@ function updateFloatingInfo(pose, idx) {
     clickable.style.cursor = "default";
     clickable.onclick = null;
   }
+}
+
+function toggleFloatingInfo() {
+  floatWin.classList.toggle('hidden');
+  btnToggleFloat.classList.toggle('isOn', !floatWin.classList.contains('hidden'));
+  floatWin.classList.toggle('isOn', !floatWin.classList.contains('hidden'));
 }
 
 // -------- pose readout --------
@@ -2771,6 +2785,32 @@ function planPlay() {
 function timelineMousePos(e) {
   const rect = timelineCanvas.getBoundingClientRect();
   return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+function isInsideTimelineC(cursor) {
+  if (!cursor) return false;
+  const x = (typeof cursor.clientX === "number") ? cursor.clientX : cursor.x;
+  const y = (typeof cursor.clientY === "number") ? cursor.clientY : cursor.y;
+  if (typeof x !== "number" || typeof y !== "number") return false;
+
+  const isPlanning = appMode === "planning";
+  const canvasEl = isPlanning ? planningTimelineCanvas : timelineCanvas;
+  if (!canvasEl) return false;
+  if (!isPlanning && timelineBar?.classList.contains("isCollapsed")) return false;
+
+  const rect = canvasEl.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return false;
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+function isInsideFieldC(cursor) {
+  if (!cursor) return false;
+  const x = (typeof cursor.clientX === "number") ? cursor.clientX : cursor.x;
+  const y = (typeof cursor.clientY === "number") ? cursor.clientY : cursor.y;
+  if (typeof x !== "number" || typeof y !== "number") return false;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return false;
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
 
 timelineCanvas.addEventListener("mousemove", (e) => {
@@ -4974,6 +5014,9 @@ document.addEventListener('keydown', (e) => {
         btnTogglePlanOverlay.click();
       }
       return;
+    }
+    if (e.key === 't' || e.key === 'T') {
+      toggleFloatingInfo();
     }
     if (e.key === 'c' || e.key === 'C') {
       e.preventDefault();

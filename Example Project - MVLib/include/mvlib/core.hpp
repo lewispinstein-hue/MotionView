@@ -92,6 +92,8 @@ namespace mvlib {
       mvlib::LogLevel::FATAL, fmt, ##__VA_ARGS__)
 /** @} */
 
+namespace {
+
 struct MutexGuard {
   /// @brief Mutex reference managed by this guard.
   pros::Mutex &m;
@@ -107,14 +109,14 @@ struct MutexGuard {
   MutexGuard(const MutexGuard &) = delete;
   MutexGuard &operator=(const MutexGuard &) = delete;
 };
-
+}
 /**
  * @enum LogLevel
  * @brief Log severity levels used for filtering and formatting.
  *
  * @note Ordering matters: higher values are considered "more severe".
  */
-enum LogLevel {
+enum class LogLevel {
   NONE = 0, /// The lowest log level. Used for simply disabling logger.
   DEBUG,    /// Used for info related to startup and diagnostics
   INFO,     /// The most frequently used log level. 
@@ -238,6 +240,8 @@ struct Pose {
  * - Use watches for values you want sampled at a controlled cadence.
  *
  */
+ template<class>
+inline constexpr bool always_false_v = false;
 class Logger {
 public:
   using LogLevel = ::mvlib::LogLevel;
@@ -419,6 +423,7 @@ public:
    * @endcode
    */
   template <class Getter>
+  requires std::invocable<Getter&>
   WatchId
   watch(std::string label, LogLevel baseLevel, uint32_t intervalMs,
         Getter &&getter,
@@ -443,18 +448,44 @@ public:
    * @param fmt Optional printf-style format for numeric values.
    * \return WatchId of the registered watch.
    */
+  template <class Getter, class U>
+    requires std::invocable<Getter&> &&
+             std::same_as<
+                std::decay_t<U>,
+                std::decay_t<std::invoke_result_t<Getter&>>>
+  WatchId watch(std::string label, LogLevel baseLevel, bool onChange, Getter&& getter,
+                LevelOverride<U> ov,
+                std::string fmt = {}) {
+    using T = std::decay_t<std::invoke_result_t<Getter&>>;
+    return addWatch<T>(std::move(label), baseLevel, 0,
+                      std::forward<Getter>(getter), std::move(ov),
+                      std::move(fmt), onChange);
+  }
+
+  template <class Getter, class U>
+    requires std::invocable<Getter&> &&
+           (!std::same_as<
+               std::decay_t<U>,
+               std::decay_t<std::invoke_result_t<Getter&>>>)
+  WatchId watch(std::string, LogLevel, bool, Getter&&,
+                LevelOverride<U>,
+                std::string = {}) {
+    using T = std::decay_t<std::invoke_result_t<Getter&>>;
+    static_assert(always_false_v<U>,
+      "Logger::watch(...): LevelOverride<U> type mismatch.\n"
+      "U must match the getter's return type T (after decay).");
+    return {}; // unreachable
+  }
+
   template <class Getter>
-  WatchId
-  watch(std::string label, LogLevel baseLevel, bool onChange, Getter &&getter,
-        auto ov = LevelOverride<std::decay_t<std::invoke_result_t<Getter &>>>{},
-        std::string fmt = {}) {
-
-    using T = std::decay_t<std::invoke_result_t<Getter &>>;
-
-    return addWatch<T>(std::move(label), baseLevel,
-                       /*intervalMs=*/0, // ignored when onChange=true
-                       std::forward<Getter>(getter), std::move(ov),
-                       std::move(fmt), onChange);
+    requires std::invocable<Getter&>
+  WatchId watch(std::string label, LogLevel baseLevel, bool onChange, Getter&& getter,
+                std::string fmt = {}) {
+    using T = std::decay_t<std::invoke_result_t<Getter&>>;
+    return watch(std::move(label), baseLevel, onChange,
+                std::forward<Getter>(getter),
+                LevelOverride<T>{},
+                std::move(fmt));
   }
 
 private:

@@ -4,17 +4,51 @@
 </p>
 
 
+## Quick Start
+1. Open MotionView.
+2. Use `Cmd + O` to open a file.
+3. Download (from this GitHub) & Select the [`Example Route`](MotionView_Example.json) to see a full demo route with poses and watches.
+4. Press `Space` to play/pause and hover the field to inspect pose + watch details.
+
+**Main features:**
+- Load recorded runs and see the robot path instantly.
+- Scrub the timeline and inspect pose, speed, and watch values.
+- Switch to Planning mode to draft, compare, and edit a path.
+- Livestream runs with one click
+- Upload your own Robot Image 
+
+## Why MotionView?
+- **Built for PROS teams**: fast to learn, practical for testing.
+- **Pose + watch aware**: path, pose, and other important values all in one view.
+- **Live or Later**: stream from the robot or open a saved file.
+- **Decision-friendly**: compare runs, spot issues, and iterate faster.
+
+## Viewing Mode
+Use this mode to **replay and analyze** a run.
+
+Features:
+- Field view with the robot path and pose playback.
+- Overlay the Planned Path and compare with events to see what went wrong
+- Live streaming support and quick file import.
+
+## Planning Mode
+Use this mode to **plan and refine** a path before testing, or after.
+
+Features:
+- Place and edit waypoints on the field.
+- Play back the planned path for timing and shape checks.
+- Export or overlay plans against real runs for comparison.
+- Fix mistakes with `Cmd + Z` and `Shift + Cmd + Z`
 
 ## Prerequisites
-MotionView requires nothing out of the box, but some features require external dependencies. 
-1. **Livestreaming:** This feature requires you to have both a PROS Project locally on your computer, and to have the `PROS Extension` installed through `VSCode` or `Cursor`.
+MotionView requires nothing out of the box to load files, but some features require external dependencies. 
+1. **Live streaming:** This feature requires you to have both a PROS Project locally on your computer, and to have the `PROS Extension` installed through `VSCode` or `Cursor`.
 
 ## Livestream Setup
 1. In order to livestream, you must be connected to your robot via the controller or brain, and be using a `Pose logger`. For a minimal, easy to setup logger, visit [MVLib](</Example Project - MVLib/README.md>), a complete Logger Library.
 2. Inside of Settings, the `PROS Project Directory` must be filled out. If you do not have your robot's code on your computer – thats fine! All you need is to install the PROS VSCode Extension and `Create a new PROS Project`. From there, the app should be able to auto-detect your project.
 3. `PROS-CLI` Location: MotionView should be able automatically detect the location of the PROS Cli. If MotionView is unable to do that, a manual guide and method to set the `PROS-CLI` location manually is in the works.
-4. Assuming your robot is logging correctly, MotionView detected your PROS Cli, and was given your PROS Project Directory, livestreaming should work!
-
+4. Assuming your robot is logging correctly, MotionView detected your PROS Cli, and was given your PROS Project Directory, live streaming should work!
 
 ## Keybinds
 

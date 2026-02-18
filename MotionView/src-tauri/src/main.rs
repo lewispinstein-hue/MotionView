@@ -6,6 +6,8 @@ use std::{
   sync::Mutex,
 };
 use std::{fs, process::Stdio};
+use std::fs::OpenOptions;
+use std::io::Write;
 
 use tauri::{Manager, RunEvent};
 use tauri::path::BaseDirectory;
@@ -19,19 +21,81 @@ fn pick_free_port() -> u16 {
   l.local_addr().unwrap().port()
 }
 
-fn resolve_bridge(app: &tauri::AppHandle) -> tauri::Result<PathBuf> {
-  let candidates = ["_up_/src/bridge.py", "_up_/bridge.py", "bridge.py", "src/bridge.py"];
+fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<PathBuf> {
+  let mut resource_candidates = Vec::new();
+  if let Some(triple) = option_env!("TAURI_ENV_TARGET_TRIPLE") {
+    if cfg!(target_os = "windows") {
+      resource_candidates.push(format!("bin/motionview-py-{triple}.exe"));
+      resource_candidates.push(format!("bin/motionview-py-{triple}"));
+    } else {
+      resource_candidates.push(format!("bin/motionview-py-{triple}"));
+    }
+  }
+  if cfg!(target_os = "windows") {
+    resource_candidates.push("bin/motionview-py.exe".to_string());
+  }
+  resource_candidates.push("bin/motionview-py".to_string());
 
-  for rel in candidates {
-    let p = app.path().resolve(rel, BaseDirectory::Resource)?;
-    if p.exists() {
-      return Ok(p);
+  let mut exe_candidates = Vec::new();
+  if let Some(triple) = option_env!("TAURI_ENV_TARGET_TRIPLE") {
+    if cfg!(target_os = "windows") {
+      exe_candidates.push(format!("motionview-py"));
+      exe_candidates.push(format!("motionview-py-{triple}.exe"));
+      exe_candidates.push(format!("motionview-py-{triple}"));
+    } else {
+      exe_candidates.push(format!("motionview-py-{triple}"));
+    }
+  }
+  if cfg!(target_os = "windows") {
+    exe_candidates.push("motionview-py.exe".to_string());
+  }
+  exe_candidates.push("motionview-py".to_string());
+
+  if cfg!(target_os = "macos") {
+    if let Ok(exe) = std::env::current_exe() {
+      if let Some(dir) = exe.parent() {
+        for rel in &exe_candidates {
+          let p = dir.join(rel);
+          if p.exists() {
+            return Ok(p);
+          }
+        }
+      }
+    }
+    for rel in &exe_candidates {
+      if let Ok(p) = app.path().resolve(rel, BaseDirectory::Executable) {
+        if p.exists() {
+          return Ok(p);
+        }
+      }
+    }
+    for rel in &resource_candidates {
+      if let Ok(p) = app.path().resolve(rel, BaseDirectory::Resource) {
+        if p.exists() {
+          return Ok(p);
+        }
+      }
+    }
+  } else {
+    for rel in &resource_candidates {
+      if let Ok(p) = app.path().resolve(rel, BaseDirectory::Resource) {
+        if p.exists() {
+          return Ok(p);
+        }
+      }
+    }
+    for rel in &exe_candidates {
+      if let Ok(p) = app.path().resolve(rel, BaseDirectory::Executable) {
+        if p.exists() {
+          return Ok(p);
+        }
+      }
     }
   }
 
   Err(tauri::Error::Io(io::Error::new(
     io::ErrorKind::NotFound,
-    "bridge.py not found in bundle resources",
+    "motionview-py sidecar not found in bundle resources",
   )))
 }
 
@@ -97,19 +161,29 @@ fn write_bridge_pid(app: &tauri::AppHandle, pid: u32) {
 }
 
 fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<Child, tauri::Error> {
-  let script = resolve_bridge(app)?;
-  let workdir = script.parent().unwrap().to_path_buf();
+  let exe = resolve_bridge_bin(app)?;
+  let workdir = exe.parent().unwrap().to_path_buf();
 
-  let py = ["/usr/bin/python3", "/opt/homebrew/bin/python3", "/usr/local/bin/python3"]
-    .into_iter()
-    .map(PathBuf::from)
-    .find(|p| p.exists())
-    .unwrap_or_else(|| PathBuf::from("python3"));
+  let log_path = app
+    .path()
+    .app_data_dir()
+    .map(|dir| dir.join("bridge.log"))?;
+  if let Some(parent) = log_path.parent() {
+    let _ = fs::create_dir_all(parent);
+  }
+  let mut log = OpenOptions::new()
+    .create(true)
+    .append(true)
+    .open(&log_path)
+    .map_err(tauri::Error::Io)?;
+  let _ = writeln!(log, "spawn_bridge: exe={:?} port={}", exe, port);
+  let log_err = log.try_clone().map_err(tauri::Error::Io)?;
 
-  Command::new(py)
-    .arg(&script)
+  Command::new(exe)
     .args(["--host", "127.0.0.1", "--port", &port.to_string()])
     .current_dir(&workdir)
+    .stdout(Stdio::from(log))
+    .stderr(Stdio::from(log_err))
     .spawn()
     .map_err(tauri::Error::Io)
 }

@@ -1,14 +1,15 @@
 # MVLib (PROS) — MotionView Telemetry + Logging
 
-MVLib is a simple logging and telemetry library for PROS V5 teams that want **clear, replayable data** in MotionView. It gives you structured logs, live “watches,” and pose data so MotionView can draw your robot path, list watches, and show details when you hover or click the field.
+# What is this?
+`MVLib` is a simple logging and telemetry library for PROS V5 teams that want **clear, replayable data** in MotionView. It gives you structured logs, live “watches,” and pose data so MotionView can draw your robot path, list watches, and show details when you hover or click the field.
 
 If your team just wants **“why use this”** or **“how do I set it up”**, this README is for you.
 
 ## Why Use MVLib
 
 - **See your robot path** in MotionView, on a real field, with real numbers.
-- **Track important values** like battery, motor temps, flywheel RPM, or auton stages.
-- **Debug faster** with consistent, readable logs instead of scattered `printf`s.
+- **Track important values** like battery, motor temps, flywheel RPM, or auton events.
+- **Debug faster** with consistent, viewable logs instead of scattered `printf`s.
 - **Share runs** with your team and compare improvements.
 - **Develop autonomous** with live viewing, event watching, and playback.
 - **Iterate quickly**: logging runs takes no more than a single button press
@@ -133,6 +134,8 @@ MotionView will show these as a **watch list**, and the field hover will show th
 
 **How `LevelOverride` works:** it lets a watch temporarily “promote” itself when a condition is true. In the examples above, the watch stays INFO normally, but flips to WARN when the battery drops too low or the intake current spikes. MotionView will show those as more urgent watch entries. <br>
 **How to use `PREDICATE`:** By default, `PREDICATE` is limited to the return type of int32_t. This means that if you need to do decimals inside of your PREDICATE, you need to manually access `mvlib::as_predicate`. It works by using variable `v` to compare. `v` is the value of the expression from `getter`. If the expression provided in PREDICATE evaluates to `true`, then LevelOverride is activated and the label and logLevel switch to those from LevelOverride.
+
+> **IMPORTANT NOTE:** When using `.watch()`, the type put into LevelOverride must be the exact return type from the `Getter` function. If the types do not match, your code will NOT compile.
 
 **`LevelOverride` parameters (high level):**
 - `elevatedLevel`: the severity to use when the condition is true
