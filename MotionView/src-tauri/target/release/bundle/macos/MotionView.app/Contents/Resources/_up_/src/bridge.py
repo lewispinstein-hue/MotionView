@@ -9,8 +9,10 @@ from typing import Optional, Set, List
 import platform
 import re
 import time
+from datetime import datetime
 
 from fastapi import FastAPI, Request
+from pydantic import BaseModel
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.websockets import WebSocket
@@ -263,6 +265,23 @@ async def robot_image():
     return Response(status_code=404)
 
 
+LOG_PATH = os.environ.get("MOTIONVIEW_LOG_PATH")
+
+def _append_log(line: str) -> None:
+    if not LOG_PATH:
+        return
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(line.rstrip("\n") + "\n")
+    except Exception:
+        pass
+
+def log_line(level: str, msg: str, tag: Optional[str] = None) -> None:
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    t = f"[{tag}] " if tag else ""
+    _append_log(f"{ts} [{level}] {t}{msg}")
+
+
 # ----------------------------
 # WebSocket clients + broadcast
 # ----------------------------
@@ -318,6 +337,7 @@ class ProsTerminalRunner:
     def __init__(self):
         self.proc: Optional[asyncio.subprocess.Process] = None
         self.reader_task: Optional[asyncio.Task] = None
+        self._op_lock = asyncio.Lock()
 
         # Unix PTY support
         self._pty_master_fd: Optional[int] = None
@@ -333,36 +353,68 @@ class ProsTerminalRunner:
         return None if self.proc is None else self.proc.pid
 
     async def start(self) -> dict:
-        if self.running:
-            return {"ok": True, "status": "already running", "pid": self.pid}
+        async with self._op_lock:
+            if self.running:
+                return {"ok": True, "status": "already running", "pid": self.pid}
 
-        self._loop = asyncio.get_running_loop()
+            self._loop = asyncio.get_running_loop()
 
-        # Prefer PTY on Unix-like systems
-        if os.name != "nt":
+            # If a previous session exited without cleanup, clear stale PTY/reader state.
+            if self._loop is not None and self._pty_master_fd is not None:
+                try:
+                    self._loop.remove_reader(self._pty_master_fd)
+                except Exception:
+                    pass
+                try:
+                    os.close(self._pty_master_fd)
+                except Exception:
+                    pass
+                self._pty_master_fd = None
+                self._pty_buf = b""
+
+            # Prefer PTY on Unix-like systems
+            if os.name != "nt":
+                try:
+                    await asyncio.wait_for(self._start_unix_pty(), timeout=3.0)
+                    return {"ok": True, "status": "started", "pid": self.pid, "mode": "pty"}
+                except Exception as e:
+                    # Fall back to pipes if PTY fails
+                    print(f"WARNING: PTY start failed, falling back to pipes: {e}", file=sys.stderr)
+
             try:
-                await self._start_unix_pty()
-                return {"ok": True, "status": "started", "pid": self.pid, "mode": "pty"}
+                await asyncio.wait_for(self._start_pipes(), timeout=3.0)
+                return {"ok": True, "status": "started", "pid": self.pid, "mode": "pipes"}
             except Exception as e:
-                # Fall back to pipes if PTY fails
-                print(f"WARNING: PTY start failed, falling back to pipes: {e}")
-
-        await self._start_pipes()
-        return {"ok": True, "status": "started", "pid": self.pid, "mode": "pipes"}
+                return {"ok": False, "status": f"start failed: {e}"}
 
     async def stop(self) -> dict:
-        if not self.running:
-            return {"ok": True, "status": "not running"}
+        async with self._op_lock:
+            if not self.running:
+                # Still clean up stale PTY/reader state if present.
+                if self.proc is None and self.reader_task is None and self._pty_master_fd is None:
+                    return {"ok": True, "status": "not running"}
+                try:
+                    await asyncio.wait_for(self._terminate(graceful=True), timeout=3.0)
+                    return {"ok": True, "status": "cleaned"}
+                except Exception as e:
+                    return {"ok": False, "status": f"stop failed: {e}"}
 
-        await self._terminate(graceful=True)
-        return {"ok": True, "status": "stopped"}
+            try:
+                await asyncio.wait_for(self._terminate(graceful=True), timeout=3.0)
+                return {"ok": True, "status": "stopped"}
+            except Exception as e:
+                return {"ok": False, "status": f"stop failed: {e}"}
 
     async def kill(self) -> dict:
-        if not self.running:
-            return {"ok": True, "status": "not running"}
+        async with self._op_lock:
+            if not self.running:
+                return {"ok": True, "status": "not running"}
 
-        await self._terminate(graceful=False)
-        return {"ok": True, "status": "killed"}
+            try:
+                await asyncio.wait_for(self._terminate(graceful=False), timeout=3.0)
+                return {"ok": True, "status": "killed"}
+            except Exception as e:
+                return {"ok": False, "status": f"kill failed: {e}"}
 
     async def _terminate(self, graceful: bool):
         # Stop reader first (so it doesn't race against FD close)
@@ -425,8 +477,10 @@ class ProsTerminalRunner:
                 pass
             try:
                 await asyncio.wait_for(proc.wait(), timeout=1.0)
-            except Exception:
+            except:
                 pass
+        except Exception:
+            pass
 
     async def _start_unix_pty(self):
         import pty  # Unix only
@@ -446,7 +500,6 @@ class ProsTerminalRunner:
         lock = _get_lock()
         async with lock:
             pros_dir = str(PROS_PROJECT_DIR)
-        os.system(f"cd {pros_dir}")
         # Spawn `pros terminal` with stdio attached to PTY slave
         self.proc = await asyncio.create_subprocess_exec(
             PROS_EXE, "terminal",
@@ -474,6 +527,17 @@ class ProsTerminalRunner:
         except OSError:
             return
         if not data:
+            # EOF: remove reader to avoid busy loop, and close master.
+            try:
+                self._loop.remove_reader(self._pty_master_fd)
+            except Exception:
+                pass
+            try:
+                os.close(self._pty_master_fd)
+            except Exception:
+                pass
+            self._pty_master_fd = None
+            self._pty_buf = b""
             return
 
         self._pty_buf += data
@@ -505,6 +569,7 @@ class ProsTerminalRunner:
             cwd=pros_dir,
             creationflags=creationflags,
         )
+        print(f"runner._start_pipes: proc started pid={self.proc.pid}", file=sys.stderr)
 
         self.reader_task = asyncio.create_task(self._read_pipe_output())
 
@@ -559,6 +624,19 @@ async def api_kill():
     except Exception as e:
         return {"ok": False, "status": f"kill failed: {e}"}
 
+class LogMessage(BaseModel):
+    level: str = "INFO"
+    message: str
+    tag: Optional[str] = None
+
+@app.post("/api/log")
+async def api_log(msg: LogMessage):
+    try:
+        log_line(msg.level.upper(), msg.message, msg.tag)
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "status": f"log failed: {e}"}
+
 @app.get("/api/status")
 async def api_status():
     lock = _get_lock()
@@ -571,6 +649,7 @@ async def api_status():
         "assets_dir": str(ASSETS_DIR),
         "viewer_html": str(VIEWER_HTML),
         "pros_dir": pros_dir,
+        "log_path": str(LOG_PATH) if LOG_PATH else None,
     }
 
 @app.get("/api/pros-dir")

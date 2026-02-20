@@ -111,6 +111,7 @@ const settingsOffY = document.getElementById('settingsOffY');
 const settingsOffTheta = document.getElementById('settingsOffTheta');
 const settingsMinSpeed = document.getElementById('settingsMinSpeed');
 const settingsMaxSpeed = document.getElementById('settingsMaxSpeed');
+const settingsLiveDebug = document.getElementById('settingsLiveDebug');
 const settingsPlanMoveStep = document.getElementById('settingsPlanMoveStep');
 const settingsPlanSnapStep = document.getElementById('settingsPlanSnapStep');
 const settingsPlanThetaSnapStep = document.getElementById('settingsPlanThetaSnapStep');
@@ -135,6 +136,8 @@ let prosDirRetryTimer = null;
 let prosDirRetryAttempts = 0;
 let prosDirFromSettings = false;
 let prosExeFromSettings = false;
+let backendReady = false;
+let backendReadyAt = 0;
 
 // --- FIELD IMAGES ---
 const FIELD_IMAGES = [
@@ -1043,6 +1046,73 @@ function refreshBridgeOrigin() {
   }
   return ORIGIN;
 }
+
+async function ensureBackendReady() {
+  const origin = refreshBridgeOrigin();
+  if (!origin) return false;
+  const now = Date.now();
+  if (backendReady && now - backendReadyAt < 2000) return true;
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 1000);
+    const res = await fetch(`${origin}/api/status`, { signal: controller.signal });
+    clearTimeout(t);
+    if (!res.ok) return false;
+    const json = await res.json().catch(() => null);
+    if (!json) return false;
+    backendReady = true;
+    backendReadyAt = now;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function formatLogArgs(args) {
+  return args.map((a) => {
+    if (typeof a === "string") return a;
+    try { return JSON.stringify(a); } catch (e) { return String(a); }
+  }).join(" ");
+}
+
+async function logToBackend(level, message, tag) {
+  const origin = refreshBridgeOrigin();
+  if (!origin) return;
+  if (!(await ensureBackendReady())) return;
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 800);
+    await fetch(`${origin}/api/log`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ level, message, tag }),
+      signal: controller.signal,
+    });
+    clearTimeout(t);
+  } catch (e) {
+    // best effort
+  }
+}
+
+// Mirror key console errors into the backend log for shipped apps
+const _consoleError = console.error.bind(console);
+console.error = (...args) => {
+  _consoleError(...args);
+  void logToBackend("ERROR", formatLogArgs(args), "console");
+};
+const _consoleWarn = console.warn.bind(console);
+console.warn = (...args) => {
+  _consoleWarn(...args);
+  void logToBackend("WARN", formatLogArgs(args), "console");
+};
+window.addEventListener("error", (e) => {
+  const msg = `${e.message || "Script error"} @ ${e.filename || "unknown"}:${e.lineno || 0}:${e.colno || 0}`;
+  void logToBackend("ERROR", msg, "window");
+});
+window.addEventListener("unhandledrejection", (e) => {
+  const reason = e.reason?.stack || e.reason?.message || String(e.reason);
+  void logToBackend("ERROR", `Unhandled rejection: ${reason}`, "window");
+});
 
 // -------- canvas sizing/transform --------
 function computeTransform() {
@@ -3057,6 +3127,33 @@ let leftStreaming = false;
 let leftActionInFlight = false;
 let leftActionLastAt = 0;
 const LEFT_ACTION_COOLDOWN_MS = 400;
+let leftActionTimeout = null;
+
+function setLeftActionInFlight(v) {
+  leftActionInFlight = v;
+  if (leftActionTimeout) {
+    clearTimeout(leftActionTimeout);
+    leftActionTimeout = null;
+  }
+  if (v) {
+    leftActionTimeout = setTimeout(() => {
+      leftActionInFlight = false;
+      setLeftUi();
+      liveAppendLine("[UI] Action timed out; UI unlocked.");
+    }, 6000);
+  }
+}
+
+function withTimeout(promise, ms, label) {
+  let t = null;
+  const timeout = new Promise((_, reject) => {
+    t = setTimeout(() => reject(new Error(`${label} timeout`)), ms);
+  });
+  return Promise.race([
+    promise.finally(() => { if (t) clearTimeout(t); }),
+    timeout,
+  ]);
+}
 
 // In livestream mode, optionally keep the robot snapped to the newest pose when not hovering the timeline.
 // Toggled with Space (while connected).
@@ -3076,6 +3173,21 @@ let liveAppendScheduled = false;
 let liveLastPoseT = null; // last pose timestamp integrated
 let liveLastPoseCount = 0;
 let liveLastWatchCount = 0;
+let liveLastRenderAt = 0;
+let liveDebugEnabled = false;
+let liveReqId = 0;
+
+function dbgLive(msg) {
+  if (!liveDebugEnabled) return;
+  liveAppendLine(`[DBG] ${msg}`);
+  void logToBackend("DEBUG", msg, "live");
+}
+
+function clearLivePending() {
+  if (livePendingLines.length === 0) return;
+  livePendingLines = [];
+  livePendingConsumed = 0;
+}
 
 function parseLiveLineIntoState(line) {
   const s = stripToTag(line);
@@ -3239,7 +3351,7 @@ function canRunLeftAction() {
   return true;
 }
 
-async function apiPost(path) {
+async function apiPost(path, timeoutMs = 5000) {
   if (!path) return;
   if (path === "/no HTTP/1.1" || path === "/ HTTP/1.1") return;
 
@@ -3247,22 +3359,32 @@ async function apiPost(path) {
   const p = path.startsWith("/") ? path : `/${path}`;
   const origin = refreshBridgeOrigin();
   if (!origin) {
+    dbgLive(`apiPost: ${p} blocked (origin not ready)`);
     return { ok: false, status: 0, json: { status: "bridge origin not ready" } };
   }
   const url = `${origin}${p}`;
+  const reqId = ++liveReqId;
+  dbgLive(`apiPost#${reqId}: POST ${url}`);
 
   try {
-    const res = await fetch(url, { method: "POST" });
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(url, { method: "POST", signal: controller.signal });
+    clearTimeout(t);
     // Best-effort JSON; don't crash UI if server returns non-JSON or 404
     let json = null;
     try { json = await res.json(); } catch (e) {}
+    dbgLive(`apiPost#${reqId}: response ${res.status}`);
     return { ok: res.ok, status: res.status, json };
   } catch (e) {
-    return { ok: false, status: 0, json: { status: e?.message || "request failed" } };
+    const msg = (e?.name === "AbortError") ? "request timeout" : (e?.message || "request failed");
+    dbgLive(`apiPost#${reqId}: error ${msg}`);
+    return { ok: false, status: 0, json: { status: msg } };
   }
 }
 
 async function connectLeft() {
+  dbgLive("connectLeft: begin");
   if (prosDirInput && prosDirInput.value && prosDirInput.value.trim()) {
     await updateProsDir(prosDirInput.value);
   }
@@ -3276,14 +3398,17 @@ async function connectLeft() {
     setLeftUi("Child process Bridge.py was not given a port. Live streaming cannot start.");
     return;
   }
-  pause();
+  if (playing)
+    pause();
   stopStreaming(false, false);
+
   if (leftWs) return;
   leftWs = new WebSocket(`${WS_ORIGIN}/ws`);
 
   leftWs.addEventListener("open", () => {
     leftConnected = true;
     leftSetUI("Connected");
+    dbgLive("ws: open");
 
     startLeftRefresh();
   });
@@ -3313,6 +3438,7 @@ async function connectLeft() {
     leftStreaming = false;
     if (window.__live) { window.__live.connected = false; window.__live.streaming = false; }
     stopLeftRefresh();
+    dbgLive("ws: close");
   });
 
   leftWs.addEventListener("error", () => {
@@ -3324,6 +3450,7 @@ async function connectLeft() {
 }
 
 function disconnectLeft() {
+  dbgLive("disconnectLeft: begin");
   if (leftWs) {
     try { leftWs.close(); } catch (e) {}
   }
@@ -3345,6 +3472,7 @@ function startLeftRefresh() {
   stopLeftRefresh();
   if (!leftConnected) return;
   if (!leftRefreshMs || leftRefreshMs <= 0) return;
+  dbgLive(`startLeftRefresh: ${leftRefreshMs}ms`);
   leftRefreshTimer = setInterval(() => {
     doLeftRefresh();
   }, leftRefreshMs);
@@ -3355,7 +3483,13 @@ async function doLeftRefresh() {
   // During live mode, refresh means: integrate any pending WS lines into
   // rawPoses/watches, then update derived state and redraw.
   if (!leftConnected) return;
-  if (!leftStreaming) return; // "Stop" pauses drawing; we still buffer lines
+  if (!leftStreaming) {
+    // "Stop" pauses drawing; do not let WS backlog grow unbounded.
+    clearLivePending();
+    return;
+  }
+
+  const t0 = performance.now();
 
   if (!data) {
     data = { poses: [], watches: [], meta: {} };
@@ -3415,50 +3549,94 @@ async function doLeftRefresh() {
   updatePoseReadout();
   requestDrawAll();
   scheduleSavedPathsSave();
+
+  const t1 = performance.now();
+  const dt = t1 - t0;
+  if (dt > 100) {
+    dbgLive(`doLeftRefresh: ${dt.toFixed(1)}ms (poses=${rawPoses.length}, watches=${watches.length}, pending=${livePendingLines.length - livePendingConsumed})`);
+  }
 }
 
 
 async function startStreaming() {
-  const r = await apiPost("/api/start");
+  dbgLive("startStreaming: begin");
+  let r;
+  try {
+    r = await withTimeout(apiPost("/api/start"), 5000, "start");
+  } catch (e) {
+    liveAppendLine(`[api] start failed (${e?.message || e})`);
+    // Retry once after reconnecting
+    try {
+      disconnectLeft();
+      await connectLeft();
+      r = await withTimeout(apiPost("/api/start"), 5000, "start");
+    } catch (e2) {
+      return false;
+    }
+    if (!r || !r.ok) return false;
+    leftStreaming = true;
+    leftSetUI("Streaming started");
+    dbgLive("startStreaming: ok (retry)");
+    return true;
+  }
   if (!r.ok) {
     liveAppendLine(`[api] start failed (${r.status})`);
-    liveAppendLine("Try restarting the application.");
+    liveAppendLine("Backend may not be working. Try restarting the application.");
+    dbgLive(`startStreaming: failed status=${r.status}`);
     return false;
   }
+  // New session: allow timestamps to restart from 0 without being dropped.
+  liveLastPoseT = null;
   leftStreaming = true;
   leftSetUI("Streaming started");
+  dbgLive(`startStreaming: ok (status=${r.status || "n/a"})`);
   return true;
 }
 
 async function stopStreaming(forceKill = false, doMsg = true) {
+  dbgLive(`stopStreaming: begin (force=${forceKill})`);
   const path = forceKill ? "/api/kill" : "/api/stop";
-  const r = await apiPost(path);
+  let r;
+  try {
+    r = await withTimeout(apiPost(path), 5000, "stop");
+  } catch (e) {
+    liveAppendLine(`[api] stop/kill failed (${e?.message || e})`);
+    dbgLive(`stopStreaming: failed (${e?.message || e})`);
+    return false;
+  }
   if (!r.ok) {
     liveAppendLine(`[api] stop/kill failed (${r.status})`);
     // Even if kill endpoint doesn't exist, still fall back to /api/stop
     if (forceKill && r.status === 404) {
-      const r2 = await apiPost("/api/stop");
+      let r2;
+      try {
+        r2 = await withTimeout(apiPost("/api/stop"), 5000, "stop");
+      } catch (e) {
+        return false;
+      }
       if (!r2.ok) return false;
     } else {
       return false;
     }
   }
   leftStreaming = false;
+  clearLivePending();
   if (doMsg)
     leftSetUI(forceKill ? "Force-killed" : "Streaming stopped");
+  dbgLive("stopStreaming: ok");
   return true;
 }
 
 // Connect toggle
 btnLeftConnectEl?.addEventListener('click', async () => {
   if (!canRunLeftAction()) return;
-  leftActionInFlight = true;
+  setLeftActionInFlight(true);
   setLeftUi();
   try {
     if (leftConnected) disconnectLeft();
     else await connectLeft();
   } finally {
-    leftActionInFlight = false;
+    setLeftActionInFlight(false);
     setLeftUi();
   }
 });
@@ -3467,7 +3645,7 @@ btnLeftConnectEl?.addEventListener('click', async () => {
 btnLeftStopEl?.addEventListener('click', async (e) => {
   if (!leftConnected) return;
   if (!canRunLeftAction()) return;
-  leftActionInFlight = true;
+  setLeftActionInFlight(true);
   setLeftUi();
 
   try {
@@ -3481,7 +3659,7 @@ btnLeftStopEl?.addEventListener('click', async (e) => {
     else await stopStreaming(false);
     btnLeftConnectEl.title = leftConnected ? "Disconnect" : "Connect";
   } finally {
-    leftActionInFlight = false;
+    setLeftActionInFlight(false);
     setLeftUi();
   }
 });
@@ -3988,6 +4166,12 @@ async function loadSettings() {
         leftRefreshMs = parseInt(leftRefreshIntervalEl.value || "0", 10) || 0;
         startLeftRefresh();
       }
+      if (settings.liveDebug !== undefined) {
+        liveDebugEnabled = !!settings.liveDebug;
+        if (settingsLiveDebug) settingsLiveDebug.checked = liveDebugEnabled;
+      } else if (settingsLiveDebug) {
+        settingsLiveDebug.checked = false;
+      }
       if (settings.playbackSpeed !== undefined && speedSelect) {
         speedSelect.value = String(settings.playbackSpeed);
         playRate = Number(speedSelect.value) || 1;
@@ -4073,6 +4257,7 @@ async function saveSettings() {
       planThetaSnapStep: settingsPlanThetaSnapStep ? settingsPlanThetaSnapStep.value : '0',
       planSpeed: settingsPlanSpeed ? settingsPlanSpeed.value : '50',
       refreshIntervalMs: leftRefreshIntervalEl ? leftRefreshIntervalEl.value : '0',
+      liveDebug: settingsLiveDebug ? settingsLiveDebug.checked : liveDebugEnabled,
       playbackSpeed: speedSelect ? speedSelect.value : '1',
       selectedField: fieldSelect ? fieldSelect.value : DEFAULT_FIELD_KEY,
       robotImgScale: robotImgTx.scale,
@@ -4228,6 +4413,8 @@ function openSettings() {
   if (prosDirInput && prosDirInput.value && prosDirInput.value.trim()) {
     updateProsDir(prosDirInput.value);
   }
+  if (appMode === "viewing")
+    refreshWS();
   // Update robot image controls visibility
   if (settingsRobotImgControls) {
     settingsRobotImgControls.hidden = !(robotImageEnabled && robotImgOk);
@@ -4253,6 +4440,7 @@ function closeSettings() {
   } catch (e) {
     console.error('Error syncing settings:', e);
   }
+  refreshWS();
   settingsModal.setAttribute('hidden', '');
   settingsModal.style.display = 'none'; // Force hide
 }
@@ -4351,6 +4539,12 @@ if (settingsMinSpeed) {
 if (settingsMaxSpeed) {
   settingsMaxSpeed.addEventListener('input', () => {
     syncSettingsToMain();
+  });
+}
+if (settingsLiveDebug) {
+  settingsLiveDebug.addEventListener('change', () => {
+    liveDebugEnabled = settingsLiveDebug.checked;
+    saveSettings();
   });
 }
 if (settingsPlanMoveStep) {
@@ -4533,10 +4727,27 @@ function renderProsExeAutoResults(candidates) {
   }
 }
 
+function refreshWS() {
+  refreshBridgeOrigin();
+  updateConnectButtonState();
+  if (prosDirInput && prosDirInput.value && prosDirInput.value.trim()) {
+    updateProsDir(prosDirInput.value);
+  } else {
+    setProsDirStatus('PROS directory not set. Live viewing disabled.', 'error');
+  }
+  if (prosExeInput && prosExeInput.value && prosExeInput.value.trim()) {
+    updateProsExe(prosExeInput.value);
+  } else {
+    setProsExeStatus('PROS CLI path not set. Auto-detect or enter a path.', 'info');
+  }
+  // Best-effort refresh from backend
+  loadProsDirFromAPI();
+  loadProsExeFromAPI();
+}
+
 // PROS directory input
 async function updateProsDir(dir) {
-  const trimmed = (dir || '').trim();
-  if (!trimmed) {
+  if (!dir) {
     prosDirValid = false;
     setProsDirStatus('PROS directory not set. Live viewing disabled.', 'error');
     saveSettings();
@@ -4544,19 +4755,19 @@ async function updateProsDir(dir) {
     return;
   }
 
-  if (trimmed === "None" /*None is default state */) {
+  if (dir === "None" /*None is default state */) {
     return;
   }
   try {
     const origin = refreshBridgeOrigin();
-    if (!origin) {
+    if (!origin || !(await ensureBackendReady())) {
       prosDirValid = false;
       setProsDirStatus('Bridge not ready yet. Retrying...', 'error');
       updateConnectButtonState();
       if (prosDirRetryTimer) clearTimeout(prosDirRetryTimer);
       if (prosDirRetryAttempts < 5) {
         prosDirRetryAttempts += 1;
-        prosDirRetryTimer = setTimeout(() => updateProsDir(trimmed), 500);
+        prosDirRetryTimer = setTimeout(() => updateProsDir(dir), 500);
       } else {
         setProsDirStatus('Bridge not ready yet. Try again in a moment.', 'error');
       }
@@ -4566,7 +4777,7 @@ async function updateProsDir(dir) {
     const response = await fetch(`${origin}/api/pros-dir`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dir: trimmed })
+      body: JSON.stringify({ dir: dir })
     });
     const result = await response.json();
     if (result.ok) {
@@ -4601,7 +4812,7 @@ async function updateProsExe(pathStr) {
   }
   try {
     const origin = refreshBridgeOrigin();
-    if (!origin) {
+    if (!origin || !(await ensureBackendReady())) {
       prosExeValid = false;
       setProsExeStatus('Bridge not ready yet. Retrying...', 'error');
       return;
@@ -4656,7 +4867,7 @@ if (prosExeInput) {
 // PROS directory browse button (placeholder - could use Tauri dialog API)
 if (btnProsDirAuto) {
   btnProsDirAuto.addEventListener('click', async () => {
-    if (!refreshBridgeOrigin()) {
+    if (!refreshBridgeOrigin() || !(await ensureBackendReady())) {
       setAutoStatus('Backend not ready.', 'error');
       return;
     }
@@ -4681,7 +4892,7 @@ if (btnProsDirAuto) {
 
 if (btnProsExeAuto) {
   btnProsExeAuto.addEventListener('click', async () => {
-    if (!refreshBridgeOrigin()) {
+    if (!refreshBridgeOrigin() || !(await ensureBackendReady())) {
       setProsExeAutoStatus('Backend not ready.', 'error');
       return;
     }
@@ -4706,7 +4917,7 @@ if (btnProsExeAuto) {
 
 // Load PROS directory from API on startup
 async function loadProsDirFromAPI() {
-  if (!refreshBridgeOrigin()) return;
+  if (!refreshBridgeOrigin() || !(await ensureBackendReady())) return;
   try {
     const response = await fetch(`${ORIGIN}/api/pros-dir`);
     const result = await response.json();
@@ -4728,7 +4939,7 @@ async function loadProsDirFromAPI() {
 }
 
 async function loadProsExeFromAPI() {
-  if (!refreshBridgeOrigin()) return;
+  if (!refreshBridgeOrigin() || !(await ensureBackendReady())) return;
   try {
     const response = await fetch(`${ORIGIN}/api/pros-exe`);
     const result = await response.json();
@@ -5102,7 +5313,7 @@ function clearAllPosesAndWatches() {
   try { updateFloatingInfo?.(null, 0); } catch {}
   try { requestDrawAll?.(); } catch {}
 
-  setStatus("Cleared Field and Plannd Path")
+  setStatus("Cleared Field and Planned Path")
 }
 
 btnLeftClear?.addEventListener('click', () => {

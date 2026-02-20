@@ -4,6 +4,7 @@ use std::{
   path::PathBuf,
   process::{Child, Command},
   sync::Mutex,
+  time::{SystemTime, UNIX_EPOCH},
 };
 use std::{fs, process::Stdio};
 #[cfg(unix)]
@@ -101,6 +102,38 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<PathBuf> {
   )))
 }
 
+#[cfg(unix)]
+fn format_log_ts() -> String {
+  use libc::{localtime_r, time, tm};
+  unsafe {
+    let mut t: libc::time_t = 0;
+    time(&mut t as *mut libc::time_t);
+    let mut out: tm = std::mem::zeroed();
+    if localtime_r(&t as *const libc::time_t, &mut out as *mut tm).is_null() {
+      return format!("{}", t);
+    }
+    let year = (out.tm_year + 1900) % 100;
+    format!(
+      "{:02}_{:02}_{:02}-{:02}_{:02}_{:02}",
+      out.tm_mon + 1,
+      out.tm_mday,
+      year,
+      out.tm_hour,
+      out.tm_min,
+      out.tm_sec
+    )
+  }
+}
+
+#[cfg(not(unix))]
+fn format_log_ts() -> String {
+  let ts = SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .map(|d| d.as_secs())
+    .unwrap_or(0);
+  format!("{}", ts)
+}
+
 fn stop_bridge(state: &tauri::State<BridgeState>, app: &tauri::AppHandle) {
   if let Some(mut child) = state.0.lock().unwrap().take() {
     #[cfg(unix)]
@@ -114,7 +147,6 @@ fn stop_bridge(state: &tauri::State<BridgeState>, app: &tauri::AppHandle) {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
-      let _ = child.wait();
       // Ensure the process group is gone
       let _ = Command::new("kill")
         .arg("-KILL")
@@ -127,8 +159,11 @@ fn stop_bridge(state: &tauri::State<BridgeState>, app: &tauri::AppHandle) {
     #[cfg(not(unix))]
     {
       let _ = child.kill();
-      let _ = child.wait(); // avoid zombie
     }
+    // Reap in background to avoid blocking the main thread.
+    std::thread::spawn(move || {
+      let _ = child.wait();
+    });
   }
   if let Ok(path) = pid_path(app) {
     let _ = fs::remove_file(path);
@@ -200,7 +235,10 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<Child, tauri::Error
   let log_path = app
     .path()
     .app_data_dir()
-    .map(|dir| dir.join("bridge.log"))?;
+    .map(|dir| {
+      let ts = format_log_ts();
+      dir.join(format!("{ts}.log"))
+    })?;
   if let Some(parent) = log_path.parent() {
     let _ = fs::create_dir_all(parent);
   }
@@ -223,6 +261,7 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<Child, tauri::Error
       })
   }
     .args(["--host", "127.0.0.1", "--port", &port.to_string()])
+    .env("MOTIONVIEW_LOG_PATH", &log_path)
     .current_dir(&workdir)
     .stdout(Stdio::from(log))
     .stderr(Stdio::from(log_err))
