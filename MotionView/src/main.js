@@ -193,7 +193,7 @@ const FIELD_BOUNDS_IN = { minX: -72, maxX: 72, minY: -72, maxY: 72, pad: 30 };
 
 const MAX_OFFSET_THETA = 359;
 
-const WATCH_TOL_MS = 40; // Controls the ± time that determines which pose a watch attaches to
+const WATCH_TOL_MS = 60; // Controls the ± time that determines which pose a watch attaches to
 const COLLAPSE_PX_TIMELINE = 100; // When the timeline collapses away
 const COLLAPSE_PX_SIDEBAR = 275; 
 const COLLAPSE_WAYPOINTLIST_PX = 5;
@@ -204,16 +204,17 @@ const MAX_PX_LIVEWIN = 650; // Max width for left live window panel
 
 const MAX_TIMELINE_H_PX = 350; // Height at which timeline stops growing
 const MAX_SIDEBAR_W_PX = 400; // Width at which sidebar stops growing
-const MAX_PLAN_UNDO = 80;
+const MAX_PLAN_UNDO = 50;
 
 const HOVER_PIXEL_TOL = 14;
 const TRACK_HOVER_PAD_PX = 12; // How close to the track before snapping on
 
 const OFFSET_MAX = 100; // Max offset in either direction
 
-const CANVAS_ZOOM_MAX = 12; // Max zoom in
-const CANVAS_ZOOM_MIN = 0.35; // Max zoom out
+const CANVAS_ZOOM_MAX = 15; // Max zoom in
+const CANVAS_ZOOM_MIN = 0.15; // Max zoom out
 
+// FLOATING INFO WINDOW SIZE
 const minW = 50, maxW = 400;
 const minH = 49, maxH = 600; // Bring minH back to 241
 let data = null;
@@ -309,9 +310,10 @@ let planLastWall = null;
 const PLAN_SPEED = 1; // units per second
 const PLAN_POINT_R = 11;
 const PLAN_OVERLAY_POINT_R = 7;
-const PLAN_THETA_HANDLE_R = 6;
+const PLAN_THETA_HANDLE_R = 6; // Radius of theta handle
 const PLAN_THETA_HANDLE_OFFSET = 25;
-const PLAN_MARKER_MAX_IN = 3;
+let PLAN_MARKER_MAX_IN = 3; // Max size of waypoint marker
+let PLAN_MARKER_MAX_IN_VIEWING = 1; // Max size of waypoint marker in viewing mode
 let planScrubbing = false;
 let planOverlayVisible = false;
 let savedPathsSaveTimer = null;
@@ -760,6 +762,16 @@ function isInField(w) {
   return sp.x >= 0 && sp.x <= rect.width && sp.y >= 0 && sp.y <= rect.height;
 }
 
+function isPointInFieldBounds(point) {
+  if (!point || typeof point.x !== "number" || typeof point.x !== "number" ) return false;
+  return (
+    point.x >= FIELD_BOUNDS_IN.minX &&
+    point.x <= FIELD_BOUNDS_IN.maxX &&
+    point.y >= FIELD_BOUNDS_IN.minY &&
+    point.y <= FIELD_BOUNDS_IN.maxY 
+  );
+}
+
 function drawPlanningOverlay(force = false) {
   if (!force && appMode !== "planning") return;
   if (appMode !== "planning" && !planOverlayVisible) return;
@@ -786,7 +798,10 @@ function drawPlanningOverlay(force = false) {
     const sp = worldToScreen(p.x, p.y);
     const isSel = planSelectedSet.has(i);
     const baseR = (appMode !== "planning") ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
-    const r = Math.min(baseR, PLAN_MARKER_MAX_IN * scale);
+
+    if (appMode === "viewing") var r = Math.min(baseR, PLAN_MARKER_MAX_IN_VIEWING * scale);
+    else var r = Math.min(baseR, PLAN_MARKER_MAX_IN * scale);
+
     ctx.beginPath();
     ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
     ctx.fillStyle = (i === planSelected) ? "rgba(180,220,255,1)" : (isSel ? "rgba(150,200,255,0.95)" : "rgba(120,180,255,0.9)");
@@ -809,7 +824,10 @@ function drawPlanningOverlay(force = false) {
     ctx.restore();
 
     if (isSel) {
-      const handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN * scale);
+      if (appMode === "viewing") var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN_VIEWING * scale);
+      else 
+        var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN * scale);
+
       const dist = r + PLAN_THETA_HANDLE_OFFSET;
       const hx = sp.x + Math.sin(theta) * dist;
       const hy = sp.y - Math.cos(theta) * dist;
@@ -2534,7 +2552,7 @@ canvas.addEventListener('pointerdown', (e) => {
       updatePlanThetaFromPointer(thetaHit, mx, my);
       return;
     }
-    if (!isInField(w)) {
+    if (!isInField(w) || !isPointInFieldBounds(w)) {
       // allow panning when clicking outside the field
       panArmed = true;
       isPanning = false;

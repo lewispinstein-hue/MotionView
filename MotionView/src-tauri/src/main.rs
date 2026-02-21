@@ -1,3 +1,5 @@
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 #[cfg(unix)]
 use std::{fs, process::Stdio};
 use std::{
@@ -5,10 +7,11 @@ use std::{
     path::PathBuf,
     process::{Child, Command},
     sync::Mutex,
+    time::{SystemTime, UNIX_EPOCH}
 };
 
 use tauri::{Manager, RunEvent, Window};
-
+use std::{fs, process::Stdio};
 mod settings;
 
 struct BridgeState(Mutex<Option<Child>>);
@@ -223,6 +226,12 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child
     // Prepare Command
     let mut cmd = std::process::Command::new(&exe);
 
+    #[cfg(windows)]
+    {
+      const CREATE_NO_WINDOW: u32 = 0x08000000;
+      cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    
     // Apply Unix-specific process grouping (ignored on Windows)
     #[cfg(unix)]
     {
@@ -275,6 +284,7 @@ fn persist_window_state(app_handle: &tauri::AppHandle) {
 fn persist_window_state(_: &tauri::AppHandle) {}
 
 fn main() {
+  println!("DO NOT CLOSE THIS WINDOW. MotionView runs off of it and cannot function without this window open.");
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(BridgeState(Mutex::new(None)))

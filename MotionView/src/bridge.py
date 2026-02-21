@@ -553,7 +553,10 @@ class ProsTerminalRunner:
             # Keep it in its own process group to make termination more reliable
             try:
                 import subprocess
-                creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+                creationflags = (
+                    subprocess.CREATE_NEW_PROCESS_GROUP
+                    | subprocess.CREATE_NO_WINDOW
+                )
             except Exception:
                 creationflags = 0
 

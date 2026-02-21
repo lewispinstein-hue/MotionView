@@ -38,7 +38,13 @@ const venvPython = path.join(repoRoot, ".venv", "bin", "python");
 const python =
   process.env.PYTHON ||
   (fs.existsSync(venvPython) ? venvPython : "python3");
-run(python, ["-m", "PyInstaller", "-F", "-n", "motionview-py", entry]);
+
+const pyInstallerArgs = ["-m", "PyInstaller", "-F", "--noconsole"];
+if (process.platform === "win32") {
+  // pyInstallerArgs.push("--noconsole");
+}
+pyInstallerArgs.push("-n", "motionview-py", entry);
+run(python, pyInstallerArgs);
 
 const distExe = path.join(distDir, outName);
 if (!fs.existsSync(distExe)) {
