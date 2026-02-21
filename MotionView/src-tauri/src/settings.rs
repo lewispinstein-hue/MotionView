@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use tauri::{AppHandle, Manager};
 use base64::Engine as _;
+use tauri::{AppHandle, Manager};
 
 const SETTINGS_FILE: &str = "user-preferences.json";
 const ROBOT_IMAGE_FILE_BASE: &str = "robot-image";
@@ -99,7 +99,13 @@ pub fn write_saved_paths(app: AppHandle, contents: String) -> Result<(), String>
 }
 
 fn mime_from_ext(path: &std::path::Path) -> &'static str {
-    match path.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase().as_str() {
+    match path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_lowercase()
+        .as_str()
+    {
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",
         "gif" => "image/gif",
@@ -174,12 +180,8 @@ pub fn save_robot_image(app: AppHandle, dataUrl: String) -> Result<String, Strin
 #[cfg(not(mobile))]
 #[allow(dead_code)]
 pub fn save_window_state(app: &AppHandle, window: &tauri::WebviewWindow) -> Result<(), String> {
-    let pos = window
-        .outer_position()
-        .map_err(|e| e.to_string())?;
-    let size = window
-        .outer_size()
-        .map_err(|e| e.to_string())?;
+    let pos = window.outer_position().map_err(|e| e.to_string())?;
+    let size = window.outer_size().map_err(|e| e.to_string())?;
     let fullscreen = window.is_fullscreen().unwrap_or(false);
     let payload = serde_json::json!({
         "x": pos.x,

@@ -1,6 +1,47 @@
 const invoke = window.__TAURI__?.core?.invoke ?? window.__TAURI__?.invoke;
 if (!invoke) console.warn("Tauri API not available; running in browser?");
 
+const isWindowsPlatform =
+  typeof navigator === "object" && /Windows/.test(navigator.userAgent);
+let windowsFullscreenState = false;
+
+async function refreshWindowsFullscreenState() {
+  if (!isWindowsPlatform || !invoke) return windowsFullscreenState;
+  try {
+    windowsFullscreenState = await invoke("get_window_fullscreen_state");
+  } catch (err) {
+    console.error("MotionView: could not query fullscreen state:", err);
+  }
+  return windowsFullscreenState;
+}
+
+async function setWindowsFullscreenState(enable) {
+  if (!isWindowsPlatform || !invoke) return windowsFullscreenState;
+  try {
+    windowsFullscreenState = await invoke("set_windows_fullscreen", { enable });
+  } catch (err) {
+    console.error("MotionView: failed to change fullscreen state:", err);
+  }
+  return windowsFullscreenState;
+}
+
+function toggleWindowsFullscreen() {
+  setWindowsFullscreenState(!windowsFullscreenState);
+}
+
+if (isWindowsPlatform) {
+  refreshWindowsFullscreenState();
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "F11") {
+      event.preventDefault();
+      toggleWindowsFullscreen();
+    } else if (event.key === "Escape" && windowsFullscreenState) {
+      event.preventDefault();
+      setWindowsFullscreenState(false);
+    }
+  });
+}
+
 let ORIGIN = window.__BRIDGE_ORIGIN__ ?? null;
 let WS_ORIGIN = ORIGIN ? ORIGIN.replace(/^http/, "ws") : null;
 
@@ -153,7 +194,7 @@ const FIELD_BOUNDS_IN = { minX: -72, maxX: 72, minY: -72, maxY: 72, pad: 30 };
 const MAX_OFFSET_THETA = 359;
 
 const WATCH_TOL_MS = 40; // Controls the ± time that determines which pose a watch attaches to
-const COLLAPSE_PX_TIMELINE = 140; // When the timeline collapses away
+const COLLAPSE_PX_TIMELINE = 100; // When the timeline collapses away
 const COLLAPSE_PX_SIDEBAR = 275; 
 const COLLAPSE_WAYPOINTLIST_PX = 5;
 

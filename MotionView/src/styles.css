@@ -20,6 +20,12 @@
       background:var(--panel); color:var(--text); border:1px solid var(--line);
       padding:8px 10px; border-radius:10px; max-width:100%;
     }
+    select option,
+    select optgroup {
+      background: var(--panel);
+      color: var(--text);
+      forced-color-adjust: none;
+    }
     input[type="text"] {
       background:var(--panel);
       color:var(--text);

@@ -32,7 +32,8 @@
     "active": true,
     "targets": "all",
     "icon": [
-      "icon/icon.icns",
+      "icons/icon.icns",
+      "icons/icon.png",
       "icons/icon.ico"
     ],
     "externalBin": [
