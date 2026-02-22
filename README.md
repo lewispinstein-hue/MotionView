@@ -55,7 +55,7 @@ Key capabilities:
 
 ## Planning Mode
 <p align="center">
-    <img src="assets/MotionView/planning_mode.png" alt="Icon" width="500" />
+    <img src="assets/MotionView/planning_mode_path.png" alt="Icon" width="500" />
 </p>
 
 Use this mode to **plan and refine** a path before testing, or after.
@@ -78,7 +78,7 @@ MotionView requires nothing out of the box to load files, but some features requ
 Livestreaming lets you watch a robot's pose logger in real time without opening a saved file.
 
 Core requirements:
-1. Be connected to your robot (controller/brain) and run a `Posex logger`; for a minimal logger build see [**MVLib**](</Example Project - MVLib/README.md>).
+1. Be connected to your robot (controller/brain) and run a `Pose logger`; for a minimal logger build see [**MVLib**](</Example Project - MVLib/README.md>).
 2. Settings must point to a valid `PROS Project Directory`. If you do not have robot code locally, install the PROS VS Code Extension, create a new PROS project, and MotionView will auto-detect it.
 3. MotionView autodetects `PROS-CLI`, but refer to the [Setup Guide](MotionView/SETUP_GUIDE.md) if it fails.
 
