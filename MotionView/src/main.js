@@ -193,13 +193,13 @@ const FIELD_BOUNDS_IN = { minX: -72, maxX: 72, minY: -72, maxY: 72, pad: 30 };
 const MAX_OFFSET_THETA = 359;
 
 const WATCH_TOL_MS = 60; // Controls the ± time that determines which pose a watch attaches to
-const COLLAPSE_PX_TIMELINE = 100; // When the timeline collapses away
+const COLLAPSE_PX_TIMELINE = 130; // When the timeline collapses away
 const COLLAPSE_PX_SIDEBAR = 275; 
 const COLLAPSE_WAYPOINTLIST_PX = 5;
 
-const COLLAPSE_PX_LEFTSIDEBAR = 370; // When the left sidebar collapses away
+const COLLAPSE_PX_LEFTSIDEBAR = 210; // When the left sidebar collapses away
 const DBLCLICK_COLLAPSE_LEFTSIDEBAR = true;
-const MAX_PX_LIVEWIN = 650; // Max width for left live window panel
+const MAX_PX_LIVEWIN = 800; // Max width for left live window panel
 
 const MAX_TIMELINE_H_PX = 350; // Height at which timeline stops growing
 const MAX_SIDEBAR_W_PX = 400; // Width at which sidebar stops growing

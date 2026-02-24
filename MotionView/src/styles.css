@@ -1,6 +1,6 @@
     :root { 
       --rightSidebarW: 370px;
-      --leftSidebarW: 390px;
+      --leftSidebarW: 391px;
       --timelineH: 180px;
       --planListH: 240px;
       --toolbarH: 54px;
@@ -878,7 +878,8 @@
 
   /* keep controls pinned and sized */
   .leftTopRow{
-    display: grid;
+    display: flex;
+    flex-wrap: wrap;
     grid-template-columns: auto auto 1fr auto;
     align-items: center;
     gap: 8px;
@@ -894,12 +895,17 @@
     justify-content: center;
   }
 
+  .leftTopRow > div:empty {
+  flex-grow: 1;
+  min-width: 100px; 
+  }
+
   .leftRefreshChip{
+    display: flex;
     justify-self: end;
-    display:flex;
-    align-items:center;
+    align-items: center;
     gap: 8px;
-    padding: 6px 10px;
+    padding: 6px 12px;
     border-radius: 14px;
     border: 1px solid rgba(255,255,255,0.12);
     background: rgba(255,255,255,0.03);
@@ -934,7 +940,7 @@
     padding: 4px 8px;
     height: 24px;
   }
-  .leftRefreshChip:hover select{ color: var(--text); }
+  .leftRefreshChip:hover:not(:disabled) select{ color: var(--text); }
 
   .leftBody{
     flex: 1 1 auto;
@@ -1083,7 +1089,7 @@
     transition: all 0.15s ease;
   }
   
-  .settingsInput:hover, .settingsSelect:hover {
+  .settingsInput:hover:not(:disabled), .settingsSelect:hover:not(:disabled) {
     border-color: rgba(255,255,255,0.15);
     background: rgba(0,0,0,0.4);
   }
@@ -1105,7 +1111,7 @@
     cursor: pointer;
   }
   
-  .settingsSelect:hover {
+  .settingsSelect:hover:not(:disabled) {
     border-color: rgba(255,255,255,0.15);
     background: rgba(0,0,0,0.4) url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23e7eef7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center !important;
   }
@@ -1127,7 +1133,7 @@
     transition: none !important;
   }
 
-  .toolbarSelect:hover {
+  .toolbarSelect:hover:not(:disabled) {
     background: rgba(120,140,160,0.28) url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23e7eef7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center !important;
   }
   
