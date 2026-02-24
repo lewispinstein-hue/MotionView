@@ -1,13 +1,12 @@
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
-#[cfg(unix)]
-use std::{fs, process::Stdio};
 use std::{
+    fs,
     net::TcpListener,
     path::PathBuf,
-    process::{Child, Command},
+    process::{Child, Command, Stdio},
     sync::Mutex,
-    time::{SystemTime, UNIX_EPOCH}
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use tauri::{Manager, RunEvent, Window};
@@ -35,13 +34,24 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
         if cfg!(target_os = "windows") { ".exe" } else { "" }
     ));
 
+    // Allow an explicit override for diagnostics or custom deployments.
+    if let Ok(force) = std::env::var("MOTIONVIEW_BRIDGE_BIN") {
+        let p = std::path::PathBuf::from(force);
+        println!("CHECKING BIN PATH (override): {:?}", p);
+        if p.exists() {
+            return Ok(p);
+        }
+    }
+
     // Collect search roots in priority order:
-    // 1) Dev bin/ (when running from source)
+    // 1) Dev bin/ (when running from source; skipped in release builds)
     // 2) Bundled Resources/bin (Tauri default for externalBin)
     // 3) Bundled executable directory (macOS puts externalBin in Contents/MacOS)
     // 4) Bundled executable directory + bin/ (Windows MSI often flattens)
     let mut roots: Vec<std::path::PathBuf> = Vec::new();
-    roots.push(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("bin"));
+    if cfg!(debug_assertions) {
+        roots.push(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("bin"));
+    }
     if let Ok(res_root) = app
         .path()
         .resolve("", tauri::path::BaseDirectory::Resource)
@@ -67,6 +77,14 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
             roots.push(parent.join("bin"));
             roots.push(parent.join("__up__"));
             roots.push(parent.join("__up__").join("bin"));
+
+            // Windows MSI often installs the exe under AppData\\Local\\Programs\\<App>,
+            // while external resources may land in AppData\\Local\\<App>. Walk one level
+            // higher and look for a sibling MotionView folder as well.
+            if let Some(grand) = parent.parent() {
+                roots.push(grand.join("MotionView"));
+                roots.push(grand.join("MotionView").join("bin"));
+            }
         }
     }
 
