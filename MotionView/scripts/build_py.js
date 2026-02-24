@@ -8,6 +8,7 @@ const repoRoot = path.resolve(path.dirname(__filename), "..");
 const entry = path.join(repoRoot, "src", "bridge.py");
 const distDir = path.join(repoRoot, "dist");
 const binDir = path.join(repoRoot, "src-tauri", "bin");
+const requirements = path.join(repoRoot, "requirements.txt");
 
 function run(cmd, args) {
   const res = spawnSync(cmd, args, { stdio: "inherit" });
@@ -44,6 +45,13 @@ if (process.platform === "win32") {
   pyInstallerArgs.push("--noconsole");
 }
 pyInstallerArgs.push("-n", "motionview-py", entry);
+
+// Ensure dependencies are installed before freezing. This is especially
+// important on CI/clean machines (Windows).
+if (fs.existsSync(requirements)) {
+  run(python, ["-m", "pip", "install", "-r", requirements]);
+}
+
 run(python, pyInstallerArgs);
 
 const distExe = path.join(distDir, outName);
