@@ -5,6 +5,14 @@
 #include <cmath>
 #include <utility>
 
+#ifdef MVLIB_LOGS_REDEFINED
+#define LOG_DEBUG MVLIB_LOG_DEBUG
+#define LOG_INFO MVLIB_LOG_INFO
+#define LOG_WARN MVLIB_LOG_WARN
+#define LOG_ERROR MVLIB_LOG_ERROR
+#define LOG_FATAL MVLIB_LOG_FATAL
+#endif
+
 namespace mvlib {
 
 Logger &Logger::getInstance() {
@@ -72,7 +80,7 @@ const char *Logger::m_levelToString(LogLevel level) const {
   case LogLevel::FATAL: return "FATAL";
   default:              return "UNKNOWN";
   }
-  std::unreachable();
+  UNREACHABLE();
 }
 
 void Logger::logMessage(LogLevel level, const char *fmt, ...) {
@@ -225,7 +233,7 @@ void Logger::start() {
   }
   m_started = true;
 
-  // SD init used to happen here.
+  // SD init happens here.
   if (m_config.logToSD.load() && m_sdFile == nullptr) {
     bool success = m_initSDLogger();
     if (!success) {
@@ -238,7 +246,8 @@ void Logger::start() {
   }
     
     // Check config
-    if (!m_checkRobotConfig()) LOG_FATAL("At least one pointer set by setRobot(Drivetrain ref) is nullptr. Aborting!\n");
+    m_configValid = m_checkRobotConfig();
+    if (!m_configValid) LOG_FATAL("At least one pointer set by setRobot(Drivetrain ref) is nullptr. Not logging speed!\n");
     else LOG_INFO("All pointers set by setRobot(Drivetrain ref) seem to be valid.");
 
   // Create task that runs Update
@@ -257,9 +266,9 @@ void Logger::start() {
           fflush(stdout);
           // Wait appropriate time
           if (m_config.logToTerminal.load()) {
-            pros::delay(120);
+            pros::delay(terminalPollingRate);
           } else {
-            pros::delay(80);
+            pros::delay(sdCardPollingRate);
           }
         }
       },
@@ -313,51 +322,52 @@ void Logger::printWatches() {
     }
     return;
   }
-  std::unreachable();
+  UNREACHABLE();
 }
 
 void Logger::Update() {
-  static pros::MotorGears drivetrain_gearset =
-      m_pLeftDrivetrain.get() ? m_pLeftDrivetrain.get()->get_gearing()
-                       : pros::MotorGears::invalid;
-  static double divide_factor_drivetrainRPM = 1;
-  switch (drivetrain_gearset) {
-  case pros::MotorGears::rpm_100:
-    divide_factor_drivetrainRPM = 100.0;
-    break;
-  case pros::MotorGears::rpm_200:
-    divide_factor_drivetrainRPM = 200.0;
-    break;
-  case pros::MotorGears::rpm_600:
-    divide_factor_drivetrainRPM = 600.0;
-    break;
-  default:
-    divide_factor_drivetrainRPM = 300.0;
+  if (m_configValid && m_configSet) {
+    static pros::MotorGears drivetrain_gearset =
+        m_pLeftDrivetrain.get() ? m_pLeftDrivetrain.get()->get_gearing()
+                        : pros::MotorGears::invalid;
+    static double divide_factor_drivetrainRPM = 1;
+    switch (drivetrain_gearset) {
+    case pros::MotorGears::rpm_100:
+      divide_factor_drivetrainRPM = 100.0;
+      break;
+    case pros::MotorGears::rpm_200:
+      divide_factor_drivetrainRPM = 200.0;
+      break;
+    case pros::MotorGears::rpm_600:
+      divide_factor_drivetrainRPM = 600.0;
+      break;
+    default:
+      divide_factor_drivetrainRPM = 300.0;
+    }
+
+    static auto norm = [&](double rpm) {
+      double v = (rpm / divide_factor_drivetrainRPM) * 127.0;
+      if (v > 127)
+        v = 127;
+      if (v < -127)
+        v = -127;
+      return v;
+    };
+
+    if (m_getPose) {
+      auto pose = m_getPose();
+      if (!pose)
+        return;
+      float normalizedTheta = fmod(pose->theta, 360.0);
+      if (normalizedTheta < 0)
+        normalizedTheta += 360.0;
+
+    LOG_INFO("[DATA],%d,%.2f,%.2f,%.2f,%.1f,%.1f", 
+            pros::millis(), pose->x, pose->y, normalizedTheta,
+            norm(m_pLeftDrivetrain.get()->get_actual_velocity()),
+            norm(m_pRightDrivetrain.get()->get_actual_velocity()));
+    }
   }
-
-  static auto norm = [&](double rpm) {
-    double v = (rpm / divide_factor_drivetrainRPM) * 127.0;
-    if (v > 127)
-      v = 127;
-    if (v < -127)
-      v = -127;
-    return v;
-  };
-
-  if (m_getPose) {
-    auto pose = m_getPose();
-    if (!pose)
-      return;
-    float normalizedTheta = fmod(pose->theta, 360.0);
-    if (normalizedTheta < 0)
-      normalizedTheta += 360.0;
-
-  LOG_INFO("[DATA],%d,%.2f,%.2f,%.2f,%.1f,%.1f", 
-          pros::millis(), pose->x, pose->y, normalizedTheta,
-          norm(m_pLeftDrivetrain.get()->get_actual_velocity()),
-          norm(m_pRightDrivetrain.get()->get_actual_velocity()));
-  }
-
   if (m_config.printWatches.load()) 
     printWatches();
 }

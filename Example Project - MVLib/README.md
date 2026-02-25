@@ -44,7 +44,7 @@ This is exactly what MotionView is built to consume, so MVLib is the easiest way
 // or
 #include "mvlib/Optional/mvlib_optional_okapi.hpp"
 // or
-#include "mvlib/Optional/mvlib_optional_custom_odom.hpp"
+#include "mvlib/Optional/mvlib_optional_custom.hpp"
 ```
 
 4. Start the logger in `initialize()`:

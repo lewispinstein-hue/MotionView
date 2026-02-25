@@ -21,6 +21,10 @@
  * @note This logger is designed for PROS projects. It expects PROS RTOS
  *       primitives (pros::Task, pros::Mutex) and an optional pose provider.
  *
+ * @warning If you need to manually include okapi's api.hpp, you MUST include  
+ *          core.hpp at the very end of the includes. This is to prevent OkApi's 
+ *          LOG macros from interfering and causing errors with mvlib's LOG macros.
+ *
  * \b Example
  * @code
  * #include "mvlib/core.hpp"
@@ -43,6 +47,9 @@
 #include "pros/rtos.hpp"        // IWYU pragma: keep
 
 #include <optional>
+#include <atomic>
+#include <optional>
+#include <utility>
 
 #define _LOGGER_CORE
 namespace mvlib {
@@ -65,6 +72,12 @@ namespace mvlib {
  * @note These macros forward directly to mvlib::Logger::logMessage().
  * @{
  */
+
+#if !defined(LOG_DEBUG) && \
+    !defined(LOG_INFO)  && \
+    !defined(LOG_WARN)  && \
+    !defined(LOG_ERROR) && \
+    !defined(LOG_FATAL)
 
 /// @brief Log a DEBUG-level message (usually noisy, for development).
 #define LOG_DEBUG(fmt, ...)                                                    \
@@ -90,6 +103,30 @@ namespace mvlib {
 #define LOG_FATAL(fmt, ...)                                                    \
   mvlib::Logger::getInstance().logMessage(                                     \
       mvlib::LogLevel::FATAL, fmt, ##__VA_ARGS__)
+
+#else
+#define MVLIB_LOGS_REDEFINED
+
+#define MVLIB_LOG_DEBUG(fmt, ...)                                                    \
+  mvlib::Logger::getInstance().logMessage(                                     \
+      mvlib::LogLevel::DEBUG, fmt, ##__VA_ARGS__)
+
+#define MVLIB_LOG_INFO(fmt, ...)                                                     \
+  mvlib::Logger::getInstance().logMessage(                                     \
+      mvlib::LogLevel::INFO, fmt, ##__VA_ARGS__)
+
+#define MVLIB_LOG_WARN(fmt, ...)                                                     \
+  mvlib::Logger::getInstance().logMessage(                                     \
+      mvlib::LogLevel::WARN, fmt, ##__VA_ARGS__)
+
+#define MVLIB_LOG_ERROR(fmt, ...)                                                    \
+  mvlib::Logger::getInstance().logMessage(                                     \
+      mvlib::LogLevel::ERROR, fmt, ##__VA_ARGS__)
+
+#define MVLIB_LOG_FATAL(fmt, ...)                                                    \
+  mvlib::Logger::getInstance().logMessage(                                     \
+      mvlib::LogLevel::FATAL, fmt, ##__VA_ARGS__)
+#endif
 /** @} */
 
 namespace {
@@ -113,7 +150,19 @@ struct MutexGuard {
 /// Workaround to force a static_assert to be type-dependent
 template<class>
 inline constexpr bool always_false_v = false;
+
+#if __cplusplus >= 202302L
+    #include <utility>
+    #define UNREACHABLE() std::unreachable()
+#elif defined(__GNUC__) || defined(__clang__)
+    #define UNREACHABLE() __builtin_unreachable()
+#elif defined(_MSC_VER)
+    #define UNREACHABLE() __assume(false)
+#else
+    #define UNREACHABLE() do {} while () // Fallback
+#endif
 }
+
 /**
  * @enum LogLevel
  * @brief Log severity levels used for filtering and formatting.
@@ -230,9 +279,9 @@ std::function<bool(const T &)> as_predicate(Pred &&p) {
  * @struct Pose struct used internally that represents the robot's x, y, and theta values.
 */
 struct Pose {
-  float x;
-  float y;
-  float theta;
+  double x{0};
+  double y{0};
+  double theta{0};
 };
 
 /**
@@ -682,6 +731,32 @@ private:
   bool m_started = false;
   bool m_sdLocked = false;
   bool m_configSet = false;
+  bool m_configValid = false;
+  // Polling intervals  
+
+  /**
+   * @brief Controls how often mvlib polls for new data and logs it.
+   *         
+   *
+   * @note Time is in ms
+   * @note This interval overrides the sd card interval. If logging to 
+   *       terminal and to sd card, the terminal polling rate is used.
+   *
+   * @warning If the polling rate is too fast, it may overwhelm the 
+   *          brain -> controller connection, which would cause the
+   *          connection to be completely dropped and stop outputting.
+  */
+  static constexpr uint16_t terminalPollingRate = 120;
+
+  /**
+   * @brief Controls how often mvlib polls for new data and logs it.
+   * 
+   * @note Time is in ms
+   * @note Sd card output is buffered by SD_FLUSH_INTERVAL_MS. This only 
+   *       controls how often that buffer is written too. Faster polling
+   *       rates may lead to starvation of other tasks.
+  */
+  static constexpr uint16_t sdCardPollingRate = 80; 
 
   // Robot refs
   std::shared_ptr<pros::MotorGroup> m_pLeftDrivetrain = nullptr; 

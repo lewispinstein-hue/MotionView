@@ -1,7 +1,6 @@
 #include "main.h"
 #include "mvlib/core.hpp"
-#include "mvlib/Optional/mvlib_optional_custom_odom.hpp"
-#include "pros/misc.hpp"
+#include "mvlib/Optional/mvlib_optional_custom.hpp"
 
 // Creating motors and controller
 pros::Controller controller(pros::E_CONTROLLER_MASTER);

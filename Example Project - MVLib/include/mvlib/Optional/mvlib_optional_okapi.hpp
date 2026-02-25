@@ -12,7 +12,7 @@
 #ifndef _MVLIB_OPTIONAL_USED
 #define _MVLIB_OPTIONAL_USED
 #include "mvlib/core.hpp" // IWYU pragma: keep
-#include "okapi/api.h"     // IWYU pragma: keep
+#include "okapi/api.hpp"     // IWYU pragma: keep
 
 #include <optional>
 namespace mvlib {
@@ -62,12 +62,15 @@ inline void setOdom(Logger& logger, okapi::OdomChassisController* chassis) {
 
     const auto s = chassis->getState();
 
-    const float xIn   = s.x.convert(okapi::inch);
-    const float yIn   = s.y.convert(okapi::inch);
-    const float thDeg = s.theta.convert(okapi::deg);
+    const double xIn   = s.x.convert(okapi::inch);
+    const double yIn   = s.y.convert(okapi::inch);
+    const double thDeg = s.theta.convert(okapi::degree);
 
-    return Pose{xIn, yIn, thDeg};
+    return Pose{
+      xIn, 
+      yIn, 
+      thDeg};
   });
 }
-} // 
+} // namespace mvlib
 #endif
