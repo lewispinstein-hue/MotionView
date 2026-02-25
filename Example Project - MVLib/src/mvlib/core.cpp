@@ -326,27 +326,24 @@ void Logger::printWatches() {
 }
 
 void Logger::Update() {
+  if (m_config.printWatches.load()) 
+    printWatches();
+
   if (m_configValid && m_configSet) {
-    static pros::MotorGears drivetrain_gearset =
-        m_pLeftDrivetrain.get() ? m_pLeftDrivetrain.get()->get_gearing()
-                        : pros::MotorGears::invalid;
-    static double divide_factor_drivetrainRPM = 1;
-    switch (drivetrain_gearset) {
-    case pros::MotorGears::rpm_100:
-      divide_factor_drivetrainRPM = 100.0;
-      break;
-    case pros::MotorGears::rpm_200:
-      divide_factor_drivetrainRPM = 200.0;
-      break;
-    case pros::MotorGears::rpm_600:
-      divide_factor_drivetrainRPM = 600.0;
-      break;
-    default:
-      divide_factor_drivetrainRPM = 300.0;
+    static pros::MotorGears drivetrainGearset =
+        m_pLeftDrivetrain.get() ? 
+        m_pLeftDrivetrain.get()->get_gearing() : pros::MotorGears::invalid;
+                      
+    static double divideFactorDrivetrainRPM = 1;
+    switch (drivetrainGearset) {
+      case pros::MotorGears::rpm_100: divideFactorDrivetrainRPM = 100.0; break;
+      case pros::MotorGears::rpm_200: divideFactorDrivetrainRPM = 200.0; break;
+      case pros::MotorGears::rpm_600: divideFactorDrivetrainRPM = 600.0; break;
+      default:                        divideFactorDrivetrainRPM = 300.0;
     }
 
     static auto norm = [&](double rpm) {
-      double v = (rpm / divide_factor_drivetrainRPM) * 127.0;
+      double v = (rpm / divideFactorDrivetrainRPM) * 127.0;
       if (v > 127)
         v = 127;
       if (v < -127)
@@ -358,7 +355,7 @@ void Logger::Update() {
       auto pose = m_getPose();
       if (!pose)
         return;
-      float normalizedTheta = fmod(pose->theta, 360.0);
+      float normalizedTheta = fmod(pose->theta, 360.0); // Normalize theta 
       if (normalizedTheta < 0)
         normalizedTheta += 360.0;
 
@@ -368,7 +365,5 @@ void Logger::Update() {
             norm(m_pRightDrivetrain.get()->get_actual_velocity()));
     }
   }
-  if (m_config.printWatches.load()) 
-    printWatches();
 }
 } // namespace mvlib

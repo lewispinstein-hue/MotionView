@@ -12,12 +12,12 @@
   <input id="file" type="file" accept=".json" style="display:none" />
   <input id="robotImageFile" type="file" accept="image/*" style="display:none" />
   <div class="topBarLeft">
-    <button id="btnFit" class="iconBtn" title="Maximize field (square)">
+    <button id="btnFit" class="iconBtn pillAction" title="Maximize field (square)">
       <svg width="12" height="12">
         <use href="assets/svg/icons.svg#icon-fit" style="color: #ffffff"></use>
       </svg>
     </button>
-    <button id="btnSettings" class="iconBtn" title="Settings">
+    <button id="iconBtn" class="iconBtn pillAction" title="Settings">
       <svg width="18" height="18">
         <use href="assets/svg/icons.svg#icon-settings" style="color: #ffffff"></use>
       </svg>
@@ -27,7 +27,7 @@
         <use href="assets/svg/icons.svg#icon-clear" style="color: #ff0000"></use>
       </svg>
     </button>
-    <button id="btnHelp" class="iconBtn" title="Help">
+    <button id="btnHelp" class="iconBtn pillAction" style="font-size: 12px"title="Help">
       <svg width="20" height="20" style="color: #ffffff; vector-effect: non-scaling-stroke; stroke-width: 5px;">
         <use href="assets/svg/icons.svg#icon-help"></use>
       </svg>
@@ -452,13 +452,13 @@
             <button class="leftRefreshBtn" id="btnLeftRefresh" type="button">Refresh</button>
             <select id="leftRefreshInterval" class="settingsSelect toolbarSelect" style="padding-left: 10px !important" aria-label="Refresh interval">
               <option value="0">off</option>
+              <option value="50">50ms</option>
               <option value="100">100ms</option>
               <option value="121">121ms (MVLib HZ)</option>
               <option value="250">250ms</option>
               <option value="500" selected>500ms</option>
               <option value="1000">1s</option>
               <option value="2000">2s</option>
-              <option value="5000">5s</option>
             </select>
           </div>
         </div>

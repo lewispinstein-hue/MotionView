@@ -732,8 +732,8 @@ private:
   bool m_sdLocked = false;
   bool m_configSet = false;
   bool m_configValid = false;
+  
   // Polling intervals  
-
   /**
    * @brief Controls how often mvlib polls for new data and logs it.
    *         
@@ -770,15 +770,16 @@ private:
 } // namespace mvlib
 
 /**
- * @brief Operator for .watch() intervalMs. Allows number_ms instead of uint32_t{number}
+ * @brief Operator for .watch() intervalMs. Allows number_mvms 
+ *        instead of uint32_t{number}
  *
  * \return explicit uint32_t casted version of the input number
  *
  * \b Example
  * @code{.cpp}
- * logger.watch("foo", mvlib::LogLevel::INFO, 100_ms, ...);
+ * logger.watch("foo", mvlib::LogLevel::INFO, 100_mvms, ...);
  * @endcode
 */
-constexpr uint32_t operator""_ms(unsigned long long int ms) {
+constexpr uint32_t operator""_mvms(unsigned long long int ms) {
     return static_cast<uint32_t>(ms);
 }

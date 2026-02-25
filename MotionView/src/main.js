@@ -5413,8 +5413,6 @@ function clearAllPosesAndWatches() {
   try { hoverTimelineTime = null; } catch {}
   try { trackHover = null; } catch {}
   try { trackLockActive = false; } catch {}
-  try { trackLockPose = null; } catch {}
-  try { trackLockIndex = null; } catch {}
 
   // Clear core data
   rawPoses = [];
@@ -5430,16 +5428,13 @@ function clearAllPosesAndWatches() {
     data.watches = [];
   }
 
-  // Reset selection + redraw
-  selectedIndex = 0;
-
   try { renderPoseList?.(); } catch {}
   try { renderWatchList?.(); } catch {}
   try { updatePoseReadout?.(); } catch {}
   try { updateFloatingInfo?.(null, 0); } catch {}
   try { requestDrawAll?.(); } catch {}
 
-  setStatus("Cleared Field and Planned Path")
+  setStatus("Cleared Field")
 }
 
 btnLeftClear?.addEventListener('click', () => {
