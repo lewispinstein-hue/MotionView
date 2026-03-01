@@ -236,11 +236,12 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child
     })?;
 
     // Setup Logging Directory and File
-    // We use app_data_dir, falling back to project root/logs if that fails
+    // Prefer app_data_dir/Logs, falling back to project root/Logs if that fails
     let log_dir = app
         .path()
         .app_data_dir()
-        .unwrap_or_else(|_| std::env::current_dir().unwrap().join("logs"));
+        .map(|dir| dir.join("Logs"))
+        .unwrap_or_else(|_| std::env::current_dir().unwrap().join("Logs"));
 
     // Create the directory if it doesn't exist
     if let Err(e) = std::fs::create_dir_all(&log_dir) {

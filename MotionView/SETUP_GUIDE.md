@@ -10,7 +10,7 @@ In the case that auto-detection fails, or you have questions, here is where to l
 
 ## PROS Project Directory
 The **PROS Project Directory** is just the folder where your PROS Project is. 
-> The only thing that this field requires is that the folder contain a `project.pros` and the other nessicary PROS files. **It DOES NOT need to contain any relevant code**
+> The only thing that this field requires is that the folder contain a `project.pros` and the other necessary PROS files. **It DOES NOT need to contain any relevant code**
 
 If you have an existing PROS Project on your computer, enter its path into the `PROS Project Directory` field of settings.
 

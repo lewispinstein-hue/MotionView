@@ -97,6 +97,23 @@ const rowGrid = document.querySelector('.row');
 const timelineBar = document.getElementById('timelineBar');
 const timelineTop = document.getElementById('timelineTop');
 const timelineHint = document.getElementById('timelineHint');
+const layoutState = {
+  lastLeftSidebarW: 360,
+  lastRightSidebarW: 360,
+  lastTimelineH: 260,
+};
+
+function parseLayoutNumber(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function readRootCssNumber(prop, fallback = 0) {
+  if (!root) return fallback;
+  const raw = getComputedStyle(root).getPropertyValue(prop);
+  const num = parseFloat(raw);
+  return Number.isFinite(num) ? num : fallback;
+}
 
 // Removed: runName, runMeta, fmt (were in Config section)
 const watchList = document.getElementById('watchList');
@@ -560,6 +577,73 @@ function renderPlanList() {
       updatePlanSelectionPanel();
     });
     planListEl.appendChild(item);
+  }
+}
+
+function applySavedLayout(settings) {
+  if (!settings) return;
+  let layoutChanged = false;
+
+  const leftWidth = parseLayoutNumber(settings.layoutLeftSidebarWidth);
+  if (leftWidth !== null) {
+    const next = clamp(leftWidth, 0, MAX_PX_LIVEWIN);
+    root?.style.setProperty('--leftSidebarW', `${next}px`);
+    layoutChanged = true;
+    if (next <= COLLAPSE_PX_LEFTSIDEBAR) {
+      leftEl?.classList?.add('isCollapsed');
+      rowGrid?.classList?.add('leftCollapsed');
+    } else {
+      leftEl?.classList?.remove('isCollapsed');
+      rowGrid?.classList?.remove('leftCollapsed');
+      layoutState.lastLeftSidebarW = next;
+    }
+  }
+
+  const rightWidth = parseLayoutNumber(settings.layoutRightSidebarWidth);
+  if (rightWidth !== null) {
+    const next = clamp(rightWidth, 0, MAX_SIDEBAR_W_PX);
+    root?.style.setProperty('--rightSidebarW', `${next}px`);
+    layoutChanged = true;
+    if (next <= COLLAPSE_PX_SIDEBAR) {
+      rightEl?.classList?.add('isCollapsed');
+    } else {
+      rightEl?.classList?.remove('isCollapsed');
+      layoutState.lastRightSidebarW = next;
+    }
+  }
+
+  const timelineHeight = parseLayoutNumber(settings.layoutTimelineHeight);
+  if (timelineHeight !== null) {
+    const next = clamp(timelineHeight, 0, MAX_TIMELINE_H_PX);
+    root?.style.setProperty('--timelineH', `${next}px`);
+    layoutChanged = true;
+    if (next <= COLLAPSE_PX_TIMELINE) {
+      timelineBar?.classList?.add('isCollapsed');
+    } else {
+      timelineBar?.classList?.remove('isCollapsed');
+      layoutState.lastTimelineH = next;
+    }
+  }
+
+  const planHeight = parseLayoutNumber(settings.layoutPlanningWaypointHeight);
+  if (planHeight !== null) {
+    const rightH = rightEl?.getBoundingClientRect().height || window.innerHeight;
+    const maxPlanH = Math.max(COLLAPSE_WAYPOINTLIST_PX, rightH - 180);
+    const next = clamp(planHeight, 0, maxPlanH);
+    root?.style.setProperty('--planListH', `${next}px`);
+    layoutChanged = true;
+    if (next <= COLLAPSE_WAYPOINTLIST_PX) {
+      rightEl?.classList?.add('planListCollapsed');
+    } else {
+      rightEl?.classList?.remove('planListCollapsed');
+    }
+  }
+
+  if (layoutChanged) {
+    updateFieldLayout(true);
+    resizeTimeline();
+    resizePlanningTimeline();
+    layoutTimelineCanvas();
   }
 }
 
@@ -3810,9 +3894,6 @@ leftSetUI("");
   let draggingV = false;
   let startX = 0;
   let startW = 0;
-
-  let lastRightSidebarW = 360;
-  let lastLeftSidebarW = 360;
   // ensure grid state matches persisted widths on load
   try {
     if (getLeftSidebarW() <= 1) { leftEl.classList.add('isCollapsed'); rowGrid && rowGrid.classList.add('leftCollapsed'); }
@@ -3863,7 +3944,6 @@ leftSetUI("");
   let draggingH = false;
   let startY = 0;
   let startH = 0;
-  let lastTimelineH = 260;
   let draggingPlanList = false;
   let startPlanY = 0;
   let startPlanH = 0;
@@ -3919,7 +3999,7 @@ leftSetUI("");
       } else {
         leftEl.classList.remove('isCollapsed');
         rowGrid && rowGrid.classList.remove('leftCollapsed');
-        lastLeftSidebarW = next;
+        layoutState.lastLeftSidebarW = next;
       }
       setLeftSidebarW(next);
       resizeCanvas();
@@ -3936,7 +4016,7 @@ leftSetUI("");
         rightEl.classList.add('isCollapsed');
       } else {
         rightEl.classList.remove('isCollapsed');
-        lastRightSidebarW = next;
+        layoutState.lastRightSidebarW = next;
       }
       setRightSidebarW(next);
       resizeCanvas();
@@ -3953,7 +4033,7 @@ leftSetUI("");
         timelineBar.classList.add('isCollapsed');
       } else {
         timelineBar.classList.remove('isCollapsed');
-        lastTimelineH = next;
+        layoutState.lastTimelineH = next;
       }
 
       setTimelineH(next);
@@ -3978,7 +4058,8 @@ leftSetUI("");
   });
 
   window.addEventListener('mouseup', () => {
-    if (draggingV || draggingH || draggingVL || draggingPlanList) {
+    const wasDragging = draggingV || draggingH || draggingVL || draggingPlanList;
+    if (wasDragging) {
       draggingV = false;
       draggingH = false;
       draggingVL = false;
@@ -3989,6 +4070,7 @@ leftSetUI("");
       if (getTimelineH() > COLLAPSE_PX_TIMELINE) timelineBar.classList.remove('isCollapsed');
       resizeCanvas();
       resizeTimeline();
+      void saveSettings();
     }
   });
 
@@ -3997,42 +4079,44 @@ leftSetUI("");
     if (!DBLCLICK_COLLAPSE_LEFTSIDEBAR) return;
     const cur = getLeftSidebarW();
     if (cur <= COLLAPSE_PX_LEFTSIDEBAR) {
-      setLeftSidebarW(Math.max(1, lastLeftSidebarW));
+      setLeftSidebarW(Math.max(1, layoutState.lastLeftSidebarW));
       leftEl.classList.remove('isCollapsed');
       rowGrid && rowGrid.classList.remove('leftCollapsed');
     } else {
-      lastLeftSidebarW = cur;
+      layoutState.lastLeftSidebarW = cur;
       setLeftSidebarW(0);
       leftEl.classList.add('isCollapsed');
       rowGrid && rowGrid.classList.add('leftCollapsed');
     }
     resizeCanvas();
     resizeTimeline();
+    void saveSettings();
   });
 
   vSplit.addEventListener('dblclick', () => {
     const cur = getRightSidebarW();
     if (cur <= COLLAPSE_PX_SIDEBAR) {
-      setRightSidebarW(Math.max(1, lastRightSidebarW));
+      setRightSidebarW(Math.max(1, layoutState.lastRightSidebarW));
       rightEl.classList.remove('isCollapsed');
     } else {
-      lastRightSidebarW = cur;
+      layoutState.lastRightSidebarW = cur;
       setRightSidebarW(0);
       rightEl.classList.add('isCollapsed');
     }
       resetFieldPosition();
       resizeCanvas();
       layoutTimelineCanvas();
+      void saveSettings();
   });
 
   hSplit.addEventListener('dblclick', () => {
     const cur = getTimelineH();
     let next = getTimelineH();
     if (cur <= COLLAPSE_PX_TIMELINE) {
-      setTimelineH(Math.max(160, lastTimelineH));
+      setTimelineH(Math.max(160, layoutState.lastTimelineH));
       timelineBar.classList.remove('isCollapsed');
     } else {
-      lastTimelineH = cur;
+      layoutState.lastTimelineH = cur;
       setTimelineH(0);
       timelineBar.classList.add('isCollapsed');
     }
@@ -4043,6 +4127,7 @@ leftSetUI("");
       resizeTimeline();
       resizeCanvas();
       layoutTimelineCanvas();
+      void saveSettings();
   });
 })();
 
@@ -4355,6 +4440,7 @@ async function loadSettings() {
           console.warn('Failed to persist robot image to app data:', e);
         }
       }
+      applySavedLayout(settings);
       updateOffsetsFromInputs();
       computeSpeedNorm();
       if (robotImageToggle) robotImageToggle.checked = robotImageEnabled;
@@ -4396,6 +4482,10 @@ async function saveSettings() {
         dataUrl: robotImagePath ? null : (robotImageDataUrl || null),
       },
       fieldRotation: fieldRotationDeg,
+      layoutLeftSidebarWidth: readRootCssNumber('--leftSidebarW', 360),
+      layoutRightSidebarWidth: readRootCssNumber('--rightSidebarW', 370),
+      layoutTimelineHeight: readRootCssNumber('--timelineH', 180),
+      layoutPlanningWaypointHeight: readRootCssNumber('--planListH', 240),
     };
     const payload = JSON.stringify(settings);
     if (invoke) {
