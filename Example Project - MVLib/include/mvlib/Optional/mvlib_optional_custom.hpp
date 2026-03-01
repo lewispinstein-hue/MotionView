@@ -1,7 +1,7 @@
 #pragma once
 
 /**
- * @file logger_optional_custom_odom.hpp
+ * @file logger_optional_custom.hpp
  * @brief Optional Logger adapter for any custom or unsupported odometry.
  */
 
@@ -45,7 +45,7 @@ namespace mvlib {
  * 3) Return std::nullopt while invalid/uninitialized
  *
  * @code{.cpp}
- * #include "mvlib/Optional/logger_optional_custom_odom.hpp"  
+ * #include "mvlib/Optional/logger_optional_custom.hpp"  
  * #include <cmath>
  * #include <optional>
  * 
@@ -55,7 +55,7 @@ namespace mvlib {
  * 
  * void initialize() {
  *   auto& logger = mvlib::Logger::getInstance();
- *   mvlib::setOdom(logger, []() -> std::optional<mvlib::Pose> {
+ *   mvlib::setOdom(logger, []() -> std::optional<mvlib::Pose> { // Important! Use std::optional!
  *     if (!customOdomReady()) {
  *       // Odom not initialized yet; downstream should treat as "no pose available".
  *       return std::nullopt;
@@ -79,6 +79,24 @@ inline void setOdom(Logger& logger, Fn&& poseGetter)
     logger.setPoseGetter([getter = std::move(getter)]() mutable -> std::optional<Pose> {
     return getter();
   });
+}
+
+// Error handling
+template <class T> struct typeIs;
+
+template <class Fn>
+inline void setOdom(Logger& logger, Fn&& poseGetter)
+  requires (!std::is_same_v<std::invoke_result_t<Fn&>, std::optional<Pose>>) {
+  using T = std::invoke_result_t<Fn&>;
+
+  static_assert(always_false_v<T>,
+                "\n\n\n------------------------------------------------------------------------\n"
+                "ERROR! The return type was: \n");
+  typeIs<T> ERROR_THE_TYPE_INPUTTED_WAS;
+  static_assert(always_false_v<T>,
+                "mvlib::setOdom (mvlib_optional_custom.hpp) has bad return type!\n"
+                "std::optional<mvlib::Pose> was expected.\n"
+                "------------------------------------------------------------------------\n\n\n");
 }
 } // namespace mvlib
 #endif

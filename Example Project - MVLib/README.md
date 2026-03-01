@@ -23,7 +23,7 @@ MotionView recognizes two kinds of lines that mvlib prints:
 
 This is exactly what MotionView is built to consume, so MVLib is the easiest way to feed it.
 
-> **Note:** MVLib is not strictly nessicary. Any other logging system, even just a `printf` inside of opcontrol could replicate this functionality. 
+> **Note:** MVLib is not strictly necessary. Any other logging system, even just a `printf` inside of opcontrol could replicate this functionality. 
 > However, MVLib provides easy setup, cross-library support, and seamless integration with MotionView, which is why it's recommended.
 
 ## Quick Setup (PROS V5)
@@ -92,7 +92,7 @@ logger.watch("Battery Percentage:", mvlib::LogLevel::INFO, true, // Instead of l
   mvlib::LevelOverride<int32_t>{}, "%d");
 
 // Drivetrain temperature (averaged)
-logger.watch("Avg Temp:", mvlib::LogLevel::INFO, 1000_ms, 
+logger.watch("Avg Temp:", mvlib::LogLevel::INFO, 1000_mvMs, 
     [&]() { return (left_mg.get_temperature() + right_mg.get_temperature()) / 2; }, 
     mvlib::LevelOverride<double>{
     .elevatedLevel = mvlib::LogLevel::WARN,
@@ -100,12 +100,12 @@ logger.watch("Avg Temp:", mvlib::LogLevel::INFO, 1000_ms,
 }, "%0f"); // Print the temperature to 0 decimals.
 
 // Flywheel RPM
-logger.watch("Flywheel RPM:", mvlib::LogLevel::INFO, 1000_ms, // For an always changing event like this, prevent spam and log periodically.
+logger.watch("Flywheel RPM:", mvlib::LogLevel::INFO, 1000_mvMs, // For an always changing event like this, prevent spam and log periodically.
   [&]() { return flywheel.get_actual_velocity(); },
   mvlib::LevelOverride<double>{}, "%.1f"); // No level override, and print with 1 decimal
 
 // Intake current (detect jams)
-logger.watch("Intake Current:", mvlib::LogLevel::INFO, 1000_ms, 
+logger.watch("Intake Current:", mvlib::LogLevel::INFO, 1000_mvMs, 
   [&]() { return intake.get_current_draw(); }, 
     mvlib::LevelOverride<int32_t>{
     .elevatedLevel = mvlib::LogLevel::WARN,

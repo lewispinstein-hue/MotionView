@@ -54,7 +54,7 @@ void initialize() {
 		.RightDrivetrain = mvlib::shared(right_mg)
 	});
 
-	logger.watch("Avg Temp:", mvlib::LogLevel::OFF, 1000_ms, // We do not log at all normally
+	logger.watch("Avg Temp:", mvlib::LogLevel::OFF, 1000_mvMs, // We do not log at all normally
 		[]() { return (left_mg.get_temperature() + right_mg.get_temperature()) / 2; },
 		mvlib::LevelOverride<double>{ // Use LevelOverride to only log if overheating
 			.elevatedLevel = mvlib::LogLevel::WARN,

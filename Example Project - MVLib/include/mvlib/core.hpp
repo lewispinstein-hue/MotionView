@@ -72,7 +72,6 @@ namespace mvlib {
  * @note These macros forward directly to mvlib::Logger::logMessage().
  * @{
  */
-
 #if !defined(LOG_DEBUG) && \
     !defined(LOG_INFO)  && \
     !defined(LOG_WARN)  && \
@@ -770,16 +769,16 @@ private:
 } // namespace mvlib
 
 /**
- * @brief Operator for .watch() intervalMs. Allows number_mvms 
+ * @brief Operator for .watch() intervalMs. Allows number_mvMs 
  *        instead of uint32_t{number}
  *
  * \return explicit uint32_t casted version of the input number
  *
  * \b Example
  * @code{.cpp}
- * logger.watch("foo", mvlib::LogLevel::INFO, 100_mvms, ...);
+ * logger.watch("foo", mvlib::LogLevel::INFO, 100_mvMs, ...);
  * @endcode
 */
-constexpr uint32_t operator""_mvms(unsigned long long int ms) {
+constexpr uint32_t operator""_mvMs(unsigned long long int ms) {
     return static_cast<uint32_t>(ms);
 }
