@@ -5522,14 +5522,24 @@ function clearAllPosesAndWatches() {
   try { renderWatchList?.(); } catch {}
   try { updatePoseReadout?.(); } catch {}
   try { updateFloatingInfo?.(null, 0); } catch {}
-  try { requestDrawAll?.(); } catch {}
-
-  setStatus("Cleared Field")
+  try { requestDrawAll?.(); } catch {}2
 }
 
 btnLeftClear?.addEventListener('click', () => {
-  clearAllPosesAndWatches();
-  resetLiveWin();
+  if (appMode === "viewing") {
+    clearAllPosesAndWatches();
+    resetLiveWin();
+    setStatus("Cleared Field and Watches")
+  } else {
+    planPause();
+    pushPlanUndo();
+    planWaypoints = [];
+    planPlayDist = 0;
+    planSetSelection([]);
+    planChanged();
+    requestDrawAll();
+    setStatus("Cleared Planned Path");
+  }
 });
 
 btnClearField?.addEventListener('click', () => {
@@ -5576,6 +5586,7 @@ document.addEventListener('keydown', (e) => {
     planPause();
     planChanged();
     requestDrawAll();
+    setStatus("Cleared Field and Planned Path");
     return;
   }
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'o' || e.key === 'O')) {
