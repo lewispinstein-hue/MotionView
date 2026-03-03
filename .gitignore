@@ -26,4 +26,5 @@ dist-ssr
 MotionView/motionview-py.spec
 MotionView/build/motionview-py
 
+MotionView/bin
 MotionView/src/sim-log.py
