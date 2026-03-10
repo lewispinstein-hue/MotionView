@@ -108,14 +108,15 @@
         <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + 1</span><span class="keybindAction">Switch to Viewing mode</span></div>
         <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + 2</span><span class="keybindAction">Switch to Planning mode</span></div>
         <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + Shift + K</span><span class="keybindAction">Clear everything (field + plan)</span></div>
+        <div class="keybindRow"><span class="keybindKeys">T</span><span class="keybindAction">Toggle Floating Info panel</span></div>
       </div>
       <div class="keybindSection" style="padding-bottom: 8px;">
         <div class="keybindHeader"><br>Viewing</div>
         <div class="keybindAction">These keybinds work in Viewing mode<br></div>
         <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + O</span><span class="keybindAction">Open JSON file</span></div>
-        <div class="keybindRow"><span class="keybindKeys">S</span><span class="keybindAction">Start/stop live streaming (if connected)</span></div>
-        <div class="keybindRow"><span class="keybindKeys">T / P</span><span class="keybindAction">Toggle Planned Overlay</span></div>
-        <div class="keybindRow"><span class="keybindKeys">C</span><span class="keybindAction">Connect/disconnect</span></div>
+        <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + S</span><span class="keybindAction">Start/stop live streaming (if connected)</span></div>
+        <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + C</span><span class="keybindAction">Connect/disconnect</span></div>
+        <div class="keybindRow"><span class="keybindKeys">P</span><span class="keybindAction">Toggle Planned Overlay</span></div>
         <div class="keybindRow"><span class="keybindKeys">Space</span><span class="keybindAction">Play/Pause playback (or toggle Auto‑follow Head when live‑connected)</span></div>
         <div class="keybindRow"><span class="keybindKeys">← / →</span><span class="keybindAction">Step to previous/next pose</span></div>
       </div>
@@ -128,7 +129,7 @@
         <div class="keybindRow"><span class="keybindKeys">Shift + ←/→/↑/↓</span><span class="keybindAction">Nudge selected waypoint(s) by 5× step</span></div>
         <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + Z</span><span class="keybindAction">Undo</span></div>
         <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + Shift + Z</span><span class="keybindAction">Redo</span></div>
-        <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + K</span><span class="keybindAction">Clear planned path</span></div>
+        <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + K</span><span class="keybindAction">Clear Planned path</span></div>
       </div>
     </div>
   </div>
@@ -240,7 +241,11 @@
       <!-- Units & Robot Size Section -->
       <div class="settingsSection settingsViewing settingsGroup" title="Affects visuals and scaling only">
         <div class="settingsGroupHeader">
-          <div class="settingsGroupIcon">📐</div>
+          <div class="settingsGroupIcon">
+            <svg width="40" height="40" style="color: #70daed">
+              <use href="assets/svg/icons.svg#icon-stgUnits"></use>
+            </svg>
+          </div>
           <div class="settingsGroupTitle">Units & Robot Size</div>
         </div>
         <div class="settingsGroupBody">
@@ -469,13 +474,13 @@
       </div>
     </div>
 
-    <div id="vSplitL" class="splitterV" title="Drag to resize"></div>
+    <div id="vSplitL" class="splitterV" title="Drag to resize live window"></div>
 
     <div id="canvasWrap">
       <canvas id="c"></canvas>
     </div>
 
-    <div id="vSplit" class="splitterV" title="Drag to resize"></div>
+    <div id="vSplit" class="splitterV" title="Drag to resize sidebar"></div>
 
     <div id="right">
       <div class="section planningOnly planSelSection">
@@ -547,10 +552,6 @@
             </div>
 
             <div id="watchList"></div>
-            <div class="muted" style="margin-top:10px">
-              Click a watch to highlight it on the field and on the timeline.
-            </div>
-          </div>
         </details>
       </div>
 
@@ -562,8 +563,7 @@
             <span class="pill" id="poseCount">—</span>
           </summary>
           <div class="detailsBody">
-            <div class="muted" style="margin-bottom:8px">Click a pose to jump.</div>
-            <div id="poseList" title="Click a pose to jump the robot to that recorded moment" style="max-height: 40vh; overflow:auto; border:1px solid var(--line); border-radius:10px;"></div>
+            <div id="poseList" title="Click a pose to jump that moment" style="max-height: 40vh; overflow:auto; border:1px solid var(--line); border-radius:10px;"></div>
           </div>
         </details>
       </div>
@@ -590,9 +590,6 @@
       <span class="pill cursorPill" id="cursorPill">Cursor: —</span>
     </div>
     <canvas id="timelineCanvas"></canvas>
-    <div id="timelineHint" class="muted">
-      Hover: preview robot at time • Click: set time • Watch dots are clickable
-    </div>
   </div>
 
   <div id="planningTimelineBar">
@@ -604,8 +601,6 @@
       <span class="pill cursorPill" id="planCursorPill">Cursor: —</span>
     </div>
     <canvas id="planningTimelineCanvas"></canvas>
-    <div id="planningTimelineHint" class="muted">Click or drag to scrub along the planned path</div>
-  </div>
 </div>
 <div id="watchPopup" hidden></div>
 </body>

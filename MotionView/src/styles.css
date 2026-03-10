@@ -119,12 +119,12 @@ canvas#c {
   backdrop-filter: blur(6px);
   overflow: hidden;
   min-width: 40px;
-  max-width: 500px;
+  max-width: auto;
   display: flex;
   flex-direction: column;
 }
 
-#right * {
+#right * {  
   min-width: 0;
 }
 

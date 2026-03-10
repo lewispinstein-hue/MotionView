@@ -10,6 +10,10 @@
     "tauri": "tauri"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@tauri-apps/cli": "^2",
+    "dotenv-cli": "^11.0.0"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.10.1"
   }
 }

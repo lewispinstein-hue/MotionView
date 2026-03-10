@@ -227,18 +227,9 @@ def strip_ansi(s: str) -> str:
     return _ANSI_RE.sub("", s)
 
 BASE_DIR = resource_base_dir()
-VIEWER_HTML = BASE_DIR / "Viewer.html"
-ASSETS_DIR = BASE_DIR / "assets"
-ROBOT_IMG = BASE_DIR / "robot_image.png"
 
-
-# ----------------------------
-# App + static serving
-# ----------------------------
 app = FastAPI()
 
-# If you load the UI from Tauri's bundled files (tauri://localhost) instead of from this server,
-# you may need CORS. Since we bind to 127.0.0.1, allowing all origins is usually OK.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -246,24 +237,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-if ASSETS_DIR.exists():
-    app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
-else:
-    print(f"WARNING: assets dir not found at {ASSETS_DIR}")
-
-@app.get("/")
-async def index():
-    if VIEWER_HTML.exists() and VIEWER_HTML.is_file():
-        return FileResponse(str(VIEWER_HTML))
-    return Response(status_code=404)          
-
-@app.get("/robot_image.png")
-async def robot_image():
-    if ROBOT_IMG.exists() and ROBOT_IMG.is_file():
-        return FileResponse(str(ROBOT_IMG))
-    return Response(status_code=404)
-
 
 LOG_PATH = os.environ.get("MOTIONVIEW_LOG_PATH")
 
@@ -651,8 +624,6 @@ async def api_status():
         "running": runner.running,
         "pid": runner.pid,
         "clients": len(clients),
-        "assets_dir": str(ASSETS_DIR),
-        "viewer_html": str(VIEWER_HTML),
         "pros_dir": pros_dir,
         "log_path": str(LOG_PATH) if LOG_PATH else None,
     }

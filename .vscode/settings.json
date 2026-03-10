@@ -5,6 +5,7 @@
         "nessicary",
         "pushback",
         "tauri",
-        "TAURI"
+        "TAURI",
+        "tctx"
     ]
 }

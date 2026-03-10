@@ -5,7 +5,12 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-close",
+    "core:window:allow-destroy",
     "opener:default",
+    "posthog:default",
+    "core:app:allow-version",
+    "core:app:allow-name",
     {
       "identifier": "shell:allow-execute",
       "allow": [

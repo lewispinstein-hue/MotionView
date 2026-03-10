@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../src",
     "beforeDevCommand": "",
-    "beforeBuildCommand": "pnpm py:build"
+    "beforeBuildCommand": ""
   },
   "app": {
     "withGlobalTauri": true,

@@ -4,15 +4,7 @@
 </p>
 
 ## What is MotionView?
-MotionView is a cross-platform live visualizer built specifically for teams using PROS V5. It turns logged pose data, sensor watches, and live telemetries into an interactive field view so you can see exactly how your robot moved, when events fired, and how closely the actual motion matches the plan.
-
-**It exists** because watching raw terminal output or dumping JSON files makes it hard to spot subtle mistakes, compare two runs, or quickly iterate between planning and testing. MotionView gives you a single place to stream live logs from the controller, play back past recordings, and draft new plans with both the physical field and telemetry values visible at once.
-
-This is made for PROS teams who want faster post-match analysis, easier validation of auto routines, or a dependable visualization tool for clinics and classroom demos. Whether you are a veteran programmer debugging PID tuning or a new team learning how poses and watches relate, MotionView keeps the context you need in plain sight.
-
-
-### Why PROS?
-PROS is needed because of the terminal interface. Because `pros terminal`, run anywhere, always does the same action, it is very easy to get consistent connections and behavior using it. While it may be possible to use VEXCode (or any non-PROS platform), piping the terminal into MotionView is not easily done.
+MotionView is a live visualizer for PROS robots. It turns a stream of numbers into a visual insight into your robot's behavior. It lets you see the robot's position, speed, and events on a live updating dashboard.
 
 ## Quick Start
 1. Open MotionView.
@@ -25,7 +17,7 @@ PROS is needed because of the terminal interface. Because `pros terminal`, run a
 - Scrub the timeline and inspect pose, speed, and watch values.
 - Switch to Planning mode to draft, compare, and edit a path.
 - Livestream runs with one click
-- Upload your own Robot Image 
+- Upload your own Robot image to use instead of a plain box
 
 ## Why MotionView?
 - **Built for PROS teams**: fast to learn, practical for testing.
@@ -33,6 +25,7 @@ PROS is needed because of the terminal interface. Because `pros terminal`, run a
 - **Live or Later**: stream from the robot or open a saved file.
 - **Decision-friendly**: compare runs, spot issues, and iterate faster.
 
+There are two main modes: 
 ## Viewing Mode
 <p align="center">
     <img src="assets/MotionView/viewing_mode.png" alt="Icon" width="500" />
@@ -102,13 +95,13 @@ Use cases:
 | Global | `Cmd + 2` | Switch to Planning mode |
 | Global | `Cmd + Shift + K` | Clear everything (field + plan) |
 | Global | `F` | Fit/reset field position |
-| Global | `Cmd + T` | Toggle Floating info panel |
+| Global | `T` | Toggle Floating info panel |
 | Viewing | `Space` | Play/Pause playback (or toggle Auto‑follow Head when live‑connected) |
 | Viewing | `Cmd + O` | Open JSON file |
 | Viewing | `Cmd + K` | Clear Viewer |
 | Viewing | `S` | Start/stop live streaming (if connected) |
 | Viewing | `P` | Toggle Planned Overlay |
-| Viewing | `C` | Connect/disconnect |
+| Viewing | `Cmd + C` | Connect/disconnect |
 | Viewing | `←` / `→` | Step to previous/next pose |
 | Planning | `Space / S` | Play/Pause plan playback |
 | Planning | `Delete` / `Backspace` | Delete selected waypoint(s) |
@@ -117,3 +110,6 @@ Use cases:
 | Planning | `Cmd + Z` | Undo |
 | Planning | `Cmd + Shift + Z` | Redo |
 | Planning | `Cmd + K` | Clear planned path |
+
+### Why PROS?
+PROS is needed because of the terminal interface. Because `pros terminal`, run anywhere, always does the same action, it is very easy to get consistent connections and behavior using it. While it may be possible to use VEXCode (or any non-PROS platform), piping the terminal into MotionView is not easily done.

@@ -6,13 +6,41 @@ use std::{
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
-    time::{SystemTime, UNIX_EPOCH},
 };
+#[cfg(not(unix))]
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use tauri::{Manager, RunEvent, Window};
+use tauri::{Manager, RunEvent, State, Window};
+use tauri_plugin_posthog::{init as posthog_init, PostHogConfig};
 mod settings;
 
 struct BridgeState(Mutex<Option<Child>>);
+struct BridgeOrigin(Mutex<Option<String>>);
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SystemInfo {
+    os: String,
+    arch: String,
+}
+
+fn load_posthog_config() -> Option<PostHogConfig> {
+    // Public facing api key (phc_...), ok to hard code
+    let api_key: String = "phc_PsC5l917wW1iP38NmUybaMTn0sRFpawhGSF03jb3g5w".to_string();
+    println!("API KEY SET");
+    Some(PostHogConfig {
+        api_key,
+        ..Default::default()
+    })
+}
+
+fn maybe_add_posthog_plugin<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    if let Some(cfg) = load_posthog_config() {
+        builder.plugin(posthog_init(cfg))
+    } else {
+        builder
+    }
+}
 
 fn pick_free_port() -> u16 {
     let l = TcpListener::bind(("127.0.0.1", 0)).expect("bind 127.0.0.1:0");
@@ -20,8 +48,13 @@ fn pick_free_port() -> u16 {
 }
 
 fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBuf> {
-    // Build candidate file names: triple-suffixed (dev) and plain (bundled).
+    // Build candidate file names. Prefer plain first to match bundled `externalBin`
+    // behavior, then try triple-suffixed as a fallback.
     let mut names: Vec<String> = Vec::new();
+    names.push(format!(
+        "motionview-py{}",
+        if cfg!(target_os = "windows") { ".exe" } else { "" }
+    ));
     if let Some(triple) = option_env!("TAURI_ENV_TARGET_TRIPLE") {
         names.push(format!(
             "motionview-py-{}{}",
@@ -29,10 +62,6 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
             if cfg!(target_os = "windows") { ".exe" } else { "" }
         ));
     }
-    names.push(format!(
-        "motionview-py{}",
-        if cfg!(target_os = "windows") { ".exe" } else { "" }
-    ));
 
     // Allow an explicit override for diagnostics or custom deployments.
     if let Ok(force) = std::env::var("MOTIONVIEW_BRIDGE_BIN") {
@@ -317,6 +346,19 @@ fn get_window_fullscreen_state(window: Window) -> Result<bool, String> {
     window.is_fullscreen().map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn get_system_info() -> SystemInfo {
+    SystemInfo {
+        os: std::env::consts::OS.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
+    }
+}
+
+#[tauri::command]
+fn get_bridge_origin(state: State<'_, BridgeOrigin>) -> Option<String> {
+    state.0.lock().unwrap().clone()
+}
+
 #[cfg(not(mobile))]
 fn persist_window_state(app_handle: &tauri::AppHandle) {
     if let Some(win) = app_handle.get_webview_window("main") {
@@ -330,10 +372,12 @@ fn persist_window_state(app_handle: &tauri::AppHandle) {
 fn persist_window_state(_: &tauri::AppHandle) {}
 
 fn main() {
-  println!("DO NOT CLOSE THIS WINDOW. MotionView runs off of it and cannot function without this window open.");
-    tauri::Builder::default()
+    println!("DO NOT CLOSE THIS WINDOW. MotionView runs off of it and cannot function without this window open.");
+    
+    maybe_add_posthog_plugin(tauri::Builder::default())
         .plugin(tauri_plugin_shell::init())
         .manage(BridgeState(Mutex::new(None)))
+        .manage(BridgeOrigin(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             settings::read_settings,
             settings::write_settings,
@@ -342,7 +386,9 @@ fn main() {
             settings::read_saved_paths,
             settings::write_saved_paths,
             set_windows_fullscreen,
-            get_window_fullscreen_state
+            get_window_fullscreen_state,
+            get_system_info,
+            get_bridge_origin
         ])
         .setup(|app| {
             cleanup_previous_bridge(app.handle());
@@ -350,6 +396,8 @@ fn main() {
             let child = spawn_bridge(app.handle(), port)?;
             write_bridge_pid(app.handle(), child.id());
             *app.state::<BridgeState>().0.lock().unwrap() = Some(child);
+            *app.state::<BridgeOrigin>().0.lock().unwrap() =
+                Some(format!("http://127.0.0.1:{port}"));
 
             // Tell frontend where backend is
             if let Some(win) = app.get_webview_window("main") {
@@ -388,8 +436,8 @@ fn main() {
                                 persist_window_state(&app_handle);
                             }
                             tauri::WindowEvent::Destroyed => {
+                                // In dev, frontend reloads can recreate the window; keep bridge alive.
                                 persist_window_state(&app_handle);
-                                stop_bridge(&app_handle.state::<BridgeState>(), app_handle);
                             }
                             _ => {}
                         }

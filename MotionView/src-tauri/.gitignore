@@ -8,4 +8,6 @@
 
 .venv/** 
 
-.vscode/**
+/.env
+
+/bin
