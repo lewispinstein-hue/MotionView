@@ -12,6 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{Manager, RunEvent, State, Window};
 use tauri_plugin_posthog::{init as posthog_init, PostHogConfig};
+mod export;
 mod settings;
 
 struct BridgeState(Mutex<Option<Child>>);
@@ -385,6 +386,7 @@ fn main() {
             settings::save_robot_image,
             settings::read_saved_paths,
             settings::write_saved_paths,
+            export::export_motionview_json,
             set_windows_fullscreen,
             get_window_fullscreen_state,
             get_system_info,

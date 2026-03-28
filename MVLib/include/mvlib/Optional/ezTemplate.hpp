@@ -1,16 +1,16 @@
 #pragma once
 
 /**
- * @file logger_optional_ez-template.hpp
+ * @file ezTemplate.hpp
  * @brief Optional Logger adapter for EZ-Template odometry.
  */
 
 #ifdef _MVLIB_OPTIONAL_USED
-#error More than one type of Mvlib Optional include used!
-#endif
+#error "More than one type of Logger/Optional include used!"
+#endif // _MVLIB_OPTIONAL_USED
 
 #ifndef _MVLIB_OPTIONAL_USED
-#define _MVLIB_OPTIONAL_USED
+#define _MVLIB_OPTIONAL_USED "ezTemplate"
 #include "mvlib/core.hpp" // IWYU pragma: keep
 #include "EZ-Template/api.hpp"  // IWYU pragma: keep
 
@@ -33,21 +33,20 @@ namespace mvlib {
  *
  * @par Example: EZ-Template odometry
  * @code{.cpp}
- * #include "mvlib/core.hpp"
- * #include "mvlib/Optional/logger_optional_ez-template.hpp"
+ * #include "mvlib/api.hpp"
+ * #include "mvlib/Optional/ezTemplate.hpp"
  *
  * // Provided by your EZ-Template setup.
  * extern ez::Drive chassis;
  *
  * void initialize() {
- *   auto& logger = mvlib::Logger::getInstance();
- *   mvlib::setOdom(logger, &chassis);
+ *   mvlib::setOdom(&chassis);
  *   logger.start();
  * }
  * @endcode
  */
-inline void setOdom(Logger& logger, ez::Drive* chassis) {
-  logger.setPoseGetter([chassis]() -> std::optional<Pose> {
+inline void setOdom(ez::Drive* chassis) {
+  mvlib::Logger::getInstance().setPoseGetter([chassis]() -> std::optional<Pose> {
     if (!chassis || !chassis->odom_enabled()) return std::nullopt;
 
     const float xIn   = chassis->odom_x_get();       // inches :contentReference[oaicite:1]{index=1}
@@ -58,4 +57,4 @@ inline void setOdom(Logger& logger, ez::Drive* chassis) {
   });
 }
 } // namespace mvlib
-#endif
+#endif // _MVLIB_OPTIONAL_USED

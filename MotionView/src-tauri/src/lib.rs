@@ -1,4 +1,5 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+mod export;
 mod settings;
 
 #[tauri::command]
@@ -17,7 +18,8 @@ pub fn run() {
             settings::read_image_data,
             settings::save_robot_image,
             settings::read_saved_paths,
-            settings::write_saved_paths
+            settings::write_saved_paths,
+            export::export_motionview_json
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

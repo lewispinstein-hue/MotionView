@@ -1,16 +1,16 @@
 #pragma once
 
 /**
- * @file logger_optional_custom.hpp
+ * @file customOdom.hpp
  * @brief Optional Logger adapter for any custom or unsupported odometry.
  */
 
 #ifdef _MVLIB_OPTIONAL_USED
-#error More than one type of Mvlib Optional include used!
-#endif
+#error "More than one type of Logger/Optional include used!"
+#endif // _MVLIB_OPTIONAL_USED
 
 #ifndef _MVLIB_OPTIONAL_USED
-#define _MVLIB_OPTIONAL_USED
+#define _MVLIB_OPTIONAL_USED "customOdom"
 #include "mvlib/core.hpp" // IWYU pragma: keep
 
 #include <optional>
@@ -45,19 +45,17 @@ namespace mvlib {
  * 3) Return std::nullopt while invalid/uninitialized
  *
  * @code{.cpp}
- * #include "mvlib/Optional/logger_optional_custom.hpp"  
- * #include <cmath>
- * #include <optional>
+ * #include "mvlib/api.hpp"
+ * #include "mvlib/Optional/customOdom.hpp"  
  * 
  * // Custom / Unsupported odom
  * #include "mylib.hpp"
  *
  * 
  * void initialize() {
- *   auto& logger = mvlib::Logger::getInstance();
- *   mvlib::setOdom(logger, []() -> std::optional<mvlib::Pose> { // Important! Use std::optional!
+ *   mvlib::setOdom([]() -> std::optional<mvlib::Pose> {
  *     if (!customOdomReady()) {
- *       // Odom not initialized yet; downstream should treat as "no pose available".
+ *       // Odom not initialized yet; should treat as "no pose available".
  *       return std::nullopt;
  *     }
  *
@@ -72,32 +70,13 @@ namespace mvlib {
  * @endcode
  */
 template <class Fn>
-inline void setOdom(Logger& logger, Fn&& poseGetter)
+inline void setOdom(Fn&& poseGetter)
   requires std::is_same_v<std::invoke_result_t<Fn&>, std::optional<Pose>> {
-    auto getter = std::forward<Fn>(poseGetter);
+  auto getter = std::forward<Fn>(poseGetter);
 
-    logger.setPoseGetter([getter = std::move(getter)]() mutable -> std::optional<Pose> {
+  mvlib::Logger::getInstance().setPoseGetter([getter = std::move(getter)]() mutable -> std::optional<Pose> {
     return getter();
   });
 }
-
-// Error handling
-template <class T> struct typeIs;
-
-template <class Fn>
-inline void setOdom(Logger& logger, Fn&& poseGetter)
-  requires (!std::is_same_v<std::invoke_result_t<Fn&>, std::optional<Pose>>) {
-  using T = std::invoke_result_t<Fn&>;
-
-  static_assert(always_false_v<T>,
-                "\n\n\n------------------------------------------------------------------------\n"
-                "ERROR! The return type was: \n");
-  typeIs<T> ERROR_THE_TYPE_INPUTTED_WAS;
-  static_assert(always_false_v<T>,
-                "mvlib::setOdom (mvlib_optional_custom.hpp) has bad return type!\n"
-                "std::optional<mvlib::Pose> was expected.\n"
-                "------------------------------------------------------------------------\n\n\n");
-}
 } // namespace mvlib
-#endif
-
+#endif // _MVLIB_OPTIONAL_USED

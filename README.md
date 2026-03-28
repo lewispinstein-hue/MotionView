@@ -1,10 +1,14 @@
-# MotionView - Live PROS Visualizer
+# MotionView - Live Robot Visualizer
 <p align="center">
-    <img src="assets/Logo.png" alt="Icon" width="315" />
+    <img src="assets/Logo.png" alt="Icon" width="390" />
 </p>
 
 ## What is MotionView?
 MotionView is a live visualizer for PROS robots. It turns a stream of numbers into a visual insight into your robot's behavior. It lets you see the robot's position, speed, and events on a live updating dashboard.
+
+<p align="left">
+    <img src="assets/MotionView/viewing_with_overlay.png" alt="Viewing Mode Dashboard" width="900" />
+</p>
 
 ## Quick Start
 1. Open MotionView.
@@ -25,19 +29,20 @@ MotionView is a live visualizer for PROS robots. It turns a stream of numbers in
 - **Live or Later**: stream from the robot or open a saved file.
 - **Decision-friendly**: compare runs, spot issues, and iterate faster.
 
-There are two main modes: 
-## Viewing Mode
-<p align="left">
-    <img src="assets/MotionView/viewing_mode.png" alt="Icon" width="500" />
-</p>
-
+## There are two main modes: 
+### Viewing Mode
 Use this mode to **replay and analyze** a run.
+<p align="left">
+    <img src="assets/MotionView/viewing_mode.png" alt="Viewing Mode" width="500" />
+</p>
 
 What you see:
 - The field canvas draws the robot path, heading, and live pose playback so you can confirm movement shape, orientation, and speed at each timestamp.
 - A timeline scrubber/keyboard stepping lets you jump to specific poses, pause on key moments, or fast-forward to the end of the run.
 - The floating info island mirrors the current pose or live update, surfacing pose (x/y/theta), left and right wheel speeds, and the last watch values without needing to hover the field.
-- The poses list (below the field) lists every timestamped pose so you can jump directly to meaningful events, and the watches list tallies timed signals (solenoids, pneumatics, etc.) so you can filter for the stories that matter.
+- The watches list tallies timed signals (solenoids, pneumatics, etc.) so you can filter for the events that matter. See the [main docs](/Docs/MVLib/Watches.md) for more info.
+- Waypoints list. Allows you to create a waypoint that you can use for auton analyzing or driver practice. See the [main docs](/Docs/MVLib/Waypoints.md) for more info.
+- Logs list. This is of your custom logs. It can be sorted through. See the [main docs](/Docs/MVLib/StandardLog.md) for more info.
  
 Key controls:
 - Refresh button and interval animate the view on a set cadence when streaming, or you can tap Refresh to pull the latest poses/watches immediately; think of it as reloading the live buffer so the UI matches the source data.
@@ -46,12 +51,11 @@ Key capabilities:
 - Toggle live streaming to keep the field updating in real time when connected to a robot, or use file import (`Cmd + O`) to review saved logs.
 - Use play/pause, step forward/back, and fit/reset (`F`) to keep attention on the most important moments.
 
-## Planning Mode
-<p align="left">
-    <img src="assets/MotionView/planning_mode_path.png" alt="Icon" width="500" />
-</p>
-
+### Planning Mode
 Use this mode to **plan and refine** a path before testing, or after.
+<p align="left">
+    <img src="assets/MotionView/planning_mode.png" alt="Planning Mode" width="500" />
+</p>
 
 What you interact with:
 - Drop waypoints on the field and drag them to adjust radii/positions; each waypoint represents a target pose or action in the plan.
@@ -71,14 +75,15 @@ MotionView requires nothing out of the box to load files, but some features requ
 Livestreaming lets you watch a robot's pose logger in real time without opening a saved file.
 
 Core requirements:
-1. Be connected to your robot (controller/brain) and run a `Pose logger`; for a minimal logger build see [**MVLib**](</MVLib/README.md>).
+1. Be connected to your robot (controller/brain) that has a `Pose logger`.
+> Use [`MVLib`](</MVLib/README.md>) as a simple and feature full bridge between MotionView and your robot.
 2. Settings must point to a valid `PROS Project Directory`. If you do not have robot code locally, install the PROS VS Code Extension, create a new PROS project, and MotionView will auto-detect it.
-3. MotionView autodetects `PROS-CLI`, but refer to the [Setup Guide](/Guides/MotionView/Setup-Livestreaming.md) if it fails.
+3. MotionView will attempt to auto-detect `PROS-CLI` on your PATH. If it fails, refer to the [Setup Guide](/Guides/MotionView/Setup-Livestreaming.md).
 
 What Livestream mode gives you:
 - A live-updating field view with the current pose, heading, and speed so you can monitor motion as it happens.
 - Watch values appear alongside poses, showing sensor states, pneumatics, or other telemetry the logger emits.
-- Controls let you Connect/Disconnect (`C`), start/stop streaming (`S`), auto-follow the robot head, and toggle overlays just like in Viewing Mode.
+- A timeline lets you scrub through the poses and watch values, or step forward/backward in real time.
 
 Use cases:
 - Warm up the robot and verify that the logger is working before grabbing a file.

@@ -1,6 +1,8 @@
 #include "main.h"
-#include "mvlib/core.hpp"
-#include "mvlib/Optional/mvlib_optional_custom.hpp"
+
+#define MVLIB_USE_SIMPLES
+#include "mvlib/api.hpp" 
+#include "mvlib/Optional/customOdom.hpp"
 
 // Creating motors and controller
 pros::Controller master(pros::E_CONTROLLER_MASTER);
@@ -44,7 +46,7 @@ void initialize() {
 	auto& logger = mvlib::Logger::getInstance(); // Get the logger object
 
 	// Mock odom setup. Replace with your real odom system.
-	mvlib::setOdom(logger, []() -> std::optional<mvlib::Pose> {
+	mvlib::setOdom([]() -> std::optional<mvlib::Pose> {
 		return mvlib::Pose{0, 0, 0}; 
 	});
 
@@ -54,6 +56,7 @@ void initialize() {
 		.rightDrivetrain = &right_mg
 	});
 
+	// Log average drivetrain temperature only if overheating
 	logger.watch("Avg Temp:", mvlib::LogLevel::OFF, 1_mvS, // We do not log at all normally
 		[]() { return (left_mg.get_temperature() + right_mg.get_temperature()) / 2; },
 		mvlib::LevelOverride<double>{ // Use LevelOverride to only log if overheating
@@ -62,8 +65,24 @@ void initialize() {
 			.label = "Overheating Drivetrain:"
 		}, "%.0f");
 
-	// Start the logger
+	// Start main telemetry stream
 	logger.start();
+	
+	auto leftGoalCP = logger.addWaypoint("Left Goal", {
+		.tarX = 10,  // Target 10 x
+		.tarY = 8,   // 8 y
+		.tarT = 180, // And 180 degrees heading
+		.timeoutMs = 15_mvS, // Timeout after 15 seconds
+		.linearTol = 1.5, // Consider reached if within 1.5 units
+		.thetaTol = 8, // Consider reached if within 8 degrees
+		.logOffsetEveryMs = 3_mvS // Log offset every 3 seconds
+	});
+
+	// Store the offset
+	auto off = leftGoalCP.getOffset();
+	// Print the offset
+	logger.info("Left Goal Distance: %.1f, %.1f, %.1f\n", off.offX, off.offY, off.offT.value_or(0));
+	logger.info("Finished initialization!");
 }
 
 /**

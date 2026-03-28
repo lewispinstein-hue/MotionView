@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file core.hpp
- * @brief Logging + telemetry utilities for PROS robots.
+ * @brief Core MVLib header. Provides the Logger singleton, watches, and 
  *
  * This header provides:
  * - A singleton logger (mvlib::Logger) that can print to the PROS terminal and/or
@@ -27,124 +27,51 @@
  *
  * \b Example
  * @code
- * #include "mvlib/core.hpp"
- *
+ * #include "main.h"
+ * #include "mvlib/api.hpp"
+ * #include "mvlib/Optional/customOdom.hpp"
  * void initialize() {
  *   auto& logger = mvlib::Logger::getInstance();
- *
- *   // Set the drivetrain 
+ *   mvlib::setOdom(logger, []() -> std::optional<mvlib::Pose { ... });
  *   logger.setRobot({
- *     .LeftDrivetrain = leftDrive,
- *     .RightDrivetrain = rightDrive
+ *     .leftDrivetrain = &leftMg,
+ *     .rightDrivetrain = &rightMg
  *   });
- *
  *   logger.start();
  * }
  * @endcode
  */
 
-#include "pros/motor_group.hpp" // IWYU pragma: keep
-#include "pros/rtos.hpp"        // IWYU pragma: keep
+#include "pros/motor_group.hpp"
+#include "pros/rtos.hpp"
+#include "renderHelper.hpp"
+#include "waypoint.hpp"
 
-#include <optional>
 #include <atomic>
 #include <optional>
-#include <sys/_intsup.h>
 #include <utility>
+#include <vector>
+#include <string>
 
 #define _LOGGER_CORE
 namespace mvlib {
 
-// --------------------------------------------------------------------------
-// Convenience log macros
-// --------------------------------------------------------------------------
-
-/**
- * @defgroup LoggingMacros Logging Macros
- * @brief Convenience wrappers around mvlib::Logger::logMessage().
- *
- * Where to use them:
- * - Most call-sites that just want to log something quickly.
- *
- * When to use them:
- * - Prefer LOG_INFO/WARN/ERROR over calling logMessage() directly unless you
- *   need a custom source pointer or you are writing logger internals.
- *
- * @note These macros forward directly to mvlib::Logger::logMessage().
- * @{
- */
-#if !defined(LOG_DEBUG) && \
-    !defined(LOG_INFO)  && \
-    !defined(LOG_WARN)  && \
-    !defined(LOG_ERROR) && \
-    !defined(LOG_FATAL)
-
-/// @brief Log a DEBUG-level message (usually noisy, for development).
-#define LOG_DEBUG(fmt, ...)                                                    \
-  mvlib::Logger::getInstance().logMessage(                                     \
-      mvlib::LogLevel::DEBUG, fmt, ##__VA_ARGS__)
-
-/// @brief Log an INFO-level message (normal operational breadcrumbs).
-#define LOG_INFO(fmt, ...)                                                     \
-  mvlib::Logger::getInstance().logMessage(                                     \
-      mvlib::LogLevel::INFO, fmt, ##__VA_ARGS__)
-
-/// @brief Log a WARN-level message (unexpected but recoverable situations).
-#define LOG_WARN(fmt, ...)                                                     \
-  mvlib::Logger::getInstance().logMessage(                                     \
-      mvlib::LogLevel::WARN, fmt, ##__VA_ARGS__)
-
-/// @brief Log an ERROR-level message (failure that likely affects behavior).
-#define LOG_ERROR(fmt, ...)                                                    \
-  mvlib::Logger::getInstance().logMessage(                                     \
-      mvlib::LogLevel::ERROR, fmt, ##__VA_ARGS__)
-
-/// @brief Log a FATAL-level message (serious failure; usually precedes a stop).
-#define LOG_FATAL(fmt, ...)                                                    \
-  mvlib::Logger::getInstance().logMessage(                                     \
-      mvlib::LogLevel::FATAL, fmt, ##__VA_ARGS__)
-
-#else // OkApi sometimes has LOG macros, so prevent redefinition
-#define MVLIB_LOGS_REDEFINED
-
-#define MVLIB_LOG_DEBUG(fmt, ...)                                              \
-  mvlib::Logger::getInstance().logMessage(                                     \
-      mvlib::LogLevel::DEBUG, fmt, ##__VA_ARGS__)
-
-#define MVLIB_LOG_INFO(fmt, ...)                                               \
-  mvlib::Logger::getInstance().logMessage(                                     \
-      mvlib::LogLevel::INFO, fmt, ##__VA_ARGS__)
-
-#define MVLIB_LOG_WARN(fmt, ...)                                               \
-  mvlib::Logger::getInstance().logMessage(                                     \
-      mvlib::LogLevel::WARN, fmt, ##__VA_ARGS__)
-
-#define MVLIB_LOG_ERROR(fmt, ...)                                              \
-  mvlib::Logger::getInstance().logMessage(                                     \
-      mvlib::LogLevel::ERROR, fmt, ##__VA_ARGS__)
-
-#define MVLIB_LOG_FATAL(fmt, ...)                                              \
-  mvlib::Logger::getInstance().logMessage(                                     \
-      mvlib::LogLevel::FATAL, fmt, ##__VA_ARGS__)
-#endif
-/** @} */
-
 namespace {
 
-struct MutexGuard {
+struct unique_lock {
   /// @brief Mutex reference managed by this guard.
   pros::Mutex &m;
   bool locked = false;
-  explicit inline MutexGuard(pros::Mutex &m) : m(m) { locked = m.take(); }
-  explicit inline MutexGuard(pros::Mutex &m, uint32_t timeout) : m(m) {
+  explicit inline unique_lock(pros::Mutex &m) : m(m) { locked = m.take(); }
+  explicit inline unique_lock(pros::Mutex &m, uint32_t timeout) : m(m) {
     locked = m.take(timeout);
   }
-  ~MutexGuard() { if (locked) m.give(); }
+  ~unique_lock() { if (locked) m.give(); }
 
   bool isLocked() const { return locked; }
 
-  MutexGuard(const MutexGuard &) = delete;
-  MutexGuard &operator=(const MutexGuard &) = delete;
+  unique_lock(const unique_lock &) = delete;
+  unique_lock &operator=(const unique_lock &) = delete;
 };
 
 /// Workaround to force a static_assert to be type-dependent
@@ -153,13 +80,13 @@ inline constexpr bool always_false_v = false;
 
 #if __cplusplus >= 202302L
   #include <utility>
-  #define UNREACHABLE() std::unreachable()
+  #define _MVLIB_UNREACHABLE() std::unreachable()
 #elif defined(__GNUC__) || defined(__clang__)
-    #define UNREACHABLE() __builtin_unreachable()
+  #define _MVLIB_UNREACHABLE() __builtin_unreachable()
 #elif defined(_MSC_VER)
-  #define UNREACHABLE() __assume(false)
+  #define _MVLIB_UNREACHABLE() __assume(false)
 #else
-  #define UNREACHABLE()
+  #define _MVLIB_UNREACHABLE()
 #endif
 } // namespace
 
@@ -169,14 +96,16 @@ inline constexpr bool always_false_v = false;
  *
  * @note Ordering matters: higher values are considered "more severe".
  */
-enum class LogLevel {
+enum class LogLevel : uint8_t {
   NONE = 0, /// The lowest log level. Used for simply disabling logger.
   OFF = 0,  /// Alias for NONE
   DEBUG,    /// Used for info related to startup and diagnostics
   INFO,     /// The most frequently used log level. 
   WARN,     /// Used for logs still not dangerous, but that should stand out
   ERROR,    /// Used when something has gone wrong.
-  FATAL     /// Used only for serious failures; often precedes a force stop.
+  FATAL,    /// Used only for serious failures; often precedes a force stop.
+  TELEMETRY_OVERRIDE = 0xFE, /// Used by system when printing telemetry to override minLoggerLevel
+  OVERRIDE = 0xFF /// Used by system for overriding minLogLevel
 };
 
 // ---------- Generic variable watches ----------
@@ -217,7 +146,7 @@ template<class T> struct LevelOverride {
  *       mvlib::asPredicate<Typename>(expression) directly.
  */
 #define PREDICATE(func) \
-mvlib::asPredicate<int32_t>([](int32_t v) { return func; })
+mvlib::asPredicate<int32_t>([](int32_t v) -> bool { return func; })
 
 /**
  * @brief Convert an arbitrary predicate callable into std::function<bool(const T&)>.
@@ -267,10 +196,13 @@ public:
    *
    * @note Most fields are atomic so they can be toggled while running.
    */
-  struct loggerConfig {
-    std::atomic<bool> logToTerminal{true};  ///< @brief Print logs to the terminal.
-    std::atomic<bool> logToSD{true};        ///< @brief Write logs to SD (locked after logger start).
-    std::atomic<bool> printWatches{true};   ///< @brief Print registered watches.
+  struct LoggerConfig {
+    std::atomic<bool> logToTerminal{true};     ///< @brief Print logs to the terminal.
+    std::atomic<bool> logToSD{true};           ///< @brief Write logs to SD (locked after logger start).
+    std::atomic<bool> printWatches{true};      ///< @brief Print registered watches.
+    std::atomic<bool> printTelemetry{true};    ///< @brief Print periodic telemetry.
+    std::atomic<bool> printWaypoints{true};    ///< @brief Print waypoints upon timeout or reached.
+    std::atomic<bool> logSystemInfo{true}; ///< @brief Print system messages (e.g., warnings, errors)
   };
 
   /**
@@ -278,8 +210,8 @@ public:
    * @brief References to robot components used by telemetry helpers.
    */
   struct Drivetrain {
-    pros::MotorGroup* leftDrivetrain;   ///< @brief Left drivetrain motors for velocity.
-    pros::MotorGroup* rightDrivetrain;  ///< @brief Right drivetrain motors for velocity.
+    pros::MotorGroup *leftDrivetrain;  ///< @brief Left drivetrain motors for velocity.
+    pros::MotorGroup *rightDrivetrain; ///< @brief Right drivetrain motors for velocity.
   }; 
 
   /**
@@ -335,13 +267,30 @@ public:
    */
   void setLogToSD(bool v);
 
-  /// @brief Enable/disable printing of registered watches.
+  /**
+   * @brief Enable/disable Pose/Telemetry printing.
+   *
+   * @note If false, MotionView will only update with watches.
+   */
+  void setPrintTelemetry(bool v);
+
+  /**
+   * @brief Enable/disable printing of registered watches.
+  */
   void setPrintWatches(bool v);
+  
+  /**
+   * @brief Enable/disable printing of waypoints.
+  */
+  void setPrintWaypoints(bool v);
 
-  // ------------------------------------------------------------------------
-  // Log filtering
-  // ------------------------------------------------------------------------
-
+  /**
+   * @brief Enable/disable printing of system messages. Recommended to 
+   *        be left on for debugging. Disable if you want your MotionView
+   *        GUI to be void of system messages.
+  */
+  void setLogSystemInfo(bool v);
+  
   /**
    * @brief Set the minimum log level that will be emitted.
    *
@@ -351,24 +300,28 @@ public:
   void setLoggerMinLevel(LogLevel level);
 
   // ------------------------------------------------------------------------
-  // Robot + motors
+  // Setup
   // ------------------------------------------------------------------------
 
   /**
    * @brief Provide a custom pose getter (for any odometry library).
    * @param getter Callable that returns a Pose or std::nullopt if unavailable.
    *
-   * @note Use the functions for your respective odom library from mvlib/Optional. 
+   * @note Prefer the adapters based on you odom library from include/mvlib/Optional
    *
    * \b Example
    * @code
    * // LemLib example
-   * #include "mvlib/Optional/logger_optional_lemlib.hpp"
+   * #include "mvlib/api.hpp"
    * #include "lemlib/api.hpp"
    * lemlib::Chassis chassis (...);
    * void initialize() {
    *   auto& logger = mvlib::Logger::getInstance();
-   *   mvlib::setOdom(logger, &chassis);
+   *   logger.setPoseGetter([&]() -> std::optional<mvlib::Pose> {
+   *     lemlib::Pose pose = chassis.getPose(); 
+   *     if (!std::isfinite(pose.x) || !std::isfinite(pose.y)) return std::nullopt;
+   *     return mvlib::Pose(pose.x, pose.y, pose.theta);
+   *   });
    * }
    * @endcode
    */
@@ -402,21 +355,119 @@ public:
   /**
    * @brief Write a formatted log line to the SD log file.
    *
+   * @note Buffer flush interval is ignored and immediately flushed 
+   *       if @c levelStr is "ERROR" or "FATAL".
+   *
    * @note This is typically called by logMessage() when SD logging is enabled.
    * @param levelStr Preformatted level string (e.g., "INFO").
    * @param fmt printf-style format string.
    */
-  void logToSD(const char *levelStr, const char *fmt, ...);
+  void logToSD(const char *levelStr, const char *fmt, ...); 
 
+
+  // ------------------------------------------------------------------------
+  // Standard Event Loggers
+  // ------------------------------------------------------------------------
+  /**
+   * @brief Emit a computer-formatted log message to MotionView. Unlike the LOG_
+   *        macros, these function will produce logs MotionView will parse and 
+   *        display. These functions only differ in the severity level that they 
+   *        log at. 
+   *
+   * @param fmt printf-style format string.
+   * @param ... Format arguments.
+   *
+   * @note Messages are truncated to 512 bytes.
+   * @note These are affected by minLoggerLevel.
+  */
+  void debug(const char *fmt, ...);
+
+  /** 
+  * @copydoc debug
+  * @brief Emit info level log message.
+  */
+  void info(const char *fmt, ...);
+
+  /** 
+  * @copydoc debug
+  * @brief Emit warning level log message.
+  */
+  void warn(const char *fmt, ...);
+
+  /** 
+  * @copydoc debug
+  * @brief Emit error level log message.
+  */
+  void error(const char *fmt, ...);
+
+  /** 
+  * @copydoc debug 
+  * @brief Emit fatal level log message.
+  */
+  void fatal(const char *fmt, ...);
+
+  // ------------------------------------------------------------------------
+  // Waypoints
+  // ------------------------------------------------------------------------
+  
+  /**
+   * @brief Add a waypoint to the logger.
+   * @param name Name of the waypoint.
+   * @param details Required waypoint details (x, y, theta, tol, etx)
+   * @return A handle to the waypoint.
+   *
+   * @note To access value of the waypoint, use the handle returned by this 
+   *       function.
+   *
+   * @warning @c name is moved into the handle. Do not use @c name after passing 
+   *          it to this function.
+   *
+   * \b Example
+   * @code
+   * auto& logger = mvlib::Logger::getInstance();
+   * auto BL_MTL = logger.addWaypoint("Blue left matchloader", {
+   *   .tarX = 70, 
+   *   .tarY = -47, 
+   *   .tarT = 0,
+   *   .linearTol = 2,
+   *   .thetaTol = 10,
+   *   .timeoutMs = 5_mvS,
+   *   .printOffsetEveryMs = 1_mvS
+   * });
+   * auto off = BL_MTL.getOffset();
+   * printf("BL_MTL CURRENT OFFSET: %.1f, %.1f, %.1f.\n", off.offX, off.offY, off.offT.value());
+   * @endcode
+   * This example creates a waypoint named "Blue left matchloader" with a 
+   * target position of (70, -47), XY tolerance of 2, theta tolerance of 
+   * 10 degrees, and a timeout of 5 seconds. It will also print the offset
+   * every 1000ms to MotionView.
+   */
+  WaypointHandle addWaypoint(std::string name, WaypointParams details);
+  
   // ------------------------------------------------------------------------
   // Watches
   // ------------------------------------------------------------------------
 
+  struct DefaultWatches {
+    bool leftDrivetrainWatchdog  = true;
+    bool rightDrivetrainWatchdog = true;
+    bool batteryWatchdog         = true;
+  };
+
   /**
-   * @brief Register a periodic watch on a getter function.
+   * @brief Set default log levels for common components.
+   * @return True if successful.
+   */
+  bool setDefaultWatches(const DefaultWatches& watches);
+
+  /**
+   * @brief Register a periodic watch on a getter function. The 
+   *        getter is sampled every intervalMs and printed at baseLevel, unless
+   *        the optional override predicate elevates the level.
    *
-   * The getter is sampled every intervalMs and printed at baseLevel, unless
-   * the optional override predicate elevates the level.
+   * @note Adding a watch is computationally expensive. Don't call logger.watch() 
+   *       repeatedly. Additionally, if the same .watch() is called 
+   *       multible times, each watch will be separate and logged independently.
    *
    * @tparam Getter Callable that returns the value to render (numeric/bool/string/cstr).
    * @param label Display label for the watch.
@@ -425,14 +476,14 @@ public:
    * @param getter Callable returning a value.
    * @param ov Optional LevelOverride (type inferred from getter).
    * @param fmt Optional printf-style format for numeric values (e.g. "%.2f").
+   *
    * \return WatchId that can be used to identify the watch internally.
    *
    * \b Example
    * @code
    * auto& logger = mvlib::Logger::getInstance();
-   * logger.watch("Intake RPM:", mvlib::LogLevel::INFO, 
-   * uint32_t{1000}, // The uint32_t{} is needed to disambiguate the overload
-   * [&](){ return left_mg.get_actual_velocity(); },
+   * logger.watch("Intake RPM:", mvlib::LogLevel::INFO, 1_mvS, 
+   * [&]() { return left_mg.get_actual_velocity(); },
    * mvlib::LevelOverride<double>{
    * .elevatedLevel = mvlib::LogLevel::WARN,
    * .predicate = PREDICATE(v > 550),
@@ -456,6 +507,10 @@ public:
   /**
    * @brief Register a watch that prints only when the rendered value changes.
    *
+   * @note Adding a watch is computationally expensive. Don't call 
+   *       logger.watch() repeatedly. If the same .watch() is called 
+   *       multible times, each watch will be separate and logged independently.
+   *
    * @tparam Getter Callable that returns the value to render.
    * @param label Display label for the watch.
    * @param baseLevel Level used for normal samples.
@@ -473,7 +528,7 @@ public:
                 Getter&& getter, LevelOverride<U> ov, std::string fmt = {}) { 
                   
     using T = std::decay_t<std::invoke_result_t<Getter&>>;
-    return addWatch<T>(std::move(label), baseLevel, 0,
+    return addWatch<T>(std::move(label), baseLevel, uint32_t{0},
                       std::forward<Getter>(getter), std::move(ov),
                       std::move(fmt), onChange);
   }
@@ -519,15 +574,15 @@ private:
   /// @brief Initialize SD logger file handle and state.
   bool m_initSDLogger();
 
-  /// @brief Generate a timestamped filename into m_currentFilename.
-  void m_makeTimestampedFile();
+  /// @brief Return the current sessions filename.
+  std::string m_getTimestampedFile();
 
   /**
    * @brief Convert a LogLevel to a printable string.
    * @param level Log level to convert.
    * \return C-string representation of the level.
    */
-  const char *m_levelToString(LogLevel level) const;
+  const char *m_levelToString(const LogLevel& level) const;
 
   /**
    * @struct Watch
@@ -553,54 +608,6 @@ private:
 
   /// @brief Watch registry keyed by WatchId.
   std::unordered_map<WatchId, Watch> m_watches;
-
-  // --- rendering helpers ---
-
-  /**
-   * @brief Render a std::string as-is.
-   * \return The rendered string.
-   */
-  static std::string renderValue(const std::string &v, const std::string &) { return v; }
-
-  /**
-   * @brief Render a C-string safely.
-   * \return "(null)" if v is nullptr, otherwise v as std::string.
-   */
-  static std::string renderValue(const char *v, const std::string &) {
-    return v ? std::string(v) : std::string("(null)");
-  }
-
-  /**
-   * @brief Render a boolean as "true"/"false".
-   * \return Rendered boolean string.
-   */
-  static std::string renderValue(bool v, const std::string &) { return v ? "true" : "false"; }
-
-  /**
-   * @brief Render arithmetic types using an optional printf-style format.
-   *
-   * @tparam T Value type.
-   * @param v Value to render.
-   * @param fmt Optional printf-style format string.
-   * \return Rendered value string.
-   *
-   * @note Non-arithmetic types fall back to "<unrenderable>".
-   */
-  template <class T>
-  static std::string renderValue(const T& v, const std::string& fmt) {
-    if constexpr (std::is_floating_point_v<T>) {
-      if (!fmt.empty()) {
-        char buf[256];
-        std::snprintf(buf, sizeof(buf), fmt.c_str(), (double)v);
-        return std::string(buf);
-      }
-      return std::to_string((double)v);
-    } else if constexpr (std::is_integral_v<T>) {
-      (void)fmt; // ignore fmt for integrals
-      return std::to_string((long long)v);
-    } else return std::string("<unrenderable>");
-  }
-
 
   // --- core builder ---
 
@@ -666,110 +673,85 @@ private:
   /// @brief Print all watches that are due (and/or changed).
   void printWatches();
 
+
+  // ------------------------------------------------------------------------
+  // Waypoint internals
+  // ------------------------------------------------------------------------
+  struct InternalWaypoint {
+    WPId id{};               /// Internal ID
+    std::string name{};      /// Name as inputted by user
+    WaypointParams params;   /// Waypoint parameters
+    uint32_t lastPrintMs{};  /// Last time the waypoint was printed (params.printOffsetEveryMs)
+    uint32_t startTimeMs;    /// Creation time of the waypoint
+    bool active = true;      /// Is the waypoint active (not yet reached or timed out)?
+    bool prevReached = false;
+  };
+
+  /// @brief Waypoint registry
+  std::vector<InternalWaypoint> m_waypoints;
+
+  /// @brief Get the offset of the robot in WaypointOffset from the WPId
+  WaypointOffset getWaypointOffset(WPId id);
+
+  /// @brief Get the prevReached variable 
+  bool isPrevReached(WPId id);
+
+  /// @brief Set the prevReached variable. 
+  /// \return false on invalid Id, true otherwise
+  bool setPrevReached(WPId id, bool value);
+
+  /// @brief Get the params of the WPId 
+  WaypointParams getWaypointParams(WPId id);
+
+  /// @brief Get the name of the WPId
+  std::string getWaypointName(WPId id);
+
+  /// @brief Returns true if the robot has reached the WPId
+  bool isWaypointReached(WPId id);
+
+  /// @brief Returns true if the WPId is actively being tracked
+  bool isWaypointActive(WPId id);
+
+  /// @brief Print all waypoints that are due
+  void printWaypoints();
+
   // ------------------------------------------------------------------------
   // Internal state
   // ------------------------------------------------------------------------
 
-  loggerConfig m_config{};
+  LoggerConfig m_config{};
   LogLevel m_minLogLevel = LogLevel::INFO;
 
+  /** 
+   * @note A different mutex is needed for sd and terminal 
+   *       because user can call independently of system, leading 
+   *       to deadlocks / race conditions
+  */
   pros::Mutex m_terminalMutex;
   pros::Mutex m_sdCardMutex;
+  pros::Mutex m_stdLogMutex;
   pros::Mutex m_mutex;
 
-  uint32_t m_lastFlush = 0;
+  uint32_t m_lastFileFlush{0};
   FILE *m_sdFile = nullptr;
   char m_currentFilename[128] = "";
   const char *date = __DATE__; // Last upload date as fallback for no RTC
 
+  volatile bool m_sdLocked = false;    // Has sd card failed?
   bool m_started = false;     // Has start() been called?
-  bool m_sdLocked = false;    // Has sd card failed?
   bool m_configSet = false;   // Has setRobot() been called?
   bool m_configValid = false; // Is drivetrain config valid?
-  
-  // Polling intervals  
-
-  /**
-   * @brief SD file flush interval (ms). At 1000ms (default), 
-   *        SD card flushes out of RAM every 1 second.
-  */
-  static constexpr uint32_t SD_FLUSH_INTERVAL_MS = 1000;
-
-  /**
-   * @brief Controls how often mvlib polls for new data and logs it.
-   *         
-   *
-   * @note Time is in ms
-   * @note This interval overrides the sd card interval. If logging to 
-   *       terminal and to sd card, the terminal polling rate is used.
-   *
-   * @warning If the polling rate is too fast, it may overwhelm the 
-   *          brain -> controller connection, which may cause the
-   *          connection to be completely dropped and cease logging.
-  */
-  static constexpr uint16_t terminalPollingRate = 120;
-
-  /**
-   * @brief Controls how often mvlib polls for new data and logs it.
-   * 
-   * @note Time is in ms
-   * @note Sd card output is buffered by SD_FLUSH_INTERVAL_MS. This only 
-   *       controls how often that buffer is written too. Faster polling
-   *       rates may lead to starvation of other tasks.
-  */
-  static constexpr uint16_t sdCardPollingRate = 80; 
 
   // Robot refs
-  pros::MotorGroup* m_pLeftDrivetrain = nullptr; 
-  pros::MotorGroup* m_pRightDrivetrain = nullptr; 
+  pros::MotorGroup *m_pLeftDrivetrain = nullptr; 
+  pros::MotorGroup *m_pRightDrivetrain = nullptr; 
 
   std::unique_ptr<pros::Task> m_task;
 
   // Position getters
   std::function<std::optional<Pose>()> m_getPose = nullptr;
+  
+  // Friend classes
+  friend class WaypointHandle;
 };
 } // namespace mvlib
-
-/**
- * @brief Operator for .watch() intervalMs. Allows number_mvMs 
- *        instead of uint32_t{number}
- *
- * \return Explicit uint32_t casted version of the input number
- *
- * \b Example
- * @code{.cpp}
- * logger.watch("foo", mvlib::LogLevel::INFO, 100_mvMs, ...);
- * @endcode
-*/
-constexpr uint32_t operator""_mvMs(unsigned long long int ms) {
-    return static_cast<uint32_t>(ms);
-}
-
-/**
- * @brief Operator for .watch() intervalMs. Allows number_mvS 
- *        instead of uint32_t{number}, in seconds form
- *
- * \return Explicit uint32_t casted version of the input number, 
- *         times 1000.
- *
- * \b Example
- * @code{.cpp}
- * logger.watch("foo", mvlib::LogLevel::INFO, 1.7_mvS, ...);
- * @endcode
-*/
-constexpr uint32_t operator""_mvS(long double s) {
-    return static_cast<uint32_t>(s * 1000);
-}
-
-/** 
- * @brief Overload for integer type. Same as mvlib::operator""_mvS, used for
- *        non-float literals.
- *
- * \b Example
- * @code{.cpp}
- * logger.watch("foo", mvlib::LogLevel::INFO, 1_mvS, ...);
- * @endcode
-*/
-constexpr uint32_t operator""_mvS(unsigned long long s) {
-    return static_cast<uint32_t>(s * 1000);
-}

@@ -1,18 +1,31 @@
-# MVLib — MotionView Telemetry + Logging
+# MVLib: Telemetry + Logging For MotionView
 
 # What is this?
 `MVLib` is a simple logging and telemetry library for PROS V5 teams that want **clear, replayable data** in MotionView. It gives you structured logs, live “watches,” and pose data so MotionView can draw your robot path, list watches, and show details when you hover or click the field.
 
-If your team just wants **“why use this”** or **“how do I set it up”**, this README is for you.
-
-## Why Use MVLib
-
+## What Can MVLib Do?
 - **See your robot path** in MotionView, on a real field, with real numbers.
 - **Track important values** like battery, motor temps, flywheel RPM, or auton events.
 - **Debug faster** with consistent, viewable logs instead of scattered `printf`s.
 - **Share runs** with your team and compare improvements.
 - **Develop autonomous** with live viewing, event watching, and playback.
-- **Iterate quickly**: logging runs takes no more than a single button press
+- **Iterate quickly**: log runs effortlessly, spot issues or change routes, and make changes faster.
+
+## Cool! Now How do I Install it?
+1. Download the latest .zip from [GitHub](https://github.com/lewispinstein-hue/MotionView/tree/main/MVLib) named `libmvlib@<version>.zip`.
+2. Move the download zip file into the root of your PROS project.
+3. Open a PROS terminal and run `pros c fetch libmvlib@<version>.zip`
+4. Then, run `pros c apply libmvlib@<version>`
+5. Add the `mvlib` headers to your project, and finally run `pros make all` to finish.
+
+## Documentation
+Detailed Guides:
+
+- [`Setup.md`](../Guides/MVLib/Setup.md): installation, logger startup, odometry and drivetrain setup.
+- [`Configuration.md`](../Guides/MVLib/Configuration.md): user-configurable settings in `include/mvlib/config.hpp` and `LoggerConfig`.
+- [`Watches.md`](../Guides/MVLib/Watches.md): the `logger.watch(...)` overloads, `LevelOverride`, `PREDICATE`, formatting, and examples.
+- [`Waypoint.md`](../Guides/MVLib/Waypoint.md): `logger.addWaypoint(...)`, waypoint structs, waypoint handles, and waypoint usage patterns.
+- [`StandardLog.md`](../Guides/MVLib/StandardLog.md): the MotionView-formatted `debug`, `info`, `warn`, `error`, and `fatal` log functions.
 
 ## What MotionView Gets From MVLib
 
@@ -23,28 +36,28 @@ MotionView recognizes two kinds of lines that mvlib prints:
 
 This is exactly what MotionView is built to consume, so MVLib is the easiest way to feed it.
 
-> **Note:** MVLib is not strictly necessary. Any other logging system, even just a `printf` inside of opcontrol could replicate this functionality. 
-> However, MVLib provides easy setup, cross-library support, and seamless integration with MotionView, which is why it's recommended.
+> **Note:** MVLib is not strictly necessary. However, MVLib provides easy setup, cross-library support, seamless integration with MotionView, and tons of features, which is why it's recommended.
 
 ## Quick Setup (PROS V5)
 
-1. Copy `include/mvlib/` and `src/mvlib/` into your PROS project.
-2. Include the core header:
+1. Install MVlib .zip into your PROS project.
+2. Include the api header:
 
 ```cpp
-#include "mvlib/core.hpp"
+#define USING_MVLIB_SIMPLES // Optional; for more concise code
+#include "mvlib/api.hpp"
 ```
 
 3. Add **one** odom adapter header if you want pose tracking:
 
 ```cpp
-#include "mvlib/Optional/mvlib_optional_lemlib.hpp"
+#include "mvlib/Optional/lemlib.hpp"
 // or
-#include "mvlib/Optional/mvlib_optional_ez-template.hpp"
+#include "mvlib/Optional/ezTemplate.hpp"
 // or
-#include "mvlib/Optional/mvlib_optional_okapi.hpp"
+#include "mvlib/Optional/okapi.hpp"
 // or
-#include "mvlib/Optional/mvlib_optional_custom.hpp"
+#include "mvlib/Optional/customOdom.hpp"
 ```
 
 4. Start the logger in `initialize()`:
@@ -52,17 +65,17 @@ This is exactly what MotionView is built to consume, so MVLib is the easiest way
 ```cpp
 // -------- Example: Bare Bones setup (no watches) -------- //
 #include "main.h"
-#include "mvlib/core.hpp"
-#include "mvlib/Optional/mvlib_optional_lemlib.hpp" // Example: Using LemLib odom
+#include "mvlib/api.hpp"
+#include "mvlib/Optional/lemlib.hpp" // Example: Using LemLib odom
+extern lemlib::Chassis chassis; // Your chassis
 void initialize() {
   auto& logger = mvlib::Logger::getInstance();
 
-  // Needed: attach your odom (in this case, LemLib)
-  mvlib::setOdom(logger, &chassis);
-
+  // Attach your odom 
+  mvlib::setOdom(&chassis);
   // Needed for accurate speed telemetry
   logger.setRobot({
-    .leftDrivetrain  = &left_mg,
+    .leftDrivetrain = &left_mg,
     .rightDrivetrain = &right_mg
   });
 
@@ -72,79 +85,103 @@ void initialize() {
 
 That’s it. Just 10 lines of code. Once the robot runs, MotionView can read your logs and show the path and watches.
 
-## Real‑World Watch Examples (What Teams Actually Track)
+## Watches
 
-- **Battery voltage** spot brownout risk
-- **Drivetrain temperature** find overheating motors
-- **Flywheel RPM** see spin‑up consistency
-- **Intake current** detect jams
-- **Auton stage** know where your routine is when it failed
-- **Lift height** see if you reached target
+Watches let you sample values over time and send them to MotionView as structured watch entries.
 
-Example watches:
+Teams usually use them for:
+
+- battery voltage
+- drivetrain temperature
+- flywheel RPM
+- intake current
+- constant monitoring
+
+Example:
 
 ```cpp
 auto& logger = mvlib::Logger::getInstance();
 
-// Battery voltage
-logger.watch("Battery Percentage:", mvlib::LogLevel::INFO, true, // Instead of logging every 1000ms, we log every time the battery level changes.
-  [&]() { return pros::battery::get_voltage(); },
-  mvlib::LevelOverride<int32_t>{}, "%d");
-
-// Drivetrain temperature (averaged)
-logger.watch("Avg Temp:", mvlib::LogLevel::INFO, 1000_mvMs, 
-    [&]() { return (left_mg.get_temperature() + right_mg.get_temperature()) / 2; }, 
-    mvlib::LevelOverride<double>{
-    .elevatedLevel = mvlib::LogLevel::WARN,
-    .predicate = PREDICATE(v > 50) // Change from a INFO to a WARN when avg temp is over 50.
-}, "%0f"); // Print the temperature to 0 decimals.
-
-// Flywheel RPM
-logger.watch("Flywheel RPM:", mvlib::LogLevel::INFO, 1000_mvMs, // For an always changing event like this, prevent spam and log periodically.
+logger.watch("Flywheel RPM:", mvlib::LogLevel::INFO, 1_mvS,
   [&]() { return flywheel.get_actual_velocity(); },
-  mvlib::LevelOverride<double>{}, "%.1f"); // No level override, and print with 1 decimal
+  mvlib::LevelOverride<double>{}, "%.1f");
 
-// Intake current (detect jams)
-logger.watch("Intake Current:", mvlib::LogLevel::INFO, 1000_mvMs, 
-  [&]() { return intake.get_current_draw(); }, 
-    mvlib::LevelOverride<int32_t>{
-    .elevatedLevel = mvlib::LogLevel::WARN,
-    .predicate = PREDICATE(v > 2000), // We change from INFO to WARN after the intake draws too much current
-    .label = "Intake Current High:"   // We also change the label when the current is too high.
-}, "%0f")
-
-// Auton stage (prints only when it changes)
-logger.watch("Auton Stage:", mvlib::LogLevel::INFO, true, 
-  [&]() { return (int)(autonStage); }, 
+logger.watch("Auton Stage:", mvlib::LogLevel::INFO, true,
+  [&]() { return (int)autonStage; },
   mvlib::LevelOverride<int>{}, "%d");
 ```
 
-MotionView will show these as a **watch list**, and the field hover will show the closest watch value at any point in the run.
+MotionView shows these in the watch list and can associate nearby watch values with points in the run.
 
-## How `.watch()` works: 
-`.watch()` samples a value you provide and prints it either **on a timer** or **only when the value changes**. MotionView then shows those entries in the watch list and on the field.
+For the detailed watch guide, including overloads, `LevelOverride`, `PREDICATE`, formatting, and more examples, see [`Watches.md`](../Guides/MVLib/Watches.md).
 
-**Overloads and parameters (high level):**
-- `watch(label, level, intervalMs, getter, levelOverride, fmt)`
-  - `label`: the name MotionView shows
-  - `level`: normal severity (INFO/WARN/etc.)
-  - `intervalMs`: how often to print
-  - `getter`: your function that returns the value
-  - `levelOverride` (optional; if unused, pass `{}`): promote the level + change the label when a condition is true
-  - `fmt` (optional): number format (e.g., `"%.0f"`)
----
-- `watch(label, level, onChange, getter, levelOverride, fmt)`
-  - `onChange`: `true` prints only when the value changes (interval ignored)
+## Standard Logs
 
-**How `LevelOverride` works:** it lets a watch temporarily “promote” itself when a condition is true. In the examples above, the watch stays INFO normally, but flips to WARN when the battery drops too low or the intake current spikes. MotionView will show those as more urgent watch entries. <br>
-**How to use `PREDICATE`:** By default, `PREDICATE` is limited to the return type of int32_t. This means that if you need to do decimals inside of your PREDICATE, you need to manually access `mvlib::asPredicate`. It works by using variable `v` to compare. `v` is the value of the expression from `getter`. If the expression provided in PREDICATE evaluates to `true`, then LevelOverride is activated and the label and logLevel switch to those from LevelOverride.
+MVLib also has MotionView-formatted event logs:
 
-> **IMPORTANT NOTE:** When using `.watch()`, the type put into LevelOverride must be the exact return type from the `Getter` function. If the types do not match, your code will NOT compile.
+- `logger.debug(...)`
+- `logger.info(...)`
+- `logger.warn(...)`
+- `logger.error(...)`
+- `logger.fatal(...)`
 
-**`LevelOverride` parameters (high level):**
-- `elevatedLevel`: the severity to use when the condition is true
-- `predicate`: the condition that decides when to elevate (true/false)
-- `label`: optional alternate label to show when elevated
+Best used for discrete events, not continuously changing values.
+
+```cpp
+logger.debug("Started auton route: %s", autonRoute.c_str());
+logger.info("Started autonomous %d", selectedAuton);
+logger.warn("Intake current high: %d", intake.get_current_draw());
+logger.error("Failed to detect ring at expected point");
+```
+
+These show up in MotionView as normal run events with a severity level and timestamp. For the full reference, see the [StandardLog Guide](../Guides/MVLib/StandardLog.md).
+
+## Waypoints
+
+Waypoints are named target poses you register with `logger.addWaypoint(...)`. They let MotionView tell you when the robot reached a location, timed out before getting there, or stayed offset from it.
+
+They are especially useful in autonomous debugging because they answer questions like:
+
+- did the robot ever reach the target?
+- was it close enough in position?
+- was it facing the right direction?
+- did it take too long?
+
+Example:
+
+```cpp
+auto& logger = mvlib::Logger::getInstance();
+mvlib::setOdom(...);
+logger.setRobot({ ... });
+
+auto goalPickup = logger.addWaypoint("Goal Pickup", {
+  .tarX = 48,         // Target 48 X
+  .tarY = -24,        // Target -24 Y
+  .tarT = 90,         // Target 90 degrees heading
+  .linearTol = 2.0f,  // +/- 2 from target before "reached"
+  .thetaTol = 10.0f,  // +/- 10 degrees before "reached"
+  .timeoutMs = 3_mvS, // Timeout after 3 seconds of not reaching
+  .printOffsetEveryMs = 0.5x_mvS // Log offset every 0.5 seconds (optional)
+});
+
+auto off = goalPickup.getOffset();
+printf("Distance to target: %.2f\n", off.totalOffset);
+```
+
+This waypoint:
+
+- targets a specific field position
+- also requires the robot to face the right direction
+- times out after 3 seconds if it is not reached
+- prints periodic offset updates while active
+
+Practical use cases:
+
+- checking whether a route segment reached a scoring spot
+- verifying wall-stake or goal approach alignment
+- proving that an auton miss came from lateness rather than just bad accuracy
+
+For the full waypoint guide, including `WaypointParams`, `WaypointHandle`, `WaypointOffset`, and more examples, see the [Waypoint Guide](../Guides/MVLib/Waypoint.md). Note that a pose getter needs to be set for waypoints to work.
 
 ## What You Need
 
@@ -162,7 +199,7 @@ MotionView will show these as a **watch list**, and the field hover will show th
 ## Notes for Teams
 
 - If you don’t have odometry, you can still use watches and logs.
-- If you do have odometry, MotionView becomes much more powerful.
-- Keep watches focused on what you actually need to debug.
+- With odometry, MVLib (and MotionView) become much more powerful.
+- If you have a drivetrain that can't be represented with 2 MotorGroups, you can leave the robot unset and MVLib will estimate your robot's speed using its pose.
 
 ---

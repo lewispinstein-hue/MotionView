@@ -1,20 +1,19 @@
 #pragma once
 
 /**
- * @file logger_optional_lemlib.hpp
+ * @file lemlib.hpp
  * @brief Optional Logger adapter for LemLib odometry.
  */
 
-#ifndef _MVLIB_OPTIONAL_USED
-#error More than one type of Mvlib Optional include used!
-#endif
+#ifdef _MVLIB_OPTIONAL_USED
+#error "More than one type of Logger/Optional include used!"
+#endif // _MVLIB_OPTIONAL_USED
 
 #ifndef _MVLIB_OPTIONAL_USED
-#define _MVLIB_OPTIONAL_USED
+#define _MVLIB_OPTIONAL_USED "lemlib"
 #include "mvlib/core.hpp" // IWYU pragma: keep
-
-/** 
- * @note Depending on your version of LemLib, this include might be outdated.
+/* 
+ * Depending on your version of LemLib, this include might be outdated.
  * If lemlib/api.hpp is not found, it is likely this instead:
  * lemlib/lemlib.hpp
 */
@@ -36,25 +35,24 @@ namespace mvlib {
  *
  * @par Example: LemLib odometry
  * @code{.cpp}
- * #include "mvlib/core.hpp"
- * #include "mvlib/Optional/logger_optional_lemlib.hpp"
+ * #include "mvlib/api.hpp"
+ * #include "mvlib/Optional/lemlib.hpp"
  *
  * // Provided by your LemLib setup.
  * extern lemlib::Chassis chassis;
  *
  * void initialize() {
- *   auto& logger = mvlib::Logger::getInstance();
- *   mvlib::setOdom(logger, &chassis);
+ *   mvlib::setOdom(&chassis);
  *   logger.start();
  * }
  * @endcode
  */
-inline void setOdom(Logger &logger, lemlib::Chassis* chassis) {
-  logger.setPoseGetter([chassis]() -> std::optional<Pose> {
+inline void setOdom(lemlib::Chassis* chassis) {
+  mvlib::Logger::getInstance().setPoseGetter([chassis]() -> std::optional<Pose> {
     if (!chassis) return std::nullopt;
     auto p = chassis->getPose();
     return Pose{p.x, p.y, p.theta};
   });
 }
 } // namespace mvlib
-#endif
+#endif // _MVLIB_OPTIONAL_USED

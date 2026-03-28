@@ -25,7 +25,7 @@ This is a standard macOS warning for non-notarized apps — not an indication of
 macOS treats *every* non-notarized app this way.
 
 <p align="left">
-    <img src="../../assets/MotionView/verification_error.png" alt="Icon" width="315" />
+    <img src="../../assets/Install/Mac/verification_error.png" alt="Icon" width="315" />
 </p>
 
 ## Why macOS Blocks It

@@ -2,7 +2,7 @@
 MotionView `Settings` are located inside of the Gear icon, typically near the top left of your MotionView window.
 
 <p align="center">
-    <img src="../assets/MotionView/pros_setup_settings.png" alt="Pros Config" width="800" />
+    <img src="../../assets/MotionView/pros_setup_settings.png" alt="Pros Config" width="800" />
 </p>
 
 MotionView was made to be easy to setup, with auto-detection when available. 
@@ -39,3 +39,6 @@ The **PROS-CLI Path** is the path to your `pros` executable file. It's what allo
 
 ### Why PROS?
 PROS is needed because of the terminal interface. Because `pros terminal`, run anywhere, always does the same action, it is very easy to get consistent connections and behavior using it. While it may be possible to use VEXCode (or any non-PROS platform), piping the terminal into MotionView is not easily done.
+
+## Live Streaming
+Once you have a connection between MotionView and your computer, the easiest way to bridge your robot and MotionView is to use [MVLib](../../MVLib/README.md). Using MVLib ensures full functionality and accurate logging. If you don't want to use MVLib, you may need help setting up a bridge. A guide for making your own Robot -> MotionView bridge is in the works.

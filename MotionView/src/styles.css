@@ -1,5 +1,6 @@
 :root {
-  --rightSidebarW: 370px;
+  --rightSidebarWViewing: 370px;
+  --rightSidebarWPlanning: 370px;
   --leftSidebarW: 391px;
   --timelineH: 180px;
   --planListH: 240px;
@@ -15,6 +16,35 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-color: rgba(147, 164, 184, 0.45) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(147, 164, 184, 0.45);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(147, 164, 184, 0.65);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 body {
@@ -112,7 +142,7 @@ canvas#c {
 }
 
 /* Sidebar: flexible width, wraps content, no horizontal scroll */
-#right {
+.rightSidebar {
   flex: 0 0 clamp(260px, 26vw, 420px);
   border-left: 1px solid var(--line);
   background: rgba(16, 23, 32, .7);
@@ -124,11 +154,11 @@ canvas#c {
   flex-direction: column;
 }
 
-#right * {  
+.rightSidebar * {
   min-width: 0;
 }
 
-#right .section {
+.rightSidebar .section {
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
 }
@@ -196,29 +226,6 @@ details>summary::-webkit-details-marker {
   gap: 10px;
 }
 
-@media (max-width: 980px) {
-  #right {
-    flex-basis: 320px;
-  }
-
-  .grid3 {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-@media (max-width: 740px) {
-  .row {
-    flex-direction: column;
-  }
-
-  #right {
-    flex: 0 0 auto;
-    max-height: 44vh;
-    border-left: none;
-    border-top: 1px solid var(--line);
-  }
-}
-
 label {
   font-size: 12px;
   color: var(--muted);
@@ -226,7 +233,9 @@ label {
   margin-bottom: 4px;
 }
 
-#watchList {
+#watchList,
+#logList,
+#waypointList {
   max-height: 40vh;
   overflow: auto;
   border: 1px solid var(--line);
@@ -257,6 +266,29 @@ label {
 .bigValue {
   font-size: 15px;
   font-weight: 800;
+  margin-top: 6px;
+  word-break: break-word;
+}
+
+.bigValue.isBooleanTrue {
+  color: #32b971;
+}
+
+.bigValue.isBooleanFalse {
+  color: #c26262;
+}
+
+.subValue {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+  word-break: break-word;
+}
+
+.waypointValue {
+  font-size: 10.5px;
+  font-weight: 400;
+  line-height: 1.35;
   margin-top: 6px;
   word-break: break-word;
 }
@@ -378,13 +410,39 @@ header.topBar {
   top: 0;
   z-index: 60;
   height: var(--topbarH);
-  padding: 8px 12px;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 12px;
+  padding: 0;
+  display: block;
+  gap: 0;
+  flex-wrap: nowrap;
   background: linear-gradient(180deg, rgba(8, 14, 22, 0.96), rgba(8, 14, 22, 0.85));
   border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+
+header.topBar:not(.isOverflowing) {
+  overflow-x: hidden;
+}
+
+.topBarContent {
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
+  height: var(--topbarH);
+  padding: 0 12px;
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  position: relative;
+}
+
+header.topBar:not(.isOverflowing) .topBarContent {
+  width: 100%;
+  min-width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 }
 
 .topBarLeft {
@@ -392,32 +450,52 @@ header.topBar {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  align-self: stretch;
+  grid-column: 1;
 }
 
 .topStatus {
-  position: inherit;
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  display: block;
   margin-left: 6px;
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 29vw;
 }
 
 .topBarCenter {
   display: flex;
   justify-content: center;
+  align-items: center;
+  grid-column: 3;
+  justify-self: center;
+}
+
+header.topBar:not(.isOverflowing) .topBarCenter {
+  position: static;
+  transform: none;
+  grid-column: 2;
+  justify-self: center;
 }
 
 .topBarRight {
   display: flex;
   justify-content: flex-end;
-}
-
-.topBarRight {
   gap: 8px;
   align-items: center;
   flex-wrap: nowrap;
+  min-width: 0;
+  grid-column: 5;
+  justify-self: end;
+}
+
+header.topBar:not(.isOverflowing) .topBarRight {
+  grid-column: 3;
 }
 
 .modeToggle {
@@ -509,7 +587,7 @@ body.mode-planning .row {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: 1fr 8px var(--rightSidebarW);
+  grid-template-columns: 1fr 8px var(--rightSidebarWPlanning);
 }
 
 body.mode-planning #canvasWrap {
@@ -523,7 +601,7 @@ body.mode-planning #vSplit {
   grid-column: 2;
 }
 
-body.mode-planning #right {
+body.mode-planning #rightPlanning {
   grid-column: 3;
   display: block;
   opacity: 1;
@@ -535,6 +613,14 @@ body.mode-planning .viewingOnly {
 }
 
 body:not(.mode-planning) .planningOnly {
+  display: none !important;
+}
+
+body.mode-planning #rightViewing {
+  display: none !important;
+}
+
+body:not(.mode-planning) #rightPlanning {
   display: none !important;
 }
 
@@ -647,7 +733,7 @@ body:not(.mode-planning) .planningOnly {
 
 .row {
   display: grid;
-  grid-template-columns: var(--leftSidebarW) 8px 1fr 8px var(--rightSidebarW);
+  grid-template-columns: var(--leftSidebarW) 8px 1fr 8px var(--rightSidebarWViewing);
   overflow: hidden;
   min-height: 0;
 }
@@ -671,7 +757,8 @@ body:not(.mode-planning) .planningOnly {
   grid-column: 4;
 }
 
-#right {
+#rightViewing,
+#rightPlanning {
   grid-column: 5;
   min-width: 240px;
   overflow: auto;
@@ -679,7 +766,7 @@ body:not(.mode-planning) .planningOnly {
 
 /* when left is collapsed, keep the splitter at the edge */
 .row.leftCollapsed {
-  grid-template-columns: 0px 8px 1fr 8px var(--rightSidebarW);
+  grid-template-columns: 0px 8px 1fr 8px var(--rightSidebarWViewing);
 }
 
 #canvasWrap {
@@ -687,7 +774,8 @@ body:not(.mode-planning) .planningOnly {
   min-height: 100;
 }
 
-#right {
+#rightViewing,
+#rightPlanning {
   min-width: 240px;
   overflow: auto;
 }
@@ -744,7 +832,7 @@ body:not(.mode-planning) .planningOnly {
 }
 
 /* --- Collapsible panels: when fully dragged closed, only handle remains --- */
-#right.isCollapsed {
+.rightSidebar.isCollapsed {
   display: none !important;
 }
 
@@ -1412,7 +1500,7 @@ body:not(.mode-planning) .planningOnly {
   margin-top: auto;
 }
 
-#right.planListCollapsed .planList {
+#rightPlanning.planListCollapsed .planList {
   display: none;
 }
 
@@ -1520,7 +1608,7 @@ body:not(.mode-planning) .planningOnly {
   width: 100%;
   padding: 10px 14px;
   background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   color: var(--text);
   font-size: 14px;
@@ -1534,9 +1622,8 @@ body:not(.mode-planning) .planningOnly {
 
 .settingsInput:focus, .settingsSelect:focus {
   outline: none;
-  border-color: #1c355b;
+  border-color: #1e4a90;
   background: rgba(0, 0, 0, 0.5);
-  box-shadow: 0 0 0 3px rgba(110, 168, 255, 0.15);
 }
 
 /* Remove ugly native select styling */
@@ -1562,7 +1649,7 @@ body:not(.mode-planning) .planningOnly {
   text-align: center;
   text-align-last: center;
   line-height: 1;
-  padding-left: 3px !important;
+  padding-left: 5px !important;
   padding-top: 6px;
   padding-bottom: 6px;
   white-space: nowrap;
@@ -1611,18 +1698,102 @@ body:not(.mode-planning) .planningOnly {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Responsive */
-@media (max-width: 640px) {
-  .settingsCard {
-    width: 96vw;
-    max-height: 92vh;
-  }
+.exportFilenameRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 
-  .settingsGroup {
-    padding: 16px;
-  }
+.exportFileExt {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
 
-  .settingsMainTitle {
-    font-size: 20px;
-  }
+.exportHint {
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.exportValidationMessage {
+  min-height: 16px;
+  color: #f2cb6b;
+}
+
+.exportSuccessMessage {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(120, 220, 150, 0.35);
+  background: rgba(50, 140, 80, 0.2);
+  color: #9ef0b5;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.exportFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.routeInfoHeader,
+.routeInfoRow {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.9fr) minmax(0, 1.4fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.routeInfoHeader {
+  padding: 0 0 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.routeInfoList {
+  display: flex;
+  flex-direction: column;
+}
+
+.routeInfoRow {
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.routeInfoKey {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.routeInfoValue {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.routeInfoEmpty {
+  padding: 14px 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+#btnExportConfirm {
+  min-width: 96px;
+}
+
+#btnExportCancel {
+  min-width: 96px;
 }

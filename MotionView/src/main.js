@@ -200,6 +200,11 @@ const planTimePill = document.getElementById('planTimePill');
 const planPointPill = document.getElementById('planPointPill');
 const pctx = planningTimelineCanvas ? planningTimelineCanvas.getContext('2d') : null;
 
+const topBarEl = document.getElementById('topBar');
+const topBarContentEl = document.querySelector('.topBarContent');
+const topBarLeftEl = document.querySelector('.topBarLeft');
+const topBarCenterEl = document.querySelector('.topBarCenter');
+const topBarRightEl = document.querySelector('.topBarRight');
 const statusEl = document.getElementById('status');
 const fileEl = document.getElementById('file');
 const btnPlay = document.getElementById('btnPlay');
@@ -216,6 +221,8 @@ const btnHelpKeybinds = document.getElementById('btnHelpKeybinds');
 const keybindsModal = document.getElementById('keybindsModal');
 const btnKeybindsClose = document.getElementById('btnKeybindsClose');
 const speedSelect = document.getElementById('speedSelect');
+const logSort = document.getElementById('logSort');
+const waypointFilter = document.getElementById('waypointFilter');
 const watchSort = document.getElementById('watchSort');
 const vSplit = document.getElementById('vSplit');
 const hSplit = document.getElementById('hSplit');
@@ -226,7 +233,8 @@ const posePill = document.getElementById('posePill');
 const cursorPill = document.getElementById('cursorPill');
 const planCursorPill = document.getElementById('planCursorPill');
 
-const rightEl = document.getElementById('right');
+const rightViewingEl = document.getElementById('rightViewing');
+const rightPlanningEl = document.getElementById('rightPlanning');
 const leftEl = document.getElementById('left');
 const vSplitL = document.getElementById('vSplitL');
 const rowGrid = document.querySelector('.row');
@@ -239,6 +247,58 @@ const layoutState = {
   lastRightSidebarW: 360,
   lastTimelineH: 260,
 };
+
+const TOP_BAR_STATUS_CHAR_LIMIT = 72;
+
+function truncateTopBarStatus(msg) {
+  const text = String(msg ?? '');
+  if (text.length <= TOP_BAR_STATUS_CHAR_LIMIT) return text;
+  return `${text.slice(0, TOP_BAR_STATUS_CHAR_LIMIT - 1).trimEnd()}…`;
+}
+
+function updateTopBarStatusLayout() {
+  if (!topBarEl || !topBarContentEl || !topBarLeftEl || !topBarCenterEl || !topBarRightEl || !statusEl) return;
+
+  const fullText = statusEl.dataset.fullText ?? statusEl.textContent ?? "";
+  statusEl.textContent = fullText;
+  statusEl.style.maxWidth = "";
+
+  const contentStyle = getComputedStyle(topBarContentEl);
+  const gap = parseFloat(contentStyle.columnGap || contentStyle.gap || "0") || 0;
+  const padLeft = parseFloat(contentStyle.paddingLeft || "0") || 0;
+  const padRight = parseFloat(contentStyle.paddingRight || "0") || 0;
+  const centerWidth = Math.ceil(topBarCenterEl.getBoundingClientRect().width);
+  const leftWidth = Math.ceil(topBarLeftEl.getBoundingClientRect().width);
+  const rightWidth = Math.ceil(topBarRightEl.getBoundingClientRect().width);
+  const requiredWidth = leftWidth + centerWidth + rightWidth + padLeft + padRight + (gap * 2);
+  const isOverflowing = requiredWidth > (topBarEl.clientWidth + 1);
+
+  topBarEl.classList.toggle("isOverflowing", isOverflowing);
+
+  if (isOverflowing) {
+    statusEl.style.maxWidth = "";
+    statusEl.textContent = truncateTopBarStatus(fullText);
+    statusEl.title = fullText;
+    return;
+  }
+
+  const centerRect = topBarCenterEl.getBoundingClientRect();
+  const statusRect = statusEl.getBoundingClientRect();
+  const available = Math.floor(centerRect.left - statusRect.left - 18);
+  if (available > 0) statusEl.style.maxWidth = `${available}px`;
+  statusEl.title = statusEl.scrollWidth > statusEl.clientWidth ? fullText : "";
+}
+
+const scheduleTopBarStatusLayout = (() => {
+  let rafId = 0;
+  return () => {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(() => {
+      rafId = 0;
+      updateTopBarStatusLayout();
+    });
+  };
+})();
 
 function parseLayoutNumber(value) {
   const num = Number(value);
@@ -255,6 +315,10 @@ function readRootCssNumber(prop, fallback = 0) {
 const watchList = document.getElementById('watchList');
 const watchCount = document.getElementById('watchCount');
 const secWatches = document.getElementById('secWatches');
+const logList = document.getElementById('logList');
+const logCount = document.getElementById('logCount');
+const waypointList = document.getElementById('waypointList');
+const waypointCount = document.getElementById('waypointCount');
 const fieldSelect = document.getElementById('fieldSelect');
 
 const poseList = document.getElementById('poseList');
@@ -274,6 +338,24 @@ const robotImgRotEl = document.getElementById('robotImgRot');
 const robotImgAlphaEl = document.getElementById('robotImgAlpha');
 const minSpeedEl = document.getElementById('settingsMinSpeed');
 const maxSpeedEl = document.getElementById('settingsMaxSpeed');
+const btnExport = document.getElementById('btnExport');
+const btnRouteInfo = document.getElementById('btnRouteInfo');
+const exportModal = document.getElementById('exportModal');
+const btnExportClose = document.getElementById('btnExportClose');
+const exportPathNameInput = document.getElementById('exportPathName');
+const exportFilenameInput = document.getElementById('exportFilename');
+const exportFilenameHint = document.getElementById('exportFilenameHint');
+const exportLocationSelect = document.getElementById('exportLocation');
+const exportCustomPathWrap = document.getElementById('exportCustomPathWrap');
+const exportCustomPathInput = document.getElementById('exportCustomPath');
+const exportCustomPathHint = document.getElementById('exportCustomPathHint');
+const exportValidationMessage = document.getElementById('exportValidationMessage');
+const exportSuccessMessage = document.getElementById('exportSuccessMessage');
+const btnExportCancel = document.getElementById('btnExportCancel');
+const btnExportConfirm = document.getElementById('btnExportConfirm');
+const routeInfoModal = document.getElementById('routeInfoModal');
+const btnRouteInfoClose = document.getElementById('btnRouteInfoClose');
+const routeInfoList = document.getElementById('routeInfoList');
 
 // Settings modal elements
 const btnSettings = document.getElementById('btnSettings');
@@ -307,10 +389,11 @@ const settingsLiveDebug = document.getElementById('settingsLiveDebug');
 const settingsPlanMoveStep = document.getElementById('settingsPlanMoveStep');
 const settingsPlanSnapStep = document.getElementById('settingsPlanSnapStep');
 const settingsPlanThetaSnapStep = document.getElementById('settingsPlanThetaSnapStep');
+const settingsPlanLimitBounds = document.getElementById('settingsPlanLimitBounds');
 const planSplit = document.getElementById('planSplit');
 const settingsPlanSpeed = document.getElementById('settingsPlanSpeed');
 const planListEl = document.getElementById('planList');
-const planCountEl = document.getElementById('planCount');
+const planCountEl = document.getElementById('planCount'); 
 const planSelIndexEl = document.getElementById('planSelIndex');
 const planSelXEl = document.getElementById('planSelX');
 const planSelYEl = document.getElementById('planSelY');
@@ -349,7 +432,7 @@ const MAX_OFFSET_THETA = 359;
 
 const WATCH_TOL_MS = 60; // Controls the ± time that determines which pose a watch attaches to
 const COLLAPSE_PX_TIMELINE = 130; // When the timeline collapses away
-const COLLAPSE_PX_SIDEBAR = 150; 
+const COLLAPSE_PX_SIDEBAR = 282; 
 const COLLAPSE_WAYPOINTLIST_PX = 5;
 
 const COLLAPSE_PX_LEFTSIDEBAR = 210; // When the left sidebar collapses away
@@ -368,7 +451,7 @@ const CANVAS_ZOOM_MAX = 15; // Max zoom in
 const CANVAS_ZOOM_MIN = 0.15; // Max zoom out
 
 // FLOATING INFO WINDOW SIZE
-const minW = 50, maxW = 400;
+const minW = 30, maxW = 400;
 const minH = 49, maxH = 600; // Bring minH back to 241
 let data = null;
 
@@ -378,9 +461,15 @@ let rawPoses = [];
 
 // Watches: normalized
 let watches = [];
+let logs = [];
+let waypoints = [];
+let waypointsById = new Map();
 let watchMarkers = []; // {watch, t, pose(in), ok, idx, dt}
 
 let selectedWatch = null;       // { marker }
+let selectedLogTime = null;
+let selectedWaypointId = null;
+let selectedWaypointEventTime = null;
 let selectedIndex = 0;          // nearest pose index for "locked" selection
 let hoverTimelineTime = null;   // preview time on timeline (ms)
 let timelineHoverSaved = null;  // { index, lockActive, lockPose, lockIndex }
@@ -393,6 +482,15 @@ let trackHoverSavedIndex = null;
 let trackLockActive = false;
 let trackLockPose = null;       // pose in inches
 let trackLockIndex = null;
+
+const telemetryMetrics = {
+  totalPosesRecived: 0,
+  totalLogsRecived: 0,
+  totalWatchesRecived: 0,
+  totalWaypointsRecived: 0,
+};
+let pendingExportRequest = null;
+let importedRouteMeta = null;
 
 // playback
 let playing = false;
@@ -492,6 +590,10 @@ function getPlanSpeedUnitsPerSec() {
   return (maxV || 0) * (pct / 100);
 }
 
+function planLimitBoundsEnabled() {
+  return settingsPlanLimitBounds ? settingsPlanLimitBounds.checked : true;
+}
+
 function applyPlanSnap(v) {
   const step = getPlanSnapStepIn();
   if (!step) return v;
@@ -505,11 +607,15 @@ function applyPlanThetaSnapDeg(v) {
 }
 
 function clampPlanCoordX(v) {
-  return clamp(applyPlanSnap(v), FIELD_BOUNDS_IN.minX, FIELD_BOUNDS_IN.maxX);
+  const next = applyPlanSnap(v);
+  if (!planLimitBoundsEnabled() || fieldImg == "None" || !fieldImg) return next;
+  return clamp(next, FIELD_BOUNDS_IN.minX, FIELD_BOUNDS_IN.maxX);
 }
 
 function clampPlanCoordY(v) {
-  return clamp(applyPlanSnap(v), FIELD_BOUNDS_IN.minY, FIELD_BOUNDS_IN.maxY);
+  const next = applyPlanSnap(v);
+  if (!planLimitBoundsEnabled() || fieldImg == "None" || !fieldImg) return next;
+  return clamp(next, FIELD_BOUNDS_IN.minY, FIELD_BOUNDS_IN.maxY);
 }
 
 let planUndoStack = [];
@@ -615,7 +721,19 @@ function planThetaDegAt(i) {
   if (i < 0 || i >= planWaypoints.length) return 0;
   const cur = planWaypoints[i];
   const theta = (typeof cur.theta === "number") ? cur.theta : 0;
-  return normalizeDeg(theta + fieldRotationDeg);
+  return normalizeDeg(theta + offsetsIn.theta);
+}
+
+function planThetaDisplayToRaw(thetaDisplay) {
+  return normalizeDeg(thetaDisplay - offsetsIn.theta);
+}
+
+function fieldHeadingToScreenDeg(thetaField) {
+  return normalizeDeg(thetaField + fieldRotationDeg);
+}
+
+function fieldHeadingToCanvasRotationDeg(thetaField) {
+  return normalizeDeg(fieldHeadingToScreenDeg(thetaField) - 90);
 }
 
 function planTotalLength() {
@@ -642,10 +760,8 @@ function planSampleAtDist(d) {
   if (planWaypoints.length === 0) return null;
   if (planWaypoints.length === 1) {
     const p = planWaypoints[0];
-    const thetaPlan = normalizeDeg(p.theta ?? 0);
-    const thetaField = thetaPlan + fieldRotationDeg;
-    const thetaRobot = thetaField - 20;
-    return { x: p.x, y: p.y, theta: thetaRobot };
+    const thetaPlan = planThetaDegAt(0);
+    return { x: p.x, y: p.y, theta: thetaPlan };
   }
   let rem = d;
   for (let i = 0; i < planWaypoints.length - 1; i++) {
@@ -656,21 +772,17 @@ function planSampleAtDist(d) {
       const t = clamp(rem / seg, 0, 1);
       const x = a.x + (b.x - a.x) * t;
       const y = a.y + (b.y - a.y) * t;
-      const theta0 = normalizeDeg(a.theta ?? 0);
-      const theta1 = normalizeDeg(b.theta ?? 0);
+      const theta0 = planThetaDegAt(i);
+      const theta1 = planThetaDegAt(i + 1);
       const diff = ((theta1 - theta0 + 540) % 360) - 180;
       const thetaPlan = theta0 + diff * t;
-      const thetaField = thetaPlan + fieldRotationDeg;
-      const thetaRobot = thetaField - 90;
-      return { x, y, theta: thetaRobot };
+      return { x, y, theta: normalizeDeg(thetaPlan) };
     }
     rem -= seg;
   }
   const last = planWaypoints[planWaypoints.length - 1];
-  const thetaPlan = normalizeDeg(last.theta ?? 0);
-  const thetaField = thetaPlan - fieldRotationDeg;
-  const thetaRobot = thetaField;
-  return { x: last.x, y: last.y, theta: thetaRobot };
+  const thetaPlan = planThetaDegAt(planWaypoints.length - 1);
+  return { x: last.x, y: last.y, theta: thetaPlan };
 }
 
 function setPlanDist(d) {
@@ -736,16 +848,29 @@ function applySavedLayout(settings) {
     }
   }
 
-  const rightWidth = parseLayoutNumber(settings.layoutRightSidebarWidth);
-  if (rightWidth !== null) {
-    const next = clamp(rightWidth, 0, MAX_SIDEBAR_W_PX);
-    root?.style.setProperty('--rightSidebarW', `${next}px`);
+  const rightViewingWidth = parseLayoutNumber(settings.layoutRightSidebarWidthViewing);
+  if (rightViewingWidth !== null) {
+    const next = clamp(rightViewingWidth, 0, MAX_SIDEBAR_W_PX);
+    root?.style.setProperty('--rightSidebarWViewing', `${next}px`);
     layoutChanged = true;
     if (next <= COLLAPSE_PX_SIDEBAR) {
-      rightEl?.classList?.add('isCollapsed');
+      rightViewingEl?.classList?.add('isCollapsed');
     } else {
-      rightEl?.classList?.remove('isCollapsed');
+      rightViewingEl?.classList?.remove('isCollapsed');
       layoutState.lastRightSidebarW = next;
+    }
+  }
+
+  const rightPlanningWidth = parseLayoutNumber(settings.layoutRightSidebarWidthPlanning);
+  if (rightPlanningWidth !== null) {
+    const next = clamp(rightPlanningWidth, 0, MAX_SIDEBAR_W_PX);
+    root?.style.setProperty('--rightSidebarWPlanning', `${next}px`);
+    layoutChanged = true;
+    if (next <= COLLAPSE_PX_SIDEBAR) {
+      rightPlanningEl?.classList?.add('isCollapsed');
+    } else {
+      rightPlanningEl?.classList?.remove('isCollapsed');
+      layoutState.lastRightSidebarWPlanning = next;
     }
   }
 
@@ -764,15 +889,15 @@ function applySavedLayout(settings) {
 
   const planHeight = parseLayoutNumber(settings.layoutPlanningWaypointHeight);
   if (planHeight !== null) {
-    const rightH = rightEl?.getBoundingClientRect().height || window.innerHeight;
+    const rightH = rightPlanningEl?.getBoundingClientRect().height || window.innerHeight;
     const maxPlanH = Math.max(COLLAPSE_WAYPOINTLIST_PX, rightH - 180);
     const next = clamp(planHeight, 0, maxPlanH);
     root?.style.setProperty('--planListH', `${next}px`);
     layoutChanged = true;
     if (next <= COLLAPSE_WAYPOINTLIST_PX) {
-      rightEl?.classList?.add('planListCollapsed');
+      rightPlanningEl?.classList?.add('planListCollapsed');
     } else {
-      rightEl?.classList?.remove('planListCollapsed');
+      rightPlanningEl?.classList?.remove('planListCollapsed');
     }
   }
 
@@ -800,11 +925,6 @@ function planChanged(opts = {}) {
   setPlanDist(planPlayDist);
   if (!opts.skipSelectionPanel) updatePlanSelectionPanel();
   scheduleSavedPathsSave();
-}
-
-function getThetaDelta() {
-  return (fieldRotationDeg === 90 || fieldRotationDeg === 270) ? 
-          fieldRotationDeg + 180 : fieldRotationDeg;
 }
 
 async function loadSavedPaths() {
@@ -838,15 +958,24 @@ async function loadSavedPaths() {
       if (Array.isArray(obj?.["watches"])) {
         watches = normalizeWatches(obj["watches"]);
       }
+      if (Array.isArray(obj?.["logs"])) {
+        logs = normalizeLogs(obj["logs"]);
+      }
+      if (Array.isArray(obj?.["waypoints"])) {
+        waypoints = normalizeWaypoints(obj["waypoints"]);
+      }
       if (poses.length) {
         rawPoses = poses.sort((a,b) => (a.t ?? 0) - (b.t ?? 0));
-        data = { poses: rawPoses, watches: watches, meta: {} };
+        data = { poses: rawPoses, watches: watches, logs: logs, waypoints, meta: {} };
         computeSpeedNorm();
         recomputeWatchMarkers();
         rebuildWatchMarkersByTime();
         syncMainToSettings();
         try { renderPoseList?.(); } catch {}
         try { renderWatchList?.(); } catch {}
+        try { renderLogList?.(); } catch {}
+        try { renderWaypointFilter?.(); } catch {}
+        try { renderWaypointList?.(); } catch {}
         updatePlanControls();
         updateFieldLayout(true);
         updatePoseReadout();
@@ -863,28 +992,59 @@ function scheduleSavedPathsSave() {
   if (savedPathsSaveTimer) clearTimeout(savedPathsSaveTimer);
   savedPathsSaveTimer = setTimeout(async () => {
     try {
-      const payload = JSON.stringify({
-        "planned-path": planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0 })),
-        "robot-path": rawPoses.map((p) => ({
-          t: p.t ?? null,
-          x: p.x, y: p.y,
-          theta: p.theta ?? 0,
-          l_vel: p.l_vel ?? null,
-          r_vel: p.r_vel ?? null,
-          speed_raw: p.speed_raw ?? 0,
-        })),
-        "watches": watches.map((w) => ({
-          t: w.t ?? null,
-          level: w.level ?? "INFO",
-          label: w.label ?? "",
-          value: w.value ?? "",
-        })),
-      });
+      const payload = buildSavedPathsPayload();
       await invoke('write_saved_paths', { contents: payload });
     } catch (e) {
       console.warn('Failed to save paths:', e);
     }
   }, 300);
+}
+
+function buildSavedPathsPayload() {
+  return JSON.stringify({
+    "planned-path": planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0 })),
+    "robot-path": rawPoses.map((p) => ({
+      t: p.t ?? null,
+      x: p.x, y: p.y,
+      theta: p.theta ?? 0,
+      l_vel: p.l_vel ?? null,
+      r_vel: p.r_vel ?? null,
+      speed_raw: p.speed_raw ?? 0,
+    })),
+    "watches": watches.map((w) => ({
+      t: w.t ?? null,
+      level: w.level ?? "INFO",
+      label: w.label ?? "",
+      value: w.value ?? "",
+    })),
+    "logs": logs.map((entry) => ({
+      t: entry.t ?? null,
+      level: normalizeLogLevel(entry.level),
+      label: entry.label ?? "",
+      value: entry.message ?? entry.value ?? "",
+    })),
+    "waypoints": waypoints.map((waypoint) => ({
+      id: waypoint.id,
+      name: waypoint.name,
+      createdTime: waypoint.createdTime ?? null,
+      createdEvent: waypoint.createdEvent ?? null,
+      events: waypoint.events ?? [],
+    })),
+  });
+}
+
+async function saveSavedPathsNow() {
+  if (!hasInvoke()) return;
+  if (savedPathsSaveTimer) {
+    clearTimeout(savedPathsSaveTimer);
+    savedPathsSaveTimer = null;
+  }
+  try {
+    const payload = buildSavedPathsPayload();
+    await invoke('write_saved_paths', { contents: payload });
+  } catch (e) {
+    console.warn('Failed to save paths:', e);
+  }
 }
 
 function updatePlanSelectionPanel() {
@@ -937,7 +1097,7 @@ function planThetaHandlePos(i) {
   const p = planWaypoints[i];
   if (!p) return null;
   const sp = worldToScreen(p.x, p.y);
-  const theta = planThetaDegAt(i) * Math.PI / 180;
+  const theta = fieldHeadingToScreenDeg(planThetaDegAt(i)) * Math.PI / 180;
   const dist = PLAN_POINT_R + PLAN_THETA_HANDLE_OFFSET;
   return {
     x: sp.x + Math.sin(theta) * dist,
@@ -969,10 +1129,10 @@ function updatePlanThetaFromPointer(idx, mx, my) {
     const delta = normalizeDeg(thetaPlan - planThetaDragStart);
     for (const entry of planThetaDragBase) {
       const next = normalizeDeg(entry.theta + delta);
-      planWaypoints[entry.i].theta = normalizeDeg(applyPlanThetaSnapDeg(next));
+      planWaypoints[entry.i].theta = planThetaDisplayToRaw(applyPlanThetaSnapDeg(next));
     }
   } else {
-    p.theta = normalizeDeg(applyPlanThetaSnapDeg(thetaPlan));
+    p.theta = planThetaDisplayToRaw(applyPlanThetaSnapDeg(thetaPlan));
   }
   renderPlanList();
   updatePlanSelectionPanel();
@@ -1035,11 +1195,11 @@ function drawPlanningOverlay(force = false) {
     ctx.stroke();
 
     // heading line (black) from center to edge
-    const theta = planThetaDegAt(i) * Math.PI / 180;
+    const theta = fieldHeadingToScreenDeg(planThetaDegAt(i)) * Math.PI / 180;
     const len = r;
     ctx.save();
     ctx.translate(sp.x, sp.y);
-    ctx.rotate(theta);
+      ctx.rotate(theta);
     ctx.strokeStyle = "rgba(0,0,0,0.9)";
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -1112,8 +1272,8 @@ function setMode(mode) {
   updatePlanControls();
   setPlanDist(planPlayDist);
   void captureTelemetry("mode_changed", { 
-    version: APP_VERSION,
-     mode: appMode 
+     version: APP_VERSION,
+     mode: appMode, 
     }, { debounceMs: 700 }
   );
 }
@@ -1133,7 +1293,12 @@ function angLerpDeg(a, b, t) {
   return normalizeDeg(a + diff * t);
 }
 function fmtNum(v, d=2) { if (typeof v !== "number" || !isFinite(v)) return "—"; return v.toFixed(d); }
-function setStatus(msg, log=true) { statusEl.textContent = msg; if (log) console.log(`Status: ${msg}`); }
+function setStatus(msg, log=true) {
+  const fullText = String(msg ?? '');
+  statusEl.dataset.fullText = fullText;
+  scheduleTopBarStatusLayout();
+  if (log) console.log(`Status: ${msg}`);
+}
 
 function escapeHtml(s) { 
   return String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[c]));
@@ -1146,10 +1311,6 @@ function toNumMaybe(v) {
     if (isFinite(n)) return n;
   }
   return null;
-}
-
-function clampMax(v, max) {
-  return v > max ? max : v;
 }
 
 function sanitizeOffsetInputs() {
@@ -1175,10 +1336,26 @@ function sanitizeOffsetInputs() {
 
 function levelStyle(levelRaw) {
   const L = String(levelRaw || "INFO").toUpperCase();
-  if (L.includes("ERROR") || L.includes("FATAL")) return { name:"ERROR", fill:"rgb(255,77,77)", text:"#081018" };
+  if (L.includes("FATAL")) return { name:"FATAL", fill:"rgba(164, 0, 0, 1)", text:"#081018" };
+  if (L.includes("ERROR")) return { name:"ERROR", fill:"rgb(255,77,77)", text:"#081018" };
   if (L.includes("WARN")) return { name:"WARN", fill:"rgb(255,212,77)", text:"#081018" };
-  if (L.includes("DEBUG")) return { name:"DEBUG", fill:"rgb(154,167,187)", text:"#081018" };
+  if (L.includes("DEBUG")) return { name:"DEBUG", fill:"rgba(78, 246, 255, 1)", text:"#081018" };
   return { name:"INFO", fill:"rgb(77,255,136)", text:"#081018" };
+}
+
+function normalizeLogLevel(levelRaw) {
+  const L = String(levelRaw || "INFO").trim().toUpperCase();
+  if (L === "DEBUG" || L === "INFO" || L === "WARN" || L === "ERROR" || L === "FATAL") return L;
+  return "INFO";
+}
+
+function levelSortRank(levelRaw) {
+  const L = normalizeLogLevel(levelRaw);
+  if (L === "FATAL") return 4;
+  if (L === "ERROR") return 3;
+  if (L === "WARN") return 2;
+  if (L === "INFO") return 1;
+  return 0;
 }
 
 function robotDimsInches() {
@@ -1730,6 +1907,236 @@ function normalizeWatches(arr) {
   return out;
 }
 
+function normalizeLogs(arr) {
+  const out = [];
+  if (!Array.isArray(arr)) return out;
+
+  for (const entry of arr) {
+    if (!entry || typeof entry !== "object") continue;
+    const tRaw = entry.t ?? entry.timestamp ?? entry.time ?? entry.ms;
+    const t = toNumMaybe(tRaw);
+    if (t == null) continue;
+
+    const message = String(entry.message ?? entry.value ?? entry.val ?? "").trim();
+    if (!message) continue;
+
+    out.push({
+      t,
+      level: normalizeLogLevel(entry.level ?? entry.lvl ?? entry.severity ?? "INFO"),
+      label: entry.label ?? "",
+      value: message,
+      message,
+    });
+  }
+
+  out.sort((a, b) => a.t - b.t);
+  return out;
+}
+
+function normalizeWaypointType(typeRaw) {
+  const T = String(typeRaw || "").trim().toUpperCase();
+  if (T === "CREATED" || T === "OFFSET" || T === "REACHED" || T === "TIMEDOUT") return T;
+  return "";
+}
+
+function parseWaypointNumber(raw) {
+  const text = String(raw ?? "").trim();
+  if (!text || text.toUpperCase() === "NA") return null;
+  const num = Number(text);
+  return Number.isFinite(num) ? num : null;
+}
+
+function parseWaypointParams(type, paramsText) {
+  const parts = String(paramsText ?? "").split(",").map((part) => part.trim());
+  if (type === "CREATED") {
+    if (parts.length !== 6 && parts.length !== 7) return null;
+    const tarX = parseWaypointNumber(parts[0]);
+    const tarY = parseWaypointNumber(parts[1]);
+    const tarT = parseWaypointNumber(parts[2]);
+    const timeoutMs = parseWaypointNumber(parts[3]);
+    const linearTol = parseWaypointNumber(parts[4]);
+    const thetaTol = parseWaypointNumber(parts[5]);
+    let retriggerable = false;
+    if (parts.length === 7) {
+      if (parts[6] !== "0" && parts[6] !== "1") return null;
+      retriggerable = parts[6] === "1";
+    }
+    if (tarX == null || tarY == null || linearTol == null) return null;
+    return { tarX, tarY, tarT, timeoutMs, linearTol, thetaTol, retriggerable };
+  }
+
+  if (type === "OFFSET" || type === "REACHED" || type === "TIMEDOUT") {
+    if (parts.length !== 4) return null;
+    const offsetX = parseWaypointNumber(parts[0]);
+    const offsetY = parseWaypointNumber(parts[1]);
+    const offsetT = parseWaypointNumber(parts[2]);
+    const remainingTime = parseWaypointNumber(parts[3]);
+    if (offsetX == null || offsetY == null) return null;
+    return { offsetX, offsetY, offsetT, remainingTime };
+  }
+
+  return null;
+}
+
+function fmtNumToString(value, decimals = 2) {
+  if (typeof value !== "number" || !isFinite(value)) return null;
+  return Number(value.toFixed(decimals)).toString();
+}
+
+function fmtSecondsToString(ms) {
+  if (typeof ms !== "number" || !isFinite(ms)) return null;
+  return `${fmtNumToString(ms / 1000, 2)}s`;
+}
+
+function waypointTypeStyle(typeRaw) {
+  const type = normalizeWaypointType(typeRaw);
+  if (type === "TIMEDOUT") return { fill: "rgba(255, 120, 120, 0.18)", text: "#ffb0b0" };
+  if (type === "REACHED") return { fill: "rgba(120, 220, 150, 0.18)", text: "#b6ffd0" };
+  if (type === "OFFSET") return { fill: "rgba(255,255,255,0.1)", text: "#d5deea" };
+  return { fill: "rgba(255,255,255,0.12)", text: "#f7fbff" };
+}
+
+function waypointEventLines(event) {
+  if (!event) return [];
+  const params = event.params || {};
+  if (event.type === "CREATED") {
+    const target = [`X: ${fmtNumToString(params.tarX)}`, `Y: ${fmtNumToString(params.tarY)}`];
+    if (params.tarT != null) target.push(`θ: ${fmtNumToString(params.tarT)}`);
+
+    const lines = [`Target: ${target.join(", ")}`];
+    const tolerances = [];
+    if (params.linearTol != null) tolerances.push(`Linear: ${fmtNumToString(params.linearTol)}`);
+    if (params.thetaTol != null) tolerances.push(`Angular: ${fmtNumToString(params.thetaTol)}`);
+    if (tolerances.length) lines.push(`Tolerances: ${tolerances.join(", ")}`);
+    if (params.timeoutMs != null) lines.push(`Timeout: ${fmtSecondsToString(params.timeoutMs)}`);
+    return lines;
+  }
+
+  if (event.type === "TIMEDOUT") {
+    const distance = [`X: ${fmtNumToString(params.offsetX)}`, `Y: ${fmtNumToString(params.offsetY)}`];
+    if (params.offsetT != null) distance.push(`θ: ${fmtNumToString(params.offsetT)}`);
+    return [`Distance: ${distance.join(", ")}`];
+  }
+
+  if (event.type === "REACHED") {
+    const distance = [`X: ${fmtNumToString(params.offsetX)}`, `Y: ${fmtNumToString(params.offsetY)}`];
+    if (params.offsetT != null) distance.push(`θ: ${fmtNumToString(params.offsetT)}`);
+    const lines = [`Distance: ${distance.join(", ")}`];
+    if (params.remainingTime != null) lines.push(`Time Left: ${fmtSecondsToString(params.remainingTime)}`);
+    return lines;
+  }
+
+  const offsets = [`X: ${fmtNumToString(params.offsetX)}`, `Y: ${fmtNumToString(params.offsetY)}`];
+  const total = (params.offsetX != null && params.offsetY != null)
+    ? fmtNumToString(Math.hypot(params.offsetX, params.offsetY))
+    : null;
+  if (total != null) offsets.push(`Total: ${total}`);
+  if (params.offsetT != null) offsets.push(`θ: ${fmtNumToString(params.offsetT)}`);
+  const lines = [`${offsets.join(", ")}`];
+  if (params.remainingTime != null) lines.push(`Time remaining: ${fmtSecondsToString(params.remainingTime)}`);
+  return lines;
+}
+
+function rebuildWaypointState() {
+  waypointsById = new Map();
+  for (const entry of waypoints) {
+    if (!entry || typeof entry !== "object") continue;
+    const id = Number(entry.id);
+    if (!Number.isInteger(id)) continue;
+    const createdEvent = entry.createdEvent && typeof entry.createdEvent === "object"
+      ? entry.createdEvent
+      : (Array.isArray(entry.events) ? entry.events.find((event) => event?.type === "CREATED") : null);
+    if (!createdEvent?.params || createdEvent.params.tarX == null || createdEvent.params.tarY == null) continue;
+
+    const events = Array.isArray(entry.events)
+      ? entry.events
+          .filter((event) => event && typeof event === "object" && typeof event.t === "number")
+          .map((event) => ({
+            t: event.t,
+            type: normalizeWaypointType(event.type),
+            params: event.params || {},
+          }))
+          .filter((event) => event.type)
+          .sort((a, b) => (a.t ?? 0) - (b.t ?? 0))
+      : [];
+    if (!events.length) continue;
+
+    const isRetriggerable = !!createdEvent?.params?.retriggerable;
+    let terminalEvent = null;
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+      const event = events[i];
+      if (event.type === "TIMEDOUT" || (!isRetriggerable && event.type === "REACHED")) {
+        terminalEvent = event;
+        break;
+      }
+    }
+    const latestEvent = events[events.length - 1];
+    let latestActiveEvent = latestEvent;
+    if (terminalEvent) {
+      latestActiveEvent = createdEvent;
+      for (let i = events.length - 1; i >= 0; i -= 1) {
+        const event = events[i];
+        if (event.t <= terminalEvent.t) {
+          latestActiveEvent = event;
+          break;
+        }
+      }
+    }
+
+    waypointsById.set(id, {
+      id,
+      name: String(entry.name ?? createdEvent.name ?? ""),
+      createdTime: createdEvent.t,
+      createdEvent,
+      target: { x: createdEvent.params.tarX, y: createdEvent.params.tarY, theta: createdEvent.params.tarT },
+      retriggerable: isRetriggerable,
+      events,
+      active: !terminalEvent,
+      terminalEvent: terminalEvent || null,
+      latestEvent: latestEvent || createdEvent,
+      latestActiveEvent: latestActiveEvent || createdEvent,
+    });
+  }
+  waypoints = Array.from(waypointsById.values()).sort((a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0));
+}
+
+function normalizeWaypoints(arr) {
+  waypoints = Array.isArray(arr) ? arr.slice() : [];
+  rebuildWaypointState();
+  return waypoints;
+}
+
+function waypointFilterValue() {
+  return waypointFilter?.value || "all";
+}
+
+function waypointEventCount(arr) {
+  if (!Array.isArray(arr)) return 0;
+  let total = 0;
+  for (const waypoint of arr) {
+    if (Array.isArray(waypoint?.events)) total += waypoint.events.length;
+  }
+  return total;
+}
+
+function waypointFilterMatches(waypoint) {
+  const filter = waypointFilterValue();
+  if (filter === "all") return true;
+  if (filter === "active") return !!waypoint?.active;
+  return String(waypoint?.id) === filter;
+}
+
+function waypointVisibleEvents() {
+  const visible = [];
+  for (const waypoint of waypoints) {
+    if (!waypointFilterMatches(waypoint)) continue;
+    for (const event of waypoint.events) {
+      visible.push({ waypoint, event });
+    }
+  }
+  return visible.sort((a, b) => (a.event.t ?? 0) - (b.event.t ?? 0));
+}
+
 function recomputeWatchMarkers() {
   watchMarkers = [];
   for (const w of watches) {
@@ -1768,6 +2175,7 @@ function scrollIntoViewIfNeeded(container, el, pad=10) {
   if (!container || !el) return;
   const c = container.getBoundingClientRect();
   const r = el.getBoundingClientRect();
+  // already in view
   if (r.top >= c.top + pad && r.bottom <= c.bottom - pad) return;
   const topDelta = (r.top - (c.top + pad));
   const botDelta = (r.bottom - (c.bottom - pad));
@@ -1778,11 +2186,59 @@ function scrollIntoViewIfNeeded(container, el, pad=10) {
 function highlightWatchInList(tMs, doScroll) {
   const items = watchList.querySelectorAll(".watchItem");
   items.forEach(el => el.classList.remove("selected"));
+  if (tMs == null) return;
   const el = watchList.querySelector(`.watchItem[data-t="${CSS.escape(String(tMs))}"]`);
   if (el) {
     el.classList.add("selected");
     if (doScroll) requestAnimationFrame(() => scrollIntoViewIfNeeded(watchList, el, 12));
   }
+}
+
+function highlightLogInList(tMs, doScroll) {
+  if (!logList) return;
+  const items = logList.querySelectorAll(".watchItem");
+  items.forEach(el => el.classList.remove("selected"));
+  if (tMs == null) return;
+  const el = logList.querySelector(`.watchItem[data-t="${CSS.escape(String(tMs))}"]`);
+  if (el) {
+    el.classList.add("selected");
+    if (doScroll) requestAnimationFrame(() => scrollIntoViewIfNeeded(logList, el, 12));
+  }
+}
+
+function jumpToEventTime(tMs, {
+  exactStatus,
+  interpolatedStatus,
+  clearWatchSelection = false,
+} = {}) {
+  // Clicking an event should override track lock/hover to avoid confusion.
+  clearTrackHover(true);
+  clearTrackLock();
+
+  if (leftConnected && leftStreaming) liveAutoFollowHead = false;
+
+  const near = nearestIndexWithinTol(tMs, WATCH_TOL_MS);
+  if (near) {
+    selectedIndex = near.idx;
+    if (typeof exactStatus === "function") exactStatus(near);
+  } else {
+    selectedIndex = findFloorIndexByTime(tMs);
+    if (typeof interpolatedStatus === "function") interpolatedStatus();
+  }
+
+  pause();
+  hoverTimelineTime = null;
+  timelineHoverSaved = null;
+
+  if (clearWatchSelection) {
+    selectedWatch = null;
+    highlightWatchInList(null, false);
+    hideWatchPopup();
+  }
+
+  highlightPoseInList();
+  updatePoseReadout();
+  requestDrawAll();
 }
 
 // --- Watch popup (tiny, click to show, click elsewhere to dismiss) ---
@@ -1800,7 +2256,7 @@ function fmtPose(p) {
   const x = (p.x ?? 0).toFixed(1);
   const y = (p.y ?? 0).toFixed(1);
   const th = (p.theta ?? 0).toFixed(1);
-  return `X: ${x}in, Y: ${y}in, θ: ${th}°`;
+  return `X: ${x}, Y: ${y}, θ: ${th}°`;
 }
 
 function showWatchPopup(marker, clickPos) {
@@ -1865,10 +2321,21 @@ function renderWatchList() {
     return { t: 0, n: 0, s: String(v) };
   };
 
+  const watchBooleanValueClass = (value) => {
+    const text = String(value ?? "").trim().toLowerCase();
+    if (text === "true") return " isBooleanTrue";
+    if (text === "false") return " isBooleanFalse";
+    return "";
+  };
+
   items.sort((a,b) => {
     const wa = a.watch || {};
     const wb = b.watch || {};
-    if (mode === "level") return String(wa.level||"").localeCompare(String(wb.level||""));
+    if (mode === "level") {
+      const r = levelSortRank(wb.level) - levelSortRank(wa.level);
+      if (r !== 0) return r;
+      return (b.t ?? 0) - (a.t ?? 0);
+    }
     if (mode === "time") return (a.t ?? 0) - (b.t ?? 0);
     if (mode === "-time") return (b.t ?? 0) - (a.t ?? 0);
     if (mode === "value") {
@@ -1900,7 +2367,7 @@ function renderWatchList() {
         </div>
         <div class="muted">${t != null ? (String(fmtNum(t / 1000, 2)) + "s") : "—"}</div>
       </div>
-      <div class="bigValue">${escapeHtml(String(value))}</div>
+      <div class="bigValue${watchBooleanValueClass(value)}">${escapeHtml(String(value))}</div>
     `;
 
     div.addEventListener('pointerdown', (ev) => {
@@ -1914,38 +2381,222 @@ function renderWatchList() {
   if (selectedWatch?.marker?.t != null) highlightWatchInList(selectedWatch.marker.t, false);
 }
 
+function renderLogList() {
+  if (!logList || !logCount) return;
+
+  logList.innerHTML = "";
+  logCount.textContent = `${logs.length}`;
+
+  const mode = logSort ? logSort.value : "-time";
+  const items = logs.slice();
+
+  items.sort((a, b) => {
+    if (mode === "level") {
+      const r = levelSortRank(b.level) - levelSortRank(a.level);
+      if (r !== 0) return r;
+      return (b.t ?? 0) - (a.t ?? 0);
+    }
+    if (mode === "time") return (a.t ?? 0) - (b.t ?? 0);
+    return (b.t ?? 0) - (a.t ?? 0);
+  });
+
+  for (const entry of items) {
+    const st = levelStyle(entry.level);
+    const div = document.createElement("div");
+    div.className = "watchItem";
+    div.dataset.t = String(entry.t);
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+        <span class="pill level" style="background:${st.fill};color:${st.text}">${escapeHtml(st.name)}</span>
+        <div class="muted">${entry.t != null ? (String(fmtNum(entry.t / 1000, 2)) + "s") : "—"}</div>
+      </div>
+      <div class="bigValue">${escapeHtml(String(entry.message ?? entry.value ?? ""))}</div>
+    `;
+    div.addEventListener('pointerdown', (ev) => {
+      if (ev.button !== 0) return;
+      ev.preventDefault();
+      selectedLogTime = entry.t ?? null;
+      selectedWaypointId = null;
+      selectedWaypointEventTime = null;
+      highlightWaypointInList(null, null, false);
+      jumpToEventTime(entry.t, {
+        exactStatus: (near) => setStatus(`Log @${entry.t}ms mapped to pose @${rawPoses[near.idx].t}ms (Δ=${near.dt}ms).`),
+        interpolatedStatus: () => setStatus(`Log @${entry.t}ms shown via interpolation (no pose within ±${WATCH_TOL_MS}ms).`),
+        clearWatchSelection: true,
+      });
+      highlightLogInList(entry.t, true);
+    }, { passive: false });
+    logList.appendChild(div);
+  }
+
+  if (selectedLogTime != null) highlightLogInList(selectedLogTime, false);
+}
+
+function renderWaypointFilter() {
+  if (!waypointFilter) return;
+  const current = waypointFilter.value || "all";
+  waypointFilter.innerHTML = "";
+
+  const allOpt = document.createElement("option");
+  allOpt.value = "all";
+  allOpt.textContent = "All";
+  waypointFilter.appendChild(allOpt);
+
+  const activeOpt = document.createElement("option");
+  activeOpt.value = "active";
+  activeOpt.textContent = "Active";
+  waypointFilter.appendChild(activeOpt);
+
+  for (const waypoint of waypoints) {
+    const opt = document.createElement("option");
+    opt.value = String(waypoint.id);
+    opt.textContent = waypoint.name || `Waypoint ${waypoint.id}`;
+    waypointFilter.appendChild(opt);
+  }
+
+  const nextValue = Array.from(waypointFilter.options).some((opt) => opt.value === current) ? current : "all";
+  waypointFilter.value = nextValue;
+}
+
+function highlightWaypointInList(waypointId, eventTime, doScroll) {
+  if (!waypointList) return;
+  const items = waypointList.querySelectorAll(".watchItem");
+  items.forEach((el) => el.classList.remove("selected"));
+  if (waypointId == null) return;
+
+  let selector = `.watchItem[data-waypoint-id="${CSS.escape(String(waypointId))}"]`;
+  if (eventTime != null) selector += `[data-event-time="${CSS.escape(String(eventTime))}"]`;
+  let el = waypointList.querySelector(selector);
+  if (!el) el = waypointList.querySelector(`.watchItem[data-waypoint-id="${CSS.escape(String(waypointId))}"]`);
+  if (el) {
+    el.classList.add("selected");
+    if (doScroll) requestAnimationFrame(() => scrollIntoViewIfNeeded(waypointList, el, 12));
+  }
+}
+
+function waypointPoseIndexForSelection(waypoint, eventTime = null) {
+  if (!waypoint || !rawPoses.length) return null;
+  const startT = waypoint.createdTime;
+  const endT = waypoint.terminalEvent?.t ?? Infinity;
+  if (typeof startT !== "number") return null;
+
+  let bestIdx = null;
+  let bestDiff = Infinity;
+  const targetTime = (typeof eventTime === "number") ? eventTime : (waypoint.latestActiveEvent?.t ?? waypoint.createdTime);
+
+  for (let i = 0; i < rawPoses.length; i += 1) {
+    const t = rawPoses[i]?.t;
+    if (typeof t !== "number") continue;
+    if (t < startT || t > endT) continue;
+    const diff = Math.abs(t - targetTime);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestIdx = i;
+    }
+  }
+
+  return bestIdx;
+}
+
+function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
+  if (!waypoint) return;
+  selectedWaypointId = waypoint.id;
+  selectedWaypointEventTime = event?.t ?? waypoint.latestActiveEvent?.t ?? waypoint.createdTime ?? null;
+  selectedWatch = null;
+  selectedLogTime = null;
+  highlightWatchInList(null, false);
+  highlightLogInList(null, false);
+  hideWatchPopup();
+
+  const poseIdx = waypointPoseIndexForSelection(waypoint, selectedWaypointEventTime);
+  if (poseIdx != null) {
+    clearTrackHover(true);
+    clearTrackLock();
+    if (leftConnected && leftStreaming) liveAutoFollowHead = false;
+    pause();
+    hoverTimelineTime = null;
+    timelineHoverSaved = null;
+    selectedIndex = poseIdx;
+    highlightPoseInList();
+    updatePoseReadout();
+    requestDrawAll();
+    setStatus(`Waypoint: ${waypoint.name || waypoint.id} mapped to pose @${rawPoses[poseIdx].t}ms.`);
+  } else {
+    setStatus(`Waypoint: ${waypoint.name || waypoint.id} has no poses while active.`);
+    requestDrawAll();
+  }
+
+  highlightWaypointInList(waypoint.id, selectedWaypointEventTime, fromUserClick);
+}
+
+function renderWaypointList() {
+  if (!waypointList || !waypointCount) return;
+  waypointList.innerHTML = "";
+
+  const visible = waypointVisibleEvents();
+  waypointCount.textContent = `${visible.length}`;
+
+  const ACTIVE_BACKGROUND = "rgba(0, 114, 176, 0.5)";
+  const INACTIVE_BACKGROUND = "rgba(49, 49, 49, 0.65)";
+
+  for (const { waypoint, event } of visible) {
+    const div = document.createElement("div");
+    div.className = "watchItem";
+    div.dataset.waypointId = String(waypoint.id);
+    div.dataset.eventTime = String(event.t);
+    const stateLabel = waypoint.retriggerable ? "RETRIGGERABLE" : (waypoint.active ? "ACTIVE" : "INACTIVE");
+    const stateFill = waypoint.retriggerable
+      ? ((waypoint.terminalEvent?.type === "TIMEDOUT") ? INACTIVE_BACKGROUND : ACTIVE_BACKGROUND)
+      : (waypoint.active ? ACTIVE_BACKGROUND : INACTIVE_BACKGROUND);
+    const stateText = waypoint.retriggerable
+      ? "#f1e7ff"
+      : (waypoint.active ? "#e7f2ff" : "#9aa9ba");
+    const eventStyle = waypointTypeStyle(event.type);
+    const detailsHtml = waypointEventLines(event)
+      .map((line) => `<div class="waypointValue">${escapeHtml(line)}</div>`)
+      .join("");
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span class="pill" style="background:${stateFill};color:${stateText}">${escapeHtml(stateLabel)}</span>
+          <span class="pill" style="background:${eventStyle.fill};color:${eventStyle.text}">${escapeHtml(event.type)}</span>
+          <span style="font-weight:850;word-break:break-word">${escapeHtml(waypoint.name || `Waypoint ${waypoint.id}`)}</span>
+          <div class="subValue" style="margin-top: 0px !important;">(Id: ${escapeHtml(String(waypoint.id))})</div>
+        </div>
+        <div class="muted">${fmtSecondsToString(event.t) || "—"}</div>
+      </div>
+      ${detailsHtml}
+    `;
+    div.addEventListener('pointerdown', (ev) => {
+      if (ev.button !== 0) return;
+      ev.preventDefault();
+      selectWaypointEvent(waypoint, event, true);
+    }, { passive: false });
+    waypointList.appendChild(div);
+  }
+
+  if (selectedWaypointId != null) {
+    highlightWaypointInList(selectedWaypointId, selectedWaypointEventTime, false);
+  }
+}
+
 function selectWatchMarker(marker, fromUserClick=false, clickPos=null) {
   selectedWatch = { marker };
+  selectedLogTime = null;
+  selectedWaypointId = null;
+  selectedWaypointEventTime = null;
 
-  // clicking a watch should override track lock/hover to avoid confusion
-  clearTrackHover(true);
-  clearTrackLock();
-
-  if (leftConnected && leftStreaming) liveAutoFollowHead = false;
-  
-  const near = nearestIndexWithinTol(marker.t, WATCH_TOL_MS);
-  if (near) {
-    selectedIndex = near.idx;
-    setStatus(`Watch @${marker.t}ms mapped to pose @${rawPoses[near.idx].t}ms (Δ=${near.dt}ms).`);
-  } else {
-    selectedIndex = findFloorIndexByTime(marker.t);
-    setStatus(`Watch @${marker.t}ms shown via interpolation (no pose within ±${WATCH_TOL_MS}ms).`);
-  }
-
-  pause();
-  hoverTimelineTime = null;
-  timelineHoverSaved = null;
+  jumpToEventTime(marker.t, {
+    exactStatus: (near) => setStatus(`Watch @${marker.t}ms mapped to pose @${rawPoses[near.idx].t}ms (Δ=${near.dt}ms).`),
+    interpolatedStatus: () => setStatus(`Watch @${marker.t}ms shown via interpolation (no pose within ±${WATCH_TOL_MS}ms).`),
+  });
 
   highlightWatchInList(marker.t, fromUserClick);
+  highlightLogInList(null, false);
+  highlightWaypointInList(null, null, false);
 
-  if (fromUserClick) {
-    showWatchPopup(marker, clickPos);
-  } else {
-    hideWatchPopup();
-  }
-  highlightPoseInList();
-  updatePoseReadout();
-  requestDrawAll();
+  if (fromUserClick) showWatchPopup(marker, clickPos);
+  else hideWatchPopup();
 }
 
 // -------- pose list --------
@@ -1980,6 +2631,10 @@ function renderPoseList() {
       clearTrackHover(true);
       clearTrackLock();
       selectedWatch = null;
+      selectedLogTime = null;
+      selectedWaypointId = null;
+      selectedWaypointEventTime = null;
+      highlightWaypointInList(null, null, false);
       selectedIndex = i;
       if (leftConnected && leftStreaming) liveAutoFollowHead = false;
       setStatus(`Jumped to pose #${i+1}.`);
@@ -2038,9 +2693,6 @@ function drawField() {
 }
 
 function drawAxes() {
-  const w = canvas.getBoundingClientRect().width;
-  const h = canvas.getBoundingClientRect().height;
-  const o = worldToScreen(0, 0);
   const ax0 = worldToScreen(bounds.minX, 0);
   const ax1 = worldToScreen(bounds.maxX, 0);
   const ay0 = worldToScreen(0, bounds.minY);
@@ -2114,13 +2766,44 @@ function drawWatchDots() {
   }
 }
 
+function drawWaypointDots() {
+  if (!waypoints.length) return;
+
+  for (const waypoint of waypoints) {
+    if (!waypointFilterMatches(waypoint)) continue;
+    const p = worldToScreen(waypoint.target.x, waypoint.target.y);
+    const isSelected = selectedWaypointId === waypoint.id;
+    const fill = waypoint.active ? "rgba(0,0,0,0.10)" : "rgba(120,120,120,0.10)";
+    const stroke = "rgba(255,255,255,0.96)";
+    const radius = isSelected ? 7.5 : 6;
+
+    ctx.save();
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    if (isSelected) {
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius + 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
 function drawRobot(pose, alpha=1.0) {
   if (!pose) return;
   const { w: wIn, h: hIn } = robotDimsInches();
   const center = worldToScreen(pose.x, pose.y);
   const wPx = wIn * scale;
   const hPx = hIn * scale;
-  const thetaDeg = (pose.theta ?? 0) + getThetaDelta();
+  const thetaDeg = fieldHeadingToCanvasRotationDeg(pose.theta ?? 0);
   const thetaRad = (thetaDeg) * Math.PI / 180;
 
   ctx.save();
@@ -2240,15 +2923,15 @@ function draw() {
   drawAxes();
   if (appMode === "viewing") {
     drawPath();
+    drawWaypointDots();
     drawWatchDots();
     if (planOverlayVisible) drawPlanningOverlay(true);
     const p = currentDisplayPose();
     if (p) drawRobot(p, 1.0);
   } else {
     drawPlanningOverlay();
-    let pose = planSampleAtDist(planPlayDist);
+    const pose = planSampleAtDist(planPlayDist);
     if (pose) {
-      pose.theta -= getThetaDelta();
       drawRobot(pose, 1.0);
     }
   }
@@ -2820,8 +3503,8 @@ canvas.addEventListener('pointerdown', (e) => {
       planThetaDragging = true;
       planThetaDragIdx = thetaHit;
       planPointerId = e.pointerId;
-      planThetaDragBase = Array.from(planSelectedSet).map((i) => ({ i, theta: normalizeDeg(planWaypoints[i]?.theta ?? 0) }));
-      planThetaDragStart = normalizeDeg(planWaypoints[thetaHit]?.theta ?? 0);
+      planThetaDragBase = Array.from(planSelectedSet).map((i) => ({ i, theta: planThetaDegAt(i) }));
+      planThetaDragStart = planThetaDegAt(thetaHit);
       canvas.setPointerCapture(e.pointerId);
       updatePlanThetaFromPointer(thetaHit, mx, my);
       return;
@@ -3088,6 +3771,29 @@ function hitTestWatchAtClient(clientX, clientY) {
   return best;
 }
 
+function hitTestWaypointAtClient(clientX, clientY) {
+  if (!waypoints.length) return null;
+  const rect = canvas.getBoundingClientRect();
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  const tol = 12;
+  let best = null;
+  let bestD2 = tol * tol;
+
+  for (const waypoint of waypoints) {
+    if (!waypointFilterMatches(waypoint)) continue;
+    const p = worldToScreen(waypoint.target.x, waypoint.target.y);
+    const dx = p.x - x;
+    const dy = p.y - y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 <= bestD2) {
+      bestD2 = d2;
+      best = waypoint;
+    }
+  }
+  return best;
+}
+
 // -------- playback --------
 let playPose = null;
 
@@ -3114,10 +3820,22 @@ function play() {
   if (!rawPoses.length) return;
   if (window.__live && window.__live.streaming) { setStatus('Playback disabled while livestreaming.'); return; }
 
+  const tMin = rawPoses[0]?.t ?? 0;
+  const tMax = rawPoses[rawPoses.length - 1]?.t ?? tMin;
+  if (selectedIndex >= rawPoses.length - 1 || (typeof playTimeMs === "number" && playTimeMs >= tMax)) {
+    selectedIndex = 0;
+    playTimeMs = tMin;
+    playPose = null;
+  }
+
   // starting playback clears track lock to avoid confusing states
   clearTrackHover(true);
   clearTrackLock();
   selectedWatch = null;
+  selectedLogTime = null;
+  selectedWaypointId = null;
+  selectedWaypointEventTime = null;
+  highlightWaypointInList(null, null, false);
   timelineHoverSaved = null;
   setStatus(`Playing from time ${((rawPoses[selectedIndex]?.t ?? 0)/1000).toFixed(2)}s`);
 
@@ -3134,9 +3852,6 @@ function play() {
     lastWall = now;
     // Constant-time playback (1x base, scaled only by playRate)
     playTimeMs += dtWall * playRate;
-
-    const tMin = rawPoses[0]?.t ?? 0;
-    const tMax = rawPoses[rawPoses.length - 1]?.t ?? tMin;
 
     if (playTimeMs >= tMax) {
       playTimeMs = tMax;
@@ -3170,6 +3885,11 @@ function play() {
 
 function planPlay() {
   if (planWaypoints.length < 2) return;
+  const total = planTotalLength();
+  if (planPlayDist >= total) {
+    planPlayDist = 0;
+    setPlanDist(planPlayDist);
+  }
   planPlaying = true;
   btnPlay.textContent = "⏸";
   planLastWall = performance.now();
@@ -3183,9 +3903,7 @@ function planPlay() {
     if (planPlayDist >= total) {
       planPlayDist = total;
       planPause();
-    } else {
-      planRaf = requestAnimationFrame(tick);
-    }
+    } else planRaf = requestAnimationFrame(tick);
     setPlanDist(planPlayDist);
   };
   planRaf = requestAnimationFrame(tick);
@@ -3277,6 +3995,10 @@ timelineCanvas.addEventListener("mousedown", (e) => {
   clearTrackHover(true);
   clearTrackLock();
   selectedWatch = null;
+  selectedLogTime = null;
+  selectedWaypointId = null;
+  selectedWaypointEventTime = null;
+  highlightWaypointInList(null, null, false);
 
   const t = xToTime(x);
   selectedIndex = findFloorIndexByTime(t);
@@ -3336,6 +4058,12 @@ canvas.addEventListener('mousemove', (e) => {
     canvas.style.cursor = "";
   }
 
+  const waypointHit = hitTestWaypointAtClient(e.clientX, e.clientY);
+  if (waypointHit) {
+    canvas.style.cursor = "pointer";
+    return;
+  }
+
   const hit = pickTrackPose(e.clientX, e.clientY);
 
   if (!hit) {
@@ -3389,11 +4117,24 @@ canvas.addEventListener('click', (e) => {
     return;
   }
 
+  const waypointHit = hitTestWaypointAtClient(e.clientX, e.clientY);
+  if (waypointHit) {
+    if (waypointFilter && waypointFilter.value === "all") {
+      renderWaypointList();
+    }
+    selectWaypointEvent(waypointHit, waypointHit.latestActiveEvent, true);
+    return;
+  }
+
   const hit = pickTrackPose(e.clientX, e.clientY);
   if (hit) {
     // lock to clicked position
     pause();
     selectedWatch = null;
+    selectedLogTime = null;
+    selectedWaypointId = null;
+    selectedWaypointEventTime = null;
+    highlightWaypointInList(null, null, false);
 
     trackLockActive = true;
     trackLockPose = hit.pose;
@@ -3564,22 +4305,22 @@ function clearLivePending() {
 
 function parseLiveLineIntoState(line) {
   const s = stripToTag(line);
-  if (!s) return { posesAdded: 0, watchesAdded: 0 };
+  if (!s) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
 
-  // DATA: [DATA],millis,x,y,theta,l_vel,r_vel
-  if (s.startsWith("[DATA],")) {
+  // POSE DATA: [POSE],millis,x,y,theta,l_vel,r_vel
+  if (s.startsWith("[POSE],")) {
     const parts = s.split(",");
-    if (parts.length < 7) return { posesAdded: 0, watchesAdded: 0 };
+    if (parts.length < 7) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
     const t = toNumMaybe(parts[1]);
     const x = toNumMaybe(parts[2]);
     const y = toNumMaybe(parts[3]);
     const theta = toNumMaybe(parts[4]);
     const l_vel = toNumMaybe(parts[5]);
     const r_vel = toNumMaybe(parts[6]);
-    if (t == null || x == null || y == null) return { posesAdded: 0, watchesAdded: 0 };
+    if (t == null || x == null || y == null) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
 
     // De-dup / monotonic guard (common if stream repeats)
-    if (liveLastPoseT != null && t <= liveLastPoseT) return { posesAdded: 0, watchesAdded: 0 };
+    if (liveLastPoseT != null && t <= liveLastPoseT) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
 
     // Derive a "speed" (raw) from wheel velocities if present
     const lv = (typeof l_vel === "number" && isFinite(l_vel)) ? l_vel : 0;
@@ -3594,25 +4335,87 @@ function parseLiveLineIntoState(line) {
       speed_raw,
       speed_norm: 0,
     });
+    telemetryMetrics.totalPosesRecived += 1;
     liveLastPoseT = t;
-    return { posesAdded: 1, watchesAdded: 0 };
+    return { posesAdded: 1, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
   }
 
   // WATCH: [WATCH],millis,level,label,value (value may contain commas)
   if (s.startsWith("[WATCH],")) {
     const parts = s.split(",");
-    if (parts.length < 5) return { posesAdded: 0, watchesAdded: 0 };
+    if (parts.length < 5) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
     const t = toNumMaybe(parts[1]);
-    if (t == null) return { posesAdded: 0, watchesAdded: 0 };
+    if (t == null) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
     const level = parts[2] ?? "INFO";
     let label = parts[3] ?? "";
     label = label.replaceAll(":", ""); 
     const value = parts.slice(4).join(",");
     watches.push({ t, level, label, value });
-    return { posesAdded: 0, watchesAdded: 1 };
+    telemetryMetrics.totalWatchesRecived += 1;
+    return { posesAdded: 0, watchesAdded: 1, logsAdded: 0, waypointsAdded: 0 };
   }
 
-  return { posesAdded: 0, watchesAdded: 0 };
+  if (s.startsWith("[LOG],")) {
+    const parts = s.split(",");
+    if (parts.length < 4) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
+    const t = toNumMaybe(parts[1]);
+    if (t == null) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
+    const message = parts.slice(3).join(",").trim();
+    if (!message) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
+    logs.push({
+      t,
+      level: normalizeLogLevel(parts[2]),
+      label: "",
+      value: message,
+      message,
+    });
+    telemetryMetrics.totalLogsRecived += 1;
+    return { posesAdded: 0, watchesAdded: 0, logsAdded: 1, waypointsAdded: 0 };
+  }
+
+  if (s.startsWith("[WPOINT],")) {
+    const parsed = parseWaypointLine(s);
+    if (!parsed.ok) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
+    const event = parsed.waypointEvent;
+    if (event.type === "CREATED") {
+      const isRetriggerable = !!event.params?.retriggerable;
+      telemetryMetrics.totalWaypointsRecived += 1;
+      waypointsById.set(event.id, {
+        id: event.id,
+        name: event.name,
+        createdTime: event.t,
+        createdEvent: event,
+        target: { x: event.params.tarX, y: event.params.tarY, theta: event.params.tarT },
+        retriggerable: isRetriggerable,
+        events: [event],
+        active: true,
+        terminalEvent: null,
+        latestEvent: event,
+        latestActiveEvent: event,
+      });
+      waypoints = Array.from(waypointsById.values()).sort((a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0));
+      return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 1 };
+    }
+
+    const waypoint = waypointsById.get(event.id);
+    if (!waypoint) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
+
+    telemetryMetrics.totalWaypointsRecived += 1;
+    waypoint.events.push(event);
+    waypoint.events.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
+    waypoint.latestEvent = event;
+    if (event.type === "TIMEDOUT" || (!waypoint.retriggerable && event.type === "REACHED")) {
+      waypoint.active = false;
+      waypoint.terminalEvent = event;
+    }
+    if (!waypoint.terminalEvent || event.t <= waypoint.terminalEvent.t) {
+      waypoint.latestActiveEvent = event;
+    }
+    waypoints = Array.from(waypointsById.values()).sort((a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0));
+    return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 1 };
+  }
+
+  return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
 }
 
 function flushLiveAppend() {
@@ -3715,15 +4518,54 @@ function resetLiveWin() {
 }
 
 function stripToTag(line) {
-  // Accept library-prefixed lines like: "[28.08] [INFO]: [DATA],..."
-  const iData = line.indexOf('[DATA]');
+  // Accept library-prefixed lines like: "[28.08] [INFO]: [POSE],..."
+  const iData = line.indexOf('[POSE]');
   const iWatch = line.indexOf('[WATCH]');
-  let i = -1;
-  if (iData >= 0 && iWatch >= 0) i = Math.min(iData, iWatch);
-  else i = (iData >= 0) ? iData : iWatch;
+  const iLog = line.indexOf('[LOG]');
+  const iWaypoint = line.indexOf('[WPOINT]');
+  const indices = [iData, iWatch, iLog, iWaypoint].filter((idx) => idx >= 0);
+  const i = indices.length ? Math.min(...indices) : -1;
 
   if (i < 0) return "";
   return line.slice(i).trim();
+}
+
+function parseWaypointLine(s) {
+  if (!s.startsWith("[WPOINT],")) return { ok: false, malformed: false };
+  const commas = [];
+  for (let i = 0; i < s.length; i += 1) {
+    if (s[i] === ",") commas.push(i);
+  }
+  if (commas.length < 5) return { ok: false, malformed: true };
+
+  const fields = [];
+  let start = 0;
+  for (let i = 0; i < 5; i += 1) {
+    const end = commas[i];
+    fields.push(s.slice(start, end));
+    start = end + 1;
+  }
+  fields.push(s.slice(start));
+
+  const [, tRaw, typeRaw, idRaw, nameRaw, paramsText] = fields;
+  const t = toNumMaybe(tRaw);
+  const type = normalizeWaypointType(typeRaw);
+  const id = Number(idRaw);
+  const name = String(nameRaw || "").trim();
+  if (t == null || !type || !Number.isInteger(id) || !name) return { ok: false, malformed: true };
+
+  const params = parseWaypointParams(type, paramsText);
+  if (!params) return { ok: false, malformed: true };
+
+  return {
+    ok: true,
+    malformed: false,
+    waypointEvent: { t, type, id, name, params },
+  };
+}
+
+function isMalformedWaypointLine(s) {
+  return parseWaypointLine(s).malformed;
 }
 
 function setLeftUi() {
@@ -3854,6 +4696,7 @@ async function connectLeft() {
   leftWs.addEventListener("message", (ev) => {
     const raw = (typeof ev.data === "string") ? ev.data : "";
     const trimmed = stripToTag(raw);
+    const malformedWaypoint = trimmed && isMalformedWaypointLine(trimmed);
     if (trimmed) {
       livePendingLines.push(trimmed);
       // cap pending buffer to avoid unbounded growth
@@ -3865,7 +4708,7 @@ async function connectLeft() {
       }
     }
 
-    if (trimmed) { liveAppendLine("\x1b[32m|\x1b[0m " + raw); } // Attach green for processed
+    if (trimmed && !malformedWaypoint) { liveAppendLine("\x1b[32m|\x1b[0m " + raw); } // Attach green for processed
     else         { liveAppendLine("\x1b[31m|\x1b[0m " + raw); } // Red if not
   });
 
@@ -3935,7 +4778,7 @@ async function doLeftRefresh() {
   const t0 = performance.now();
 
   if (!data) {
-    data = { poses: [], watches: [], meta: {} };
+    data = { poses: [], watches: [], logs: [], waypoints: [], meta: {} };
   }
 
   const startIdx = livePendingConsumed;
@@ -3955,28 +4798,50 @@ async function doLeftRefresh() {
 
   let posesAdded = 0;
   let watchesAdded = 0;
+  let logsAdded = 0;
+  let waypointsAdded = 0;
 
   for (let i = startIdx; i < endIdx; i++) {
     const r = parseLiveLineIntoState(livePendingLines[i]);
     posesAdded += r.posesAdded;
     watchesAdded += r.watchesAdded;
+    logsAdded += r.logsAdded;
+    waypointsAdded += r.waypointsAdded;
   }
   livePendingConsumed = endIdx;
 
-  if (posesAdded === 0 && watchesAdded === 0) return;
+  if (posesAdded === 0 && watchesAdded === 0 && logsAdded === 0 && waypointsAdded === 0) return;
 
   // Keep watches sorted (poses are appended monotonically by t)
   if (watchesAdded > 0) {
     watches.sort((a,b) => (a.t ?? 0) - (b.t ?? 0));
   }
+  if (logsAdded > 0) {
+    logs.sort((a,b) => (a.t ?? 0) - (b.t ?? 0));
+  }
+  if (waypointsAdded > 0) {
+    waypoints.sort((a,b) => (a.createdTime ?? 0) - (b.createdTime ?? 0));
+  }
 
   // Recompute derived fields. This is cheap at this scale (<~4000 poses).
   computeSpeedNorm();
+  data.poses = rawPoses;
+  data.watches = watches;
+  data.logs = logs;
+  data.waypoints = waypoints;
 
   if (watchesAdded > 0) {
     recomputeWatchMarkers();
     rebuildWatchMarkersByTime();
     renderWatchList();
+  }
+
+  if (logsAdded > 0) {
+    renderLogList();
+  }
+  if (waypointsAdded > 0) {
+    renderWaypointFilter();
+    renderWaypointList();
   }
 
   if (posesAdded > 0) {
@@ -4131,6 +4996,12 @@ if (btnFit) {
 leftSetUI("");
 
 
+function getTimelineH() {
+  const v = getComputedStyle(root).getPropertyValue('--timelineH').trim();
+  const n = parseFloat(v);
+  return isFinite(n) ? n : 260;
+};
+
 // -------- splitters with collapse --------
 (function setupSplitters() {
   let draggingV = false;
@@ -4142,16 +5013,25 @@ leftSetUI("");
   } catch (e) {}
 
 
-  const getRightSidebarW = () => {
-    const v = getComputedStyle(root).getPropertyValue('--rightSidebarW').trim();
+  const getRightSidebarWViewing = () => {
+    const v = getComputedStyle(root).getPropertyValue('--rightSidebarWViewing').trim();
     const n = parseFloat(v);
     return isFinite(n) ? n : 360;
   };
-  const setRightSidebarW = (px) => {
+  const setRightSidebarWViewing = (px) => {
     px = Math.min(px, MAX_SIDEBAR_W_PX);
-    root.style.setProperty('--rightSidebarW', `${px}px`);
+    root.style.setProperty('--rightSidebarWViewing', `${px}px`);
+  };
 
-  }
+  const getRightSidebarWPlanning = () => {
+    const v = getComputedStyle(root).getPropertyValue('--rightSidebarWPlanning').trim();
+    const n = parseFloat(v);
+    return isFinite(n) ? n : 360;
+  };
+  const setRightSidebarWPlanning = (px) => {
+    px = Math.min(px, MAX_SIDEBAR_W_PX);
+    root.style.setProperty('--rightSidebarWPlanning', `${px}px`);
+  };
 
   const getLeftSidebarW = () => {
     const v = getComputedStyle(root).getPropertyValue('--leftSidebarW').trim();
@@ -4178,7 +5058,7 @@ leftSetUI("");
   vSplit.addEventListener('mousedown', (e) => {
     draggingV = true;
     startX = e.clientX;
-    startW = getRightSidebarW();
+    startW = (appMode === "planning") ? getRightSidebarWPlanning() : getRightSidebarWViewing();
     document.body.style.cursor = 'col-resize';
     e.preventDefault();
   });
@@ -4190,11 +5070,6 @@ leftSetUI("");
   let startPlanY = 0;
   let startPlanH = 0;
 
-  const getTimelineH = () => {
-    const v = getComputedStyle(root).getPropertyValue('--timelineH').trim();
-    const n = parseFloat(v);
-    return isFinite(n) ? n : 260;
-  };
   const setTimelineH = (px) => {
     px = Math.min(px, MAX_TIMELINE_H_PX);
     root.style.setProperty('--timelineH', `${px}px`);
@@ -4255,12 +5130,19 @@ leftSetUI("");
 
       if (next <= COLLAPSE_PX_SIDEBAR) {
         next = 0;
-        rightEl.classList.add('isCollapsed');
+        if (appMode === "planning") rightPlanningEl?.classList?.add('isCollapsed');
+        else rightViewingEl?.classList?.add('isCollapsed');
       } else {
-        rightEl.classList.remove('isCollapsed');
-        layoutState.lastRightSidebarW = next;
+        if (appMode === "planning") {
+          rightPlanningEl?.classList?.remove('isCollapsed');
+          layoutState.lastRightSidebarWPlanning = next;
+        } else {
+          rightViewingEl?.classList?.remove('isCollapsed');
+          layoutState.lastRightSidebarW = next;
+        }
       }
-      setRightSidebarW(next);
+      if (appMode === "planning") setRightSidebarWPlanning(next);
+      else setRightSidebarWViewing(next);
       resizeCanvas();
       resizeTimeline();
     }
@@ -4285,15 +5167,15 @@ leftSetUI("");
 
     if (draggingPlanList) {
       const dy = e.clientY - startPlanY;
-      const rightH = rightEl?.getBoundingClientRect().height || window.innerHeight;
+      const rightH = rightPlanningEl?.getBoundingClientRect().height || window.innerHeight;
       const maxH = Math.max(COLLAPSE_WAYPOINTLIST_PX, rightH - 180);
       let next = clamp(startPlanH + dy, 0, maxH);
       if (next <= COLLAPSE_WAYPOINTLIST_PX) {
         next = 0;
-        rightEl?.classList.add('planListCollapsed');
+        rightPlanningEl?.classList.add('planListCollapsed');
       } else {
         if (next < minH) next = minH;
-        rightEl?.classList.remove('planListCollapsed');
+        rightPlanningEl?.classList.remove('planListCollapsed');
       }
       setPlanListH(next);
     }
@@ -4308,7 +5190,11 @@ leftSetUI("");
       draggingPlanList = false;
       document.body.style.cursor = '';
       // If user re-expands from collapsed by dragging, restore visibility automatically
-      if (getRightSidebarW() > COLLAPSE_PX_SIDEBAR) rightEl.classList.remove('isCollapsed');
+      if (appMode === "planning") {
+        if (getRightSidebarWPlanning() > COLLAPSE_PX_SIDEBAR) rightPlanningEl?.classList?.remove('isCollapsed');
+      } else {
+        if (getRightSidebarWViewing() > COLLAPSE_PX_SIDEBAR) rightViewingEl?.classList?.remove('isCollapsed');
+      }
       if (getTimelineH() > COLLAPSE_PX_TIMELINE) timelineBar.classList.remove('isCollapsed');
       resizeCanvas();
       resizeTimeline();
@@ -4334,14 +5220,26 @@ leftSetUI("");
   });
 
   vSplit.addEventListener('dblclick', () => {
-    const cur = getRightSidebarW();
-    if (cur <= COLLAPSE_PX_SIDEBAR) {
-      setRightSidebarW(Math.max(1, layoutState.lastRightSidebarW));
-      rightEl.classList.remove('isCollapsed');
+    if (appMode === "planning") {
+      const cur = getRightSidebarWPlanning();
+      if (cur <= COLLAPSE_PX_SIDEBAR) {
+        setRightSidebarWPlanning(Math.max(1, layoutState.lastRightSidebarWPlanning || 360));
+        rightPlanningEl?.classList?.remove('isCollapsed');
+      } else {
+        layoutState.lastRightSidebarWPlanning = cur;
+        setRightSidebarWPlanning(0);
+        rightPlanningEl?.classList?.add('isCollapsed');
+      }
     } else {
-      layoutState.lastRightSidebarW = cur;
-      setRightSidebarW(0);
-      rightEl.classList.add('isCollapsed');
+      const cur = getRightSidebarWViewing();
+      if (cur <= COLLAPSE_PX_SIDEBAR) {
+        setRightSidebarWViewing(Math.max(1, layoutState.lastRightSidebarW));
+        rightViewingEl?.classList?.remove('isCollapsed');
+      } else {
+        layoutState.lastRightSidebarW = cur;
+        setRightSidebarWViewing(0);
+        rightViewingEl?.classList?.add('isCollapsed');
+      }
     }
     resetFieldPosition();
     resizeCanvas();
@@ -4388,12 +5286,16 @@ function setData(obj) {
 
   // watches: accept alternate key just in case
   watches = normalizeWatches(obj.watches || obj.watch || []);
+  setImportedRouteMeta(obj.meta);
   finalizeLoadedData();
 }
 
 function setDataFromStreamText(text) {
   rawPoses = [];
   watches = [];
+  logs = [];
+  waypoints = [];
+  waypointsById = new Map();
   liveLastPoseT = null;
 
   const lines = String(text ?? "").split(/\r?\n/);
@@ -4402,10 +5304,13 @@ function setDataFromStreamText(text) {
   }
 
   watches.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
-  data = { poses: rawPoses, watches, meta: {} };
+  logs.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
+  waypoints.sort((a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0));
+  data = { poses: rawPoses, watches, logs, waypoints, meta: {} };
+  setImportedRouteMeta(null);
 
   if (!rawPoses.length) {
-    setStatus("No [DATA] entries found in log/text file.");
+    setStatus("No data entries found in log/text file.");
     return;
   }
 
@@ -4425,6 +5330,9 @@ function finalizeLoadedData() {
   saveSettings();
 
   selectedWatch = null;
+  selectedLogTime = null;
+  selectedWaypointId = null;
+  selectedWaypointEventTime = null;
   selectedIndex = 0;
   hoverTimelineTime = null;
   timelineHoverSaved = null;
@@ -4437,12 +5345,15 @@ function finalizeLoadedData() {
   recomputeWatchMarkers();
   rebuildWatchMarkersByTime();
   renderWatchList();
+  renderLogList();
+  renderWaypointFilter();
+  renderWaypointList();
   renderPoseList();
 
   bounds = { ...FIELD_BOUNDS_IN };
   computeTransform();
 
-  setStatus(`Loaded ${rawPoses.length} poses, ${watches.length} watches.`);
+  setStatus(`Loaded ${rawPoses.length} poses, ${watches.length} watches, ${logs.length} logs, ${waypointVisibleEvents().length} waypoints.`);
   if (btnPlay) btnPlay.disabled = rawPoses.length < 2;
   if (btnFit) btnFit.disabled = false;
   if (fieldSelect) fieldSelect.disabled = false;
@@ -4642,6 +5553,9 @@ async function loadSettings() {
       if (settings.planThetaSnapStep !== undefined && settingsPlanThetaSnapStep) {
         settingsPlanThetaSnapStep.value = settings.planThetaSnapStep;
       }
+      if (settings.planLimitBounds !== undefined && settingsPlanLimitBounds) {
+        settingsPlanLimitBounds.checked = !!settings.planLimitBounds;
+      }
       if (settings.planSpeed !== undefined && settingsPlanSpeed) {
         settingsPlanSpeed.value = settings.planSpeed;
       }
@@ -4740,6 +5654,7 @@ async function saveSettings() {
       planMoveStep: settingsPlanMoveStep ? settingsPlanMoveStep.value : '0.5',
       planSnapStep: settingsPlanSnapStep ? settingsPlanSnapStep.value : '0',
       planThetaSnapStep: settingsPlanThetaSnapStep ? settingsPlanThetaSnapStep.value : '0',
+      planLimitBounds: settingsPlanLimitBounds ? settingsPlanLimitBounds.checked : true,
       planSpeed: settingsPlanSpeed ? settingsPlanSpeed.value : '50',
       refreshIntervalMs: leftRefreshIntervalEl ? leftRefreshIntervalEl.value : '0',
       liveDebug: settingsLiveDebug ? settingsLiveDebug.checked : liveDebugEnabled,
@@ -4756,7 +5671,8 @@ async function saveSettings() {
       },
       fieldRotation: fieldRotationDeg,
       layoutLeftSidebarWidth: readRootCssNumber('--leftSidebarW', 360),
-      layoutRightSidebarWidth: readRootCssNumber('--rightSidebarW', 370),
+      layoutRightSidebarWidthViewing: readRootCssNumber('--rightSidebarWViewing', 370),
+      layoutRightSidebarWidthPlanning: readRootCssNumber('--rightSidebarWPlanning', 370),
       layoutTimelineHeight: readRootCssNumber('--timelineH', 180),
       layoutPlanningWaypointHeight: readRootCssNumber('--planListH', 240),
     };
@@ -4922,12 +5838,343 @@ function openSettings() {
 function closeSettings() {
   if (!settingsModal) return;
   try {
+    void saveSettings();
+  } catch (e) {
+    console.error('Error saving settings:', e);
+  }
+  
+  try {
     syncSettingsToMain(); // Save settings modal values to main inputs
   } catch (e) {
     console.error('Error syncing settings:', e);
   }
   settingsModal.setAttribute('hidden', '');
   settingsModal.style.display = 'none'; // Force hide
+}
+
+function sanitizeExportFilename(value) {
+  if (typeof value !== 'string') return '';
+  return value
+    .replace(/\.json\s*$/i, '')
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[. ]+$/g, '')
+    .replace(/[^A-Za-z0-9 _-]/g, '')
+    .trim();
+}
+
+function sanitizeExportPathName(value) {
+  if (typeof value !== 'string') return '';
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function exportLocationLabel(value) {
+  if (value === 'desktop') return 'Desktop';
+  if (value === 'documents') return 'Documents';
+  if (value === 'custom') return 'Custom Folder';
+  return 'Downloads';
+}
+
+function getExportLocationPath() {
+  const location = exportLocationSelect ? exportLocationSelect.value : 'downloads';
+  const customPath = exportCustomPathInput ? exportCustomPathInput.value.trim() : '';
+  return {
+    kind: location,
+    label: exportLocationLabel(location),
+    customPath: location === 'custom' ? customPath : null,
+  };
+}
+
+function serializeExportPose(pose) {
+  return {
+    t: pose.t ?? null,
+    x: pose.x,
+    y: pose.y,
+    theta: pose.theta ?? 0,
+    l_vel: pose.l_vel ?? null,
+    r_vel: pose.r_vel ?? null,
+    speed: pose.speed_raw ?? 0,
+  };
+}
+
+function serializeExportWatch(watch) {
+  return {
+    t: watch.t ?? null,
+    level: watch.level ?? 'INFO',
+    label: watch.label ?? '',
+    value: watch.value ?? '',
+  };
+}
+
+function serializeExportLog(entry) {
+  return {
+    t: entry.t ?? null,
+    level: normalizeLogLevel(entry.level),
+    label: entry.label ?? '',
+    value: entry.message ?? entry.value ?? '',
+  };
+}
+
+function serializeExportWaypointEvent(event) {
+  return {
+    t: event?.t ?? null,
+    type: normalizeWaypointType(event?.type),
+    id: Number.isInteger(event?.id) ? event.id : null,
+    name: event?.name ?? '',
+    params: event?.params ? { ...event.params } : {},
+  };
+}
+
+function serializeExportWaypoint(waypoint) {
+  return {
+    id: waypoint.id,
+    name: waypoint.name ?? '',
+    createdTime: waypoint.createdTime ?? null,
+    createdEvent: waypoint.createdEvent ? serializeExportWaypointEvent(waypoint.createdEvent) : null,
+    active: !!waypoint.active,
+    target: waypoint.target ? { ...waypoint.target } : null,
+    terminalEvent: waypoint.terminalEvent ? serializeExportWaypointEvent(waypoint.terminalEvent) : null,
+    latestEvent: waypoint.latestEvent ? serializeExportWaypointEvent(waypoint.latestEvent) : null,
+    latestActiveEvent: waypoint.latestActiveEvent ? serializeExportWaypointEvent(waypoint.latestActiveEvent) : null,
+    events: Array.isArray(waypoint.events) ? waypoint.events.map(serializeExportWaypointEvent) : [],
+  };
+}
+
+function buildExportMetadata(PathName) {
+  const { minV, maxV } = getMinMaxSpeed();
+  const robotDims = robotDimsInches();
+  const Units = settingsUnitsSelect?.value || unitsSelect?.value || currentUnits || 'in';
+  const SelectedField = fieldSelect ? fieldSelect.value : DEFAULT_FIELD_KEY;
+  const poseStart = rawPoses[0]?.t ?? null;
+  const poseEnd = rawPoses[rawPoses.length - 1]?.t ?? null;
+
+  const formattedDateGB = new Intl.DateTimeFormat('en-GB', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date());
+
+  return {
+    SchemaVersion: 1,
+    CreationDate: formattedDateGB,
+    AppVersion: APP_VERSION,
+    Creator: 'MotionView',
+    PathName,
+    Stats: {
+      PoseCount: rawPoses.length,
+      WatchCount: watches.length,
+      LogCount: logs.length,
+      WaypointCount: waypoints.length,
+      WaypointEvents: waypointEventCount(waypoints),
+    },
+    Times: {
+      StartTime: String(fmtNum(poseStart / 1000, 2)) + "ms",
+      EndTimeMs: String(fmtNum(poseEnd / 1000, 2)) + "ms",
+      DurationTimeMs: (typeof poseStart === 'number' && typeof poseEnd === 'number') ? Math.max(0, poseEnd - poseStart) : null,
+    },
+    ViewingSettings: {
+      Units,
+      SelectedField,
+      PathOffsets: {
+        X: Number((offXEl ? offXEl.value : settingsOffX ? settingsOffX.value : 0) || 0),
+        Y: Number((offYEl ? offYEl.value : settingsOffY ? settingsOffY.value : 0) || 0),
+        Theta: Number((offThetaEl ? offThetaEl.value : settingsOffTheta ? settingsOffTheta.value : 0) || 0),
+      },
+      RobotDimensions: {
+        Width: robotDims.w,
+        Height: robotDims.h,
+      },
+      SpeedNorm: {
+        Minimum: minV,
+        Maximum: maxV,
+      },
+    },
+  };
+}
+
+function buildExportPayload() {
+  const rawPathName = exportPathNameInput ? exportPathNameInput.value : '';
+  const pathName = sanitizeExportPathName(rawPathName) || 'Untitled Path';
+
+  return {
+    poses: rawPoses.map(serializeExportPose),
+    watches: watches.map(serializeExportWatch),
+    logs: logs.map(serializeExportLog),
+    waypoints: waypoints.map(serializeExportWaypoint),
+    meta: buildExportMetadata(pathName),
+  };
+}
+
+function buildExportRequest() {
+  const filenameBase = sanitizeExportFilename(exportFilenameInput ? exportFilenameInput.value : '');
+  const pathName = sanitizeExportPathName(exportPathNameInput ? exportPathNameInput.value : '');
+  const location = getExportLocationPath();
+  const payload = buildExportPayload();
+  const json = JSON.stringify(payload, null, 2);
+
+  return {
+    filenameBase,
+    filename: `${filenameBase}.json`,
+    pathName: pathName || payload.metadata.pathName,
+    destination: location,
+    payload,
+    json,
+  };
+}
+
+function flattenMetaEntries(value, prefix = '') {
+  if (value == null) {
+    return prefix ? [{ key: prefix, value: 'null' }] : [];
+  }
+
+  if (Array.isArray(value)) {
+    if (!value.length) return prefix ? [{ key: prefix, value: '[]' }] : [];
+    const entries = [];
+    value.forEach((item, index) => {
+      const nextPrefix = prefix ? `${prefix}[${index}]` : `[${index}]`;
+      entries.push(...flattenMetaEntries(item, nextPrefix));
+    });
+    return entries;
+  }
+
+  if (typeof value === 'object') {
+    const keys = Object.keys(value);
+    if (!keys.length) return prefix ? [{ key: prefix, value: '{}' }] : [];
+    const entries = [];
+    for (const key of keys) {
+      const nextPrefix = prefix ? `${prefix}.${key}` : key;
+      entries.push(...flattenMetaEntries(value[key], nextPrefix));
+    }
+    return entries;
+  }
+
+  const text = typeof value === 'string' ? value : String(value);
+  return prefix ? [{ key: prefix, value: text }] : [];
+}
+
+function renderRouteInfoList() {
+  if (!routeInfoList) return;
+  const entries = flattenMetaEntries(importedRouteMeta);
+  if (!entries.length) {
+    routeInfoList.innerHTML = '<div class="routeInfoEmpty">No imported metadata is available for this route.</div>';
+    return;
+  }
+  routeInfoList.innerHTML = entries
+    .map((entry) => `
+      <div class="routeInfoRow">
+        <div class="routeInfoKey">${escapeHtml(entry.key)}</div>
+        <div class="routeInfoValue">${escapeHtml(entry.value)}</div>
+      </div>
+    `)
+    .join('');
+}
+
+function setImportedRouteMeta(meta) {
+  importedRouteMeta = (meta && typeof meta === 'object' && !Array.isArray(meta) && Object.keys(meta).length)
+    ? meta
+    : null;
+  if (btnRouteInfo) {
+    btnRouteInfo.disabled = !importedRouteMeta;
+  }
+  renderRouteInfoList();
+}
+
+function openRouteInfoModal() {
+  if (!routeInfoModal || !importedRouteMeta) return;
+  renderRouteInfoList();
+  routeInfoModal.removeAttribute('hidden');
+  routeInfoModal.style.display = 'flex';
+  requestAnimationFrame(() => {
+    const modalCard = routeInfoModal.querySelector('.modalCard');
+    if (modalCard) modalCard.focus();
+  });
+}
+
+function closeRouteInfoModal() {
+  if (!routeInfoModal) return;
+  routeInfoModal.setAttribute('hidden', '');
+  routeInfoModal.style.display = 'none';
+}
+
+function updateExportUiState() {
+  const exportLocation = exportLocationSelect ? exportLocationSelect.value : 'downloads';
+  const isCustomLocation = exportLocation === 'custom';
+  if (exportCustomPathWrap) {
+    exportCustomPathWrap.hidden = !isCustomLocation;
+  }
+
+  const pathName = sanitizeExportPathName(exportPathNameInput ? exportPathNameInput.value : '');
+  const rawFilename = exportFilenameInput ? exportFilenameInput.value : '';
+  const sanitizedFilename = sanitizeExportFilename(rawFilename);
+  const pathNameValid = pathName.length > 0;
+  const filenameValid = sanitizedFilename.length > 0;
+  const customPath = exportCustomPathInput ? exportCustomPathInput.value.trim() : '';
+  const customPathValid = !isCustomLocation || customPath.length > 0;
+
+  if (exportFilenameHint) {
+    exportFilenameHint.textContent = sanitizedFilename && rawFilename !== sanitizedFilename
+      ? `Sanitized filename: ${sanitizedFilename}.json`
+      : 'Only letters, numbers, spaces, dashes, and underscores are kept.';
+  }
+
+  if (exportCustomPathHint) {
+    exportCustomPathHint.textContent = isCustomLocation
+      ? 'Enter a folder path. Folder existence will be checked when export logic is added.'
+      : 'Folder validation will be enforced when export logic is added.';
+  }
+
+  if (exportValidationMessage) {
+    if (!pathNameValid) {
+      exportValidationMessage.textContent = 'Enter a path name to continue.';
+    } else if (!filenameValid) {
+      exportValidationMessage.textContent = 'Enter a filename to continue.';
+    } else if (!customPathValid) {
+      exportValidationMessage.textContent = 'Enter a custom folder path to continue.';
+    } else {
+      exportValidationMessage.textContent = '';
+    }
+  }
+
+  if (btnExportConfirm) {
+    btnExportConfirm.disabled = !(pathNameValid && filenameValid && customPathValid);
+  }
+}
+
+function openExportModal() {
+  if (!exportModal) {
+    console.warn('Export modal not found');
+    return;
+  }
+  if (exportSuccessMessage) {
+    exportSuccessMessage.textContent = '';
+    exportSuccessMessage.hidden = true;
+  }
+  if (exportPathNameInput && !exportPathNameInput.value.trim()) {
+    exportPathNameInput.value = 'Untitled Path';
+  }
+  if (exportFilenameInput && !exportFilenameInput.value.trim()) {
+    exportFilenameInput.value = 'motionview-path';
+  }
+  updateExportUiState();
+  exportModal.removeAttribute('hidden');
+  exportModal.style.display = 'flex';
+  requestAnimationFrame(() => {
+    if (exportPathNameInput) exportPathNameInput.focus();
+    else {
+      const modalCard = exportModal.querySelector('.modalCard');
+      if (modalCard) modalCard.focus();
+    }
+  });
+}
+
+function closeExportModal() {
+  if (!exportModal) return;
+  exportModal.setAttribute('hidden', '');
+  exportModal.style.display = 'none';
 }
 
 // Settings modal event handlers - ensure they're set up
@@ -4941,6 +6188,26 @@ if (btnSettings) {
   console.warn('btnSettings element not found');
 }
 
+if (btnExport) {
+  btnExport.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openExportModal();
+  });
+} else {
+  console.warn('btnExport element not found');
+}
+
+if (btnRouteInfo) {
+  btnRouteInfo.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openRouteInfoModal();
+  });
+} else {
+  console.warn('btnRouteInfo element not found');
+}
+
 if (btnSettingsClose) {
   btnSettingsClose.addEventListener('click', (e) => {
     e.preventDefault();
@@ -4951,11 +6218,144 @@ if (btnSettingsClose) {
   console.warn('btnSettingsClose element not found');
 }
 
+if (btnExportClose) {
+  btnExportClose.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeExportModal();
+  });
+} else {
+  console.warn('btnExportClose element not found');
+}
+
+if (btnRouteInfoClose) {
+  btnRouteInfoClose.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeRouteInfoModal();
+  });
+} else {
+  console.warn('btnRouteInfoClose element not found');
+}
+
+if (btnExportCancel) {
+  btnExportCancel.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeExportModal();
+  });
+} else {
+  console.warn('btnExportCancel element not found');
+}
+
+if (btnExportConfirm) {
+  btnExportConfirm.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    updateExportUiState();
+    if (btnExportConfirm.disabled) return;
+    try {
+      if (exportSuccessMessage) {
+        exportSuccessMessage.textContent = '';
+        exportSuccessMessage.hidden = true;
+      }
+      pendingExportRequest = buildExportRequest();
+      window.__motionViewPendingExport = pendingExportRequest;
+      window.__motionViewPendingExportJson = pendingExportRequest.json;
+      const result = await invoke('export_motionview_json', {
+        filenameBase: pendingExportRequest.filenameBase,
+        location: pendingExportRequest.destination.kind,
+        customPath: pendingExportRequest.destination.customPath,
+        jsonContents: pendingExportRequest.json,
+      });
+      if (exportSuccessMessage) {
+        exportSuccessMessage.textContent = `Successfully exported ${pendingExportRequest.pathName} to '${result?.path || pendingExportRequest.filename}'`;
+        exportSuccessMessage.hidden = false;
+      }
+      setStatus(`Exported ${pendingExportRequest.filename}.`);
+      console.log('MotionView export payload written:', {
+        request: pendingExportRequest,
+        result,
+      });
+    } catch (err) {
+      console.error('Failed to export MotionView JSON:', err);
+      if (exportSuccessMessage) {
+        exportSuccessMessage.textContent = '';
+        exportSuccessMessage.hidden = true;
+      }
+      if (exportValidationMessage) {
+        exportValidationMessage.textContent = `Failed to export file: ${err?.message || err}`;
+      }
+    }
+  });
+} else {
+  console.warn('btnExportConfirm element not found');
+}
+
+if (exportPathNameInput) {
+  exportPathNameInput.addEventListener('input', () => {
+    const sanitizedValue = sanitizeExportPathName(exportPathNameInput.value);
+    if (exportPathNameInput.value !== sanitizedValue) {
+      const cursor = sanitizedValue.length;
+      exportPathNameInput.value = sanitizedValue;
+      exportPathNameInput.setSelectionRange(cursor, cursor);
+    }
+    updateExportUiState();
+  });
+  exportPathNameInput.addEventListener('blur', () => {
+    exportPathNameInput.value = sanitizeExportPathName(exportPathNameInput.value);
+    updateExportUiState();
+  });
+}
+
+if (exportFilenameInput) {
+  exportFilenameInput.addEventListener('input', () => {
+    const sanitizedValue = sanitizeExportFilename(exportFilenameInput.value);
+    if (exportFilenameInput.value !== sanitizedValue) {
+      const cursor = sanitizedValue.length;
+      exportFilenameInput.value = sanitizedValue;
+      exportFilenameInput.setSelectionRange(cursor, cursor);
+    }
+    updateExportUiState();
+  });
+  exportFilenameInput.addEventListener('blur', () => {
+    exportFilenameInput.value = sanitizeExportFilename(exportFilenameInput.value);
+    updateExportUiState();
+  });
+}
+
+if (exportLocationSelect) {
+  exportLocationSelect.addEventListener('change', () => {
+    updateExportUiState();
+    if (exportLocationSelect.value === 'custom' && exportCustomPathInput) {
+      requestAnimationFrame(() => exportCustomPathInput.focus());
+    }
+  });
+}
+
+if (exportCustomPathInput) {
+  exportCustomPathInput.addEventListener('input', () => {
+    updateExportUiState();
+  });
+}
+
 if (settingsModal) {
   settingsModal.addEventListener('click', (e) => {
     if (e.target && (e.target.classList.contains('modalBackdrop'))) closeSettings();
   });
 } else console.warn('settingsModal element not found');
+
+if (exportModal) {
+  exportModal.addEventListener('click', (e) => {
+    if (e.target && e.target.classList.contains('modalBackdrop')) closeExportModal();
+  });
+} else console.warn('exportModal element not found');
+
+if (routeInfoModal) {
+  routeInfoModal.addEventListener('click', (e) => {
+    if (e.target && e.target.classList.contains('modalBackdrop')) closeRouteInfoModal();
+  });
+} else console.warn('routeInfoModal element not found');
 
 if (modeViewingBtn) modeViewingBtn.addEventListener('click', () => setMode('viewing'));
 
@@ -4966,8 +6366,12 @@ window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   const helpOpen = helpModal && helpModal.style.display !== 'none' && !helpModal.hasAttribute('hidden');
   const settingsOpen = settingsModal && settingsModal.style.display !== 'none' && !settingsModal.hasAttribute('hidden');
+  const exportOpen = exportModal && exportModal.style.display !== 'none' && !exportModal.hasAttribute('hidden');
+  const routeInfoOpen = routeInfoModal && routeInfoModal.style.display !== 'none' && !routeInfoModal.hasAttribute('hidden');
   if (helpOpen) closeHelp();
   else if (settingsOpen) closeSettings();
+  else if (exportOpen) closeExportModal();
+  else if (routeInfoOpen) closeRouteInfoModal();
   e.preventDefault();
   e.stopPropagation();
 }, true);
@@ -5038,6 +6442,11 @@ if (settingsPlanSnapStep) {
 if (settingsPlanThetaSnapStep) {
   settingsPlanThetaSnapStep.addEventListener('change', () => {
     syncSettingsToMain();
+  });
+}
+if (settingsPlanLimitBounds) {
+  settingsPlanLimitBounds.addEventListener('change', () => {
+    saveSettings();
   });
 }
 if (settingsPlanSpeed) {
@@ -5638,6 +7047,11 @@ if (settingsPlanThetaSnapStep) {
     saveSettings();
   });
 }
+if (settingsPlanLimitBounds) {
+  settingsPlanLimitBounds.addEventListener('change', () => {
+    saveSettings();
+  });
+}
 if (settingsPlanSpeed) {
   settingsPlanSpeed.addEventListener('input', () => {
     saveSettings();
@@ -5700,8 +7114,8 @@ bindPlanField(
 );
 bindPlanField(
   planSelThetaEl,
-  () => fmtNum(planWaypoints[planSelected]?.theta ?? 0, 1),
-  (v) => { planWaypoints[planSelected].theta = normalizeDeg(v); }
+  () => fmtNum(planThetaDegAt(planSelected), 1),
+  (v) => { planWaypoints[planSelected].theta = planThetaDisplayToRaw(v); }
 );
 
 if (planSelXEl) {
@@ -5716,7 +7130,7 @@ if (planSelThetaEl) {
     if (planSelected < 0 || planSelected >= planWaypoints.length) return;
     const v = Number(planSelThetaEl.value);
     if (isFinite(v)) {
-      planWaypoints[planSelected].theta = normalizeDeg(v);
+      planWaypoints[planSelected].theta = planThetaDisplayToRaw(v);
       updatePlanSelectionPanel();
       requestDrawAll();
     }
@@ -5740,6 +7154,11 @@ offThetaEl.addEventListener('input', () => {
 });
 
 if (watchSort) watchSort.addEventListener('change', () => { renderWatchList(); requestDrawAll(); });
+if (logSort) logSort.addEventListener('change', () => { renderLogList(); });
+if (waypointFilter) waypointFilter.addEventListener('change', () => {
+  renderWaypointList();
+  requestDrawAll();
+});
 
 const btnClearField = document.getElementById('btnClearField');
 
@@ -5753,19 +7172,34 @@ function clearAllPosesAndWatches() {
   // Clear core data
   rawPoses = [];
   watches = [];
+  logs = [];
+  waypoints = [];
+  waypointsById = new Map();
+  selectedWaypointId = null;
+  selectedWaypointEventTime = null;
 
   try { watchMarkers = []; } catch {}
   try { watchByLabel = {}; } catch {}
   try { lastPoseIndex = 0; } catch {}
+  liveLastPoseT = null;
+  liveLastPoseCount = 0;
+  liveLastWatchCount = 0;
+  liveLastRenderAt = 0;
   try { livePendingLines = []; livePendingConsumed = 0; } catch {}
+  setImportedRouteMeta(null);
 
   if (typeof data === "object" && data) {
     data.poses = [];
     data.watches = [];
+    data.logs = [];
+    data.waypoints = [];
   }
 
   try { renderPoseList?.(); } catch {}
   try { renderWatchList?.(); } catch {}
+  try { renderLogList?.(); } catch {}
+  try { renderWaypointFilter?.(); } catch {}
+  try { renderWaypointList?.(); } catch {}
   try { updatePoseReadout?.(); } catch {}
   try { updateFloatingInfo?.(null, 0); } catch {}
   try { requestDrawAll?.(); } catch {}2
@@ -5815,14 +7249,15 @@ document.addEventListener('keydown', (e) => {
 
     if (e.key === 'c' || e.key === 'C') {
       e.preventDefault();
-      if (appMode === "viewing") {
-        if (leftConnected) disconnectLeft();
-        else void connectLeft();
-      }
+      if (appMode !== "viewing") return;
+      if (leftConnected) disconnectLeft();
+      else void connectLeft();
       return;
     }
     if (e.key === 's' || e.key === 'S') {
       e.preventDefault();
+      if (appMode !== "viewing") return;
+
       if (leftConnected) {
         if (!leftStreaming) void startStreaming();
         else void stopStreaming(false);
@@ -5920,17 +7355,18 @@ document.addEventListener('keydown', (e) => {
     const step = getPlanMoveStepIn();
     if (planSelectedSet.size) {
       let dx = 0, dy = 0;
-      if (e.key === "ArrowLeft" && e.shiftKey) dx = -step * 5
+      if (e.key === "ArrowLeft" && e.shiftKey) dx = -step * 5;
       else if (e.key === "ArrowLeft") dx = -step;
 
-      if (e.key === "ArrowRight" && e.shiftKey) dx = step * 5
+      if (e.key === "ArrowDown" && e.shiftKey) dy = -step * 5;
+      else if (e.key === "ArrowDown") dy = -step;
+
+      if (e.key === "ArrowRight" && e.shiftKey) dx = step * 5;
       else if (e.key === "ArrowRight") dx = step;
 
-      if (e.key === "ArrowUp" && e.shiftKey) dy = step * 5
+      if (e.key === "ArrowUp" && e.shiftKey) dy = step * 5;
       else if (e.key === "ArrowUp") dy = step;
 
-      if (e.key === "ArrowDown" && e.shiftKey) dy = -step * 5
-      else if (e.key === "ArrowDown") dy = -step;
       if (dx !== 0 || dy !== 0) {
         e.preventDefault();
         pushPlanUndo();
@@ -5978,6 +7414,10 @@ document.addEventListener('keydown', (e) => {
     clearTrackHover(true);
     clearTrackLock();
     selectedWatch = null;
+    selectedLogTime = null;
+    selectedWaypointId = null;
+    selectedWaypointEventTime = null;
+    highlightWaypointInList(null, null, false);
     selectedIndex = Math.max(0, selectedIndex-1);
     highlightPoseInList();
     updatePoseReadout();
@@ -5989,6 +7429,10 @@ document.addEventListener('keydown', (e) => {
     clearTrackHover(true);
     clearTrackLock();
     selectedWatch = null;
+    selectedLogTime = null;
+    selectedWaypointId = null;
+    selectedWaypointEventTime = null;
+    highlightWaypointInList(null, null, false);
     selectedIndex = Math.min(rawPoses.length-1, selectedIndex+1);
     highlightPoseInList();
     updatePoseReadout();
@@ -5997,24 +7441,46 @@ document.addEventListener('keydown', (e) => {
 });
 
 // -------- init --------
+await initPosthogTelemetry(); 
 loadFieldOptions();
 void loadSettings();
-void initPosthogTelemetry();
 void loadSavedPaths();
 setMode("viewing");
 
 async function appExit() {
-  try { await saveSettings(); } 
-  catch (err) { console.error("Failed to save settings during exit:", err); }
+  try {
+    if (robotImageDataUrl && invoke && !robotImagePath) {
+      try {
+        const savedPath = await invoke('save_robot_image', { dataUrl: robotImageDataUrl });
+        if (savedPath) robotImagePath = savedPath;
+      } catch (e) {
+        console.warn('Failed to persist robot image during exit:', e);
+      }
+    }
+    await saveSavedPathsNow();
+    await saveSettings();
+  } catch (err) {}
 
   await captureTelemetry("total_streaming_duration", {
     version: APP_VERSION, 
-    duration: streamingAccumulatedMs,
+    duration: fmtNum(streamingAccumulatedMs / 1000, 1),
   });
+
+  await captureTelemetry("livestream_metrics", {
+    version: APP_VERSION,
+    totalPosesRecived: telemetryMetrics.totalPosesRecived,
+    totalLogsRecived: telemetryMetrics.totalLogsRecived,
+    totalWatchesRecived: telemetryMetrics.totalWatchesRecived,
+    totalWaypointsRecived: telemetryMetrics.totalWaypointsRecived,
+  });
+
+  const uptime = fmtNum(performance.now() / 1000, 2) > 60 
+                 ? fmtNum(performance.now() / 1000 / 60, 2) 
+                 : fmtNum(performance.now() / 1000, 2);
 
   await captureTelemetry("app_exit", {
     version: APP_VERSION, 
-    uptime: Number(fmtNum(performance.now() / 1000, 2)),
+    uptime: Number(uptime),
   });
 
 }
@@ -6079,11 +7545,24 @@ window.addEventListener('resize', () => {
   updateFieldLayout(true); // keep bounds, recompute square sizing
   resizeTimeline();
   resizePlanningTimeline();
+  scheduleTopBarStatusLayout();
 });
+
+if (typeof ResizeObserver === "function") {
+  const topBarResizeObserver = new ResizeObserver(() => {
+    scheduleTopBarStatusLayout();
+  });
+  if (topBarEl) topBarResizeObserver.observe(topBarEl);
+  if (topBarContentEl) topBarResizeObserver.observe(topBarContentEl);
+  if (topBarLeftEl) topBarResizeObserver.observe(topBarLeftEl);
+  if (topBarCenterEl) topBarResizeObserver.observe(topBarCenterEl);
+  if (topBarRightEl) topBarResizeObserver.observe(topBarRightEl);
+}
 
 updateFieldLayout(false);
 resizeTimeline();
 resizePlanningTimeline();
+scheduleTopBarStatusLayout();
 if (robotImgControlsEl) robotImgControlsEl.hidden = true;
 if (settingsRobotImgControls) settingsRobotImgControls.hidden = true;
 syncRobotImgTxFromInputs();
