@@ -214,6 +214,13 @@ details>summary::-webkit-details-marker {
   font-weight: 800;
 }
 
+.pill.logSystemPill {
+  background: rgba(255, 255, 255, 0.08);
+  color: #cfd9e6;
+  border-color: rgba(255, 255, 255, 0.14);
+  font-weight: 800;
+}
+
 .grid2 {
   display: grid;
   grid-template-columns: 1fr 1fr;

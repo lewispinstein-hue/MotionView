@@ -260,33 +260,38 @@ function updateTopBarStatusLayout() {
   if (!topBarEl || !topBarContentEl || !topBarLeftEl || !topBarCenterEl || !topBarRightEl || !statusEl) return;
 
   const fullText = statusEl.dataset.fullText ?? statusEl.textContent ?? "";
-  statusEl.textContent = fullText;
+  
+  const wasOverflowing = topBarEl.classList.contains("isOverflowing");
   statusEl.style.maxWidth = "";
+  statusEl.textContent = fullText;
 
   const contentStyle = getComputedStyle(topBarContentEl);
-  const gap = parseFloat(contentStyle.columnGap || contentStyle.gap || "0") || 0;
+  const gap = parseFloat(contentStyle.columnGap || "8") || 0;
   const padLeft = parseFloat(contentStyle.paddingLeft || "0") || 0;
   const padRight = parseFloat(contentStyle.paddingRight || "0") || 0;
+
   const centerWidth = Math.ceil(topBarCenterEl.getBoundingClientRect().width);
-  const leftWidth = Math.ceil(topBarLeftEl.getBoundingClientRect().width);
-  const rightWidth = Math.ceil(topBarRightEl.getBoundingClientRect().width);
+  const leftWidth   = Math.ceil(topBarLeftEl.getBoundingClientRect().width);
+  const rightWidth  = Math.ceil(topBarRightEl.getBoundingClientRect().width);
+
   const requiredWidth = leftWidth + centerWidth + rightWidth + padLeft + padRight + (gap * 2);
-  const isOverflowing = requiredWidth > (topBarEl.clientWidth + 1);
+  
+  // Use a larger buffer if we are already overflowing
+  const buffer = wasOverflowing ? -5 : 15; 
+  const isOverflowing = requiredWidth > (topBarEl.clientWidth - buffer);
 
   topBarEl.classList.toggle("isOverflowing", isOverflowing);
 
   if (isOverflowing) {
-    statusEl.style.maxWidth = "";
     statusEl.textContent = truncateTopBarStatus(fullText);
     statusEl.title = fullText;
-    return;
+  } else {
+    const centerRect = topBarCenterEl.getBoundingClientRect();
+    const statusRect = statusEl.getBoundingClientRect();
+    const available = Math.floor(centerRect.left - statusRect.left - 24);
+    if (available > 0) statusEl.style.maxWidth = `${available}px`;
+    statusEl.title = statusEl.scrollWidth > statusEl.clientWidth ? fullText : "";
   }
-
-  const centerRect = topBarCenterEl.getBoundingClientRect();
-  const statusRect = statusEl.getBoundingClientRect();
-  const available = Math.floor(centerRect.left - statusRect.left - 18);
-  if (available > 0) statusEl.style.maxWidth = `${available}px`;
-  statusEl.title = statusEl.scrollWidth > statusEl.clientWidth ? fullText : "";
 }
 
 const scheduleTopBarStatusLayout = (() => {
@@ -356,6 +361,7 @@ const btnExportConfirm = document.getElementById('btnExportConfirm');
 const routeInfoModal = document.getElementById('routeInfoModal');
 const btnRouteInfoClose = document.getElementById('btnRouteInfoClose');
 const routeInfoList = document.getElementById('routeInfoList');
+const btnApplyRunSettings = document.getElementById('btnApplyRunSettings');
 
 // Settings modal elements
 const btnSettings = document.getElementById('btnSettings');
@@ -418,8 +424,10 @@ let backendReadyLastCheckAt = 0;
 
 // --- FIELD IMAGES ---
 const FIELD_IMAGES = [
-  { key: "./assets/match_field_2025-2026_pushback.png", label: "Match Field (V5 Pushback)" },
-  { key: "./assets/skills_field_2025-2026_pushback.png", label: "Skills Field (V5 Pushback)" },
+  { key: "./assets/fields/v5_match_field_2025-2026_pushback.png", label: "Match Field (V5 Pushback)" },
+  { key: "./assets/fields/v5_skills_field_2025-2026_pushback.png", label: "Skills Field (V5 Pushback)" },
+  { key: "./assets/fields/vU_field_2025-2026_pushback.png", label: "VexU Field (VU Pushback)" },
+  { key: "./assets/fields/v5_field_perimeter.png", label: "Field Perimeter (V5 Pushback)" },
 ];
 
 // Default field image
@@ -432,17 +440,17 @@ const MAX_OFFSET_THETA = 359;
 
 const WATCH_TOL_MS = 60; // Controls the ± time that determines which pose a watch attaches to
 const COLLAPSE_PX_TIMELINE = 130; // When the timeline collapses away
-const COLLAPSE_PX_SIDEBAR = 282; 
+const COLLAPSE_PX_SIDEBAR = 282;  // When the right sidebar collapses away
 const COLLAPSE_WAYPOINTLIST_PX = 5;
 
 const COLLAPSE_PX_LEFTSIDEBAR = 210; // When the left sidebar collapses away
 const MAX_PX_LIVEWIN = 800; // Max width for left live window panel
 
 const MAX_TIMELINE_H_PX = 350; // Height at which timeline stops growing
-const MAX_SIDEBAR_W_PX = 550; // Width at which sidebar stops growing
-const MAX_PLAN_UNDO = 50;
+const MAX_SIDEBAR_W_PX = 550;  // Width at which sidebar stops growing
+const MAX_PLAN_UNDO = 50;      // Max number of undo steps
 
-const HOVER_PIXEL_TOL = 14;
+const HOVER_PIXEL_TOL = 14;    
 const TRACK_HOVER_PAD_PX = 12; // How close to the track before snapping on
 
 const OFFSET_MAX = 100; // Max offset in either direction
@@ -1759,7 +1767,7 @@ function loadFieldOptions() {
     console.warn('fieldSelect element not found');
     return;
   }
-  fieldSelect.innerHTML = `<option value="none">No field image</option>`;
+  fieldSelect.innerHTML = "";
   for (const f of FIELD_IMAGES) {
     const opt = document.createElement('option');
     opt.value = f.key;
@@ -1769,19 +1777,18 @@ function loadFieldOptions() {
 }
 
 async function loadFieldImage(filename) {
-  if (!filename) { fieldImg = null; draw(); return; }
+  const nextField = FIELD_IMAGES.some((field) => field.key === filename) ? filename : DEFAULT_FIELD_KEY;
   const img = new Image();
   img.onload = () => { fieldImg = img; draw(); };
   img.onerror = () => {
     fieldImg = null; 
     draw();
-    if (filename == "none") return; // No field image is 'none' 
-    setStatus(`Could not load field image: ${filename}`); 
+    setStatus(`Could not load field image: ${nextField}`); 
   };
-  img.src = filename;
+  img.src = nextField;
   await captureTelemetry("field_image_loaded", { 
     version: APP_VERSION, 
-    field: filename,
+    field: nextField,
   }, { debounceMs: 1500 });
 }
 
@@ -1814,11 +1821,10 @@ function drawFirstField() {
     console.warn('fieldSelect not available for drawFirstField');
     return;
   }
-  const defaultField = FIELD_IMAGES.find(f => f.key === DEFAULT_FIELD_KEY);
   
-  if (defaultField && fieldSelect) {
-    fieldSelect.value = defaultField.key; 
-    loadFieldImage(defaultField.key); 
+  if (DEFAULT_FIELD_KEY && fieldSelect) {
+    fieldSelect.value = DEFAULT_FIELD_KEY; 
+    loadFieldImage(DEFAULT_FIELD_KEY); 
   }
 }
 
@@ -1917,20 +1923,34 @@ function normalizeLogs(arr) {
     const t = toNumMaybe(tRaw);
     if (t == null) continue;
 
-    const message = String(entry.message ?? entry.value ?? entry.val ?? "").trim();
-    if (!message) continue;
+    const parsed = normalizeSystemLogMessage(entry.message ?? entry.value ?? entry.val ?? "");
+    if (!parsed.message) continue;
 
     out.push({
       t,
       level: normalizeLogLevel(entry.level ?? entry.lvl ?? entry.severity ?? "INFO"),
       label: entry.label ?? "",
-      value: message,
-      message,
+      value: parsed.message,
+      message: parsed.message,
+      isSystem: parsed.isSystem,
     });
   }
 
   out.sort((a, b) => a.t - b.t);
   return out;
+}
+
+function normalizeSystemLogMessage(rawMessage) {
+  const text = String(rawMessage ?? "").trim();
+  if (!text) return { message: "", isSystem: false };
+  const prefix = "[MVLIB] ";
+  if (text.startsWith(prefix)) {
+    return {
+      message: text.slice(prefix.length).trim(),
+      isSystem: true,
+    };
+  }
+  return { message: text, isSystem: false };
 }
 
 function normalizeWaypointType(typeRaw) {
@@ -2225,6 +2245,7 @@ function jumpToEventTime(tMs, {
     selectedIndex = findFloorIndexByTime(tMs);
     if (typeof interpolatedStatus === "function") interpolatedStatus();
   }
+  lastPoseIndex = selectedIndex;
 
   pause();
   hoverTimelineTime = null;
@@ -2402,12 +2423,18 @@ function renderLogList() {
 
   for (const entry of items) {
     const st = levelStyle(entry.level);
+    const systemPill = entry.isSystem
+      ? '<span class="pill logSystemPill">SYSTEM</span>'
+      : '';
     const div = document.createElement("div");
     div.className = "watchItem";
     div.dataset.t = String(entry.t);
     div.innerHTML = `
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
-        <span class="pill level" style="background:${st.fill};color:${st.text}">${escapeHtml(st.name)}</span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span class="pill level" style="background:${st.fill};color:${st.text}">${escapeHtml(st.name)}</span>
+          ${systemPill}
+        </div>
         <div class="muted">${entry.t != null ? (String(fmtNum(entry.t / 1000, 2)) + "s") : "—"}</div>
       </div>
       <div class="bigValue">${escapeHtml(String(entry.message ?? entry.value ?? ""))}</div>
@@ -2516,8 +2543,9 @@ function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
     pause();
     hoverTimelineTime = null;
     timelineHoverSaved = null;
-    selectedIndex = poseIdx;
-    highlightPoseInList();
+      selectedIndex = poseIdx;
+      lastPoseIndex = selectedIndex;
+      highlightPoseInList();
     updatePoseReadout();
     requestDrawAll();
     setStatus(`Waypoint: ${waypoint.name || waypoint.id} mapped to pose @${rawPoses[poseIdx].t}ms.`);
@@ -2637,6 +2665,7 @@ function renderPoseList() {
       highlightWaypointInList(null, null, false);
       selectedIndex = i;
       if (leftConnected && leftStreaming) liveAutoFollowHead = false;
+      lastPoseIndex = selectedIndex;
       setStatus(`Jumped to pose #${i+1}.`);
       highlightPoseInList();
       updatePoseReadout();
@@ -4002,7 +4031,7 @@ timelineCanvas.addEventListener("mousedown", (e) => {
 
   const t = xToTime(x);
   selectedIndex = findFloorIndexByTime(t);
-  lastPoseIndex = selectedWatch;
+  lastPoseIndex = selectedIndex;
   hoverTimelineTime = null;
   timelineHoverSaved = null;
 
@@ -4141,6 +4170,7 @@ canvas.addEventListener('click', (e) => {
     trackLockIndex = hit.nearestIdx;
 
     selectedIndex = hit.nearestIdx;
+    lastPoseIndex = selectedIndex;
     clearTrackHover(false);
     trackHoverSavedIndex = null;
 
@@ -4360,14 +4390,15 @@ function parseLiveLineIntoState(line) {
     if (parts.length < 4) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
     const t = toNumMaybe(parts[1]);
     if (t == null) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-    const message = parts.slice(3).join(",").trim();
-    if (!message) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
+    const parsed = normalizeSystemLogMessage(parts.slice(3).join(","));
+    if (!parsed.message) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
     logs.push({
       t,
       level: normalizeLogLevel(parts[2]),
       label: "",
-      value: message,
-      message,
+      value: parsed.message,
+      message: parsed.message,
+      isSystem: parsed.isSystem,
     });
     telemetryMetrics.totalLogsRecived += 1;
     return { posesAdded: 0, watchesAdded: 0, logsAdded: 1, waypointsAdded: 0 };
@@ -5575,8 +5606,11 @@ async function loadSettings() {
         playRate = Number(speedSelect.value) || 1;
       }
       if (settings.selectedField !== undefined && fieldSelect) {
-        fieldSelect.value = settings.selectedField;
-        loadFieldImage(settings.selectedField);
+        const nextField = FIELD_IMAGES.some((field) => field.key === settings.selectedField)
+          ? settings.selectedField
+          : DEFAULT_FIELD_KEY;
+        fieldSelect.value = nextField;
+        loadFieldImage(nextField);
       }
       if (settings.robotImgScale !== undefined) {
         robotImgTx.scale = settings.robotImgScale;
@@ -5972,8 +6006,8 @@ function buildExportMetadata(PathName) {
       WaypointEvents: waypointEventCount(waypoints),
     },
     Times: {
-      StartTime: String(fmtNum(poseStart / 1000, 2)) + "ms",
-      EndTimeMs: String(fmtNum(poseEnd / 1000, 2)) + "ms",
+      StartTime: String(fmtNum(poseStart / 1000, 2)) + "s",
+      EndTime: String(fmtNum(poseEnd / 1000, 2)) + "s",
       DurationTimeMs: (typeof poseStart === 'number' && typeof poseEnd === 'number') ? Math.max(0, poseEnd - poseStart) : null,
     },
     ViewingSettings: {
@@ -6080,7 +6114,66 @@ function setImportedRouteMeta(meta) {
   if (btnRouteInfo) {
     btnRouteInfo.disabled = !importedRouteMeta;
   }
+  if (btnApplyRunSettings) {
+    btnApplyRunSettings.disabled = !importedRouteMeta?.ViewingSettings;
+  }
   renderRouteInfoList();
+}
+
+async function applyImportedRunSettings() {
+  const viewing = importedRouteMeta?.ViewingSettings;
+  if (!viewing || typeof viewing !== 'object') {
+    setStatus('No run settings were found in this route metadata.');
+    return;
+  }
+
+  if (viewing.Units !== undefined) {
+    const nextUnits = inferUnitsFromMeta(viewing.Units);
+    if (unitsSelect) unitsSelect.value = nextUnits;
+    if (settingsUnitsSelect) settingsUnitsSelect.value = nextUnits;
+    setUnitsFactorFromSelect(nextUnits);
+  }
+
+  if (viewing.SelectedField !== undefined && fieldSelect) {
+    const nextField = FIELD_IMAGES.some((field) => field.key === viewing.SelectedField)
+      ? viewing.SelectedField
+      : DEFAULT_FIELD_KEY;
+    fieldSelect.value = nextField;
+    await loadFieldImage(nextField);
+  }
+
+  const pathOffsets = (viewing.PathOffsets && typeof viewing.PathOffsets === 'object') ? viewing.PathOffsets : null;
+  if (pathOffsets) {
+    if (offXEl) offXEl.value = String(toNumMaybe(pathOffsets.X) ?? 0);
+    if (offYEl) offYEl.value = String(toNumMaybe(pathOffsets.Y) ?? 0);
+    if (offThetaEl) offThetaEl.value = String(toNumMaybe(pathOffsets.Theta) ?? 0);
+  }
+
+  const robotDimensions = (viewing.RobotDimensions && typeof viewing.RobotDimensions === 'object') ? viewing.RobotDimensions : null;
+  if (robotDimensions) {
+    if (robotWEl) robotWEl.value = String(toNumMaybe(robotDimensions.Width) ?? robotWEl.value ?? 12);
+    if (robotHEl) robotHEl.value = String(toNumMaybe(robotDimensions.Height) ?? robotHEl.value ?? 12);
+  }
+
+  const speedNorm = (viewing.SpeedNorm && typeof viewing.SpeedNorm === 'object') ? viewing.SpeedNorm : null;
+  if (speedNorm) {
+    if (minSpeedEl) minSpeedEl.value = String(toNumMaybe(speedNorm.Minimum) ?? 0);
+    if (maxSpeedEl) maxSpeedEl.value = String(toNumMaybe(speedNorm.Maximum) ?? 127);
+  }
+
+  sanitizeOffsetInputs();
+  syncMainToSettings();
+  updateOffsetsFromInputs();
+  computeSpeedNorm();
+  renderPoseList();
+  renderWatchList();
+  renderLogList();
+  renderWaypointFilter();
+  renderWaypointList();
+  updatePoseReadout();
+  requestDrawAll();
+  await saveSettings();
+  setStatus('Applied run settings from imported metadata.');
 }
 
 function openRouteInfoModal() {
@@ -6236,6 +6329,14 @@ if (btnRouteInfoClose) {
   });
 } else {
   console.warn('btnRouteInfoClose element not found');
+}
+
+if (btnApplyRunSettings) {
+  btnApplyRunSettings.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void applyImportedRunSettings();
+  });
 }
 
 if (btnExportCancel) {
@@ -7419,6 +7520,7 @@ document.addEventListener('keydown', (e) => {
     selectedWaypointEventTime = null;
     highlightWaypointInList(null, null, false);
     selectedIndex = Math.max(0, selectedIndex-1);
+    lastPoseIndex = selectedIndex;
     highlightPoseInList();
     updatePoseReadout();
     requestDrawAll();
@@ -7434,6 +7536,7 @@ document.addEventListener('keydown', (e) => {
     selectedWaypointEventTime = null;
     highlightWaypointInList(null, null, false);
     selectedIndex = Math.min(rawPoses.length-1, selectedIndex+1);
+    lastPoseIndex = selectedIndex;
     highlightPoseInList();
     updatePoseReadout();
     requestDrawAll();

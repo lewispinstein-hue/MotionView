@@ -1,30 +1,15 @@
 #include "pros/rtos.hpp"
 #include "mvlib/core.hpp"
-#include "mvlib/logMacros.h"
+#include "mvlib/private/forwardLogMacros.h"
 #include "mvlib/config.hpp"
 #include <cstdarg>
 #include <cstdint>
 #include <cstring>
-#include <sys/stat.h> 
 #include <random>
-
-#ifdef MVLIB_LOGS_REDEFINED
-#undef LOG_DEBUG
-#undef LOG_INFO
-#undef LOG_WARN
-#undef LOG_ERROR
-#undef LOG_FATAL
-
-#define LOG_DEBUG MVLIB_LOG_DEBUG
-#define LOG_INFO MVLIB_LOG_INFO
-#define LOG_WARN MVLIB_LOG_WARN
-#define LOG_ERROR MVLIB_LOG_ERROR
-#define LOG_FATAL MVLIB_LOG_FATAL
-#endif
 
 namespace mvlib {
 
-int getrandInt(const uint32_t min, const uint32_t max) {
+uint32_t getrandInt(const uint32_t min, const uint32_t max) {
   /**
     * @note This method of generation is needed because the v5 brain is 
     *       completely deterministic. Using std::rand or std::random_device
@@ -33,7 +18,7 @@ int getrandInt(const uint32_t min, const uint32_t max) {
 
   uint64_t seed = pros::micros();
   seed ^= (uint64_t)pros::battery::get_voltage() << 32;
-  seed &= [&]() -> uint64_t {
+  seed &= [&]() mutable -> uint64_t {
     seed += 0x9e3779b97f4a7c15ULL;
     uint64_t z = seed;
     z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
@@ -55,43 +40,43 @@ std::string Logger::m_getTimestampedFile() {
   static char filename[128];
   
   // Add random variance to filename to avoid overwriting existing files
-  const int randInt = getrandInt(0, 99999);
-  LOG_DEBUG("Got Random Int: %05u", randInt);
+  const uint32_t randInt = getrandInt(0, 99999);
+  _MVLIB_FORWARD_DEBUG("Got Random Int: %d", randInt);
 
   if (tstruct->tm_year < 100) {
-    LOG_INFO("VEX RTC Inaccurate. Falling back to program duration and last upload date.");
+    _MVLIB_FORWARD_INFO("VEX RTC Inaccurate. Falling back to program duration and last upload date.");
     // Use last upload and random number
-    snprintf(filename, sizeof(filename), "/usd/MVLIB_%s_%u-%u_%05u.log",
+    snprintf(filename, sizeof(filename), "/usd/MVLIB_%s_%u-%u_%d.log",
              date, pros::millis() / 1000, pros::millis() / 100, randInt);
   } else {
-    LOG_INFO("VEX RTC Plausible. Creating file name with date.");
+    _MVLIB_FORWARD_INFO("VEX RTC Plausible. Creating file name with date.");
     char timeBuf[64];
     strftime(timeBuf, sizeof(timeBuf),
              "/usd/MVLIB_%Y-%m-%d_%H-%M", tstruct); // Get time
     // Attach random number
-    snprintf(filename, sizeof(filename), "%s_%05u.log", timeBuf, randInt); 
+    snprintf(filename, sizeof(filename), "%s_%d.log", timeBuf, randInt); 
   }
   return filename;
 } 
 
 bool Logger::m_initSDLogger() {
   if (pros::usd::is_installed()) {
-    LOG_DEBUG("SD Card installed (On first attempt)");
+    _MVLIB_FORWARD_DEBUG("SD Card installed (On first attempt)");
     pros::delay(500);
   } else {
-    LOG_DEBUG("SD Card not installed, rechecking...");
+    _MVLIB_FORWARD_DEBUG("SD Card not installed, rechecking...");
     for (int i = 0; i < 10; i++) {
       if (pros::usd::is_installed()) {
-        LOG_DEBUG("SD Card installed! Attempt: %d/10", i);
+        _MVLIB_FORWARD_DEBUG("SD Card installed! Attempt: %d/10", i);
         break;
       }
-      LOG_DEBUG("Rechecking SD card installment... Attempts: %d/10", i);
+      _MVLIB_FORWARD_DEBUG("Rechecking SD card installment... Attempts: %d/10", i);
       pros::delay(200);
     }
   }
 
   if (!pros::usd::is_installed()) {
-    LOG_FATAL("SD Card not installed after 10 attemps. Aborting SD card.");
+    _MVLIB_FORWARD_FATAL("SD Card not installed after 10 attemps. Aborting SD card.");
     return false;
   }
 
@@ -102,10 +87,10 @@ bool Logger::m_initSDLogger() {
 
   m_sdFile = fopen(m_currentFilename, "w");
   if (!m_sdFile) {
-    LOG_FATAL("File: %s could not be opened. Aborting.", m_currentFilename);
+    _MVLIB_FORWARD_FATAL("File: %s could not be opened. Aborting.", m_currentFilename);
     return false;
   }
-  LOG_DEBUG("File successfully opened.");
+  _MVLIB_FORWARD_DEBUG("File successfully opened.");
   fprintf(m_sdFile, "|———| Logger initialized at %.2fs |———|\n", pros::millis() / 1000.0);
   fflush(m_sdFile);
   return true;

@@ -1,6 +1,5 @@
 #include "pros/rtos.hpp"
 #include "mvlib/core.hpp"
-#include "mvlib/logMacros.h"
 #include "mvlib/config.hpp"
 #include "mvlib/private/forwardLogMacros.h"
 #include <cmath>
@@ -103,7 +102,8 @@ void Logger::start() {
       // Update loop
       try { this->Update(); }
       catch (std::exception &e) {
-        _MVLIB_FORWARD_FATAL("%s", e.what());
+        _MVLIB_FORWARD_FATAL("MVLib Update loop exception: %s", e.what());
+        return;
       }
 
       // Flush stdout buffer, and wait appropriate time

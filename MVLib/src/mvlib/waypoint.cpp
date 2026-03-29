@@ -13,18 +13,6 @@
 #endif
 
 namespace mvlib {
-
-/**
- * @brief Helper to format offsets using snprintf to avoid stack/heap crashes.
- * Swapped from std::string return to buffer-based for safety.
- */
-static void formatOffsetSafe(char* buf, size_t len, const WaypointOffset& off) {
-  snprintf(buf, len, "%.2f,%.2f,%s,%s",
-           off.offX, off.offY,
-           off.offT.has_value() ? std::to_string(off.offT.value()).c_str() : "NA",
-           off.remainingTimeout.has_value() ? std::to_string(off.remainingTimeout.value()).c_str() : "NA");
-}
-
 WaypointOffset Logger::getWaypointOffset(WPId id) {
   auto it = std::find_if(m_waypoints.begin(), m_waypoints.end(),
                          [id](const InternalWaypoint& ic) { return ic.id == id; });
@@ -76,6 +64,7 @@ WaypointOffset Logger::getWaypointOffset(WPId id) {
 WaypointParams Logger::getWaypointParams(WPId id) {
   auto it = std::find_if(m_waypoints.begin(), m_waypoints.end(),
                           [id](const InternalWaypoint& ic) { return ic.id == id; });
+  if (it == m_waypoints.end()) return {};
   return it->params;
 }
 
@@ -128,9 +117,16 @@ WaypointHandle Logger::addWaypoint(std::string name, WaypointParams details) {
   InternalWaypoint wp;
   wp.id = id;
   wp.name = std::move(name);
-  wp.params = details;
   wp.startTimeMs = pros::millis();
   wp.active = true;
+
+  if (details.tarT.has_value() && !details.thetaTol.has_value()) 
+    details.thetaTol = details.linearTol;
+
+  if (!details.tarT.has_value() && details.thetaTol.has_value())
+   details.thetaTol = std::nullopt;
+
+  wp.params = details;
 
   // Use the ID before moving wp into the vector
   m_waypoints.push_back(std::move(wp));

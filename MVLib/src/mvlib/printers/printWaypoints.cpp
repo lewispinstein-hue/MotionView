@@ -9,6 +9,18 @@
 #endif
 
 namespace mvlib {
+static int formatOffset(char *buf, size_t len, const WaypointOffset& off) {
+  if (!buf) return -1;
+  if (len < 128) return -2;
+
+  snprintf(buf, len, "%.2f,%.2f,%s,%s",
+           off.offX, off.offY,
+           off.offT.has_value() ? std::to_string(off.offT.value()).c_str() : "NA",
+           off.remainingTimeout.has_value() ? std::to_string(off.remainingTimeout.value()).c_str() : "NA");
+
+  return 0;
+}
+
 void Logger::printWaypoints() {
   unique_lock lock(m_mutex);
   if (!lock.isLocked()) return;
@@ -24,14 +36,12 @@ void Logger::printWaypoints() {
     bool prevReached = isPrevReached(wp.id);
     std::optional<uint32_t> printEveryMs = wp.params.logOffsetEveryMs;
     
-    snprintf(buffer, sizeof(buffer), "%.2f,%.2f,%.2f,%d",
-              off.offX, off.offY,
-              off.offT.value_or(0.0), off.remainingTimeout.value_or(0));
+    if (formatOffset(buffer, sizeof(buffer), off) < 0) continue;
               
     if ((off.reached && !prevReached) || (off.reached && !perpetual)) {
       LOG_INFO("[WPOINT],%u,REACHED,%" PRIu64 ",%s,%s", nowMs, wp.id, wp.name.c_str(), buffer);
       prevReached = true;
-      wp.active = !perpetual; // Dynamic based on if perpetual
+      wp.active = perpetual; // Dynamic based on if perpetual
     } else if (!off.reached && prevReached) {
       prevReached = false;
     } else if (off.timedOut.value_or(false)) {

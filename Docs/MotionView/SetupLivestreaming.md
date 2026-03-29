@@ -41,4 +41,4 @@ The **PROS-CLI Path** is the path to your `pros` executable file. It's what allo
 PROS is needed because of the terminal interface. Because `pros terminal`, run anywhere, always does the same action, it is very easy to get consistent connections and behavior using it. While it may be possible to use VEXCode (or any non-PROS platform), piping the terminal into MotionView is not easily done.
 
 ## Live Streaming
-Once you have a connection between MotionView and your computer, the easiest way to bridge your robot and MotionView is to use [MVLib](../../MVLib/README.md). Using MVLib ensures full functionality and accurate logging. If you don't want to use MVLib, you may need help setting up a bridge. A guide for making your own Robot -> MotionView bridge is in the works.
+Once you have a connection between MotionView and your computer, the easiest way to bridge your robot and MotionView is to use [MVLib](../../MVLib/README.md). Using MVLib ensures full functionality and accurate logging. If you don't want to use MVLib, you may need help setting up a bridge. If you want to make your own logger, see [here](./MotionViewAPI.md).md.

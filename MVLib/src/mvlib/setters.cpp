@@ -44,6 +44,7 @@ void Logger::setLoggerMinLevel(LogLevel level) {
 void Logger::setPoseGetter(std::function<std::optional<Pose>()> getter) {
   unique_lock m(m_mutex, TIMEOUT_MAX);
   if (!m.isLocked() || !getter) return;
+  _MVLIB_FORWARD_DEBUG("Set poseGetter callback. Address: %p", (void*)&getter);
   m_getPose = std::move(getter);
 }
 } // namespace mvlib

@@ -21,7 +21,7 @@ void Logger::debug(const char *fmt, ...) {
     printf("[LOG],%d,DEBUG,%s\n", time, buffer);
 
   if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
-    logToSD("DEBUG", "[LOG],%d,DEBUG,%s", time, buffer);
+    logToSD("", "[LOG],%d,DEBUG,%s", time, buffer);
   }
 }
 
@@ -43,7 +43,7 @@ void Logger::info(const char *fmt, ...) {
     printf("[LOG],%d,INFO,%s\n", time, buffer);
 
   if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
-    logToSD("INFO", "[LOG],%d,INFO,%s", time, buffer);
+    logToSD("", "[LOG],%d,INFO,%s", time, buffer);
   }
 }
 
@@ -65,7 +65,7 @@ void Logger::warn(const char *fmt, ...) {
     printf("[LOG],%d,WARN,%s\n", time, buffer);
 
   if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
-    logToSD("WARN", "[LOG],%d,WARN,%s", time, buffer);
+    logToSD("", "[LOG],%d,WARN,%s", time, buffer);
   }
 }
 
@@ -87,7 +87,7 @@ void Logger::error(const char *fmt, ...) {
     printf("[LOG],%d,ERROR,%s\n", time, buffer);
 
   if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
-    logToSD("ERROR", "[LOG],%d,ERROR,%s", time, buffer);
+    logToSD("", "[LOG],%d,ERROR,%s", time, buffer);
   }
 } 
 
@@ -109,7 +109,7 @@ void Logger::fatal(const char *fmt, ...) {
     printf("[LOG],%d,FATAL,%s\n", time, buffer);
 
   if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
-    logToSD("FATAL", "[LOG],%d,FATAL,%s", time, buffer);
+    logToSD("", "[LOG],%d,FATAL,%s", time, buffer);
   }
 } 
 } // namespace mvlib

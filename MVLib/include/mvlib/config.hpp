@@ -11,7 +11,7 @@
 #include "literals.hpp"
 
 namespace mvlib {
-#define __MVLIB_CONFIGURABLE static constexpr auto
+#define __MVLIB_CONFIGURABLE static constexpr uint32_t
 
 namespace detail {
 using namespace mvlib::literals;
