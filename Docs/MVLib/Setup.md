@@ -30,7 +30,7 @@ For most teams, the only header you need to include directly is:
 #include "mvlib/api.hpp"
 ```
 
-`mvlib/api.hpp` is the convenience header. It pulls in the logger, log macros, config values, checkpoints, and MVLib time literals.
+`mvlib/api.hpp` is the convenience header. It pulls in the logger, log macros, config values, waypoints, and MVLib time literals.
 
 **Optional shorthand:** If you want shorter code, define `MVLIB_USE_SIMPLES` before the include:
 
@@ -52,7 +52,7 @@ If you skip odometry, MVLib still gives you:
 - Watches
 - Drivetrain velocity telemetry
 
-If you do attach odometry (highly recommended), MotionView can also draw the robot path, show pose over time, and sync logs, watches, and checkpoints to your robot.
+If you do attach odometry (highly recommended), MotionView can also draw the robot path, show pose over time, and sync logs, watches, and waypoints to your robot.
 
 ## 4. Attach Odometry
 **Rule: include only one adapter**
@@ -172,9 +172,9 @@ Once setup is done, start the logger once:
 logger.start();
 ```
 
-`start()` launches MVLib's background task. That task handles telemetry output, watch polling, MotionView-formatted logging, SD logging when enabled, and checkpoint reporting.
+`start()` launches MVLib's background task. That task handles telemetry output, watch polling, MotionView-formatted logging, SD logging when enabled, and waypoint reporting.
 
-Configure odometry, drivetrain references, watches, and checkpoints before calling `start()`.
+Configure odometry, drivetrain references, watches, and waypoints before calling `start()`.
 
 ## 7. Recommended Setup Examples
 
@@ -204,7 +204,7 @@ void initialize() {
 }
 ```
 
-That setup gives you robot path rendering in MotionView, telemetry output, drivetrain speed data, and a base you can extend with watches and checkpoints.
+That setup gives you robot path rendering in MotionView, telemetry output, drivetrain speed data, and a base you can extend with watches and waypoints.
 
 If your robot does not have odometry yet, a smaller setup still works:
 
@@ -227,7 +227,7 @@ void initialize() {
 }
 ```
 
-That version will not produce a robot path, but you still get logs, watches, checkpoints, and drivetrain-based telemetry.
+That version will not produce a robot path, but you still get logs, watches, waypoints, and drivetrain-based telemetry.
 
 ## 8. Add a First Watch
 
@@ -261,7 +261,7 @@ logger.setLogToTerminal(true);
 logger.setLogToSD(true);
 logger.setPrintTelemetry(true);
 logger.setPrintWatches(true);
-logger.setPrintCheckpoints(true);
+logger.setPrintWaypoints(true);
 logger.setLoggerMinLevel(mvlib::LogLevel::INFO);
 ```
 
@@ -269,7 +269,7 @@ logger.setLoggerMinLevel(mvlib::LogLevel::INFO);
 - `setLogToSD(bool)` enables or disables SD logging
 - `setPrintTelemetry(bool)` enables or disables telemetry output
 - `setPrintWatches(bool)` enables or disables watch output
-- `setPrintCheckpoints(bool)` enables or disables checkpoint output
+- `setPrintWaypoints(bool)` enables or disables waypoint output
 - `setLoggerMinLevel(...)` filters out messages below a chosen severity
 These are mainly useful when you want to narrow output while debugging or reduce noise during normal use.
 
