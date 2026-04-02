@@ -106,6 +106,7 @@ Use cases:
 | Viewing | `Cmd + K` | Clear Viewer |
 | Viewing | `Cmd + S` | Start/stop live streaming (if connected) |
 | Viewing | `P` | Toggle Planned Overlay |
+| Viewing | `G` | Toggle Floating Graph |
 | Viewing | `Cmd + C` | Connect/disconnect |
 | Viewing | `←` / `→` | Step to previous/next pose |
 | Planning | `Space` | Play/Pause plan playback |

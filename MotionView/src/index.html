@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>PROS Path Viewer (Offline)</title>
   <link rel="stylesheet" href="styles.css" />
+  <script src="assets/vendor/chart.umd.min.js" defer></script>
   <script type="module" src="/main.js" defer></script>
 </head>
 <body>
@@ -73,10 +74,8 @@
     <div class="modalBody">
       MotionView is a PROS Live viewer that allows you to compare timings, adjust routes, and view your robot live, all in once place.
       <p>
-        <span>View the </span><a href="https://github.com/lewispinstein-hue/MotionView/tree/main/README.md">main app README</a>
-      </p>
-      <p>
-        <span>View the </span><a href="https://github.com/lewispinstein-hue/MotionView/tree/main/Docs">docs</a>
+        <span>About: </span><a href="https://github.com/lewispinstein-hue/MotionView/tree/main/README.md">Description</a>
+        <span> • </span><a href="https://github.com/lewispinstein-hue/MotionView/tree/main/Docs">docs</a>
       </p>
       <div style="margin-top:10px">
         <div style="font-weight:850;margin-bottom:6px">Main elements</div>
@@ -90,9 +89,10 @@
       <div style="margin-top:10px" class="muted">
         Tip: Drag the thin handles to resize/collapse the sidebar (left) and timeline (bottom).
       </div>
-      <div style="margin-top:14px;display:flex;gap:8px">
+      <div style="margin-top:14px;display:flex;gap:8px;align-self:center;position:absolute;bottom:10px;right:10px">
         <button id="btnHelpKeybinds" class="iconBtn secondaryBtn" style="font-size:15px">Keybinds</button>
       </div>
+      <div style="color:darkgray;font-size:12px;margin-top:5px;"><span class="muted">Version:</span> <span class="muted" id="versionDisplay">?</span></div>
     </div>
   </div>
 </div>
@@ -121,6 +121,7 @@
         <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + S</span><span class="keybindAction">Start/stop live streaming (if connected)</span></div>
         <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + C</span><span class="keybindAction">Connect/disconnect</span></div>
         <div class="keybindRow"><span class="keybindKeys">P</span><span class="keybindAction">Toggle Planned Overlay</span></div>
+        <div class="keybindRow"><span class="keybindKeys">G</span><span class="keybindAction">Toggle Floating Graph</span></div>
         <div class="keybindRow"><span class="keybindKeys">Space</span><span class="keybindAction">Play/Pause playback (or toggle Auto‑follow Head when live‑connected)</span></div>
         <div class="keybindRow"><span class="keybindKeys">← / →</span><span class="keybindAction">Step to previous/next pose</span></div>
       </div>
@@ -467,7 +468,6 @@
               <option value="0">off</option>
               <option value="50">50ms</option>
               <option value="100">100ms</option>
-              <option value="121">121ms (MVLib HZ)</option>
               <option value="250">250ms</option>
               <option value="500" selected>500ms</option>
               <option value="1000">1s</option>
@@ -549,11 +549,18 @@
           </summary>
           <div class="detailsBody">
             <div class="rowline" style="margin-bottom:8px">
+              <span class="muted">Filter</span>
+              <select id="watchFilter" class="settingsSelect toolbarSelect" style="margin-left:auto">
+                <option value="all" selected>All</option>
+              </select>
+            </div>
+
+            <div class="rowline" style="margin-bottom:8px">
               <span class="muted">Sort</span>
               <select id="watchSort" class="settingsSelect toolbarSelect" style="margin-left:auto">
                 <option value="level">Level</option>
-                <option value="time" selected>Time</option>
-                <option value="-time">–Time</option>
+                <option value="time">Time</option>
+                <option value="-time" selected>–Time</option>
                 <option value="value">Value</option>
               </select>
             </div>
@@ -758,5 +765,29 @@
   </div>
 </div>
 <div id="watchPopup" hidden></div>
+<div id="watchGraphPanel" class="watchGraphPanel hidden" aria-live="polite">
+  <div class="watchGraphHeader" id="watchGraphHeader">
+    <div class="watchGraphTitleWrap">
+      <span class="watchGraphTitle">Watch Graph</span>
+      <span class="watchGraphSubtitle" id="watchGraphSubtitle">ID: —</span>
+    </div>
+    <button id="btnCloseWatchGraph" class="iconBtn" type="button" aria-label="Close watch graph">✕</button>
+  </div>
+  <div class="watchGraphBody">
+    <div class="watchGraphRow"><span class="k">Label</span><span class="v" id="watchGraphLabel">—</span></div>
+    <div class="watchGraphRow"><span class="k">Latest</span><span class="v" id="watchGraphLatest">—</span></div>
+    <details id="watchGraphDetails" class="watchGraphDetails"> 
+      <div class="watchGraphRow"><span class="k">Samples</span><span class="v" id="watchGraphCount">0</span></div>
+      <div class="watchGraphRow"><span class="k">Avg</span><span class="v" id="watchGraphAvg">—</span></div>
+      <div class="watchGraphRow"><span class="k">Min</span><span class="v" id="watchGraphMin">—</span></div>
+      <div class="watchGraphRow"><span class="k">Max</span><span class="v" id="watchGraphMax">—</span></div>
+    </details>
+    <div class="watchGraphPlaceholder">
+      <canvas id="watchGraphCanvas"></canvas>
+      <div id="watchGraphEmpty" class="watchGraphEmpty">No numeric samples yet</div>
+    </div>
+  </div>
+  <div id="watchGraphResizer" aria-hidden="true"></div>
+</div>
 </body>
 </html>

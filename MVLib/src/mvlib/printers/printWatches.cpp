@@ -26,7 +26,8 @@ void Logger::printWatches() {
     if (!w.eval) continue;
 
     auto [lvl, valueStr, label] = w.eval();
-
+    if (lvl == LogLevel::NONE || lvl == LogLevel::OFF) continue;
+    
     if (w.onChange) {
       if (w.lastValue && *w.lastValue == valueStr) continue;
       w.lastValue = valueStr;
@@ -36,6 +37,7 @@ void Logger::printWatches() {
     label = std::string("[WATCH],") +
             std::to_string(nowMs) + 
             "," + m_levelToString(lvl) 
+            + "," + std::to_string(id)
             +  "," + label + "," + valueStr;
 
     switch (lvl) {

@@ -203,3 +203,34 @@ For the full waypoint guide, including `WaypointParams`, `WaypointHandle`, `Wayp
 - If you have a drivetrain that can't be represented with 2 MotorGroups, you can leave the robot unset and MVLib will estimate your robot's speed using its pose.
 
 ---
+
+
+
+function updateTopBarStatusLayout() {
+  if (!topBarEl || !topBarContentEl || !topBarLeftEl || !topBarCenterEl || !topBarRightEl || !statusEl) return;
+
+  const fullText = statusEl.dataset.fullText ?? statusEl.textContent ?? "";
+  statusEl.style.maxWidth = "";
+  statusEl.textContent = fullText;
+
+  // Measure against a stable baseline: force the overflow-capable layout so
+  // the content width reflects its natural size, independent of the current
+  // `isOverflowing` class state.
+  topBarEl.classList.add("isOverflowing");
+  const requiredWidth = Math.ceil(topBarContentEl.scrollWidth);
+  const availableWidth = Math.ceil(topBarEl.clientWidth);
+  const isOverflowing = requiredWidth > (availableWidth - TOP_BAR_OVERFLOW_TOLERANCE_PX);
+
+  topBarEl.classList.toggle("isOverflowing", isOverflowing);
+
+  if (isOverflowing) {
+    statusEl.textContent = truncateTopBarStatus(fullText);
+    statusEl.title = fullText;
+  } else {
+    const centerRect = topBarCenterEl.getBoundingClientRect();
+    const statusRect = statusEl.getBoundingClientRect();
+    const available = Math.floor(centerRect.left - statusRect.left - 24);
+    if (available > 0) statusEl.style.maxWidth = `${available}px`;
+    statusEl.title = statusEl.scrollWidth > statusEl.clientWidth ? fullText : "";
+  }
+}

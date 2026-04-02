@@ -270,6 +270,30 @@ label {
   background: rgba(255, 255, 255, .03);
 }
 
+.watchMeta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.watchActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.watchGraphBtn,
+.watchVisibilityBtn {
+  min-width: 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
 .bigValue {
   font-size: 15px;
   font-weight: 800;
@@ -427,6 +451,14 @@ header.topBar {
   overflow-y: hidden;
   white-space: nowrap;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+header.topBar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 header.topBar:not(.isOverflowing) {
@@ -435,21 +467,20 @@ header.topBar:not(.isOverflowing) {
 
 .topBarContent {
   box-sizing: border-box;
-  width: max-content;
+  width: 100%;
   min-width: 100%;
   height: var(--topbarH);
   padding: 0 12px;
   display: grid;
-  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 8px;
   position: relative;
 }
 
-header.topBar:not(.isOverflowing) .topBarContent {
-  width: 100%;
-  min-width: 100%;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+header.topBar.isOverflowing .topBarContent {
+  width: max-content;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto auto;
 }
 
 .topBarLeft {
@@ -475,19 +506,29 @@ header.topBar:not(.isOverflowing) .topBarContent {
   text-overflow: ellipsis;
 }
 
+header.topBar.isOverflowing .topStatus {
+  flex: 0 1 auto;
+  width: auto;
+}
+
 .topBarCenter {
   display: flex;
   justify-content: center;
   align-items: center;
-  grid-column: 3;
-  justify-self: center;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
 }
 
-header.topBar:not(.isOverflowing) .topBarCenter {
+header.topBar.isOverflowing .topBarCenter {
   position: static;
+  left: auto;
+  top: auto;
   transform: none;
-  grid-column: 2;
-  justify-self: center;
+  grid-column: 3;
+  justify-self: end;
 }
 
 .topBarRight {
@@ -497,12 +538,12 @@ header.topBar:not(.isOverflowing) .topBarCenter {
   align-items: center;
   flex-wrap: nowrap;
   min-width: 0;
-  grid-column: 5;
+  grid-column: 2;
   justify-self: end;
 }
 
-header.topBar:not(.isOverflowing) .topBarRight {
-  grid-column: 3;
+header.topBar.isOverflowing .topBarRight {
+  grid-column: 4;
 }
 
 .modeToggle {
@@ -533,6 +574,23 @@ header.topBar:not(.isOverflowing) .topBarRight {
   box-shadow: inset 0 0 0 1px rgba(110, 168, 255, 0.35);
 }
 
+.topBarDebugOverlay {
+  position: fixed;
+  top: calc(var(--topbarH) + 8px);
+  right: 8px;
+  z-index: 120;
+  max-width: min(520px, calc(100vw - 16px));
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(8, 14, 22, 0.94);
+  color: #dbe7f5;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  white-space: pre-wrap;
+  pointer-events: none;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
 body.mode-planning .app {
   height: calc(100vh - var(--topbarH));
   display: grid;
@@ -546,7 +604,8 @@ body.mode-planning #vSplit,
 body.mode-planning #vSplitL,
 body.mode-planning #floatWin,
 body.mode-planning #floatResizer,
-body.mode-planning #watchPopup {
+body.mode-planning #watchPopup,
+body.mode-planning #watchGraphPanel {
   opacity: 0;
   pointer-events: none;
   transition: opacity .25s ease;
@@ -952,6 +1011,7 @@ body:not(.mode-planning) #rightPlanning {
 }
 
 .modalBody {
+  display: grid;
   padding: 12px;
   overflow: auto;
   color: var(--text);
@@ -1028,6 +1088,188 @@ body:not(.mode-planning) #rightPlanning {
 #watchPopup .v {
   color: var(--text);
   word-break: break-word;
+}
+
+.watchGraphPanel {
+  --wg-bg: rgba(18, 18, 20, 0.60);
+  --wg-border: rgba(255, 255, 255, 0.12);
+  --wg-line: rgba(255, 255, 255, 0.10);
+  --wg-text: rgba(255, 255, 255, 0.92);
+  --wg-muted: rgba(255, 255, 255, 0.60);
+
+  position: absolute;
+  right: 16px;
+  top: 112px;
+  width: 290px;
+  height: 240px;
+  border-radius: 14px;
+  border: 1px solid var(--wg-border) !important;
+  background: var(--wg-bg);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 101;
+  overflow: hidden;
+  color: var(--wg-text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  font-size: 12.5px;
+  line-height: 1.35;
+  display: flex;
+  flex-direction: column;
+}
+
+.watchGraphPanel.isOn {
+  border-color: rgba(120, 220, 160, 0.55);
+  box-shadow: 0 0 0 1px rgba(120, 220, 160, 0.15) inset, 0 14px 40px rgba(0, 0, 0, 0.55);
+}
+
+.watchGraphHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 10px 10px 12px;
+  border-bottom: 1px solid var(--wg-line);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: grab;
+  user-select: none;
+}
+
+.watchGraphHeader:active {
+  cursor: grabbing;
+}
+
+.watchGraphTitleWrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.watchGraphTitle {
+  color: var(--wg-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.watchGraphSubtitle {
+  color: var(--wg-muted);
+  font-size: 11.5px;
+}
+
+.watchGraphBody {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.watchGraphRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.watchGraphRow .k {
+  color: var(--wg-muted);
+}
+
+.watchGraphRow .v {
+  color: var(--wg-text);
+  text-align: right;
+  word-break: break-word;
+}
+
+.watchGraphPlaceholder {
+  margin-top: 8px;
+  border: 1px dashed var(--wg-line);
+  border-radius: 10px;
+  min-height: 130px;
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  flex: 1;
+  padding: 8px;
+  color: var(--wg-muted);
+  font-size: 11.5px;
+}
+
+.watchGraphDetails {
+  all: unset;
+  display: block;
+}
+
+#watchGraphCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.watchGraphEmpty {
+  position: absolute;
+  inset: 8px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--wg-muted);
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.watchGraphEmpty[hidden] {
+  display: none !important;
+}
+
+#btnCloseWatchGraph.iconBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  border: 1px solid var(--wg-line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--wg-muted);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+#btnCloseWatchGraph.iconBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--wg-text);
+}
+
+#btnCloseWatchGraph.iconBtn:active {
+  transform: translateY(0.5px);
+}
+
+#btnCloseWatchGraph.iconBtn:focus-visible {
+  outline: 2px solid rgba(110, 168, 255, 0.7);
+  outline-offset: 2px;
+}
+
+.watchGraphHeader:hover #btnCloseWatchGraph.iconBtn,
+.watchGraphHeader:focus-within #btnCloseWatchGraph.iconBtn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#watchGraphResizer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 15px;
+  height: 15px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, var(--muted) 50%);
+  opacity: 0.3;
 }
 
 /* tighten pose list */

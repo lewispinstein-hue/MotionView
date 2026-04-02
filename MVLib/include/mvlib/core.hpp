@@ -53,7 +53,7 @@
 #include <vector>
 #include <string>
 
-#define _LOGGER_CORE
+#define MVLIB_VERSION "1.1.0"
 namespace mvlib {
 
 namespace {
@@ -379,6 +379,13 @@ public:
    *
    * @note Messages are truncated to 512 bytes.
    * @note These are affected by minLoggerLevel.
+   *
+   * \b Example
+   * @code
+   * auto& logger = mvlib::Logger::getInstance();
+   * logger.debug("Hello, %s", "world");
+   * logger.info("Battery Temp: %.1f", pros::battery::get_temperature());
+   * @endcode
   */
   void debug(const char *fmt, ...);
 
