@@ -1,11 +1,18 @@
 #pragma once
+/**
+ * @file api.hpp
+ * @brief API Header for MVLib.
+ *
+ * @note Define MVLIB_USE_SIMPLES to use the time literals 
+ *       (for disambiguation of .watch()) and to drop the namespace 
+ *       from the mvlib::LogLevel enum.
+ */
 
 // IWYU pragma: begin_keep
 #include "core.hpp"
 #include "logMacros.h"
 #include "pros/motors.hpp"
 #include "renderHelper.hpp"
-#include "config.hpp"
 #include "literals.hpp" 
 #include "waypoint.hpp"
 // IWYU pragma: end_keep

@@ -36,6 +36,11 @@ void Logger::setLogSystemInfo(bool v) {
   _MVLIB_FORWARD_DEBUG("logSystemInfo set to: %d", v);
 }
 
+void Logger::setTimings(LoggerTimings timings) {
+  _MVLIB_FORWARD_DEBUG("SetTimings changed");
+  m_timings = timings;  
+}
+
 void Logger::setLoggerMinLevel(LogLevel level) {
   _MVLIB_FORWARD_DEBUG("SetLoggerMinLevel set to: %d", (int)level);
   m_minLogLevel = level;

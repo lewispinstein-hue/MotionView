@@ -16,7 +16,9 @@ bool Logger::setDefaultWatches(const DefaultWatches& watches) {
   DefaultWatches w = watches;
   bool retval = true;
   if (!m_configSet || !m_configValid) {
-    _MVLIB_FORWARD_WARN("Drivetrain watches could not be set because config is not set or invalid!");
+    _MVLIB_FORWARD_WARN("Drivetrain watches could not be set because config is not "
+                        "set or invalid! Did you make sure to set config before default "
+                        "watches?");
     w.leftDrivetrainWatchdog = false;
     w.rightDrivetrainWatchdog = false;
     retval = false;

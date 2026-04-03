@@ -12,7 +12,7 @@ namespace mvlib {
   * @brief Render a std::string as-is.
   * \return The rendered string.
   */
-static std::string renderValue(const std::string &v, const std::string &) {
+static std::string renderValue(const std::string& v, const std::string&) {
   return v; 
 }
 
@@ -20,7 +20,7 @@ static std::string renderValue(const std::string &v, const std::string &) {
   * @brief Render a C-string safely.
   * \return "(null)" if v is nullptr, otherwise v as std::string.
   */
-static std::string renderValue(const char *v, const std::string &) {
+static std::string renderValue(const char *v, const std::string&) {
   return v ? std::string(v) : std::string("(null)");
 }
 
@@ -28,7 +28,7 @@ static std::string renderValue(const char *v, const std::string &) {
   * @brief Render a boolean as "true"/"false".
   * \return Rendered boolean string.
   */
-static std::string renderValue(bool v, const std::string &) { return v ? "true" : "false"; }
+static std::string renderValue(bool v, const std::string&) { return v ? "true" : "false"; }
 
 /**
   * @brief Render arithmetic types using an optional printf-style format.

@@ -223,6 +223,7 @@ const btnKeybindsClose = document.getElementById('btnKeybindsClose');
 const speedSelect = document.getElementById('speedSelect');
 const logSort = document.getElementById('logSort');
 const waypointFilter = document.getElementById('waypointFilter');
+const watchFilter = document.getElementById('watchFilter');
 const watchSort = document.getElementById('watchSort');
 const vSplit = document.getElementById('vSplit');
 const hSplit = document.getElementById('hSplit');
@@ -248,7 +249,13 @@ const layoutState = {
   lastTimelineH: 260,
 };
 
-const TOP_BAR_STATUS_CHAR_LIMIT = 72;
+const TOP_BAR_STATUS_CHAR_LIMIT = 72;     // Length before truncation of top status
+const TOP_BAR_OVERFLOW_TOLERANCE_PX = 0; // Extra px before scroll mode engages
+const TOP_BAR_CENTER_STATUS_GAP_PX = 16;  // Gap between status text and center control
+const TOP_BAR_CENTER_RIGHT_OVERLAP_TOLERANCE_PX = 0; // Allowed overlap with right controls before scrolling
+const TOP_BAR_CENTER_RIGHT_SCROLL_GAP_PX = 0; // Enter scroll mode if shifted center would be closer than this to the right side
+let topBarMaxObservedWidth = 0;
+let topBarMaxCenteredStatusWidth = 0;
 
 function truncateTopBarStatus(msg) {
   const text = String(msg ?? '');
@@ -256,42 +263,81 @@ function truncateTopBarStatus(msg) {
   return `${text.slice(0, TOP_BAR_STATUS_CHAR_LIMIT - 1).trimEnd()}…`;
 }
 
+function fmtTopBarRect(rect) {
+  return `L${Math.round(rect.left)} R${Math.round(rect.right)} W${Math.round(rect.width)}`;
+}
+
 function updateTopBarStatusLayout() {
   if (!topBarEl || !topBarContentEl || !topBarLeftEl || !topBarCenterEl || !topBarRightEl || !statusEl) return;
 
   const fullText = statusEl.dataset.fullText ?? statusEl.textContent ?? "";
-  
-  const wasOverflowing = topBarEl.classList.contains("isOverflowing");
+  topBarEl.classList.remove("isOverflowing");
+  topBarCenterEl.style.left = "50%";
+  topBarCenterEl.style.top = "50%";
   statusEl.style.maxWidth = "";
   statusEl.textContent = fullText;
+  statusEl.title = "";
 
-  const contentStyle = getComputedStyle(topBarContentEl);
-  const gap = parseFloat(contentStyle.columnGap || "8") || 0;
-  const padLeft = parseFloat(contentStyle.paddingLeft || "0") || 0;
-  const padRight = parseFloat(contentStyle.paddingRight || "0") || 0;
+  const topBarRect = topBarEl.getBoundingClientRect();
+  const centerRect = topBarCenterEl.getBoundingClientRect();
+  const rightRect = topBarRightEl.getBoundingClientRect();
+  const statusRect = statusEl.getBoundingClientRect();
 
-  const centerWidth = Math.ceil(topBarCenterEl.getBoundingClientRect().width);
-  const leftWidth   = Math.ceil(topBarLeftEl.getBoundingClientRect().width);
-  const rightWidth  = Math.ceil(topBarRightEl.getBoundingClientRect().width);
+  const centerWidth = Math.ceil(centerRect.width);
+  const idealCenterX = Math.floor(topBarRect.width / 2);
+  const idealCenterLeft = idealCenterX - centerWidth / 2;
+  const statusStartX = Math.floor(statusRect.left - topBarRect.left);
+  const statusNaturalWidth = Math.ceil(statusEl.scrollWidth);
 
-  const requiredWidth = leftWidth + centerWidth + rightWidth + padLeft + padRight + (gap * 2);
-  
-  // Use a larger buffer if we are already overflowing
-  const buffer = wasOverflowing ? -5 : 15; 
-  const isOverflowing = requiredWidth > (topBarEl.clientWidth - buffer);
-
-  topBarEl.classList.toggle("isOverflowing", isOverflowing);
-
-  if (isOverflowing) {
-    statusEl.textContent = truncateTopBarStatus(fullText);
-    statusEl.title = fullText;
-  } else {
-    const centerRect = topBarCenterEl.getBoundingClientRect();
-    const statusRect = statusEl.getBoundingClientRect();
-    const available = Math.floor(centerRect.left - statusRect.left - 24);
-    if (available > 0) statusEl.style.maxWidth = `${available}px`;
-    statusEl.title = statusEl.scrollWidth > statusEl.clientWidth ? fullText : "";
+  const centeredStatusMaxWidth = Math.max(0, Math.floor(idealCenterLeft - statusStartX - TOP_BAR_CENTER_STATUS_GAP_PX));
+  const currentBarWidth = Math.ceil(topBarRect.width);
+  if (currentBarWidth >= topBarMaxObservedWidth) {
+    topBarMaxObservedWidth = currentBarWidth;
+    topBarMaxCenteredStatusWidth = centeredStatusMaxWidth;
   }
+
+  // First decide based on the current centered layout only. If the status does
+  // not truncate while truly centered, keep the center truly centered.
+  statusEl.style.maxWidth = `${Math.max(0, centeredStatusMaxWidth)}px`;
+  const centeredCurrentlyTruncates = statusEl.scrollWidth > statusEl.clientWidth;
+  const centeredCenterRight = idealCenterX + centerWidth / 2;
+  const gapToRightWhileCentered = (rightRect.left - topBarRect.left) - centeredCenterRight;
+
+  if (!centeredCurrentlyTruncates && gapToRightWhileCentered >= TOP_BAR_CENTER_RIGHT_SCROLL_GAP_PX) {
+    topBarCenterEl.style.left = "50%";
+    statusEl.title = "";
+    return;
+  }
+
+  const preservedStatusWidth = Math.max(centeredStatusMaxWidth, topBarMaxCenteredStatusWidth);
+  const desiredStatusWidth = Math.min(statusNaturalWidth, preservedStatusWidth);
+  const centeredKeepsStatusUntruncated = centeredStatusMaxWidth >= desiredStatusWidth;
+
+  const minCenterX = Math.ceil(statusStartX + desiredStatusWidth + TOP_BAR_CENTER_STATUS_GAP_PX + centerWidth / 2);
+  const shiftedCenterX = Math.max(idealCenterX, minCenterX);
+  const shiftedCenterRight = shiftedCenterX + centerWidth / 2;
+  const gapToRightAfterShift = (rightRect.left - topBarRect.left) - shiftedCenterRight;
+
+  if (centeredKeepsStatusUntruncated) {
+    topBarCenterEl.style.left = "50%";
+    statusEl.style.maxWidth = `${Math.max(0, desiredStatusWidth)}px`;
+    statusEl.title = "";
+    return;
+  }
+
+  if (gapToRightAfterShift >= TOP_BAR_CENTER_RIGHT_SCROLL_GAP_PX) {
+    topBarCenterEl.style.left = `${shiftedCenterX}px`;
+    statusEl.style.maxWidth = `${Math.max(0, desiredStatusWidth)}px`;
+    statusEl.title = statusEl.scrollWidth > statusEl.clientWidth ? fullText : "";
+    return;
+  }
+
+  topBarEl.classList.add("isOverflowing");
+  topBarCenterEl.style.left = "";
+  topBarCenterEl.style.top = "";
+  statusEl.style.maxWidth = `${Math.max(0, desiredStatusWidth)}px`;
+  statusEl.textContent = fullText;
+  statusEl.title = statusEl.scrollWidth > statusEl.clientWidth ? fullText : "";
 }
 
 const scheduleTopBarStatusLayout = (() => {
@@ -362,6 +408,21 @@ const routeInfoModal = document.getElementById('routeInfoModal');
 const btnRouteInfoClose = document.getElementById('btnRouteInfoClose');
 const routeInfoList = document.getElementById('routeInfoList');
 const btnApplyRunSettings = document.getElementById('btnApplyRunSettings');
+const watchGraphPanel = document.getElementById('watchGraphPanel');
+const btnCloseWatchGraph = document.getElementById('btnCloseWatchGraph');
+const watchGraphHeader = document.getElementById('watchGraphHeader');
+const watchGraphResizer = document.getElementById('watchGraphResizer');
+const watchGraphSubtitle = document.getElementById('watchGraphSubtitle');
+const watchGraphTitle = document.getElementById('watchGraphTitle');
+const watchGraphLatest = document.getElementById('watchGraphLatest');
+const watchGraphCount = document.getElementById('watchGraphCount');
+const watchGraphAvg = document.getElementById('watchGraphAvg');
+const watchGraphMin = document.getElementById('watchGraphMin');
+const watchGraphMax = document.getElementById('watchGraphMax');
+const watchGraphCanvas = document.getElementById('watchGraphCanvas');
+const watchGraphEmpty = document.getElementById('watchGraphEmpty');
+const pinnedWatchHost = document.getElementById('pinnedWatchHost');
+const pinnedWatchTemplate = document.getElementById('pinnedWatchTemplate');
 
 // Settings modal elements
 const btnSettings = document.getElementById('btnSettings');
@@ -404,6 +465,7 @@ const planSelIndexEl = document.getElementById('planSelIndex');
 const planSelXEl = document.getElementById('planSelX');
 const planSelYEl = document.getElementById('planSelY');
 const planSelThetaEl = document.getElementById('planSelTheta');
+document.getElementById('versionDisplay').innerHTML = APP_VERSION;
 
 const prosDirStatusEl = document.getElementById('prosDirStatus');
 const prosDirAutoStatusEl = document.getElementById('prosDirAutoStatus');
@@ -460,7 +522,12 @@ const CANVAS_ZOOM_MIN = 0.15; // Max zoom out
 
 // FLOATING INFO WINDOW SIZE
 const minW = 30, maxW = 400;
-const minH = 49, maxH = 600; // Bring minH back to 241
+const minH = 49, maxH = 600; 
+
+const WATCH_GRAPH_MIN_W = 240;
+const WATCH_GRAPH_MAX_W = 1600;
+const WATCH_GRAPH_MIN_H = 170;
+const WATCH_GRAPH_MARGIN = 16;
 let data = null;
 
 // Raw poses are stored in FILE units; we convert to inches for rendering.
@@ -492,10 +559,10 @@ let trackLockPose = null;       // pose in inches
 let trackLockIndex = null;
 
 const telemetryMetrics = {
-  totalPosesRecived: 0,
-  totalLogsRecived: 0,
-  totalWatchesRecived: 0,
-  totalWaypointsRecived: 0,
+  totalPosesReceived: 0,
+  totalLogsReceived: 0,
+  totalWatchesReceived: 0,
+  totalWaypointsReceived: 0,
 };
 let pendingExportRequest = null;
 let importedRouteMeta = null;
@@ -1021,6 +1088,8 @@ function buildSavedPathsPayload() {
     })),
     "watches": watches.map((w) => ({
       t: w.t ?? null,
+      id: Number.isInteger(w.id) ? w.id : null,
+      visible: w.visible !== false,
       level: w.level ?? "INFO",
       label: w.label ?? "",
       value: w.value ?? "",
@@ -1357,6 +1426,132 @@ function normalizeLogLevel(levelRaw) {
   return "INFO";
 }
 
+let pinnedWatchPanelCount = 0;
+let pinnedWatchDragTarget = null;
+let pinnedWatchDragStart = { x: 0, y: 0 };
+
+function findLatestWatchById(watchId) {
+  if (watchId == null || !Array.isArray(watches) || !watches.length) return null;
+  const normalizedId = String(watchId);
+  for (let i = watches.length - 1; i >= 0; i -= 1) {
+    const watch = watches[i];
+    const candidateId = watch?.id ?? watch?.watchId;
+    if (candidateId != null && String(candidateId) === normalizedId) return watch;
+  }
+  return null;
+}
+
+function findWatchByIdAtOrBeforeTime(watchId, tMs) {
+  if (watchId == null || tMs == null || !Array.isArray(watches) || !watches.length) return null;
+  const normalizedId = String(watchId);
+  for (let i = watches.length - 1; i >= 0; i -= 1) {
+    const watch = watches[i];
+    const candidateId = watch?.id ?? watch?.watchId;
+    if (candidateId == null || String(candidateId) !== normalizedId) continue;
+    if ((watch.t ?? Infinity) <= tMs) return watch;
+  }
+  return null;
+}
+
+function getPinnedWatchReferenceTimeMs() {
+  if (playing) return playTimeMs ?? null;
+  if (hoverTimelineTime != null) return hoverTimelineTime;
+  if (!playing && trackHover?.pose?.t != null) return trackHover.pose.t;
+  if (!playing && trackLockActive && trackLockPose?.t != null) return trackLockPose.t;
+  if (!rawPoses.length) return null;
+  const idx = clamp(selectedIndex, 0, Math.max(0, rawPoses.length - 1));
+  return rawPoses[idx]?.t ?? null;
+}
+
+function applyPinnedWatchLevel(el, levelRaw) {
+  if (!el) return;
+  const level = normalizeLogLevel(levelRaw);
+  const st = levelStyle(level);
+  el.style.background = st.fill;
+  el.style.color = st.text;
+  el.style.borderColor = "rgba(255, 255, 255, 0.10)";
+}
+
+function getPinnedWatchPanelById(watchId) {
+  if (!pinnedWatchHost || watchId == null) return null;
+  return pinnedWatchHost.querySelector(`.pinnedWatchPanel[data-watch-id="${CSS.escape(String(watchId))}"]`);
+}
+
+function closePinnedWatchPanel(panel) {
+  if (!panel) return;
+  if (pinnedWatchDragTarget === panel) pinnedWatchDragTarget = null;
+  panel.remove();
+}
+
+function updatePinnedWatchPanel(panel, watchId) {
+  if (!panel) return;
+  const tMs = getPinnedWatchReferenceTimeMs();
+  const latest = findWatchByIdAtOrBeforeTime(watchId, tMs);
+  const nameEl = panel.querySelector('.pinnedWatchName');
+  const valueEl = panel.querySelector('.pinnedWatchValue');
+  const latestOverall = findLatestWatchById(watchId);
+  const label = latest?.label || latestOverall?.label || (watchId == null ? "No watch selected" : `Watch ${watchId}`);
+  if (nameEl) nameEl.textContent = label;
+  if (valueEl) valueEl.textContent = latest?.value != null ? String(latest.value) : "—";
+  applyPinnedWatchLevel(valueEl, latest?.level ?? "INFO");
+}
+
+function refreshPinnedWatchPanels() {
+  if (!pinnedWatchHost) return;
+  const panels = pinnedWatchHost.querySelectorAll('.pinnedWatchPanel');
+  for (const panel of panels) {
+    const watchId = panel.dataset.watchId || null;
+    updatePinnedWatchPanel(panel, watchId);
+  }
+}
+
+function toggleFloatingWatch(watchId) {
+  if (watchId == null) return openFloatingWatch(null);
+  const existing = getPinnedWatchPanelById(watchId);
+  if (existing) {
+    closePinnedWatchPanel(existing);
+    return null;
+  }
+  return openFloatingWatch(watchId);
+}
+
+function openFloatingWatch(watchId) {
+  if (!pinnedWatchHost || !pinnedWatchTemplate) return null;
+
+  const root = pinnedWatchTemplate.content.firstElementChild?.cloneNode(true);
+  if (!root) return null;
+
+  const headerEl = root.querySelector('.pinnedWatchHeader');
+  const closeEl = root.querySelector('.pinnedWatchClose');
+
+  root.dataset.watchId = watchId == null ? "" : String(watchId);
+  root.style.top = `${128 + pinnedWatchPanelCount * 26}px`;
+  root.style.right = `${16 + pinnedWatchPanelCount * 18}px`;
+  pinnedWatchPanelCount += 1;
+
+  updatePinnedWatchPanel(root, watchId);
+
+  headerEl?.addEventListener('mousedown', (ev) => {
+    if (ev.button !== 0) return;
+    pinnedWatchDragTarget = root;
+    pinnedWatchDragStart = {
+      x: ev.clientX - root.offsetLeft,
+      y: ev.clientY - root.offsetTop,
+    };
+    root.style.left = `${root.offsetLeft}px`;
+    root.style.top = `${root.offsetTop}px`;
+    root.style.right = 'auto';
+    ev.preventDefault();
+  });
+
+  closeEl?.addEventListener('click', () => {
+    closePinnedWatchPanel(root);
+  });
+
+  pinnedWatchHost.appendChild(root);
+  return root;
+}
+
 function levelSortRank(levelRaw) {
   const L = normalizeLogLevel(levelRaw);
   if (L === "FATAL") return 4;
@@ -1423,9 +1618,14 @@ function getMinMaxSpeed() {
 }
 
 function computeSpeedNorm() {
+  computeSpeedNormRange(0);
+}
+
+function computeSpeedNormRange(startIndex = 0) {
   const { minV, maxV } = getMinMaxSpeed();
   const denom = (maxV - minV) || 1;
-  for (const p of rawPoses) {
+  for (let i = Math.max(0, startIndex); i < rawPoses.length; i += 1) {
+    const p = rawPoses[i];
     const s = Math.abs(p.speed_raw ?? 0);
     p.speed_norm = clamp((s - minV) / denom, 0, 1);
   }
@@ -1687,18 +1887,63 @@ function setFieldRotationDeg(deg) {
   requestDrawAll();
 }
 
+function canvasViewportRect() {
+  const rect = canvas.getBoundingClientRect();
+  if (!squareMode) {
+    return { x: 0, y: 0, width: rect.width || 1, height: rect.height || 1 };
+  }
+  const side = Math.min(rect.width || 1, rect.height || 1);
+  return {
+    x: ((rect.width || 1) - side) / 2,
+    y: ((rect.height || 1) - side) / 2,
+    width: side,
+    height: side,
+  };
+}
+
+function canvasViewportCenter() {
+  const rect = canvasViewportRect();
+  return {
+    x: rect.x + rect.width / 2,
+    y: rect.y + rect.height / 2,
+  };
+}
+
+function rotateScreenPoint(x, y, angleRad) {
+  if (!angleRad) return { x, y };
+  const center = canvasViewportCenter();
+  const dx = x - center.x;
+  const dy = y - center.y;
+  return {
+    x: center.x + dx * Math.cos(angleRad) - dy * Math.sin(angleRad),
+    y: center.y + dx * Math.sin(angleRad) + dy * Math.cos(angleRad),
+  };
+}
+
+function rotateScreenDelta(dx, dy, angleRad) {
+  if (!angleRad) return { x: dx, y: dy };
+  return {
+    x: dx * Math.cos(angleRad) - dy * Math.sin(angleRad),
+    y: dx * Math.sin(angleRad) + dy * Math.cos(angleRad),
+  };
+}
+
+function worldToScreenBase(xIn, yIn) {
+  return { x: offsetXpx + xIn * scale, y: offsetYpx - yIn * scale };
+}
+
 function worldToScreen(xIn, yIn) {
-  const xR = xIn * fieldRotationCos - yIn * fieldRotationSin;
-  const yR = xIn * fieldRotationSin + yIn * fieldRotationCos;
-  return { x: offsetXpx + xR * scale, y: offsetYpx - yR * scale };
+  const base = worldToScreenBase(xIn, yIn);
+  return rotateScreenPoint(base.x, base.y, fieldRotationRad);
 }
 
 function screenToWorld(xPx, yPx) {
-  const xR = (xPx - offsetXpx) / (scale || 1);
-  const yR = (offsetYpx - yPx) / (scale || 1);
+  const base = rotateScreenPoint(xPx, yPx, -fieldRotationRad);
+  const xR = (base.x - offsetXpx) / (scale || 1);
+  const yR = (offsetYpx - base.y) / (scale || 1);
   return {
-    x: xR * fieldRotationCos + yR * fieldRotationSin,
-    y: -xR * fieldRotationSin + yR * fieldRotationCos,
+    x: xR,
+    y: yR,
   };
 }
 
@@ -1901,9 +2146,14 @@ function normalizeWatches(arr) {
     const tRaw = (w.t ?? w.timestamp ?? w.time ?? w.ms);
     const t = toNumMaybe(tRaw);
     if (t == null) continue;
+    const idRaw = w.id ?? w.watchId;
+    const idNum = Number(idRaw);
+    const id = Number.isInteger(idNum) ? idNum : null;
 
     out.push({
       t,
+      id,
+      visible: w.visible !== false,
       level: w.level ?? w.lvl ?? w.severity ?? "INFO",
       label: w.label ?? w.name ?? "",
       value: (w.value ?? w.val ?? w.message ?? ""),
@@ -2074,6 +2324,8 @@ function rebuildWaypointState() {
           .map((event) => ({
             t: event.t,
             type: normalizeWaypointType(event.type),
+            id: Number.isInteger(event.id) ? event.id : id,
+            name: String(event.name ?? entry.name ?? createdEvent.name ?? ""),
             params: event.params || {},
           }))
           .filter((event) => event.type)
@@ -2265,6 +2517,14 @@ function jumpToEventTime(tMs, {
 // --- Watch popup (tiny, click to show, click elsewhere to dismiss) ---
 const watchPopup = document.getElementById('watchPopup');
 let watchPopupOpen = false;
+let watchGraphPanelOpen = false;
+let watchGraphPanelKey = null;
+let watchGraphChart = null;
+let watchGraphMarkersForKey = [];
+let isWatchGraphDragging = false;
+let isWatchGraphResizing = false;
+let watchGraphDragStart = { x: 0, y: 0 };
+let watchGraphHoverSaved = null;
 
 function hideWatchPopup() {
   if (!watchPopup) return;
@@ -2272,12 +2532,389 @@ function hideWatchPopup() {
   watchPopupOpen = false;
 }
 
+function watchGraphKeyForWatch(w) {
+  const idNum = Number(w?.id);
+  if (Number.isInteger(idNum)) return `id:${idNum}`;
+  return `label:${String(w?.label ?? "").trim()}`;
+}
+
+function watchVisibilityKeyForWatch(w) {
+  const idNum = Number(w?.id);
+  if (Number.isInteger(idNum)) return `id:${idNum}`;
+  return `entry:${Number(w?.t)}`;
+}
+
+function watchFilterValue() {
+  return watchFilter?.value || "all";
+}
+
+function watchFilterKeyForWatch(w) {
+  return watchGraphKeyForWatch(w);
+}
+
+function watchFilterMatches(watch) {
+  const filter = watchFilterValue();
+  if (filter === "all") return true;
+  return watchFilterKeyForWatch(watch) === filter;
+}
+
+function watchFilterLabelForWatch(watch) {
+  const idNum = Number(watch?.id);
+  const hasId = Number.isInteger(idNum);
+  const label = String(watch?.label ?? "").trim();
+  if (hasId && label) return `${label}`;
+  if (hasId) return `Watch ${idNum}`;
+  return label || "Unnamed Watch";
+}
+
+function isWatchVisible(w) {
+  return w?.visible !== false;
+}
+
+function isWatchMarkerVisible(marker) {
+  return isWatchVisible(marker?.watch) && watchFilterMatches(marker?.watch);
+}
+
+function watchVisibilityIconId(w) {
+  return isWatchVisible(w) ? "icon-visibleWatch" : "icon-invisibleWatch";
+}
+
+function watchVisibilityTitle(w) {
+  return isWatchVisible(w) ? "Hide watch" : "Show watch";
+}
+
+function updateWatchVisibilityButtons(key) {
+  if (!watchList || !key) return;
+  const buttons = watchList.querySelectorAll(`.watchVisibilityBtn[data-watch-visibility-key="${key}"]`);
+  for (const button of buttons) {
+    const useEl = button.querySelector("use");
+    const iconId = button.dataset.iconId || "icon-visibleWatch";
+    if (useEl) useEl.setAttribute("href", `assets/svg/icons.svg#${iconId}`);
+    button.title = button.dataset.title || "Toggle watch visibility";
+    button.setAttribute("aria-label", button.dataset.title || "Toggle watch visibility");
+  }
+  requestDrawAll();
+}
+
+function currentVisibilityForWatch(watch) {
+  const key = watchVisibilityKeyForWatch(watch);
+  for (let i = watches.length - 1; i >= 0; i -= 1) {
+    const candidate = watches[i];
+    if (watchVisibilityKeyForWatch(candidate) !== key) continue;
+    return isWatchVisible(candidate);
+  }
+  return true;
+}
+
+function toggleWatchVisibilityForWatch(watch) {
+  const key = watchVisibilityKeyForWatch(watch);
+  const nextVisible = !isWatchVisible(watch);
+
+  for (let i = 0; i < watches.length; i += 1) {
+    const candidate = watches[i];
+    if (watchVisibilityKeyForWatch(candidate) !== key) continue;
+    candidate.visible = nextVisible;
+  }
+
+  const nextTitle = watchVisibilityTitle({ visible: nextVisible });
+  const nextIconId = watchVisibilityIconId({ visible: nextVisible });
+  const buttons = watchList?.querySelectorAll(`.watchVisibilityBtn[data-watch-visibility-key="${key}"]`) ?? [];
+  for (const button of buttons) {
+    button.dataset.iconId = nextIconId;
+    button.dataset.title = nextTitle;
+  }
+  updateWatchVisibilityButtons(key);
+}
+
+function watchGraphStatsByKey(key) {
+  if (!key) return { latest: null, count: 0, avg: null, min: null, max: null };
+  let latest = null;
+  let count = 0;
+  let sum = 0;
+  let numericCount = 0;
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = 0; i < watches.length; i += 1) {
+    const entry = watches[i];
+    if (watchGraphKeyForWatch(entry) !== key) continue;
+    count += 1;
+    if (!latest || (entry.t ?? 0) >= (latest.t ?? 0)) latest = entry;
+    const numericValue = numericWatchValue(entry.value);
+    if (numericValue == null) continue;
+    sum += numericValue;
+    numericCount += 1;
+    min = Math.min(min, numericValue);
+    max = Math.max(max, numericValue);
+  }
+  return {
+    latest,
+    count,
+    avg: numericCount > 0 ? (sum / numericCount) : null,
+    min: numericCount > 0 ? min : null,
+    max: numericCount > 0 ? max : null,
+  };
+}
+
+function findWatchByKeyAtOrBeforeTime(key, tMs) {
+  if (!key || tMs == null || !Array.isArray(watches) || !watches.length) return null;
+  for (let i = watches.length - 1; i >= 0; i -= 1) {
+    const entry = watches[i];
+    if (watchGraphKeyForWatch(entry) !== key) continue;
+    if ((entry.t ?? Infinity) <= tMs) return entry;
+  }
+  return null;
+}
+
+function formatWatchGraphNumericStat(value) {
+  if (!Number.isFinite(value)) return "—";
+  return fmtNum(value, 3);
+}
+
+function numericWatchValue(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "boolean") return value ? 1 : 0;
+
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text) return null;
+  if (text === "true") return 1;
+  if (text === "false") return 0;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : null;
+}
+
+function isBooleanWatchValue(value) {
+  if (typeof value === "boolean") return true;
+  const text = String(value ?? "").trim().toLowerCase();
+  return text === "true" || text === "false";
+}
+
+function renderWatchGraphForKey(key) {
+  if (!watchGraphCanvas) return;
+  const ChartLib = window.Chart;
+  if (!ChartLib) return;
+
+  const points = [];
+  const markers = [];
+  let hasBooleanSeries = false;
+  for (let i = 0; i < watchMarkers.length; i += 1) {
+    const marker = watchMarkers[i];
+    const entry = marker?.watch;
+    if (watchGraphKeyForWatch(entry) !== key) continue;
+    const y = numericWatchValue(entry?.value);
+    const tMs = Number(marker?.t);
+    if (y == null || !Number.isFinite(tMs)) continue;
+    hasBooleanSeries = hasBooleanSeries || isBooleanWatchValue(entry?.value);
+    markers.push(marker);
+    points.push({ x: tMs / 1000, y });
+  }
+  watchGraphMarkersForKey = markers;
+
+  if (watchGraphEmpty) watchGraphEmpty.hidden = points.length > 0;
+
+  if (points.length === 0) {
+    if (watchGraphChart) {
+      watchGraphChart.destroy();
+      watchGraphChart = null;
+    }
+    return;
+  }
+
+  if (!watchGraphChart) {
+    watchGraphChart = new ChartLib(watchGraphCanvas, {
+      type: "line",
+      data: {
+        datasets: [{
+          label: "Value",
+          data: points,
+          borderColor: "rgba(110, 168, 255, 0.95)",
+          backgroundColor: "rgba(110, 168, 255, 0.25)",
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: hasBooleanSeries ? 0 : 0.1,
+          stepped: hasBooleanSeries ? "after" : false,
+        }],
+      },
+      options: {
+        animation: false,
+        maintainAspectRatio: false,
+        parsing: false,
+        normalized: true,
+        scales: {
+          x: {
+            type: "linear",
+            title: { display: true, text: "Time (s)", color: "rgba(255,255,255,0.75)" },
+            ticks: { color: "rgba(255,255,255,0.72)" },
+            grid: { color: "rgba(255,255,255,0.1)" },
+          },
+          y: {
+            type: "linear",
+            title: { display: true, text: "Value", color: "rgba(255,255,255,0.75)" },
+            ticks: { color: "rgba(255,255,255,0.72)" },
+            grid: { color: "rgba(255,255,255,0.1)" },
+          },
+        },
+        plugins: {
+          legend: { display: false },
+        },
+      },
+    });
+    return;
+  }
+
+  watchGraphChart.data.datasets[0].data = points;
+  watchGraphChart.data.datasets[0].tension = hasBooleanSeries ? 0 : 0.1;
+  watchGraphChart.data.datasets[0].stepped = hasBooleanSeries ? "after" : false;
+  watchGraphChart.update("none");
+}
+
+function resizeWatchGraphChart() {
+  if (!watchGraphChart) return;
+  watchGraphChart.resize();
+  watchGraphChart.update("none");
+}
+
+function saveWatchGraphHoverState() {
+  if (watchGraphHoverSaved != null) return;
+  watchGraphHoverSaved = {
+    index: selectedIndex,
+    lockActive: trackLockActive,
+    lockPose: trackLockPose,
+    lockIndex: trackLockIndex,
+  };
+}
+
+function clearWatchGraphHoverPreview({ restore = true } = {}) {
+  hoverTimelineTime = null;
+
+  if (restore && watchGraphHoverSaved != null) {
+    selectedIndex = watchGraphHoverSaved.index;
+    trackLockActive = watchGraphHoverSaved.lockActive;
+    trackLockPose = watchGraphHoverSaved.lockPose;
+    trackLockIndex = watchGraphHoverSaved.lockIndex;
+  }
+
+  watchGraphHoverSaved = null;
+  updatePoseReadout();
+  requestDrawAll();
+}
+
+function watchGraphMarkerFromEvent(event) {
+  if (!watchGraphChart || !watchGraphMarkersForKey.length) return null;
+  const hits = watchGraphChart.getElementsAtEventForMode(event, "nearest", { intersect: false }, false);
+  if (!Array.isArray(hits) || !hits.length) return null;
+  const pointIndex = hits[0]?.index;
+  if (!Number.isInteger(pointIndex)) return null;
+  return watchGraphMarkersForKey[pointIndex] ?? null;
+}
+
+function refreshWatchGraphPanelData() {
+  if (!watchGraphPanelOpen || !watchGraphPanelKey) return;
+  const { latest, count, avg, min, max } = watchGraphStatsByKey(watchGraphPanelKey);
+  if (!latest || count <= 0) {
+    hideWatchGraphPanel();
+    return;
+  }
+
+  const currentLatest = findWatchByKeyAtOrBeforeTime(watchGraphPanelKey, getPinnedWatchReferenceTimeMs());
+
+  const idNum = Number(latest.id);
+  const hasId = Number.isInteger(idNum);
+  const idText = hasId ? String(idNum) : "—";
+  const labelText = String(latest.label ?? "");
+  const latestValue = (currentLatest?.value == null) ? "—" : String(currentLatest.value);
+
+  if (watchGraphSubtitle) watchGraphSubtitle.textContent = hasId ? `Id: ${idText}` : "Id: —";
+  if (watchGraphTitle) watchGraphTitle.textContent = labelText || "—";
+  if (watchGraphLatest) watchGraphLatest.textContent = latestValue;
+  if (watchGraphCount) watchGraphCount.textContent = String(count);
+  if (watchGraphAvg) watchGraphAvg.textContent = formatWatchGraphNumericStat(avg);
+  if (watchGraphMin) watchGraphMin.textContent = formatWatchGraphNumericStat(min);
+  if (watchGraphMax) watchGraphMax.textContent = formatWatchGraphNumericStat(max);
+  renderWatchGraphForKey(watchGraphPanelKey);
+}
+
+function showWatchGraphPanelForKey(key) {
+  if (!watchGraphPanel || !key) return false;
+  const { latest, count } = watchGraphStatsByKey(key);
+  if (!latest || count <= 0) return false;
+
+  watchGraphPanel.classList.remove("hidden");
+  watchGraphPanel.classList.add("isOn");
+  watchGraphPanelOpen = true;
+  watchGraphPanelKey = key;
+  refreshWatchGraphPanelData();
+  resizeWatchGraphChart();
+  return true;
+}
+
+function hideWatchGraphPanel({ preserveKey = false } = {}) {
+  if (!watchGraphPanel) return;
+  watchGraphPanel.classList.add("hidden");
+  watchGraphPanel.classList.remove("isOn");
+  watchGraphPanelOpen = false;
+  if (!preserveKey) watchGraphPanelKey = null;
+  watchGraphMarkersForKey = [];
+  clearWatchGraphHoverPreview({ restore: true });
+  if (!preserveKey && watchGraphChart) {
+    watchGraphChart.destroy();
+    watchGraphChart = null;
+  }
+  if (!preserveKey && watchGraphEmpty) watchGraphEmpty.hidden = false;
+}
+
+function openOrToggleWatchGraphPanel(marker) {
+  const w = marker?.watch || {};
+  const nextKey = watchGraphKeyForWatch(w);
+  if (!nextKey) return;
+
+  if (watchGraphPanelOpen && watchGraphPanelKey === nextKey) {
+    hideWatchGraphPanel();
+    return;
+  }
+  showWatchGraphPanelForKey(nextKey);
+}
+
+function findClosestWatchMarker(targetMs) {
+  if (!watchMarkers.length || !Number.isFinite(targetMs)) return null;
+
+  let closest = null;
+  let minDiff = Infinity;
+  for (let i = 0; i < watchMarkers.length; i += 1) {
+    const marker = watchMarkers[i];
+    const diff = Math.abs((marker?.t ?? 0) - targetMs);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = marker;
+    }
+  }
+  return closest;
+}
+
+function toggleCurrentWatchGraphPanel() {
+  if (watchGraphPanelOpen) {
+    hideWatchGraphPanel({ preserveKey: true });
+    return;
+  }
+
+  if (watchGraphPanelKey && showWatchGraphPanelForKey(watchGraphPanelKey)) return;
+
+  const selectedMarker = selectedWatch?.marker ?? null;
+  const poseTime = Number(currentDisplayPose()?.t);
+  const fallbackMarker = Number.isFinite(poseTime)
+    ? (lastWatchAtTime(poseTime) ?? findClosestWatchMarker(poseTime))
+    : (watchMarkers[watchMarkers.length - 1] ?? null);
+  const marker = selectedMarker || fallbackMarker;
+  if (!marker) return;
+
+  openOrToggleWatchGraphPanel(marker);
+}
+
 function fmtPose(p) {
   if (!p) return "—";
   const x = (p.x ?? 0).toFixed(1);
   const y = (p.y ?? 0).toFixed(1);
   const th = (p.theta ?? 0).toFixed(1);
-  return `X: ${x}, Y: ${y}, θ: ${th}°`;
+  return `X: ${x} Y: ${y} θ: ${th}°`;
 }
 
 function showWatchPopup(marker, clickPos) {
@@ -2288,15 +2925,15 @@ function showWatchPopup(marker, clickPos) {
   const pose = marker.pose || interpolatePoseAtTime(marker.t);
   const poseStr = fmtPose(pose);
 
-  const tStr = (marker.t != null) ? `${marker.t}ms` : "—";
+  const tStr = (marker.t != null) ? `${fmtNum(marker.t / 1000)}s` : "—";
   const labelStr = w.label || "—";
   const valStr = (w.value == null) ? "—" : String(w.value);
 
   watchPopup.innerHTML = `
-    <div class="row"><div class="k">time</div><div class="v">${escapeHtml(tStr)}</div></div>
-    <div class="row"><div class="k">pose</div><div class="v">${escapeHtml(poseStr)}</div></div>
-    <div class="row"><div class="k">label</div><div class="v">${escapeHtml(String(labelStr))}</div></div>
-    <div class="row"><div class="k">value</div><div class="v">${escapeHtml(valStr)}</div></div>
+    <div class="row"><div class="k">Time</div><div class="v">${escapeHtml(tStr)}</div></div>
+    <div class="row"><div class="k">Pose</div><div class="v">${escapeHtml(poseStr)}</div></div>
+    <div class="row"><div class="k">Name</div><div class="v">${escapeHtml(String(labelStr))}</div></div>
+    <div class="row"><div class="k">Value</div><div class="v">${escapeHtml(valStr)}</div></div>
   `;
 
   // Position above click, clamp to viewport
@@ -2327,13 +2964,83 @@ document.addEventListener('mousedown', (e) => {
   hideWatchPopup();
 }, { capture: true });
 
+if (btnCloseWatchGraph) {
+  btnCloseWatchGraph.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    hideWatchGraphPanel();
+  });
+}
+
+if (watchGraphHeader && watchGraphPanel) {
+  watchGraphHeader.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    if (e.target && e.target.closest("#btnCloseWatchGraph")) return;
+    isWatchGraphDragging = true;
+    watchGraphDragStart = {
+      x: e.clientX - watchGraphPanel.offsetLeft,
+      y: e.clientY - watchGraphPanel.offsetTop,
+    };
+    e.preventDefault();
+  });
+}
+
+if (watchGraphResizer) {
+  watchGraphResizer.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    isWatchGraphResizing = true;
+    e.preventDefault();
+    e.stopPropagation();
+  });
+}
+
+if (watchGraphCanvas) {
+  watchGraphCanvas.addEventListener("mousemove", (e) => {
+    if (!data || playing || !watchGraphPanelOpen) return;
+    const marker = watchGraphMarkerFromEvent(e);
+    watchGraphCanvas.style.cursor = marker ? "pointer" : "crosshair";
+    if (!marker) {
+      clearWatchGraphHoverPreview({ restore: true });
+      return;
+    }
+
+    saveWatchGraphHoverState();
+    hoverTimelineTime = marker.t ?? null;
+    updatePoseReadout();
+    requestDrawAll();
+  });
+
+  watchGraphCanvas.addEventListener("mouseleave", () => {
+    if (!data || playing) return;
+    watchGraphCanvas.style.cursor = "default";
+    clearWatchGraphHoverPreview({ restore: true });
+  });
+
+  watchGraphCanvas.addEventListener("mousedown", (e) => {
+    if (!data || playing || !watchGraphPanelOpen) return;
+    if (window.__live && window.__live.streaming) return;
+    if (e.button !== 0) return;
+
+    const marker = watchGraphMarkerFromEvent(e);
+    if (!marker) return;
+
+    e.preventDefault();
+    clearWatchGraphHoverPreview({ restore: false });
+    selectWatchMarker(marker, false, null);
+  });
+}
+
 
 function renderWatchList() {
+  if (watchFilter) {
+    renderWatchFilter();
+  }
   watchList.innerHTML = "";
-  watchCount.textContent = `${watchMarkers.length}`;
+  watchCount.textContent = "0";
 
   const mode = watchSort ? watchSort.value : "time";
-  const items = watchMarkers.slice();
+  const items = watchMarkers.filter((marker) => watchFilterMatches(marker.watch));
+  watchCount.textContent = `${items.length}`;
 
   const valKey = (v) => {
     if (v == null) return { t: 2, n: 0, s: "" };
@@ -2347,6 +3054,16 @@ function renderWatchList() {
     if (text === "true") return " isBooleanTrue";
     if (text === "false") return " isBooleanFalse";
     return "";
+  };
+
+  const isGraphableWatchValue = (value) => {
+    if (typeof value === "boolean") return true;
+    if (typeof value === "number") return Number.isFinite(value);
+
+    const text = String(value ?? "").trim().toLowerCase();
+    if (!text) return false;
+    if (text === "true" || text === "false") return true;
+    return Number.isFinite(Number(text));
   };
 
   items.sort((a,b) => {
@@ -2375,6 +3092,7 @@ function renderWatchList() {
     const label = w.label || "";
     const value = w.value ?? "";
     const t = m.t;
+    const showGraphButton = isGraphableWatchValue(value);
 
     const div = document.createElement("div");
     div.className = "watchItem";
@@ -2386,7 +3104,28 @@ function renderWatchList() {
           <span class="pill level" style="background:${st.fill};color:${st.text}">${escapeHtml(st.name)}</span>
           <span style="font-weight:850;word-break:break-word">${escapeHtml(label)}</span>
         </div>
-        <div class="muted">${t != null ? (String(fmtNum(t / 1000, 2)) + "s") : "—"}</div>
+        <div class="watchMeta">
+          <div class="muted">${t != null ? (String(fmtNum(t / 1000, 2)) + "s") : "—"}</div>
+          <div class="watchActions">
+            <button class="iconBtn watchPinBtn" type="button" title="Open watch graph">
+                <svg width="20" height="20">
+                  <use href="assets/svg/icons.svg#icon-pinWatch"></use>
+                </svg>
+            </button>
+            <button class="iconBtn watchVisibilityBtn" type="button" title="Toggle watch visibility">
+              <svg width="20" height="20">
+                <use href="assets/svg/icons.svg#${watchVisibilityIconId(w)}"></use>
+              </svg>
+            </button>
+            ${showGraphButton ? `
+            <button class="iconBtn watchGraphBtn" type="button" title="Open watch graph">
+              <svg width="20" height="20">
+                <use href="assets/svg/icons.svg#icon-watchGraph"></use>
+              </svg>
+            </button>
+            ` : ""}
+          </div>
+        </div>
       </div>
       <div class="bigValue${watchBooleanValueClass(value)}">${escapeHtml(String(value))}</div>
     `;
@@ -2396,10 +3135,94 @@ function renderWatchList() {
       ev.preventDefault();
       selectWatchMarker(m, true, { x: ev.clientX, y: ev.clientY });
     }, { passive:false });
+
+    const visibilityBtn = div.querySelector(".watchVisibilityBtn");
+    const pinBtn = div.querySelector(".watchPinBtn");
+    if (pinBtn) {
+      pinBtn.title = "Pin watch";
+      pinBtn.setAttribute("aria-label", "Pin watch");
+      pinBtn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleFloatingWatch(w.id ?? w.watchId ?? null);
+      });
+      pinBtn.addEventListener("pointerdown", (ev) => {
+        ev.stopPropagation();
+      }, { passive: true });
+    }
+
+    if (visibilityBtn) {
+      const visibilityKey = watchVisibilityKeyForWatch(w);
+      const visibilityTitle = watchVisibilityTitle(w);
+      visibilityBtn.dataset.watchVisibilityKey = visibilityKey;
+      visibilityBtn.dataset.iconId = watchVisibilityIconId(w);
+      visibilityBtn.dataset.title = visibilityTitle;
+      visibilityBtn.title = visibilityTitle;
+      visibilityBtn.setAttribute("aria-label", visibilityTitle);
+      visibilityBtn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleWatchVisibilityForWatch(w);
+      });
+      visibilityBtn.addEventListener("pointerdown", (ev) => {
+        ev.stopPropagation();
+      }, { passive: true });
+    }
+
+    const graphBtn = div.querySelector(".watchGraphBtn");
+    if (graphBtn) {
+      graphBtn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        openOrToggleWatchGraphPanel(m);
+      });
+      graphBtn.addEventListener("pointerdown", (ev) => {
+        ev.stopPropagation();
+      }, { passive: true });
+    }
     watchList.appendChild(div);
   }
 
   if (selectedWatch?.marker?.t != null) highlightWatchInList(selectedWatch.marker.t, false);
+  refreshWatchGraphPanelData();
+}
+
+function renderWatchFilter() {
+  if (!watchFilter) return;
+  const current = watchFilter.value || "all";
+  watchFilter.innerHTML = "";
+
+  const allOpt = document.createElement("option");
+  allOpt.value = "all";
+  allOpt.textContent = "All";
+  watchFilter.appendChild(allOpt);
+
+  const seen = new Set();
+  const options = [];
+  const source = watchMarkers.length > 0
+    ? watchMarkers.map((marker) => marker.watch).filter(Boolean)
+    : watches;
+  for (let i = 0; i < source.length; i += 1) {
+    const watch = source[i];
+    const key = watchFilterKeyForWatch(watch);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    options.push({
+      key,
+      label: watchFilterLabelForWatch(watch),
+    });
+  }
+
+  options.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" }));
+  for (const option of options) {
+    const opt = document.createElement("option");
+    opt.value = option.key;
+    opt.textContent = option.label;
+    watchFilter.appendChild(opt);
+  }
+
+  const nextValue = Array.from(watchFilter.options).some((opt) => opt.value === current) ? current : "all";
+  watchFilter.value = nextValue;
 }
 
 function renderLogList() {
@@ -2614,9 +3437,12 @@ function selectWatchMarker(marker, fromUserClick=false, clickPos=null) {
   selectedWaypointId = null;
   selectedWaypointEventTime = null;
 
+  const timeStr = (marker.t != null) ? `${fmtNum(marker.t / 1000)}s` : "—";;
+
   jumpToEventTime(marker.t, {
-    exactStatus: (near) => setStatus(`Watch @${marker.t}ms mapped to pose @${rawPoses[near.idx].t}ms (Δ=${near.dt}ms).`),
-    interpolatedStatus: () => setStatus(`Watch @${marker.t}ms shown via interpolation (no pose within ±${WATCH_TOL_MS}ms).`),
+    exactStatus: (near) => setStatus(`Watch @${timeStr} mapped to pose `
+     + `@${((rawPoses[near.idx].t != null) ? `${fmtNum(rawPoses[near.idx].t / 1000)}s` : "—")} (Δ=${fmtNum(near.dt / 1000, 2)}s).`),
+    interpolatedStatus: () => setStatus(`Watch @${timeStr} shown via interpolation (no pose within ±${WATCH_TOL_MS}ms).`),
   });
 
   highlightWatchInList(marker.t, fromUserClick);
@@ -2628,6 +3454,52 @@ function selectWatchMarker(marker, fromUserClick=false, clickPos=null) {
 }
 
 // -------- pose list --------
+function createPoseListItem(i) {
+  const p = rawPoses[i];
+  const t = (typeof p.t === "number") ? Math.round(p.t) : "—";
+  const pi = poseToInches(p);
+  const poseSummary = `X: ${(pi.x ?? 0).toFixed(1)}in, Y: ${(pi.y ?? 0).toFixed(1)}in, θ: ${(pi.theta ?? 0).toFixed(1)}°`;
+  const div = document.createElement('div');
+  div.className = 'poseItem';
+  div.dataset.idx = String(i);
+  div.innerHTML = `<div style="display:flex;justify-content:space-between;gap:10px">
+    <div style="font-weight:800">#${i+1}</div>
+    <div class="muted">${fmtNum(t / 1000)}s</div>
+  </div>
+  <div class="sub">${escapeHtml(poseSummary)}</div>`;
+  div.addEventListener('pointerdown', (ev) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+
+    pause();
+    clearTrackHover(true);
+    clearTrackLock();
+    selectedWatch = null;
+    selectedLogTime = null;
+    selectedWaypointId = null;
+    selectedWaypointEventTime = null;
+    highlightWaypointInList(null, null, false);
+    selectedIndex = i;
+    if (leftConnected && leftStreaming) liveAutoFollowHead = false;
+    lastPoseIndex = selectedIndex;
+    setStatus(`Jumped to pose #${i+1}.`);
+    highlightPoseInList();
+    updatePoseReadout();
+    requestDrawAll();
+  }, { passive:false });
+  return div;
+}
+
+function appendPoseListItems(startIndex = 0) {
+  if (!poseList) return;
+  const frag = document.createDocumentFragment();
+  for (let i = startIndex; i < rawPoses.length; i += 1) {
+    frag.appendChild(createPoseListItem(i));
+  }
+  poseList.appendChild(frag);
+  poseCount.textContent = `${rawPoses.length}`;
+}
+
 function renderPoseList() {
   if (!poseList) return;
   poseList.innerHTML = "";
@@ -2635,45 +3507,7 @@ function renderPoseList() {
     poseCount.textContent = "—";
     return;
   }
-  poseCount.textContent = `${rawPoses.length}`;
-  const frag = document.createDocumentFragment();
-  const maxItems = rawPoses.length; // keep simple
-  for (let i = 0; i < maxItems; i++) {
-    const p = rawPoses[i];
-    const t = (typeof p.t === "number") ? Math.round(p.t) : "—";
-    const pi = poseToInches(p);
-    const poseSummary = `X: ${(pi.x ?? 0).toFixed(1)}in, Y: ${(pi.y ?? 0).toFixed(1)}in, θ: ${(pi.theta ?? 0).toFixed(1)}°`;
-    const div = document.createElement('div');
-    div.className = 'poseItem';
-    div.dataset.idx = String(i);
-    div.innerHTML = `<div style="display:flex;justify-content:space-between;gap:10px">
-      <div style="font-weight:800">#${i+1}</div>
-      <div class="muted">${fmtNum(t / 1000)}s</div>
-    </div>
-    <div class="sub">${escapeHtml(poseSummary)}</div>`;
-    div.addEventListener('pointerdown', (ev) => {
-      if (ev.button !== 0) return;
-      ev.preventDefault();
-
-      pause();
-      clearTrackHover(true);
-      clearTrackLock();
-      selectedWatch = null;
-      selectedLogTime = null;
-      selectedWaypointId = null;
-      selectedWaypointEventTime = null;
-      highlightWaypointInList(null, null, false);
-      selectedIndex = i;
-      if (leftConnected && leftStreaming) liveAutoFollowHead = false;
-      lastPoseIndex = selectedIndex;
-      setStatus(`Jumped to pose #${i+1}.`);
-      highlightPoseInList();
-      updatePoseReadout();
-      requestDrawAll();
-    }, { passive:false });
-    frag.appendChild(div);
-  }
-  poseList.appendChild(frag);
+  appendPoseListItems(0);
   highlightPoseInList();
 }
 
@@ -2706,17 +3540,21 @@ function drawField() {
   ctx.fillRect(0, 0, w, h);
 
   if (!fieldImg) return;
-  const center = worldToScreen(0, 0);
+  const centerWorldX = (bounds.minX + bounds.maxX) * 0.5;
+  const centerWorldY = (bounds.minY + bounds.maxY) * 0.5;
+  const center = worldToScreenBase(centerWorldX, centerWorldY);
   const wIn = (bounds.maxX - bounds.minX) || 1;
   const hIn = (bounds.maxY - bounds.minY) || 1;
   const wPx = wIn * scale;
   const hPx = hIn * scale;
+  const viewportCenter = canvasViewportCenter();
 
   ctx.save();
-  ctx.translate(center.x, center.y);
+  ctx.translate(viewportCenter.x, viewportCenter.y);
   ctx.rotate(fieldRotationRad);
+  ctx.translate(-viewportCenter.x, -viewportCenter.y);
   ctx.globalAlpha = 0.95;
-  ctx.drawImage(fieldImg, -wPx / 2, -hPx / 2, wPx, hPx);
+  ctx.drawImage(fieldImg, center.x - wPx / 2, center.y - hPx / 2, wPx, hPx);
   ctx.restore();
   ctx.globalAlpha = 1.0;
 }
@@ -2756,6 +3594,7 @@ function drawWatchDots() {
 
   for (const m of watchMarkers) {
     const { pose, watch } = m;
+    if (!isWatchMarkerVisible(m)) continue;
     if (!pose) continue;
     const st = levelStyle(watch.level);
     const p = worldToScreen(pose.x, pose.y);
@@ -2775,7 +3614,7 @@ function drawWatchDots() {
     ctx.restore();
   }
 
-  if (selectedWatch?.marker?.pose) {
+  if (selectedWatch?.marker?.pose && isWatchMarkerVisible(selectedWatch.marker)) {
     const st = levelStyle(selectedWatch.marker.watch.level);
     const pose = selectedWatch.marker.pose;
     const p = worldToScreen(pose.x, pose.y);
@@ -3024,6 +3863,7 @@ function xToTime(x) {
 function timelinePickWatchDot(mx, my) {
   const r = 8;
   for (const m of watchMarkers) {
+    if (!isWatchMarkerVisible(m)) continue;
     const dx = mx - timeToX(m.t);
     const dy = my - 10;
     if ((dx*dx + dy*dy) <= r*r) return m;
@@ -3078,6 +3918,7 @@ function drawTimeline() {
 
   // watch dots
   for (const m of watchMarkers) {
+    if (!isWatchMarkerVisible(m)) continue;
     const st = levelStyle(m.watch.level);
     const x = timeToX(m.t);
     const y = 10;
@@ -3118,7 +3959,7 @@ function drawTimeline() {
     tctx.stroke();
   }
 
-  if (selectedWatch?.marker?.t != null) {
+  if (selectedWatch?.marker?.t != null && isWatchMarkerVisible(selectedWatch.marker)) {
     const x = timeToX(selectedWatch.marker.t);
     const y = 10;
     tctx.save();
@@ -3234,6 +4075,26 @@ window.addEventListener('mousemove', (e) => {
     floatWin.style.left = `${e.clientX - dragStart.x}px`;
     floatWin.style.top = `${e.clientY - dragStart.y}px`;
   }
+  if (isWatchGraphDragging && watchGraphPanel) {
+    const nextLeft = e.clientX - watchGraphDragStart.x;
+    const nextTop = e.clientY - watchGraphDragStart.y;
+    const rect = watchGraphPanel.getBoundingClientRect();
+    const clampedLeft = clamp(nextLeft, 0, Math.max(0, window.innerWidth - rect.width));
+    const clampedTop = clamp(nextTop, 0, Math.max(0, window.innerHeight - rect.height));
+    watchGraphPanel.style.left = `${clampedLeft}px`;
+    watchGraphPanel.style.top = `${clampedTop}px`;
+    watchGraphPanel.style.right = "auto";
+  }
+  if (pinnedWatchDragTarget) {
+    const nextLeft = e.clientX - pinnedWatchDragStart.x;
+    const nextTop = e.clientY - pinnedWatchDragStart.y;
+    const rect = pinnedWatchDragTarget.getBoundingClientRect();
+    const clampedLeft = clamp(nextLeft, 0, Math.max(0, window.innerWidth - rect.width));
+    const clampedTop = clamp(nextTop, 0, Math.max(0, window.innerHeight - rect.height));
+    pinnedWatchDragTarget.style.left = `${clampedLeft}px`;
+    pinnedWatchDragTarget.style.top = `${clampedTop}px`;
+    pinnedWatchDragTarget.style.right = "auto";
+  }
   
   if (isResizing) {
     // 1. Calculate the intended new size
@@ -3248,11 +4109,25 @@ window.addEventListener('mousemove', (e) => {
     floatWin.style.width = `${newWidth}px`;
     floatWin.style.height = `${newHeight}px`;
   }
+  if (isWatchGraphResizing && watchGraphPanel) {
+    let newWidth = e.clientX - watchGraphPanel.offsetLeft;
+    let newHeight = e.clientY - watchGraphPanel.offsetTop;
+    const maxWidth = Math.max(WATCH_GRAPH_MIN_W, window.innerWidth - watchGraphPanel.offsetLeft - WATCH_GRAPH_MARGIN);
+    const maxHeight = Math.max(WATCH_GRAPH_MIN_H, window.innerHeight - watchGraphPanel.offsetTop - WATCH_GRAPH_MARGIN);
+    newWidth = clamp(newWidth, WATCH_GRAPH_MIN_W, Math.min(WATCH_GRAPH_MAX_W, maxWidth));
+    newHeight = clamp(newHeight, WATCH_GRAPH_MIN_H, maxHeight);
+    watchGraphPanel.style.width = `${newWidth}px`;
+    watchGraphPanel.style.height = `${newHeight}px`;
+    resizeWatchGraphChart();
+  }
 });
 
 window.addEventListener('mouseup', () => {
   isDragging = false;
   isResizing = false;
+  isWatchGraphDragging = false;
+  isWatchGraphResizing = false;
+  pinnedWatchDragTarget = null;
 });
 
 function findTemporallyClosestWatch(targetMs) {
@@ -3366,6 +4241,7 @@ function updatePoseReadout() {
     timePill.textContent = "Time: —";
     pointPill.textContent = "Point: —/—";
     posePill.textContent = "X: —  Y: — θ: —  Speed: —";
+    refreshPinnedWatchPanels();
     return;
   }
   if (selectedIndex < 0) selectedIndex = 0;
@@ -3418,7 +4294,9 @@ function updatePoseReadout() {
     ? `X: ${fmtNum(p.x,1)}  Y: ${fmtNum(p.y,1)}  θ: ${fmtNum(p.theta,1)}°  Speed: ${spDisp == null ? "—" : fmtNum(spDisp,2)}`
     : "X: —  Y: —  θ: —  Speed: —";
   updateDeltaReadout();
-  updateFloatingInfo(p, idx);  
+  updateFloatingInfo(p, idx);
+  refreshWatchGraphPanelData();
+  refreshPinnedWatchPanels();
 }
 
 // -------- fit --------
@@ -3498,12 +4376,9 @@ canvas.addEventListener('wheel', (e) => {
   const newScale = baseScale * viewZoom;
   const newOffXBase = baseOffsetXpx * viewZoom;
   const newOffYBase = baseOffsetYpx * viewZoom;
-
-  // account for field rotation when anchoring zoom to cursor
-  const xR = w0.x * fieldRotationCos - w0.y * fieldRotationSin;
-  const yR = w0.x * fieldRotationSin + w0.y * fieldRotationCos;
-  viewPanXpx = mx - (xR * newScale + newOffXBase);
-  viewPanYpx = my - (newOffYBase - yR * newScale);
+  const targetBase = rotateScreenPoint(mx, my, -fieldRotationRad);
+  viewPanXpx = targetBase.x - (w0.x * newScale + newOffXBase);
+  viewPanYpx = targetBase.y - (newOffYBase - w0.y * newScale);
   computeTransform();
   clampViewPanToVisibleMargin();
   requestDrawAll();
@@ -3641,6 +4516,7 @@ canvas.addEventListener('pointermove', (e) => {
   const y = e.clientY - rect.top;
   const dx = x - panStart.x;
   const dy = y - panStart.y;
+  const baseDelta = rotateScreenDelta(dx, dy, -fieldRotationRad);
 
   // Only start panning once the user has clearly dragged.
   if (!isPanning) {
@@ -3657,8 +4533,8 @@ canvas.addEventListener('pointermove', (e) => {
     }
   }
 
-  viewPanXpx = panStart.panX + dx;
-  viewPanYpx = panStart.panY + dy;
+  viewPanXpx = panStart.panX + baseDelta.x;
+  viewPanYpx = panStart.panY + baseDelta.y;
 
   computeTransform();
   clampViewPanToVisibleMargin();
@@ -3790,6 +4666,7 @@ function hitTestWatchAtClient(clientX, clientY) {
   let best = null;
   let bestD2 = tol*tol;
   for (const m of watchMarkers) {
+    if (!isWatchMarkerVisible(m)) continue;
     if (!m.pose) continue;
     const p = worldToScreen(m.pose.x, m.pose.y);
     const dx = p.x - x;
@@ -3834,7 +4711,7 @@ function pause() {
   raf = null;
   playPose = null;
   lastWall = null;
-  setStatus(`Paused at time ${((rawPoses[selectedIndex]?.t ?? 0)/1000).toFixed(2)}s`);
+  setStatus(`Paused at time ${((rawPoses[selectedIndex]?.t ?? 0)/1000).toFixed(1)}s`);
 }
 
 function planPause() {
@@ -3866,8 +4743,8 @@ function play() {
   selectedWaypointEventTime = null;
   highlightWaypointInList(null, null, false);
   timelineHoverSaved = null;
-  setStatus(`Playing from time ${((rawPoses[selectedIndex]?.t ?? 0)/1000).toFixed(2)}s`);
-
+  setStatus(`Playing from time ${((rawPoses[selectedIndex]?.t ?? 0)/1000).toFixed(1)}s`);
+  
   const tStart = rawPoses[selectedIndex]?.t;
   playTimeMs = (typeof tStart === "number") ? tStart : (rawPoses[0]?.t ?? 0);
 
@@ -4365,23 +5242,43 @@ function parseLiveLineIntoState(line) {
       speed_raw,
       speed_norm: 0,
     });
-    telemetryMetrics.totalPosesRecived += 1;
+    telemetryMetrics.totalPosesReceived += 1;
     liveLastPoseT = t;
     return { posesAdded: 1, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
   }
 
-  // WATCH: [WATCH],millis,level,label,value (value may contain commas)
+  // WATCH (new): [WATCH],millis,level,id,label,value (value may contain commas)
   if (s.startsWith("[WATCH],")) {
     const parts = s.split(",");
     if (parts.length < 5) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
     const t = toNumMaybe(parts[1]);
     if (t == null) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
     const level = parts[2] ?? "INFO";
-    let label = parts[3] ?? "";
-    label = label.replaceAll(":", ""); 
-    const value = parts.slice(4).join(",");
-    watches.push({ t, level, label, value });
-    telemetryMetrics.totalWatchesRecived += 1;
+    let id = null;
+    let label = "";
+    let value = "";
+
+    // Prefer the new schema when an integer id is present in field 4.
+    if (parts.length >= 6) {
+      const idCandidate = Number(parts[3]);
+      if (Number.isInteger(idCandidate)) {
+        id = idCandidate;
+        label = parts[4] ?? "";
+        value = parts.slice(5).join(",");
+      } else {
+        label = parts[3] ?? "";
+        value = parts.slice(4).join(",");
+      }
+    } else {
+      label = parts[3] ?? "";
+      value = parts.slice(4).join(",");
+    }
+
+    label = label.replaceAll(":", "");
+    const nextWatch = { t, id, level, label, value };
+    nextWatch.visible = currentVisibilityForWatch(nextWatch);
+    watches.push(nextWatch);
+    telemetryMetrics.totalWatchesReceived += 1;
     return { posesAdded: 0, watchesAdded: 1, logsAdded: 0, waypointsAdded: 0 };
   }
 
@@ -4400,7 +5297,7 @@ function parseLiveLineIntoState(line) {
       message: parsed.message,
       isSystem: parsed.isSystem,
     });
-    telemetryMetrics.totalLogsRecived += 1;
+    telemetryMetrics.totalLogsReceived += 1;
     return { posesAdded: 0, watchesAdded: 0, logsAdded: 1, waypointsAdded: 0 };
   }
 
@@ -4410,7 +5307,7 @@ function parseLiveLineIntoState(line) {
     const event = parsed.waypointEvent;
     if (event.type === "CREATED") {
       const isRetriggerable = !!event.params?.retriggerable;
-      telemetryMetrics.totalWaypointsRecived += 1;
+      telemetryMetrics.totalWaypointsReceived += 1;
       waypointsById.set(event.id, {
         id: event.id,
         name: event.name,
@@ -4431,7 +5328,7 @@ function parseLiveLineIntoState(line) {
     const waypoint = waypointsById.get(event.id);
     if (!waypoint) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
 
-    telemetryMetrics.totalWaypointsRecived += 1;
+    telemetryMetrics.totalWaypointsReceived += 1;
     waypoint.events.push(event);
     waypoint.events.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
     waypoint.latestEvent = event;
@@ -4460,7 +5357,7 @@ function flushLiveAppend() {
   liveAppendQueue = [];
 
   // keep it responsive (basic cap)
-  const MAX_CHARS = 25000;
+  const MAX_CHARS = 50_000;
   if (liveWinRaw.length > MAX_CHARS) {
     liveWinRaw = liveWinRaw.slice(liveWinRaw.length - MAX_CHARS);
   }
@@ -4608,6 +5505,10 @@ function setLeftUi() {
     updateConnectButtonState();
   }
 
+  if (btnExport) {
+    btnExport.disabled = leftConnected && leftStreaming;
+  }
+
   if (btnLeftStop) {
     btnLeftStop.disabled = !leftConnected || leftActionInFlight;
     if (!leftConnected) {
@@ -4621,6 +5522,10 @@ function setLeftUi() {
       btnLeftStop.textContent = leftStreaming ? "Stop" : "Start";
       btnLeftStop.classList.toggle('isOn', leftStreaming);
     }
+  }
+
+  if (btnLeftRefreshEl) {
+    btnLeftRefreshEl.disabled = !leftConnected || leftActionInFlight;
   }
 }
 
@@ -4642,9 +5547,6 @@ function leftSetUI(reason) {
       ? (leftStreaming ? "Stop streaming" : "Starts streaming.")
       : "Starts streaming. Connect to start.";
   }
-
-  // Refresh controls only meaningful while connected
-  if (btnLeftRefreshEl) btnLeftRefreshEl.disabled = !leftConnected || !leftActionInFlight;
 
   if (reason) liveAppendLine(`[UI] ${reason}`);
 }
@@ -4752,6 +5654,7 @@ async function connectLeft() {
     else resetStreamingTimer();
     if (window.__live) { window.__live.connected = false; window.__live.streaming = false; }
     stopLeftRefresh();
+    leftSetUI("Disconnected");
     dbgLive("ws: close");
   });
 
@@ -4854,8 +5757,8 @@ async function doLeftRefresh() {
     waypoints.sort((a,b) => (a.createdTime ?? 0) - (b.createdTime ?? 0));
   }
 
-  // Recompute derived fields. This is cheap at this scale (<~4000 poses).
-  computeSpeedNorm();
+  // Recompute derived fields incrementally for newly appended poses.
+  if (posesAdded > 0) computeSpeedNormRange(rawPoses.length - posesAdded);
   data.poses = rawPoses;
   data.watches = watches;
   data.logs = logs;
@@ -4864,7 +5767,9 @@ async function doLeftRefresh() {
   if (watchesAdded > 0) {
     recomputeWatchMarkers();
     rebuildWatchMarkersByTime();
+    renderWatchFilter();
     renderWatchList();
+    refreshPinnedWatchPanels();
   }
 
   if (logsAdded > 0) {
@@ -4876,7 +5781,13 @@ async function doLeftRefresh() {
   }
 
   if (posesAdded > 0) {
-    renderPoseList();
+    const appendStart = rawPoses.length - posesAdded;
+    if (poseList && poseList.childElementCount === appendStart) {
+      appendPoseListItems(appendStart);
+      highlightPoseInList();
+    } else {
+      renderPoseList();
+    }
     // If not hovering timeline/track, keep the robot on the most recent pose.
     if (liveAutoFollowHead && hoverTimelineTime == null && !playing && !trackLockActive && !(trackHover && (trackHover.pose || trackHover.t))) {
       selectedIndex = rawPoses.length - 1;
@@ -5317,6 +6228,8 @@ function setData(obj) {
 
   // watches: accept alternate key just in case
   watches = normalizeWatches(obj.watches || obj.watch || []);
+  logs = normalizeLogs(obj.logs || obj.log || []);
+  waypoints = normalizeWaypoints(obj.waypoints || []);
   setImportedRouteMeta(obj.meta);
   finalizeLoadedData();
 }
@@ -5361,6 +6274,7 @@ function finalizeLoadedData() {
   saveSettings();
 
   selectedWatch = null;
+  hideWatchGraphPanel();
   selectedLogTime = null;
   selectedWaypointId = null;
   selectedWaypointEventTime = null;
@@ -5375,7 +6289,9 @@ function finalizeLoadedData() {
 
   recomputeWatchMarkers();
   rebuildWatchMarkersByTime();
+  renderWatchFilter();
   renderWatchList();
+  refreshPinnedWatchPanels();
   renderLogList();
   renderWaypointFilter();
   renderWaypointList();
@@ -5935,6 +6851,8 @@ function serializeExportPose(pose) {
 function serializeExportWatch(watch) {
   return {
     t: watch.t ?? null,
+    id: Number.isInteger(watch.id) ? watch.id : null,
+    visible: watch.visible !== false,
     level: watch.level ?? 'INFO',
     label: watch.label ?? '',
     value: watch.value ?? '',
@@ -5964,13 +6882,6 @@ function serializeExportWaypoint(waypoint) {
   return {
     id: waypoint.id,
     name: waypoint.name ?? '',
-    createdTime: waypoint.createdTime ?? null,
-    createdEvent: waypoint.createdEvent ? serializeExportWaypointEvent(waypoint.createdEvent) : null,
-    active: !!waypoint.active,
-    target: waypoint.target ? { ...waypoint.target } : null,
-    terminalEvent: waypoint.terminalEvent ? serializeExportWaypointEvent(waypoint.terminalEvent) : null,
-    latestEvent: waypoint.latestEvent ? serializeExportWaypointEvent(waypoint.latestEvent) : null,
-    latestActiveEvent: waypoint.latestActiveEvent ? serializeExportWaypointEvent(waypoint.latestActiveEvent) : null,
     events: Array.isArray(waypoint.events) ? waypoint.events.map(serializeExportWaypointEvent) : [],
   };
 }
@@ -5993,7 +6904,7 @@ function buildExportMetadata(PathName) {
   }).format(new Date());
 
   return {
-    SchemaVersion: 1,
+    SchemaVersion: 2,
     CreationDate: formattedDateGB,
     AppVersion: APP_VERSION,
     Creator: 'MotionView',
@@ -6114,6 +7025,9 @@ function setImportedRouteMeta(meta) {
   if (btnRouteInfo) {
     btnRouteInfo.disabled = !importedRouteMeta;
   }
+  if (btnExport) {
+    btnExport.disabled = !importedRouteMeta;
+  }
   if (btnApplyRunSettings) {
     btnApplyRunSettings.disabled = !importedRouteMeta?.ViewingSettings;
   }
@@ -6166,6 +7080,7 @@ async function applyImportedRunSettings() {
   updateOffsetsFromInputs();
   computeSpeedNorm();
   renderPoseList();
+  renderWatchFilter();
   renderWatchList();
   renderLogList();
   renderWaypointFilter();
@@ -7255,6 +8170,10 @@ offThetaEl.addEventListener('input', () => {
 });
 
 if (watchSort) watchSort.addEventListener('change', () => { renderWatchList(); requestDrawAll(); });
+if (watchFilter) watchFilter.addEventListener('change', () => {
+  renderWatchList();
+  requestDrawAll();
+});
 if (logSort) logSort.addEventListener('change', () => { renderLogList(); });
 if (waypointFilter) waypointFilter.addEventListener('change', () => {
   renderWaypointList();
@@ -7298,6 +8217,7 @@ function clearAllPosesAndWatches() {
 
   try { renderPoseList?.(); } catch {}
   try { renderWatchList?.(); } catch {}
+  try { refreshPinnedWatchPanels?.(); } catch {}
   try { renderLogList?.(); } catch {}
   try { renderWaypointFilter?.(); } catch {}
   try { renderWaypointList?.(); } catch {}
@@ -7345,6 +8265,13 @@ document.addEventListener('keydown', (e) => {
       if (appMode !== "viewing") return;
       e.preventDefault();
       fileEl.click();
+      return;
+    }
+
+    if (e.key === 'r' || e.key === 'R') {
+      if (appMode !== "viewing") return;
+      e.preventDefault();
+      btnLeftRefresh?.click();
       return;
     }
 
@@ -7413,6 +8340,19 @@ document.addEventListener('keydown', (e) => {
       toggleFloatingInfo();
       return;
     }
+
+    if (e.key === 'g' || e.key === 'G') {
+      e.preventDefault();
+      if (appMode !== "viewing") return;
+      toggleCurrentWatchGraphPanel();
+      return;
+    }
+  }
+
+  if (!e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
+    e.preventDefault();
+    openFloatingWatch(null);
+    return;
   }
 
   if (e.key === 'f' || e.key === 'F') {
@@ -7571,10 +8511,10 @@ async function appExit() {
 
   await captureTelemetry("livestream_metrics", {
     version: APP_VERSION,
-    totalPosesRecived: telemetryMetrics.totalPosesRecived,
-    totalLogsRecived: telemetryMetrics.totalLogsRecived,
-    totalWatchesRecived: telemetryMetrics.totalWatchesRecived,
-    totalWaypointsRecived: telemetryMetrics.totalWaypointsRecived,
+    totalPosesReceived: telemetryMetrics.totalPosesReceived,
+    totalLogsReceived: telemetryMetrics.totalLogsReceived,
+    totalWatchesReceived: telemetryMetrics.totalWatchesReceived,
+    totalWaypointsReceived: telemetryMetrics.totalWaypointsReceived,
   });
 
   const uptime = fmtNum(performance.now() / 1000, 2) > 60 
@@ -7648,6 +8588,7 @@ window.addEventListener('resize', () => {
   updateFieldLayout(true); // keep bounds, recompute square sizing
   resizeTimeline();
   resizePlanningTimeline();
+  resizeWatchGraphChart();
   scheduleTopBarStatusLayout();
 });
 

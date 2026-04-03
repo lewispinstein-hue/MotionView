@@ -55,14 +55,15 @@ namespace mvlib {
  * }
  * @endcode
  */
-inline void setOdom(okapi::OdomChassisController* chassis) {
+inline void setOdom(okapi::OdomChassisController* chassis, 
+                    okapi::QLength units = okapi::inch) {
   mvlib::Logger::getInstance().setPoseGetter([chassis]() -> std::optional<Pose> {
     if (!chassis) return std::nullopt;
 
     const auto s = chassis->getState();
 
-    const float xIn   = s.x.convert(okapi::inch);
-    const float yIn   = s.y.convert(okapi::inch);
+    const float xIn   = s.x.convert(units);
+    const float yIn   = s.y.convert(units);
     const float thDeg = s.theta.convert(okapi::deg);
 
     return Pose{xIn, yIn, thDeg};

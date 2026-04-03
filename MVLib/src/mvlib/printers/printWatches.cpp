@@ -17,8 +17,11 @@
 
 namespace mvlib {
 void Logger::printWatches() {
+  unique_lock lock(m_mutex);
+  if (!lock.isLocked()) return; // Ensure the vector won't be resized  
+
   uint32_t nowMs = pros::millis();
-  for (auto &[id, w] : m_watches) {
+  for (auto& w : m_watches) {
     // Gate evaluation frequency for not onChange watches
     if (!w.onChange && w.lastPrintMs != 0 &&
        (nowMs - w.lastPrintMs) < w.intervalMs) continue;
@@ -26,7 +29,8 @@ void Logger::printWatches() {
     if (!w.eval) continue;
 
     auto [lvl, valueStr, label] = w.eval();
-
+    if (lvl == LogLevel::NONE || lvl == LogLevel::OFF) continue;
+    
     if (w.onChange) {
       if (w.lastValue && *w.lastValue == valueStr) continue;
       w.lastValue = valueStr;
@@ -36,6 +40,7 @@ void Logger::printWatches() {
     label = std::string("[WATCH],") +
             std::to_string(nowMs) + 
             "," + m_levelToString(lvl) 
+            + "," + std::to_string(w.id)
             +  "," + label + "," + valueStr;
 
     switch (lvl) {
@@ -43,6 +48,7 @@ void Logger::printWatches() {
       case LogLevel::INFO:  LOG_INFO("%s",  label.c_str()); break;
       case LogLevel::WARN:  LOG_WARN("%s",  label.c_str()); break;
       case LogLevel::ERROR: LOG_ERROR("%s", label.c_str()); break;
+      case LogLevel::FATAL: LOG_FATAL("%s", label.c_str()); break;
       default:              LOG_INFO("%s",  label.c_str()); break;
     }
   }

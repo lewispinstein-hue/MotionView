@@ -202,4 +202,3 @@ For the full waypoint guide, including `WaypointParams`, `WaypointHandle`, `Wayp
 - With odometry, MVLib (and MotionView) become much more powerful.
 - If you have a drivetrain that can't be represented with 2 MotorGroups, you can leave the robot unset and MVLib will estimate your robot's speed using its pose.
 
----

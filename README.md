@@ -106,6 +106,7 @@ Use cases:
 | Viewing | `Cmd + K` | Clear Viewer |
 | Viewing | `Cmd + S` | Start/stop live streaming (if connected) |
 | Viewing | `P` | Toggle Planned Overlay |
+| Viewing | `G` | Toggle Floating Graph |
 | Viewing | `Cmd + C` | Connect/disconnect |
 | Viewing | `←` / `→` | Step to previous/next pose |
 | Planning | `Space` | Play/Pause plan playback |
@@ -115,3 +116,16 @@ Use cases:
 | Planning | `Cmd + Z` | Undo |
 | Planning | `Cmd + Shift + Z` | Redo |
 | Planning | `Cmd + K` | Clear planned path |
+
+
+## Version Compatibility
+> You can find your MotionView version by clicking on the `?` icon in MotionView and looking in the bottom left, and your MVLib version by running `pros c info-project` and looking for `libmvlib` in the output.
+
+The MotionView field holds the version of the app, an the MVLib field holds all versions of MVLib that that version of MotionView supports.
+
+> Example: `MotionView <= v1.0.1 supports MVLib <= v1.0.1` Meaning MotionView versions lower or equal to 1.0.1 support MVLib versions 1.0.1 or lower.
+
+| MotionView | MVLib |
+|---|---|
+| <=1.0.1 | <=1.0.1 |
+| >=1.1.0 | >=1.1.0 |
