@@ -1,4 +1,5 @@
 #include "main.h"
+#include "pros/misc.hpp"
 
 #define MVLIB_USE_SIMPLES
 #include "mvlib/api.hpp" 
@@ -83,6 +84,10 @@ void initialize() {
 	// Print the offset
 	logger.info("Left Goal Distance: %.1f, %.1f, %.1f\n", off.offX, off.offY, off.offT.value_or(0));
 	logger.info("Finished initialization!");
+
+	if (pros::competition::is_field_control()) {
+		
+	}
 }
 
 /**

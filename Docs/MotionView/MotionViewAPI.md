@@ -50,7 +50,7 @@ This type of data is used by MotionView to draw the robot.
 Expected format:
 
 ```log
-[WATCH],uptime,level,label,value
+[WATCH],uptime,level,id,label,value
 ```
 
 - `uptime`: The time since the robot booted in milliseconds
@@ -61,7 +61,7 @@ Expected format:
 Example:
 
 ```log
-[12.43] [INFO]: [WATCH],12342,INFO,"Tongue mech state",true
+[12.43] [INFO]: [WATCH],12342,INFO,7,"Tongue mech state",true
 ```
 
 Parsed as:
@@ -69,6 +69,7 @@ Parsed as:
 {
   "t": 12432,
   "level": "INFO",
+  "id": 7,
   "label": "Tongue mech state",
   "value": "true"
 }

@@ -9,8 +9,10 @@
     "core:window:allow-destroy",
     "opener:default",
     "posthog:default",
+    "shell:default",
     "core:app:allow-version",
     "core:app:allow-name",
+    "shell:allow-open",
     {
       "identifier": "shell:allow-execute",
       "allow": [

@@ -413,7 +413,7 @@ const btnCloseWatchGraph = document.getElementById('btnCloseWatchGraph');
 const watchGraphHeader = document.getElementById('watchGraphHeader');
 const watchGraphResizer = document.getElementById('watchGraphResizer');
 const watchGraphSubtitle = document.getElementById('watchGraphSubtitle');
-const watchGraphLabel = document.getElementById('watchGraphLabel');
+const watchGraphTitle = document.getElementById('watchGraphTitle');
 const watchGraphLatest = document.getElementById('watchGraphLatest');
 const watchGraphCount = document.getElementById('watchGraphCount');
 const watchGraphAvg = document.getElementById('watchGraphAvg');
@@ -421,6 +421,8 @@ const watchGraphMin = document.getElementById('watchGraphMin');
 const watchGraphMax = document.getElementById('watchGraphMax');
 const watchGraphCanvas = document.getElementById('watchGraphCanvas');
 const watchGraphEmpty = document.getElementById('watchGraphEmpty');
+const pinnedWatchHost = document.getElementById('pinnedWatchHost');
+const pinnedWatchTemplate = document.getElementById('pinnedWatchTemplate');
 
 // Settings modal elements
 const btnSettings = document.getElementById('btnSettings');
@@ -1424,6 +1426,132 @@ function normalizeLogLevel(levelRaw) {
   return "INFO";
 }
 
+let pinnedWatchPanelCount = 0;
+let pinnedWatchDragTarget = null;
+let pinnedWatchDragStart = { x: 0, y: 0 };
+
+function findLatestWatchById(watchId) {
+  if (watchId == null || !Array.isArray(watches) || !watches.length) return null;
+  const normalizedId = String(watchId);
+  for (let i = watches.length - 1; i >= 0; i -= 1) {
+    const watch = watches[i];
+    const candidateId = watch?.id ?? watch?.watchId;
+    if (candidateId != null && String(candidateId) === normalizedId) return watch;
+  }
+  return null;
+}
+
+function findWatchByIdAtOrBeforeTime(watchId, tMs) {
+  if (watchId == null || tMs == null || !Array.isArray(watches) || !watches.length) return null;
+  const normalizedId = String(watchId);
+  for (let i = watches.length - 1; i >= 0; i -= 1) {
+    const watch = watches[i];
+    const candidateId = watch?.id ?? watch?.watchId;
+    if (candidateId == null || String(candidateId) !== normalizedId) continue;
+    if ((watch.t ?? Infinity) <= tMs) return watch;
+  }
+  return null;
+}
+
+function getPinnedWatchReferenceTimeMs() {
+  if (playing) return playTimeMs ?? null;
+  if (hoverTimelineTime != null) return hoverTimelineTime;
+  if (!playing && trackHover?.pose?.t != null) return trackHover.pose.t;
+  if (!playing && trackLockActive && trackLockPose?.t != null) return trackLockPose.t;
+  if (!rawPoses.length) return null;
+  const idx = clamp(selectedIndex, 0, Math.max(0, rawPoses.length - 1));
+  return rawPoses[idx]?.t ?? null;
+}
+
+function applyPinnedWatchLevel(el, levelRaw) {
+  if (!el) return;
+  const level = normalizeLogLevel(levelRaw);
+  const st = levelStyle(level);
+  el.style.background = st.fill;
+  el.style.color = st.text;
+  el.style.borderColor = "rgba(255, 255, 255, 0.10)";
+}
+
+function getPinnedWatchPanelById(watchId) {
+  if (!pinnedWatchHost || watchId == null) return null;
+  return pinnedWatchHost.querySelector(`.pinnedWatchPanel[data-watch-id="${CSS.escape(String(watchId))}"]`);
+}
+
+function closePinnedWatchPanel(panel) {
+  if (!panel) return;
+  if (pinnedWatchDragTarget === panel) pinnedWatchDragTarget = null;
+  panel.remove();
+}
+
+function updatePinnedWatchPanel(panel, watchId) {
+  if (!panel) return;
+  const tMs = getPinnedWatchReferenceTimeMs();
+  const latest = findWatchByIdAtOrBeforeTime(watchId, tMs);
+  const nameEl = panel.querySelector('.pinnedWatchName');
+  const valueEl = panel.querySelector('.pinnedWatchValue');
+  const latestOverall = findLatestWatchById(watchId);
+  const label = latest?.label || latestOverall?.label || (watchId == null ? "No watch selected" : `Watch ${watchId}`);
+  if (nameEl) nameEl.textContent = label;
+  if (valueEl) valueEl.textContent = latest?.value != null ? String(latest.value) : "—";
+  applyPinnedWatchLevel(valueEl, latest?.level ?? "INFO");
+}
+
+function refreshPinnedWatchPanels() {
+  if (!pinnedWatchHost) return;
+  const panels = pinnedWatchHost.querySelectorAll('.pinnedWatchPanel');
+  for (const panel of panels) {
+    const watchId = panel.dataset.watchId || null;
+    updatePinnedWatchPanel(panel, watchId);
+  }
+}
+
+function toggleFloatingWatch(watchId) {
+  if (watchId == null) return openFloatingWatch(null);
+  const existing = getPinnedWatchPanelById(watchId);
+  if (existing) {
+    closePinnedWatchPanel(existing);
+    return null;
+  }
+  return openFloatingWatch(watchId);
+}
+
+function openFloatingWatch(watchId) {
+  if (!pinnedWatchHost || !pinnedWatchTemplate) return null;
+
+  const root = pinnedWatchTemplate.content.firstElementChild?.cloneNode(true);
+  if (!root) return null;
+
+  const headerEl = root.querySelector('.pinnedWatchHeader');
+  const closeEl = root.querySelector('.pinnedWatchClose');
+
+  root.dataset.watchId = watchId == null ? "" : String(watchId);
+  root.style.top = `${128 + pinnedWatchPanelCount * 26}px`;
+  root.style.right = `${16 + pinnedWatchPanelCount * 18}px`;
+  pinnedWatchPanelCount += 1;
+
+  updatePinnedWatchPanel(root, watchId);
+
+  headerEl?.addEventListener('mousedown', (ev) => {
+    if (ev.button !== 0) return;
+    pinnedWatchDragTarget = root;
+    pinnedWatchDragStart = {
+      x: ev.clientX - root.offsetLeft,
+      y: ev.clientY - root.offsetTop,
+    };
+    root.style.left = `${root.offsetLeft}px`;
+    root.style.top = `${root.offsetTop}px`;
+    root.style.right = 'auto';
+    ev.preventDefault();
+  });
+
+  closeEl?.addEventListener('click', () => {
+    closePinnedWatchPanel(root);
+  });
+
+  pinnedWatchHost.appendChild(root);
+  return root;
+}
+
 function levelSortRank(levelRaw) {
   const L = normalizeLogLevel(levelRaw);
   if (L === "FATAL") return 4;
@@ -1490,9 +1618,14 @@ function getMinMaxSpeed() {
 }
 
 function computeSpeedNorm() {
+  computeSpeedNormRange(0);
+}
+
+function computeSpeedNormRange(startIndex = 0) {
   const { minV, maxV } = getMinMaxSpeed();
   const denom = (maxV - minV) || 1;
-  for (const p of rawPoses) {
+  for (let i = Math.max(0, startIndex); i < rawPoses.length; i += 1) {
+    const p = rawPoses[i];
     const s = Math.abs(p.speed_raw ?? 0);
     p.speed_norm = clamp((s - minV) / denom, 0, 1);
   }
@@ -1784,6 +1917,14 @@ function rotateScreenPoint(x, y, angleRad) {
   return {
     x: center.x + dx * Math.cos(angleRad) - dy * Math.sin(angleRad),
     y: center.y + dx * Math.sin(angleRad) + dy * Math.cos(angleRad),
+  };
+}
+
+function rotateScreenDelta(dx, dy, angleRad) {
+  if (!angleRad) return { x: dx, y: dy };
+  return {
+    x: dx * Math.cos(angleRad) - dy * Math.sin(angleRad),
+    y: dx * Math.sin(angleRad) + dy * Math.cos(angleRad),
   };
 }
 
@@ -2514,6 +2655,16 @@ function watchGraphStatsByKey(key) {
   };
 }
 
+function findWatchByKeyAtOrBeforeTime(key, tMs) {
+  if (!key || tMs == null || !Array.isArray(watches) || !watches.length) return null;
+  for (let i = watches.length - 1; i >= 0; i -= 1) {
+    const entry = watches[i];
+    if (watchGraphKeyForWatch(entry) !== key) continue;
+    if ((entry.t ?? Infinity) <= tMs) return entry;
+  }
+  return null;
+}
+
 function formatWatchGraphNumericStat(value) {
   if (!Number.isFinite(value)) return "—";
   return fmtNum(value, 3);
@@ -2531,6 +2682,12 @@ function numericWatchValue(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function isBooleanWatchValue(value) {
+  if (typeof value === "boolean") return true;
+  const text = String(value ?? "").trim().toLowerCase();
+  return text === "true" || text === "false";
+}
+
 function renderWatchGraphForKey(key) {
   if (!watchGraphCanvas) return;
   const ChartLib = window.Chart;
@@ -2538,6 +2695,7 @@ function renderWatchGraphForKey(key) {
 
   const points = [];
   const markers = [];
+  let hasBooleanSeries = false;
   for (let i = 0; i < watchMarkers.length; i += 1) {
     const marker = watchMarkers[i];
     const entry = marker?.watch;
@@ -2545,6 +2703,7 @@ function renderWatchGraphForKey(key) {
     const y = numericWatchValue(entry?.value);
     const tMs = Number(marker?.t);
     if (y == null || !Number.isFinite(tMs)) continue;
+    hasBooleanSeries = hasBooleanSeries || isBooleanWatchValue(entry?.value);
     markers.push(marker);
     points.push({ x: tMs / 1000, y });
   }
@@ -2571,7 +2730,8 @@ function renderWatchGraphForKey(key) {
           backgroundColor: "rgba(110, 168, 255, 0.25)",
           borderWidth: 2,
           pointRadius: 0,
-          tension: 0.1,
+          tension: hasBooleanSeries ? 0 : 0.1,
+          stepped: hasBooleanSeries ? "after" : false,
         }],
       },
       options: {
@@ -2602,6 +2762,8 @@ function renderWatchGraphForKey(key) {
   }
 
   watchGraphChart.data.datasets[0].data = points;
+  watchGraphChart.data.datasets[0].tension = hasBooleanSeries ? 0 : 0.1;
+  watchGraphChart.data.datasets[0].stepped = hasBooleanSeries ? "after" : false;
   watchGraphChart.update("none");
 }
 
@@ -2653,14 +2815,16 @@ function refreshWatchGraphPanelData() {
     return;
   }
 
+  const currentLatest = findWatchByKeyAtOrBeforeTime(watchGraphPanelKey, getPinnedWatchReferenceTimeMs());
+
   const idNum = Number(latest.id);
   const hasId = Number.isInteger(idNum);
   const idText = hasId ? String(idNum) : "—";
   const labelText = String(latest.label ?? "");
-  const latestValue = (latest.value == null) ? "—" : String(latest.value);
+  const latestValue = (currentLatest?.value == null) ? "—" : String(currentLatest.value);
 
   if (watchGraphSubtitle) watchGraphSubtitle.textContent = hasId ? `Id: ${idText}` : "Id: —";
-  if (watchGraphLabel) watchGraphLabel.textContent = labelText || "—";
+  if (watchGraphTitle) watchGraphTitle.textContent = labelText || "—";
   if (watchGraphLatest) watchGraphLatest.textContent = latestValue;
   if (watchGraphCount) watchGraphCount.textContent = String(count);
   if (watchGraphAvg) watchGraphAvg.textContent = formatWatchGraphNumericStat(avg);
@@ -2750,7 +2914,7 @@ function fmtPose(p) {
   const x = (p.x ?? 0).toFixed(1);
   const y = (p.y ?? 0).toFixed(1);
   const th = (p.theta ?? 0).toFixed(1);
-  return `X: ${x}, Y: ${y}, θ: ${th}°`;
+  return `X: ${x} Y: ${y} θ: ${th}°`;
 }
 
 function showWatchPopup(marker, clickPos) {
@@ -2761,15 +2925,15 @@ function showWatchPopup(marker, clickPos) {
   const pose = marker.pose || interpolatePoseAtTime(marker.t);
   const poseStr = fmtPose(pose);
 
-  const tStr = (marker.t != null) ? `${marker.t}ms` : "—";
+  const tStr = (marker.t != null) ? `${fmtNum(marker.t / 1000)}s` : "—";
   const labelStr = w.label || "—";
   const valStr = (w.value == null) ? "—" : String(w.value);
 
   watchPopup.innerHTML = `
-    <div class="row"><div class="k">time</div><div class="v">${escapeHtml(tStr)}</div></div>
-    <div class="row"><div class="k">pose</div><div class="v">${escapeHtml(poseStr)}</div></div>
-    <div class="row"><div class="k">label</div><div class="v">${escapeHtml(String(labelStr))}</div></div>
-    <div class="row"><div class="k">value</div><div class="v">${escapeHtml(valStr)}</div></div>
+    <div class="row"><div class="k">Time</div><div class="v">${escapeHtml(tStr)}</div></div>
+    <div class="row"><div class="k">Pose</div><div class="v">${escapeHtml(poseStr)}</div></div>
+    <div class="row"><div class="k">Name</div><div class="v">${escapeHtml(String(labelStr))}</div></div>
+    <div class="row"><div class="k">Value</div><div class="v">${escapeHtml(valStr)}</div></div>
   `;
 
   // Position above click, clamp to viewport
@@ -2943,6 +3107,11 @@ function renderWatchList() {
         <div class="watchMeta">
           <div class="muted">${t != null ? (String(fmtNum(t / 1000, 2)) + "s") : "—"}</div>
           <div class="watchActions">
+            <button class="iconBtn watchPinBtn" type="button" title="Open watch graph">
+                <svg width="20" height="20">
+                  <use href="assets/svg/icons.svg#icon-pinWatch"></use>
+                </svg>
+            </button>
             <button class="iconBtn watchVisibilityBtn" type="button" title="Toggle watch visibility">
               <svg width="20" height="20">
                 <use href="assets/svg/icons.svg#${watchVisibilityIconId(w)}"></use>
@@ -2968,6 +3137,20 @@ function renderWatchList() {
     }, { passive:false });
 
     const visibilityBtn = div.querySelector(".watchVisibilityBtn");
+    const pinBtn = div.querySelector(".watchPinBtn");
+    if (pinBtn) {
+      pinBtn.title = "Pin watch";
+      pinBtn.setAttribute("aria-label", "Pin watch");
+      pinBtn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleFloatingWatch(w.id ?? w.watchId ?? null);
+      });
+      pinBtn.addEventListener("pointerdown", (ev) => {
+        ev.stopPropagation();
+      }, { passive: true });
+    }
+
     if (visibilityBtn) {
       const visibilityKey = watchVisibilityKeyForWatch(w);
       const visibilityTitle = watchVisibilityTitle(w);
@@ -3254,9 +3437,12 @@ function selectWatchMarker(marker, fromUserClick=false, clickPos=null) {
   selectedWaypointId = null;
   selectedWaypointEventTime = null;
 
+  const timeStr = (marker.t != null) ? `${fmtNum(marker.t / 1000)}s` : "—";;
+
   jumpToEventTime(marker.t, {
-    exactStatus: (near) => setStatus(`Watch @${marker.t}ms mapped to pose @${rawPoses[near.idx].t}ms (Δ=${near.dt}ms).`),
-    interpolatedStatus: () => setStatus(`Watch @${marker.t}ms shown via interpolation (no pose within ±${WATCH_TOL_MS}ms).`),
+    exactStatus: (near) => setStatus(`Watch @${timeStr} mapped to pose `
+     + `@${((rawPoses[near.idx].t != null) ? `${fmtNum(rawPoses[near.idx].t / 1000)}s` : "—")} (Δ=${fmtNum(near.dt / 1000, 2)}s).`),
+    interpolatedStatus: () => setStatus(`Watch @${timeStr} shown via interpolation (no pose within ±${WATCH_TOL_MS}ms).`),
   });
 
   highlightWatchInList(marker.t, fromUserClick);
@@ -3268,6 +3454,52 @@ function selectWatchMarker(marker, fromUserClick=false, clickPos=null) {
 }
 
 // -------- pose list --------
+function createPoseListItem(i) {
+  const p = rawPoses[i];
+  const t = (typeof p.t === "number") ? Math.round(p.t) : "—";
+  const pi = poseToInches(p);
+  const poseSummary = `X: ${(pi.x ?? 0).toFixed(1)}in, Y: ${(pi.y ?? 0).toFixed(1)}in, θ: ${(pi.theta ?? 0).toFixed(1)}°`;
+  const div = document.createElement('div');
+  div.className = 'poseItem';
+  div.dataset.idx = String(i);
+  div.innerHTML = `<div style="display:flex;justify-content:space-between;gap:10px">
+    <div style="font-weight:800">#${i+1}</div>
+    <div class="muted">${fmtNum(t / 1000)}s</div>
+  </div>
+  <div class="sub">${escapeHtml(poseSummary)}</div>`;
+  div.addEventListener('pointerdown', (ev) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+
+    pause();
+    clearTrackHover(true);
+    clearTrackLock();
+    selectedWatch = null;
+    selectedLogTime = null;
+    selectedWaypointId = null;
+    selectedWaypointEventTime = null;
+    highlightWaypointInList(null, null, false);
+    selectedIndex = i;
+    if (leftConnected && leftStreaming) liveAutoFollowHead = false;
+    lastPoseIndex = selectedIndex;
+    setStatus(`Jumped to pose #${i+1}.`);
+    highlightPoseInList();
+    updatePoseReadout();
+    requestDrawAll();
+  }, { passive:false });
+  return div;
+}
+
+function appendPoseListItems(startIndex = 0) {
+  if (!poseList) return;
+  const frag = document.createDocumentFragment();
+  for (let i = startIndex; i < rawPoses.length; i += 1) {
+    frag.appendChild(createPoseListItem(i));
+  }
+  poseList.appendChild(frag);
+  poseCount.textContent = `${rawPoses.length}`;
+}
+
 function renderPoseList() {
   if (!poseList) return;
   poseList.innerHTML = "";
@@ -3275,45 +3507,7 @@ function renderPoseList() {
     poseCount.textContent = "—";
     return;
   }
-  poseCount.textContent = `${rawPoses.length}`;
-  const frag = document.createDocumentFragment();
-  const maxItems = rawPoses.length; // keep simple
-  for (let i = 0; i < maxItems; i++) {
-    const p = rawPoses[i];
-    const t = (typeof p.t === "number") ? Math.round(p.t) : "—";
-    const pi = poseToInches(p);
-    const poseSummary = `X: ${(pi.x ?? 0).toFixed(1)}in, Y: ${(pi.y ?? 0).toFixed(1)}in, θ: ${(pi.theta ?? 0).toFixed(1)}°`;
-    const div = document.createElement('div');
-    div.className = 'poseItem';
-    div.dataset.idx = String(i);
-    div.innerHTML = `<div style="display:flex;justify-content:space-between;gap:10px">
-      <div style="font-weight:800">#${i+1}</div>
-      <div class="muted">${fmtNum(t / 1000)}s</div>
-    </div>
-    <div class="sub">${escapeHtml(poseSummary)}</div>`;
-    div.addEventListener('pointerdown', (ev) => {
-      if (ev.button !== 0) return;
-      ev.preventDefault();
-
-      pause();
-      clearTrackHover(true);
-      clearTrackLock();
-      selectedWatch = null;
-      selectedLogTime = null;
-      selectedWaypointId = null;
-      selectedWaypointEventTime = null;
-      highlightWaypointInList(null, null, false);
-      selectedIndex = i;
-      if (leftConnected && leftStreaming) liveAutoFollowHead = false;
-      lastPoseIndex = selectedIndex;
-      setStatus(`Jumped to pose #${i+1}.`);
-      highlightPoseInList();
-      updatePoseReadout();
-      requestDrawAll();
-    }, { passive:false });
-    frag.appendChild(div);
-  }
-  poseList.appendChild(frag);
+  appendPoseListItems(0);
   highlightPoseInList();
 }
 
@@ -3891,6 +4085,16 @@ window.addEventListener('mousemove', (e) => {
     watchGraphPanel.style.top = `${clampedTop}px`;
     watchGraphPanel.style.right = "auto";
   }
+  if (pinnedWatchDragTarget) {
+    const nextLeft = e.clientX - pinnedWatchDragStart.x;
+    const nextTop = e.clientY - pinnedWatchDragStart.y;
+    const rect = pinnedWatchDragTarget.getBoundingClientRect();
+    const clampedLeft = clamp(nextLeft, 0, Math.max(0, window.innerWidth - rect.width));
+    const clampedTop = clamp(nextTop, 0, Math.max(0, window.innerHeight - rect.height));
+    pinnedWatchDragTarget.style.left = `${clampedLeft}px`;
+    pinnedWatchDragTarget.style.top = `${clampedTop}px`;
+    pinnedWatchDragTarget.style.right = "auto";
+  }
   
   if (isResizing) {
     // 1. Calculate the intended new size
@@ -3923,6 +4127,7 @@ window.addEventListener('mouseup', () => {
   isResizing = false;
   isWatchGraphDragging = false;
   isWatchGraphResizing = false;
+  pinnedWatchDragTarget = null;
 });
 
 function findTemporallyClosestWatch(targetMs) {
@@ -4036,6 +4241,7 @@ function updatePoseReadout() {
     timePill.textContent = "Time: —";
     pointPill.textContent = "Point: —/—";
     posePill.textContent = "X: —  Y: — θ: —  Speed: —";
+    refreshPinnedWatchPanels();
     return;
   }
   if (selectedIndex < 0) selectedIndex = 0;
@@ -4088,7 +4294,9 @@ function updatePoseReadout() {
     ? `X: ${fmtNum(p.x,1)}  Y: ${fmtNum(p.y,1)}  θ: ${fmtNum(p.theta,1)}°  Speed: ${spDisp == null ? "—" : fmtNum(spDisp,2)}`
     : "X: —  Y: —  θ: —  Speed: —";
   updateDeltaReadout();
-  updateFloatingInfo(p, idx);  
+  updateFloatingInfo(p, idx);
+  refreshWatchGraphPanelData();
+  refreshPinnedWatchPanels();
 }
 
 // -------- fit --------
@@ -4308,6 +4516,7 @@ canvas.addEventListener('pointermove', (e) => {
   const y = e.clientY - rect.top;
   const dx = x - panStart.x;
   const dy = y - panStart.y;
+  const baseDelta = rotateScreenDelta(dx, dy, -fieldRotationRad);
 
   // Only start panning once the user has clearly dragged.
   if (!isPanning) {
@@ -4324,8 +4533,8 @@ canvas.addEventListener('pointermove', (e) => {
     }
   }
 
-  viewPanXpx = panStart.panX + dx;
-  viewPanYpx = panStart.panY + dy;
+  viewPanXpx = panStart.panX + baseDelta.x;
+  viewPanYpx = panStart.panY + baseDelta.y;
 
   computeTransform();
   clampViewPanToVisibleMargin();
@@ -4502,7 +4711,7 @@ function pause() {
   raf = null;
   playPose = null;
   lastWall = null;
-  setStatus(`Paused at time ${((rawPoses[selectedIndex]?.t ?? 0)/1000).toFixed(2)}s`);
+  setStatus(`Paused at time ${((rawPoses[selectedIndex]?.t ?? 0)/1000).toFixed(1)}s`);
 }
 
 function planPause() {
@@ -4534,8 +4743,8 @@ function play() {
   selectedWaypointEventTime = null;
   highlightWaypointInList(null, null, false);
   timelineHoverSaved = null;
-  setStatus(`Playing from time ${((rawPoses[selectedIndex]?.t ?? 0)/1000).toFixed(2)}s`);
-
+  setStatus(`Playing from time ${((rawPoses[selectedIndex]?.t ?? 0)/1000).toFixed(1)}s`);
+  
   const tStart = rawPoses[selectedIndex]?.t;
   playTimeMs = (typeof tStart === "number") ? tStart : (rawPoses[0]?.t ?? 0);
 
@@ -5314,6 +5523,10 @@ function setLeftUi() {
       btnLeftStop.classList.toggle('isOn', leftStreaming);
     }
   }
+
+  if (btnLeftRefreshEl) {
+    btnLeftRefreshEl.disabled = !leftConnected || leftActionInFlight;
+  }
 }
 
 function leftSetUI(reason) {
@@ -5334,9 +5547,6 @@ function leftSetUI(reason) {
       ? (leftStreaming ? "Stop streaming" : "Starts streaming.")
       : "Starts streaming. Connect to start.";
   }
-
-  // Refresh controls only meaningful while connected
-  if (btnLeftRefreshEl) btnLeftRefreshEl.disabled = !leftConnected || !leftActionInFlight;
 
   if (reason) liveAppendLine(`[UI] ${reason}`);
 }
@@ -5444,6 +5654,7 @@ async function connectLeft() {
     else resetStreamingTimer();
     if (window.__live) { window.__live.connected = false; window.__live.streaming = false; }
     stopLeftRefresh();
+    leftSetUI("Disconnected");
     dbgLive("ws: close");
   });
 
@@ -5546,8 +5757,8 @@ async function doLeftRefresh() {
     waypoints.sort((a,b) => (a.createdTime ?? 0) - (b.createdTime ?? 0));
   }
 
-  // Recompute derived fields. This is cheap at this scale (<~4000 poses).
-  computeSpeedNorm();
+  // Recompute derived fields incrementally for newly appended poses.
+  if (posesAdded > 0) computeSpeedNormRange(rawPoses.length - posesAdded);
   data.poses = rawPoses;
   data.watches = watches;
   data.logs = logs;
@@ -5558,6 +5769,7 @@ async function doLeftRefresh() {
     rebuildWatchMarkersByTime();
     renderWatchFilter();
     renderWatchList();
+    refreshPinnedWatchPanels();
   }
 
   if (logsAdded > 0) {
@@ -5569,7 +5781,13 @@ async function doLeftRefresh() {
   }
 
   if (posesAdded > 0) {
-    renderPoseList();
+    const appendStart = rawPoses.length - posesAdded;
+    if (poseList && poseList.childElementCount === appendStart) {
+      appendPoseListItems(appendStart);
+      highlightPoseInList();
+    } else {
+      renderPoseList();
+    }
     // If not hovering timeline/track, keep the robot on the most recent pose.
     if (liveAutoFollowHead && hoverTimelineTime == null && !playing && !trackLockActive && !(trackHover && (trackHover.pose || trackHover.t))) {
       selectedIndex = rawPoses.length - 1;
@@ -6073,6 +6291,7 @@ function finalizeLoadedData() {
   rebuildWatchMarkersByTime();
   renderWatchFilter();
   renderWatchList();
+  refreshPinnedWatchPanels();
   renderLogList();
   renderWaypointFilter();
   renderWaypointList();
@@ -7998,6 +8217,7 @@ function clearAllPosesAndWatches() {
 
   try { renderPoseList?.(); } catch {}
   try { renderWatchList?.(); } catch {}
+  try { refreshPinnedWatchPanels?.(); } catch {}
   try { renderLogList?.(); } catch {}
   try { renderWaypointFilter?.(); } catch {}
   try { renderWaypointList?.(); } catch {}
@@ -8045,6 +8265,13 @@ document.addEventListener('keydown', (e) => {
       if (appMode !== "viewing") return;
       e.preventDefault();
       fileEl.click();
+      return;
+    }
+
+    if (e.key === 'r' || e.key === 'R') {
+      if (appMode !== "viewing") return;
+      e.preventDefault();
+      btnLeftRefresh?.click();
       return;
     }
 
@@ -8120,6 +8347,12 @@ document.addEventListener('keydown', (e) => {
       toggleCurrentWatchGraphPanel();
       return;
     }
+  }
+
+  if (!e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
+    e.preventDefault();
+    openFloatingWatch(null);
+    return;
   }
 
   if (e.key === 'f' || e.key === 'F') {

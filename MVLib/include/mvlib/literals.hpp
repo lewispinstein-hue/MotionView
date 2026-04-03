@@ -2,6 +2,7 @@
 /**
  * @file literals.hpp
 */
+
 #include <cstdint>
 
 namespace mvlib {

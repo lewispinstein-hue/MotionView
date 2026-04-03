@@ -69,14 +69,23 @@ namespace mvlib {
  * }
  * @endcode
  */
-template <class Fn>
-inline void setOdom(Fn&& poseGetter)
-  requires std::is_same_v<std::invoke_result_t<Fn&>, std::optional<Pose>> {
+template<class Fn>
+  requires std::is_same_v<std::invoke_result_t<Fn&>, std::optional<Pose>> 
+inline void setOdom(Fn&& poseGetter) {
   auto getter = std::forward<Fn>(poseGetter);
-
   mvlib::Logger::getInstance().setPoseGetter([getter = std::move(getter)]() mutable -> std::optional<Pose> {
     return getter();
   });
+}
+
+template<class Fn>
+  requires (!std::is_same_v<std::invoke_result_t<Fn&>, std::optional<Pose>>) 
+inline void setOdom(Fn&&) {
+  static_assert(always_false_v<Fn>,
+              "\n\n\n------------------------------------------------------------------------"
+              "\nLogger::setOdom(/* customOdom */): Type mismatch.\n"
+              "Pose getter must return std::optional<Pose>.\n"
+              "------------------------------------------------------------------------\n\n\n");
 }
 } // namespace mvlib
 #endif // _MVLIB_OPTIONAL_USED

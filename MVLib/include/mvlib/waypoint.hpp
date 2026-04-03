@@ -1,4 +1,9 @@
 #pragma once
+/**
+ * @file waypoint.hpp
+ * @brief Contains user-facing information relating 
+ *       to handling and creating waypoints
+ */
 
 #include <optional>
 #include <cstdint>
@@ -35,7 +40,7 @@ struct WaypointParams {
   std::optional<uint32_t> logOffsetEveryMs = std::nullopt;
 
   /// @brief Make waypoint retriggerable. It will always log when reached, 
-  ///        never timeout, and never deactivate.
+  ///        and deactivate only on timeout (if provided)
   bool retriggerable = false;
 };
 

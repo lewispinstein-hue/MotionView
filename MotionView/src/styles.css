@@ -287,7 +287,8 @@ label {
 }
 
 .watchGraphBtn,
-.watchVisibilityBtn {
+.watchVisibilityBtn,
+.watchPinBtn {
   min-width: 28px;
   width: 28px;
   height: 28px;
@@ -1270,6 +1271,122 @@ body:not(.mode-planning) #rightPlanning {
   cursor: nwse-resize;
   background: linear-gradient(135deg, transparent 50%, var(--muted) 50%);
   opacity: 0.3;
+}
+
+#pinnedWatchHost {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 102;
+}
+
+.pinnedWatchPanel {
+  --pw-bg: rgba(18, 18, 20, 0.60);
+  --pw-border: rgba(255, 255, 255, 0.12);
+  --pw-line: rgba(255, 255, 255, 0.10);
+  --pw-text: rgba(255, 255, 255, 0.92);
+
+  position: absolute;
+  top: 128px;
+  right: 16px;
+  width: 300px;
+  border-radius: 14px;
+  border: 1px solid var(--pw-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)),
+    var(--pw-bg);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(10px);
+  overflow: hidden;
+  color: var(--pw-text);
+  pointer-events: auto;
+}
+
+.pinnedWatchHeader {
+  padding: 12px 42px 10px 14px;
+  border-bottom: 1px solid var(--pw-line);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: grab;
+  user-select: none;
+}
+
+.pinnedWatchHeader:active {
+  cursor: grabbing;
+}
+
+.pinnedWatchClose.iconBtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.60);
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.pinnedWatchClose.iconBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--pw-text);
+}
+
+.pinnedWatchClose.iconBtn:focus-visible {
+  outline: 2px solid rgba(110, 168, 255, 0.7);
+  outline-offset: 2px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.pinnedWatchPanel:hover .pinnedWatchClose.iconBtn,
+.pinnedWatchPanel:focus-within .pinnedWatchClose.iconBtn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.pinnedWatchBody {
+  padding: 10px 10px 8px !important;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.pinnedWatchName {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.pinnedWatchValue {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 3px 6px !important;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 14px;
+  color: var(--float-text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* tighten pose list */

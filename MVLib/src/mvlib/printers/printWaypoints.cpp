@@ -1,6 +1,7 @@
 #include "mvlib/core.hpp"
 #include "mvlib/logMacros.h"
 #include <inttypes.h>
+#include <cmath>
 
 #ifdef MVLIB_LOGS_REDEFINED
 #undef LOG_INFO
@@ -23,36 +24,68 @@ static int formatOffset(char *buf, size_t len, const WaypointOffset& off) {
 
 void Logger::printWaypoints() {
   unique_lock lock(m_mutex);
-  if (!lock.isLocked()) return;
-
+  if (!lock.isLocked()) return; // Safe: we own the lock now
+  
   uint32_t nowMs = pros::millis();
   char buffer[256];
+  
+  // Get pose once per loop to save overhead
+  auto pose = m_getPose ? m_getPose() : std::nullopt;
   
   for (auto& wp : m_waypoints) {
     if (!wp.active) continue; 
 
-    WaypointOffset off = getWaypointOffset(wp.id);
+    WaypointOffset off{};
+    if (pose) {
+      off.offX = wp.params.tarX - pose->x;
+      off.offY = wp.params.tarY - pose->y; 
+      off.totalOffset = sqrt(off.offX * off.offX + off.offY * off.offY);
+
+      if (wp.params.tarT.has_value()) {
+        double error = wp.params.tarT.value() - pose->theta;
+        error = fmod(error + 180.0, 360.0);
+        if (error < 0) error += 360.0;
+        off.offT = error - 180.0;
+      }
+      
+      bool linearReached = off.totalOffset <= wp.params.linearTol;
+      bool angularReached = !wp.params.thetaTol.has_value() || 
+                            (off.offT.has_value() && std::abs(off.offT.value()) <= wp.params.thetaTol.value());
+      off.reached = (linearReached && angularReached);
+    }
+
+    if (wp.params.timeoutMs.has_value()) {
+      uint32_t elapsed = nowMs - wp.startTimeMs;
+      if (elapsed >= wp.params.timeoutMs.value()) {
+        off.timedOut = true;
+        off.remainingTimeout = 0;
+      } else {
+        off.remainingTimeout = wp.params.timeoutMs.value() - elapsed;
+        off.timedOut = false;
+      }
+    } else {
+      off.remainingTimeout = std::nullopt;
+      off.timedOut = false;
+    }
+
     bool perpetual = wp.params.retriggerable;
-    bool prevReached = isPrevReached(wp.id);
     std::optional<uint32_t> printEveryMs = wp.params.logOffsetEveryMs;
     
     if (formatOffset(buffer, sizeof(buffer), off) < 0) continue;
               
-    if ((off.reached && !prevReached) || (off.reached && !perpetual)) {
+    if ((off.reached && !wp.prevReached) || (off.reached && !perpetual)) {
       LOG_INFO("[WPOINT],%u,REACHED,%" PRIu64 ",%s,%s", nowMs, wp.id, wp.name.c_str(), buffer);
-      prevReached = true;
-      wp.active = perpetual; // Dynamic based on if perpetual
-    } else if (!off.reached && prevReached) {
-      prevReached = false;
+      wp.prevReached = true;
+      wp.active = perpetual; 
+    } else if (!off.reached && wp.prevReached) {
+      wp.prevReached = false;
     } else if (off.timedOut.value_or(false)) {
       LOG_INFO("[WPOINT],%u,TIMEDOUT,%" PRIu64 ",%s,%s", nowMs, wp.id, wp.name.c_str(), buffer);
       wp.active = false;
     } else if (printEveryMs.has_value() && nowMs - wp.lastPrintMs >= printEveryMs.value()) {
-      LOG_INFO("[WPOINT],%u,OFFSET,%" PRIu64 ",%s,%s",
-              nowMs, wp.id, wp.name.c_str(), buffer);      
+      LOG_INFO("[WPOINT],%u,OFFSET,%" PRIu64 ",%s,%s", nowMs, wp.id, wp.name.c_str(), buffer);      
       wp.lastPrintMs = nowMs;
     }
-    setPrevReached(wp.id, prevReached);
   }
 }
 } // namespace mvlib

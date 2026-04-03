@@ -1,7 +1,6 @@
 #include "pros/rtos.hpp"
 #include "mvlib/core.hpp"
 #include "mvlib/private/forwardLogMacros.h"
-#include "mvlib/config.hpp"
 #include <cstdarg>
 #include <cstdint>
 #include <cstring>
@@ -37,7 +36,7 @@ std::string Logger::m_getTimestampedFile() {
   time_t now = time(0);
   tm *tstruct = localtime(&now);
 
-  static char filename[128];
+  char filename[128];
   
   // Add random variance to filename to avoid overwriting existing files
   const uint32_t randInt = getrandInt(0, 99999);
@@ -56,7 +55,7 @@ std::string Logger::m_getTimestampedFile() {
     // Attach random number
     snprintf(filename, sizeof(filename), "%s_%d.log", timeBuf, randInt); 
   }
-  return filename;
+  return std::string(filename);
 } 
 
 bool Logger::m_initSDLogger() {
@@ -114,7 +113,7 @@ void Logger::logToSD(const char *levelStr, const char *fmt, ...) {
 
   bool isError = (strcmp(levelStr, "ERROR") == 0 || strcmp(levelStr, "FATAL") == 0);
 
-  if (isError || (now - m_lastFileFlush >= SD_FLUSH_INTERVAL_MS)) {
+  if (isError || (now - m_lastFileFlush >= m_timings.sd_buffer_flush_interval)) {
     fflush(m_sdFile);
     m_lastFileFlush = now;
   }
