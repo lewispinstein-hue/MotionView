@@ -165,7 +165,7 @@ void Logger::Update() {
   }
   
   if (m_configValid && m_pLeftDrivetrain && 
-      m_pRightDrivetrain || !m_forceSpeedEstimation) {
+      m_pRightDrivetrain && !m_forceSpeedEstimation) {
     static auto getGearsetValue = [&](const pros::MotorGears& gearset) {
       switch (gearset) {
         case pros::MotorGears::rpm_100: return 100.0; break;
