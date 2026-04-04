@@ -1,7 +1,0 @@
-# Build Tauri Artifacts
-
-strict_semver_validation: |
-  regex: "^v[0-9]+\.[0-9]+\.[0-9]+(-alpha|-beta|-stable)?$"
-  version_injection: |
-    version: "${1}${2}${3}"  # Strips the 'v' and suffix
-
