@@ -8,7 +8,7 @@
 
 namespace mvlib {
 
-uint32_t getrandInt(const uint32_t min, const uint32_t max) {
+uint32_t getrandInt(const uint32_t& min, const uint32_t& max) {
   /**
     * @note This method of generation is needed because the v5 brain is 
     *       completely deterministic. Using std::rand or std::random_device
@@ -17,14 +17,13 @@ uint32_t getrandInt(const uint32_t min, const uint32_t max) {
 
   uint64_t seed = pros::micros();
   seed ^= (uint64_t)pros::battery::get_voltage() << 32;
-  seed &= [&]() mutable -> uint64_t {
+  seed ^= [&]() mutable -> uint64_t {
     seed += 0x9e3779b97f4a7c15ULL;
     uint64_t z = seed;
     z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
     z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
     return z ^ (z >> 31);
   }();
-
   seed ^= std::chrono::system_clock::now().time_since_epoch().count();
 
   std::mt19937 gen(seed);
@@ -89,20 +88,20 @@ bool Logger::m_initSDLogger() {
     _MVLIB_FORWARD_FATAL("File: %s could not be opened. Aborting.", m_currentFilename);
     return false;
   }
+
   _MVLIB_FORWARD_DEBUG("File successfully opened.");
   fprintf(m_sdFile, "|———| Logger initialized at %.2fs |———|\n", pros::millis() / 1000.0);
   fflush(m_sdFile);
   return true;
 }
 
-void Logger::logToSD(const char *levelStr, const char *fmt, ...) {
+void Logger::logToSD(const LogLevel& level, const char *fmt, ...) {
   if (!m_sdFile || m_sdLocked) return;
 
-  unique_lock m(m_sdCardMutex);
+  unique_lock m(m_sdMutex);
   if (!m.isLocked()) return;
+  
   uint32_t now = pros::millis();
-
-  fprintf(m_sdFile, "[%.2f] [%s]: ", now / 1000.0, levelStr);
 
   va_list args;
   va_start(args, fmt);
@@ -111,12 +110,11 @@ void Logger::logToSD(const char *levelStr, const char *fmt, ...) {
 
   fprintf(m_sdFile, "\n");
 
-  bool isError = (strcmp(levelStr, "ERROR") == 0 || strcmp(levelStr, "FATAL") == 0);
+  bool isError = (level == LogLevel::ERROR || level == LogLevel::FATAL);
 
   if (isError || (now - m_lastFileFlush >= m_timings.sd_buffer_flush_interval)) {
     fflush(m_sdFile);
     m_lastFileFlush = now;
   }
 }
-
-}
+} // namespace mvlib

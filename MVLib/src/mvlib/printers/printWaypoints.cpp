@@ -1,5 +1,4 @@
 #include "mvlib/core.hpp"
-#include "mvlib/logMacros.h"
 #include <inttypes.h>
 #include <cmath>
 
@@ -74,16 +73,16 @@ void Logger::printWaypoints() {
     if (formatOffset(buffer, sizeof(buffer), off) < 0) continue;
               
     if ((off.reached && !wp.prevReached) || (off.reached && !perpetual)) {
-      LOG_INFO("[WPOINT],%u,REACHED,%" PRIu64 ",%s,%s", nowMs, wp.id, wp.name.c_str(), buffer);
+      logMessage(LogLevel::OVERRIDE, "[WPOINT],%u,REACHED,%" PRIu64 ",%s,%s", nowMs, wp.id, wp.name.c_str(), buffer);
       wp.prevReached = true;
       wp.active = perpetual; 
     } else if (!off.reached && wp.prevReached) {
       wp.prevReached = false;
     } else if (off.timedOut.value_or(false)) {
-      LOG_INFO("[WPOINT],%u,TIMEDOUT,%" PRIu64 ",%s,%s", nowMs, wp.id, wp.name.c_str(), buffer);
+      logMessage(LogLevel::OVERRIDE, "[WPOINT],%u,TIMEDOUT,%" PRIu64 ",%s,%s", nowMs, wp.id, wp.name.c_str(), buffer);
       wp.active = false;
     } else if (printEveryMs.has_value() && nowMs - wp.lastPrintMs >= printEveryMs.value()) {
-      LOG_INFO("[WPOINT],%u,OFFSET,%" PRIu64 ",%s,%s", nowMs, wp.id, wp.name.c_str(), buffer);      
+      logMessage(LogLevel::OVERRIDE, "[WPOINT],%u,OFFSET,%" PRIu64 ",%s,%s", nowMs, wp.id, wp.name.c_str(), buffer);      
       wp.lastPrintMs = nowMs;
     }
   }

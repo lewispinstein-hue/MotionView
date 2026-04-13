@@ -52,8 +52,8 @@ struct unique_lock {
   /// @brief Mutex reference managed by this guard.
   pros::Mutex& m;
   bool locked = false;
-  explicit inline unique_lock(pros::Mutex &m) : m(m) { locked = m.take(); }
-  explicit inline unique_lock(pros::Mutex &m, uint32_t timeout) : m(m) {
+  explicit inline unique_lock(pros::Mutex& m) : m(m) { locked = m.take(); }
+  explicit inline unique_lock(pros::Mutex& m, uint32_t timeout) : m(m) {
     locked = m.take(timeout);
   }
   ~unique_lock() { if (locked) m.give(); }
@@ -98,20 +98,17 @@ inline constexpr bool always_false_v = false;
  * @note Ordering matters: higher values are considered "more severe".
  */
 enum class LogLevel : uint8_t {
-  NONE = 0, /// The lowest log level. Used for simply disabling logger.
-  OFF = 0,  /// Alias for NONE
-  DEBUG,    /// Used for info related to startup and diagnostics
-  INFO,     /// The most frequently used log level. 
-  WARN,     /// Used for logs still not dangerous, but that should stand out
-  ERROR,    /// Used when something has gone wrong.
-  FATAL,    /// Used only for serious failures; often precedes a force stop.
-  TELEMETRY_OVERRIDE = 0xFE, /// Used by system when printing telemetry to override minLoggerLevel
+  NONE = 0,    /// The lowest log level. Used for simply disabling logger.
+  OFF = NONE,  /// Alias for NONE
+  DEBUG,       /// Used for info related to startup and diagnostics
+  INFO,        /// The most frequently used log level. 
+  WARN,        /// Used for logs still not dangerous, but that should stand out
+  ERROR,       /// Used when something has gone wrong.
+  FATAL,       /// Used only for serious failures; often precedes a force stop.
   OVERRIDE = 0xFF /// Used by system for overriding minLogLevel
 };
 
 // ---------- Generic variable watches ----------
-
-/// @brief Identifier for a registered watch entry.
 using WatchId = uint64_t;
 
 /**
@@ -120,10 +117,6 @@ using WatchId = uint64_t;
  *
  * A watch has a base log level (e.g., INFO). If predicate(expression) evaluates to
  * true, the watch sample is emitted at elevatedLevel instead.
- *
- * Where to use it:
- * - In watches where you want "normal" printing at INFO, but highlight abnormal
- *   values at WARN/ERROR.
  */
 template<class T> 
 struct LevelOverride {
@@ -178,15 +171,6 @@ struct Pose {
 /**
  * @class Logger
  * @brief Singleton logging + telemetry manager.
- *
- * Where to use it:
- * - As the single source of truth for logging configuration.
- * - As a central place for periodic telemetry (pose, battery, tasks, watches).
- *
- * When to use it:
- * - Prefer it for on-robot debug output instead of scattered printf calls.
- * - Use watches for values you want sampled at a controlled cadence.
- *
  */
 class Logger {
 public:
@@ -397,35 +381,6 @@ public:
   // ------------------------------------------------------------------------
 
   /**
-   * @brief Emit a formatted log message. Automatically handles 
-   *        terminal/SD logging.
-   *
-   * @param level Log severity.
-   * @param fmt printf-style format string.
-   * 
-   * @note Messages are truncated to 1024 bytes.
-   */
-  _MVLIB_PRINTF_CHECK(3, 4)
-  void logMessage(LogLevel level, const char *fmt, ...);
-
-  /**
-   * @brief Write a formatted log line to the SD log file.
-   *
-   * @note Buffer flush interval is ignored and immediately flushed 
-   *       if @c levelStr is "ERROR" or "FATAL".
-   *
-   * @note This is typically called by logMessage() when SD logging is enabled.
-   * @param levelStr Preformatted level string (e.g., "INFO").
-   * @param fmt printf-style format string.
-   */
-  _MVLIB_PRINTF_CHECK(3, 4)
-  void logToSD(const char *levelStr, const char *fmt, ...); 
-
-
-  // ------------------------------------------------------------------------
-  // Standard Event Loggers
-  // ------------------------------------------------------------------------
-  /**
    * @brief Emit a computer-formatted log message to MotionView. Unlike the LOG_
    *        macros, these function will produce logs MotionView will parse and 
    *        display. These functions only differ in the severity level that they 
@@ -560,7 +515,7 @@ public:
    * "%.0f");
    * @endcode
    */
-  template <class Getter, class U>
+  template<class Getter, class U>
     requires std::invocable<Getter&> &&
              std::same_as<std::decay_t<U>,
              std::decay_t<std::invoke_result_t<Getter&>>>
@@ -589,7 +544,7 @@ public:
    * @param fmt Optional printf-style format for numeric values.
    * \return WatchId of the registered watch.
    */
-  template <class Getter, class U>
+  template<class Getter, class U>
     requires std::invocable<Getter&> &&
              std::same_as<std::decay_t<U>,
              std::decay_t<std::invoke_result_t<Getter&>>>
@@ -603,7 +558,7 @@ public:
   }
 
   // Error catching 
-  template <class Getter, class U>
+  template<class Getter, class U>
     requires std::invocable<Getter&> &&
             (!std::same_as<std::decay_t<U>, 
             std::decay_t<std::invoke_result_t<Getter&>>>)
@@ -616,7 +571,7 @@ public:
     return -1;
   }
 
-  template <class Getter, class U>
+  template<class Getter, class U>
     requires std::invocable<Getter&> &&
             (!std::same_as<std::decay_t<U>, 
             std::decay_t<std::invoke_result_t<Getter&>>>)
@@ -631,8 +586,8 @@ public:
 
 private:
   Logger();
-  Logger(const Logger &) = delete;
-  Logger &operator=(const Logger &) = delete;
+  Logger(const Logger&) = delete;
+  Logger& operator=(const Logger&) = delete;
 
   /// @brief Background update loop invoked by the logger task.
   void Update();
@@ -789,6 +744,19 @@ private:
   /// @brief Print all waypoints that are due
   void printWaypoints();
 
+  /**
+   * @brief Emit a formatted log message. Automatically handles 
+   *        terminal/SD logging.
+   */
+  _MVLIB_PRINTF_CHECK(3, 4)
+  void logMessage(const LogLevel& level, const char *fmt, ...);
+
+  /**
+   * @brief Write a formatted log line to the SD log file.
+   */
+  _MVLIB_PRINTF_CHECK(3, 4)
+  void logToSD(const LogLevel& level, const char *fmt, ...);
+  
   // ------------------------------------------------------------------------
   // Internal state
   // ------------------------------------------------------------------------
@@ -803,8 +771,7 @@ private:
    *       to deadlocks / race conditions
   */
   pros::Mutex m_terminalMutex;
-  pros::Mutex m_sdCardMutex;
-  pros::Mutex m_stdLogMutex;
+  pros::Mutex m_sdMutex;
   pros::Mutex m_mutex;
 
   uint32_t m_lastFileFlush{0};

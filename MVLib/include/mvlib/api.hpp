@@ -10,10 +10,8 @@
 
 // IWYU pragma: begin_keep
 #include "core.hpp"
-#include "logMacros.h"
-#include "pros/motors.hpp"
 #include "renderHelper.hpp"
-#include "literals.hpp" 
+#include "literals.hpp"
 #include "waypoint.hpp"
 // IWYU pragma: end_keep
 

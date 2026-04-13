@@ -69,7 +69,7 @@ void initialize() {
 	// Start main telemetry stream
 	logger.start();
 	
-	auto leftGoalCP = logger.addWaypoint("Left Goal", {
+	auto leftGoalWP = logger.addWaypoint("Left Goal", {
 		.tarX = 10,  // Target 10 x
 		.tarY = 8,   // 8 y
 		.tarT = 180, // And 180 degrees heading
@@ -80,14 +80,10 @@ void initialize() {
 	});
 
 	// Store the offset
-	auto off = leftGoalCP.getOffset();
+	auto off = leftGoalWP.getOffset();
 	// Print the offset
-	logger.info("Left Goal Distance: %.1f, %.1f, %.1f\n", off.offX, off.offY, off.offT.value_or(0));
+	logger.info("Left Goal Distance: %.1f, %.1f\n", off.totalOffset, off.offT.value_or(0));
 	logger.info("Finished initialization!");
-
-	if (pros::competition::is_field_control()) {
-		
-	}
 }
 
 /**

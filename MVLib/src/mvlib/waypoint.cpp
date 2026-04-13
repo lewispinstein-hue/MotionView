@@ -1,16 +1,10 @@
 #include "mvlib/core.hpp"
 #include "mvlib/waypoint.hpp"
-#include "mvlib/logMacros.h"
 #include <cmath>
 #include <cstdio> 
 #include <inttypes.h>
 #include <string>
 #include <algorithm>
-
-#ifdef MVLIB_LOGS_REDEFINED
-#undef LOG_INFO
-#define LOG_INFO MVLIB_LOG_INFO
-#endif
 
 namespace mvlib {
 WaypointOffset Logger::getWaypointOffset(WPId id) {
@@ -130,6 +124,7 @@ static std::string formatParams(const WaypointParams& params) {
 
 WaypointHandle Logger::addWaypoint(std::string name, WaypointParams details) {
   unique_lock lock(m_mutex);
+  if (!lock.isLocked()) return WaypointHandle(0);
 
   WPId id = m_nextId++;
   InternalWaypoint wp;
@@ -149,7 +144,7 @@ WaypointHandle Logger::addWaypoint(std::string name, WaypointParams details) {
   // Use the ID before moving wp into the vector
   m_waypoints.push_back(std::move(wp));
 
-  LOG_INFO("[WPOINT],%d,CREATED,%" PRIu64 ",%s,%s",
+  logMessage(LogLevel::INFO, "[WPOINT],%d,CREATED,%" PRIu64 ",%s,%s",
            pros::millis(), id, m_waypoints.back().name.c_str(), 
            formatParams(details).c_str());
   return WaypointHandle(id);

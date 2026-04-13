@@ -218,11 +218,15 @@ void Logger::Update() {
     double normalizedTheta = fmod(pose->theta, 360.0); // Normalize theta 
     if (normalizedTheta < 0) normalizedTheta += 360.0;
     
-    // Print main telemetry
-    Logger::getInstance().logMessage(LogLevel::OVERRIDE, 
-              "[POSE],%u,%.2f,%.2f,%.2f,%.1f,%.1f", 
-              pros::millis(), pose->x, pose->y, normalizedTheta,
-              leftVelocity, rightVelocity);
+    bool allFinite = std::isfinite(pose->x) && std::isfinite(pose->y) &&
+                     std::isfinite(pose->theta);
+    if (allFinite) {
+      // Print main telemetry
+      Logger::getInstance().logMessage(LogLevel::OVERRIDE, 
+                "[POSE],%u,%.2f,%.2f,%.2f,%.1f,%.1f", 
+                pros::millis(), pose->x, pose->y, normalizedTheta,
+                leftVelocity, rightVelocity);
+    }
   }
 }
 } // namespace mvlib

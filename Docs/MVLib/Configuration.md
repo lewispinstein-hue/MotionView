@@ -2,14 +2,12 @@
 
 This page covers the two parts of MVLib configuration:
 
-- `LoggerConfig`<small>(core.cpp: runtime)</small>, which controls runtime output behavior
-- `include/mvlib/config.hpp`, which controls compile-time timing values
-
-In practice, the runtime settings answer "what should MVLib print?" and the compile-time settings answer "how often should MVLib do it?"
+- `LoggerConfig`, which controls the output behavior
+- `LoggerTimings`, which controls timing for polling/flushing behavior
 
 ## `LoggerConfig`
 
-`LoggerConfig` is the logger's runtime configuration struct.
+`LoggerConfig` is the logger's output configuration struct.
 
 <details>
   <summary><small>View Source Code</small></summary>
@@ -21,6 +19,7 @@ struct LoggerConfig {
   std::atomic<bool> printWatches{true};
   std::atomic<bool> printTelemetry{true};
   std::atomic<bool> printWaypoints{true};
+  std::atomic<bool> logSystemInfo{true};
 };
 ```
 </details>
@@ -35,11 +34,12 @@ logger.setLogToSD(true);
 logger.setPrintWatches(true);
 logger.setPrintTelemetry(true);
 logger.setPrintWaypoints(true);
+logger.setLogSystemInfo(true);
 ```
 
 That is how you should change them.
 
-## Runtime Settings
+## Output Settings
 
 ### `logToTerminal`
 
@@ -141,31 +141,21 @@ Turn it off when:
 - you don't need (or don't care) to know what MVLib is doing
 - you don't want to clutter the MotionView GUI with system prints
 
-## Compile-Time Settings in `config.hpp`
-
-The other configuration surface is `include/mvlib/config.hpp`.
+## Timing Settings
 
 <details>
   <summary><small>View Source Code</small></summary>
 
 ```cpp
-namespace detail {
-__MVLIB_CONFIGURABLE sd_flush = 1_mvS;
-__MVLIB_CONFIGURABLE terminal_polling_rate = 120_mvMs;
-__MVLIB_CONFIGURABLE sd_polling_rate = 80_mvMs;
-}
+struct LoggerTimings {
+  uint32_t sd_buffer_flush_interval = 1000;
+  uint32_t sd_polling_rate = 80;
+  uint32_t terminal_polling_rate = 120;
+};
 ```
 </details>
 
-These values are meant to be changed in the header, then compiled into the library values:
-
-- `mvlib::SD_FLUSH_INTERVAL_MS`
-- `mvlib::TERMINAL_POLLING_RATE_MS`
-- `mvlib::SD_POLLING_RATE_MS`
-
-## Timing Settings
-
-### `detail::sd_flush`
+### `sd_buffer_flush_interval`
 
 Default: `1_mvS`
 
@@ -185,7 +175,7 @@ Higher values:
 Warning:
 - Extremely aggressive flushing can add unnecessary overhead. The default is a good starting point. Only change this if you know why you're doing it.
 
-### `detail::terminal_polling_rate`
+### `terminal_polling_rate`
 
 Default: `120_mvMs`
 
@@ -211,7 +201,7 @@ Risk:
 - Leave this alone unless you have measured reason to change it.
 - If you do tune it, change it cautiously and test on real hardware.
 
-### `detail::sd_polling_rate`
+### `sd_polling_rate`
 
 Default: `80_mvMs`
 
