@@ -58,10 +58,10 @@ void initialize() {
 	});
 
 	// Log average drivetrain temperature only if overheating
-	logger.watch("Avg Temp:", mvlib::LogLevel::OFF, 1_mvS, // We do not log at all normally
+	logger.watch("Avg Temp:", LogLevel::OFF, 1_mvS, // We do not log at all normally
 		[]() { return (left_mg.get_temperature() + right_mg.get_temperature()) / 2; },
 		mvlib::LevelOverride<double>{ // Use LevelOverride to only log if overheating
-			.elevatedLevel = mvlib::LogLevel::WARN,
+			.elevatedLevel = LogLevel::WARN,
 			.predicate = PREDICATE(v > 50), 
 			.label = "Overheating Drivetrain:"
 		}, "%.0f");

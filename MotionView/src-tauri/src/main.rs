@@ -11,7 +11,7 @@ use std::{
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{Manager, RunEvent, State, Window};
-use tauri_plugin_posthog::{init as posthog_init, PostHogConfig};
+use tauri_plugin_posthog::{init as posthog_init, PostHogConfig, PostHogOptions};
 mod export;
 mod settings;
 
@@ -31,6 +31,10 @@ fn load_posthog_config() -> Option<PostHogConfig> {
     println!("API KEY SET");
     Some(PostHogConfig {
         api_key,
+        options: Some(PostHogOptions {
+        disable_session_recording: Some(false),
+        ..Default::default()
+        }),
         ..Default::default()
     })
 }
@@ -206,6 +210,12 @@ fn pid_path(app: &tauri::AppHandle) -> Result<PathBuf, tauri::Error> {
     app.path().app_data_dir().map(|dir| dir.join("bridge.pid"))
 }
 
+fn posthog_id_path(app: &tauri::AppHandle) -> Result<PathBuf, tauri::Error> {
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join("posthog_distinct_id"))
+}
+
 #[cfg(unix)]
 fn kill_pid(pid: u32) {
     let _ = Command::new("kill")
@@ -360,6 +370,25 @@ fn get_bridge_origin(state: State<'_, BridgeOrigin>) -> Option<String> {
     state.0.lock().unwrap().clone()
 }
 
+#[tauri::command]
+fn get_posthog_distinct_id(app: tauri::AppHandle) -> Result<String, String> {
+    let path = posthog_id_path(&app).map_err(|err| err.to_string())?;
+    if let Ok(existing) = fs::read_to_string(&path) {
+        let trimmed = existing.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.to_string());
+        }
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+
+    let id = uuid::Uuid::new_v4().to_string();
+    fs::write(&path, &id).map_err(|err| err.to_string())?;
+    Ok(id)
+}
+
 #[cfg(not(mobile))]
 fn persist_window_state(app_handle: &tauri::AppHandle) {
     if let Some(win) = app_handle.get_webview_window("main") {
@@ -386,11 +415,14 @@ fn main() {
             settings::save_robot_image,
             settings::read_saved_paths,
             settings::write_saved_paths,
+            settings::read_aux_window_state,
+            settings::write_aux_window_state,
             export::export_motionview_json,
             set_windows_fullscreen,
             get_window_fullscreen_state,
             get_system_info,
-            get_bridge_origin
+            get_bridge_origin,
+            get_posthog_distinct_id
         ])
         .setup(|app| {
             cleanup_previous_bridge(app.handle());

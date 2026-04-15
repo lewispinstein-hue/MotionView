@@ -159,9 +159,10 @@ void Logger::Update() {
 
   static double leftVelocity, rightVelocity;
   std::optional<Pose> pose = std::nullopt;
-  {
+
+  if (m_getPose) {
     unique_lock lock(m_mutex);
-    if (m_getPose) pose = m_getPose();
+    pose = m_getPose();
   }
   
   if (m_configValid && m_pLeftDrivetrain && 

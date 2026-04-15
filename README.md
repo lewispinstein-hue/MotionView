@@ -105,6 +105,7 @@ Use cases:
 | Viewing | `Cmd + O` | Open JSON file |
 | Viewing | `Cmd + K` | Clear Viewer |
 | Viewing | `Cmd + S` | Start/stop live streaming (if connected) |
+| Viewing | `Cmd + R` | Refresh & sync livestream (if streaming) |
 | Viewing | `P` | Toggle Planned Overlay |
 | Viewing | `G` | Toggle Floating Graph |
 | Viewing | `Cmd + C` | Connect/disconnect |
@@ -119,13 +120,17 @@ Use cases:
 
 
 ## Version Compatibility
-> You can find your MotionView version by clicking on the `?` icon in MotionView and looking in the bottom left, and your MVLib version by running `pros c info-project` and looking for `libmvlib` in the output.
 
-The MotionView field holds the version of the app, an the MVLib field holds all versions of MVLib that that version of MotionView supports.
+> **How to check your versions:**
+> * **MotionView (Desktop App):** Click the `?` icon in the app and look in the bottom left corner.
+> * **MVLib (PROS Library):** Run `pros c info-project` in your terminal and look for `libmvlib` in the output.
 
-> Example: `MotionView <= v1.0.1 supports MVLib <= v1.0.1` Meaning MotionView versions lower or equal to 1.0.1 support MVLib versions 1.0.1 or lower.
+Because MotionView and MVLib communicate using a custom data protocol, you must ensure your desktop app and your PROS library are compatible. 
 
-| MotionView | MVLib |
-|---|---|
-| <=1.0.1 | <=1.0.1 |
-| >=1.1.0 | >=1.1.0 |
+We highly recommend always updating to the latest versions for both.
+
+| MotionView App | Requires MVLib | Notes |
+| :--- | :--- | :--- |
+| **v1.2.x** | **v1.1.x** <br> **v2.0.0** | Current Latest Release |
+| **v1.1.x** | **v1.1.x** | Altered data protocol |
+| **v1.0.x** | **v1.0.x** | Legacy data protocol (missing some features) |

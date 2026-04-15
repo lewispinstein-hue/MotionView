@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::{collections::HashMap, fs};
 
 use base64::Engine as _;
 use tauri::{AppHandle, Manager};
@@ -9,6 +10,16 @@ const SAVED_PATHS_FILE: &str = "saved-paths.json";
 #[cfg(not(mobile))]
 #[allow(dead_code)]
 const WINDOW_STATE_FILE: &str = "window-state.json";
+const AUX_WINDOW_STATE_FILE: &str = "aux-window-state.json";
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuxWindowState {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
 
 fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
@@ -34,6 +45,15 @@ fn saved_paths_path(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e: tauri::Error| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.join(SAVED_PATHS_FILE))
+}
+
+fn aux_window_state_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e: tauri::Error| e.to_string())?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join(AUX_WINDOW_STATE_FILE))
 }
 
 #[cfg(not(mobile))]
@@ -96,6 +116,36 @@ pub fn write_saved_paths(app: AppHandle, contents: String) -> Result<(), String>
     serde_json::from_str::<serde_json::Value>(&contents).map_err(|e| e.to_string())?;
     let path = saved_paths_path(&app)?;
     std::fs::write(path, contents).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn read_aux_window_state(app: AppHandle, label: String) -> Result<Option<AuxWindowState>, String> {
+    let path = aux_window_state_path(&app)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let contents = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let states: HashMap<String, AuxWindowState> =
+        serde_json::from_str(&contents).map_err(|e| e.to_string())?;
+    Ok(states.get(&label).cloned())
+}
+
+#[tauri::command]
+pub fn write_aux_window_state(
+    app: AppHandle,
+    label: String,
+    state: AuxWindowState,
+) -> Result<(), String> {
+    let path = aux_window_state_path(&app)?;
+    let mut states: HashMap<String, AuxWindowState> = if path.exists() {
+        let contents = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&contents).unwrap_or_default()
+    } else {
+        HashMap::new()
+    };
+    states.insert(label, state);
+    let contents = serde_json::to_string_pretty(&states).map_err(|e| e.to_string())?;
+    fs::write(path, contents).map_err(|e| e.to_string())
 }
 
 fn mime_from_ext(path: &std::path::Path) -> &'static str {

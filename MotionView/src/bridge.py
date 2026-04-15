@@ -13,8 +13,6 @@ from datetime import datetime
 
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
-from fastapi.responses import FileResponse, Response
-from fastapi.staticfiles import StaticFiles
 from fastapi.websockets import WebSocket
 from starlette.middleware.cors import CORSMiddleware
 import uvicorn
@@ -32,7 +30,7 @@ def _get_lock():
     """Get or create the lock for PROS_PROJECT_DIR updates."""
     global PROS_PROJECT_DIR_LOCK
     if PROS_PROJECT_DIR_LOCK is None:
-        try:
+        try: 
             PROS_PROJECT_DIR_LOCK = asyncio.Lock()
         except RuntimeError:
             # No event loop running, create new lock
@@ -477,7 +475,7 @@ class ProsTerminalRunner:
             pros_dir = str(PROS_PROJECT_DIR)
         # Spawn `pros terminal` with stdio attached to PTY slave
         self.proc = await asyncio.create_subprocess_exec(
-            PROS_EXE, "terminal",
+            PROS_EXE, "terminal", "--no-banner",
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,
@@ -540,7 +538,7 @@ class ProsTerminalRunner:
         async with lock:
             pros_dir = str(PROS_PROJECT_DIR)
         self.proc = await asyncio.create_subprocess_exec(
-            PROS_EXE, "terminal",
+            PROS_EXE, "terminal", "--no-banner",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             stdin=asyncio.subprocess.DEVNULL,

@@ -168,27 +168,6 @@ Parsed as:
 
 MotionView uses `CREATED` to create or replace the waypoint with that `id`. The waypoint is placed on the field immediately at its target location and remains there until cleared. If the same `id` appears later with a new `CREATED` event, MotionView treats that as a new session for that waypoint and drops the old waypoint state and history.
 
-#### `OFFSET`
-
-Expected format:
-
-```log
-[WPOINT],uptime,OFFSET,id,wpointName,offsetX,offsetY,offsetT|NA,remainingTime|NA
-```
-
-- `offsetX`: Current x error from the waypoint target
-- `offsetY`: Current y error from the waypoint target
-- `offsetT`: Current angular error, or `NA`
-- `remainingTime`: Remaining timeout in milliseconds, or `NA`
-
-Example:
-
-```log
-[15.80] [INFO]: [WPOINT],15800,OFFSET,4,Park Zone,1.25,-0.50,3.0,420
-```
-
-MotionView stores the event in the waypoint's event history and shows it in the sidebar. It does not move the field marker, because field markers always stay at the original target location from `CREATED`.
-
 #### `REACHED`
 
 Expected format:
