@@ -79,10 +79,11 @@ def terminal(port: str, backend: str, **kwargs):
     else:
         logger(__name__).debug("not a v5 joystick")
         ser = DirectPort(port)
-    if kwargs.get('raw', False):
-        device = devices.RawStreamDevice(ser)
-    else:
-        device = devices.vex.V5UserDevice(ser)
+    # MVLib disables PROS user-serial COBS/topic framing on the robot so the
+    # terminal must read the raw byte stream in both decoded and --raw modes.
+    # In decoded mode Terminal.reader still routes the raw bytes through the
+    # MotionView decoder; --raw only changes the final display formatting.
+    device = devices.RawStreamDevice(ser)
     term = Terminal(
         device,
         output_raw=kwargs.get('raw', False),

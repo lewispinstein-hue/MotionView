@@ -454,7 +454,6 @@ const prosExeStatusEl = document.getElementById('prosExeStatus');
 const prosExeAutoStatusEl = document.getElementById('prosExeAutoStatus');
 const prosExeAutoResultsEl = document.getElementById('prosExeAutoResults');
 let prosDirValid = false;
-let prosExeValid = false;
 let prosDirRetryTimer = null;
 let prosDirRetryAttempts = 0;
 let prosDirFromSettings = false;
@@ -497,8 +496,6 @@ const TRACK_HOVER_PAD_PX = 12; // How close to the track before snapping on
 
 const WAYPOINT_OFFSET_PILL_MAX_W_PX = 120;
 const FIELD_WAYPOINT_MARKER_MAX_W_PX = 35;
-
-const OFFSET_MAX = 100; // Max offset in either direction
 
 const CANVAS_ZOOM_MAX = 15; // Max zoom in
 const CANVAS_ZOOM_MIN = 0.15; // Max zoom out
@@ -3763,6 +3760,12 @@ function highlightWaypointInList(waypointId, eventTime, doScroll) {
   }
 }
 
+function clearWaypointSelection() {
+  selectedWaypointId = null;
+  selectedWaypointEventTime = null;
+  highlightWaypointInList(null, null, false);
+}
+
 function waypointPoseIndexForSelection(waypoint, eventTime = null) {
   if (!waypoint || !rawPoses.length) return null;
   const startT = waypoint.createdTime;
@@ -3797,11 +3800,17 @@ function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
   highlightLogInList(null, false);
   hideWatchPopup();
 
+  if (leftConnected && leftStreaming) {
+    requestDrawAll();
+    setStatus(`Waypoint: ${waypoint.name || waypoint.id} selected.`);
+    highlightWaypointInList(waypoint.id, selectedWaypointEventTime, fromUserClick);
+    return;
+  }
+
   const poseIdx = waypointPoseIndexForSelection(waypoint, selectedWaypointEventTime);
   if (poseIdx != null) {
     clearTrackHover(true);
     clearTrackLock();
-    if (leftConnected && leftStreaming) liveAutoFollowHead = false;
     pause();
     hoverTimelineTime = null;
     timelineHoverSaved = null;
@@ -3827,7 +3836,8 @@ function renderWaypointList() {
   waypointCount.textContent = `${visible.length}`;
 
   const ACTIVE_BACKGROUND = "rgba(0, 114, 176, 0.5)";
-  const INACTIVE_BACKGROUND = "rgba(49, 49, 49, 0.65)";
+  const TIMEDOUT_BACKGROUND = "#8a0000aa";
+  const REACHED_BACKGROUND = "#008a30aa";
 
   for (const { waypoint, event } of visible) {
     const div = document.createElement("div");
@@ -3836,11 +3846,11 @@ function renderWaypointList() {
     div.dataset.eventTime = String(event.t);
     const stateLabel = waypoint.retriggerable ? "RETRIGGERABLE" : (waypoint.active ? "ACTIVE" : "INACTIVE");
     const stateFill = waypoint.retriggerable
-      ? ((waypoint.terminalEvent?.type === "TIMEDOUT") ? INACTIVE_BACKGROUND : ACTIVE_BACKGROUND)
-      : (waypoint.active ? ACTIVE_BACKGROUND : INACTIVE_BACKGROUND);
+      ? ((waypoint.terminalEvent?.type === "TIMEDOUT") ? TIMEDOUT_BACKGROUND : ACTIVE_BACKGROUND)
+      : (waypoint.active ? ACTIVE_BACKGROUND : (waypoint.terminalEvent?.type === "TIMEDOUT" ? TIMEDOUT_BACKGROUND : REACHED_BACKGROUND));
     const stateText = waypoint.retriggerable
       ? "#f1e7ff"
-      : (waypoint.active ? "#e7f2ff" : "#9aa9ba");
+      : (waypoint.active ? "#e7f2ff" : "#d5e3f3ff");
     const eventStyle = waypointTypeStyle(event.type);
     const detailsHtml = waypointEventLines(event)
       .map((line) => `<div class="waypointValue">${escapeHtml(line)}</div>`)
@@ -4124,11 +4134,13 @@ function waypointOffsetUiScale() {
   return clamp(viewZoom, 0.25, 1);
 }
 
-function filteredWaypointForOverlay() {
+function selectedWaypointForOverlay() {
   if (appMode !== "viewing") return null;
-  const filter = waypointFilterValue();
-  if (!filter || filter === "all" || filter === "active") return null;
-  return waypoints.find((waypoint) => String(waypoint?.id) === filter) || null;
+  if (selectedWaypointId == null) return null;
+  const waypoint = waypointsById.get(Number(selectedWaypointId))
+    || waypoints.find((waypoint) => String(waypoint?.id) === String(selectedWaypointId))
+    || null;
+  return waypoint && waypointFilterMatches(waypoint) ? waypoint : null;
 }
 
 function drawOffsetPill(x, y, parts, options = {}) {
@@ -4189,7 +4201,7 @@ function drawOffsetPill(x, y, parts, options = {}) {
 }
 
 function drawWaypointOffsetOverlay(pose) {
-  const waypoint = filteredWaypointForOverlay();
+  const waypoint = selectedWaypointForOverlay();
   if (!waypoint || !pose) return;
 
   const waypointScreen = worldToScreen(waypoint.target.x, waypoint.target.y);
@@ -5342,9 +5354,6 @@ function play() {
   clearTrackLock();
   selectedWatch = null;
   selectedLogTime = null;
-  selectedWaypointId = null;
-  selectedWaypointEventTime = null;
-  highlightWaypointInList(null, null, false);
   timelineHoverSaved = null;
   setStatus(`Playing from time ${((rawPoses[selectedIndex]?.t ?? 0) / 1000).toFixed(1)}s`);
 
@@ -5617,23 +5626,32 @@ canvas.addEventListener('mouseleave', () => {
 canvas.addEventListener('click', (e) => {
   if (appMode === "planning") return;
   if (!data || playing) return;
-  if (window.__live && window.__live.streaming) return;
   if (suppressNextClick) { suppressNextClick = false; return; }
 
-  const hw = hitTestWatchAtClient(e.clientX, e.clientY);
-  if (hw) {
-    selectWatchMarker(hw, true, { x: e.clientX, y: e.clientY });
-    return;
+  const isLiveStreaming = window.__live && window.__live.streaming;
+  if (!isLiveStreaming) {
+    const hw = hitTestWatchAtClient(e.clientX, e.clientY);
+    if (hw) {
+      selectWatchMarker(hw, true, { x: e.clientX, y: e.clientY });
+      return;
+    }
   }
 
   const waypointHit = hitTestWaypointAtClient(e.clientX, e.clientY);
   if (waypointHit) {
+    if (selectedWaypointId === waypointHit.id) {
+      clearWaypointSelection();
+      requestDrawAll();
+      return;
+    }
     if (waypointFilter && waypointFilter.value === "all") {
       renderWaypointList();
     }
     selectWaypointEvent(waypointHit, waypointHit.latestActiveEvent, true);
     return;
   }
+
+  if (isLiveStreaming) return;
 
   const hit = pickTrackPose(e.clientX, e.clientY);
   if (hit) {
@@ -5673,8 +5691,12 @@ canvas.addEventListener('click', (e) => {
   // click off-track unlocks
   if (trackLockActive) {
     clearTrackLock();
+    clearWaypointSelection();
     setStatus(`Unlocked track lock.`);
     updatePoseReadout();
+    requestDrawAll();
+  } else if (selectedWaypointId != null) {
+    clearWaypointSelection();
     requestDrawAll();
   }
 });
@@ -8013,6 +8035,10 @@ window.addEventListener('keydown', (e) => {
   else if (settingsOpen) closeSettings();
   else if (exportOpen) closeExportModal();
   else if (routeInfoOpen) closeRouteInfoModal();
+  else if (selectedWaypointId != null) {
+    clearWaypointSelection();
+    requestDrawAll();
+  }
   e.preventDefault();
   e.stopPropagation();
 }, true);

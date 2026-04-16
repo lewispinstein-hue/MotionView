@@ -136,6 +136,15 @@ def _decode_text(payload: bytes) -> str:
     return payload.decode("utf-8", errors="replace")
 
 
+def _decode_watch_text(payload: bytes) -> str:
+    value = _decode_text(payload)
+    if value == "t":
+        return "true"
+    if value == "f":
+        return "false"
+    return value
+
+
 def _decode_roster_name(payload: bytes) -> str:
     return payload.split(b"\0", 1)[0].decode("utf-8", errors="replace")
 
@@ -261,7 +270,7 @@ def _handle_watch(payload: bytes, level_bits: int, subtype: int) -> str:
     if subtype in (WATCH_TEXT, WATCH_TEXT_TRIPPED):
         ts, watch_id = struct.unpack("<HH", payload[:4])
         ts = _expand_timestamp(ts)
-        value = _decode_text(payload[4:])
+        value = _decode_watch_text(payload[4:])
         tripped = subtype == WATCH_TEXT_TRIPPED
         event = ("watch_text", ts, level_name, watch_id, value, tripped)
         return _emit_rostered_event(watch_id, tripped, event)
