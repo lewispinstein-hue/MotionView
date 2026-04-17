@@ -88,6 +88,7 @@ def terminal(port: str, backend: str, **kwargs):
         device,
         output_raw=kwargs.get('raw', False),
         request_banner=kwargs.pop('request_banner', True),
+        allow_input=os.environ.get("MOTIONVIEW_HEADLESS") != "1",
     )
 
     class TerminalOutput(object):

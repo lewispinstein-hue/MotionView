@@ -109,6 +109,9 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
         if let Some(parent) = exe_dir.parent() {
             roots.push(parent.to_path_buf());
             roots.push(parent.join("bin"));
+            roots.push(parent.join("_up_"));
+            roots.push(parent.join("_up_").join("bin"));
+            roots.push(parent.join("_up_").join("src-tauri").join("bin"));
             roots.push(parent.join("__up__"));
             roots.push(parent.join("__up__").join("bin"));
 

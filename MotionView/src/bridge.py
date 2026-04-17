@@ -153,6 +153,9 @@ def resolve_bundled_pros_exe() -> Optional[str]:
                 exe_dir.parent / "Resources" / "_up_",
                 exe_dir.parent / "Resources" / "_up_" / "src-tauri" / "bin",
                 exe_dir.parent / "Resources" / "src-tauri" / "bin",
+                exe_dir.parent / "_up_",
+                exe_dir.parent / "_up_" / "bin",
+                exe_dir.parent / "_up_" / "src-tauri" / "bin",
                 exe_dir.parent / "__up__",
                 exe_dir.parent / "__up__" / "bin",
                 exe_dir.parent / "__up__" / "src-tauri" / "bin",
@@ -506,7 +509,16 @@ class ProsTerminalRunner:
                     except Exception:
                         proc.terminate()
                 else:
-                    proc.terminate()
+                    try:
+                        import subprocess
+                        subprocess.run(
+                            ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            check=False,
+                        )
+                    except Exception:
+                        proc.terminate()
             else:
                 if os.name != "nt":
                     try:
@@ -514,7 +526,16 @@ class ProsTerminalRunner:
                     except Exception:
                         proc.kill()
                 else:
-                    proc.kill()
+                    try:
+                        import subprocess
+                        subprocess.run(
+                            ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            check=False,
+                        )
+                    except Exception:
+                        proc.kill()
         except Exception:
             pass
 
@@ -615,6 +636,8 @@ class ProsTerminalRunner:
         lock = _get_lock()
         async with lock:
             pros_dir = str(PROS_PROJECT_DIR)
+        env = os.environ.copy()
+        env["MOTIONVIEW_HEADLESS"] = "1"
         self.proc = await asyncio.create_subprocess_exec(
             PROS_EXE, "terminal", "--no-banner",
             stdout=asyncio.subprocess.PIPE,
@@ -622,6 +645,7 @@ class ProsTerminalRunner:
             stdin=asyncio.subprocess.DEVNULL,
             cwd=pros_dir,
             creationflags=creationflags,
+            env=env,
         )
         print(f"runner._start_pipes: proc started pid={self.proc.pid}", file=sys.stderr)
 

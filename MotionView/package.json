@@ -6,9 +6,10 @@
   "scripts": {
     "py:build": "node scripts/build_py.js",
     "dev:web": "vite --config vite.config.js",
+    "py:clean": "rm -rf ./src-tauri/bin",
     "build:web": "vite build --config vite.config.js",
-    "dev": "pnpm py:build && tauri dev",
-    "build": "pnpm py:build && tauri build",
+    "dev": "pnpm py:clean && pnpm py:build && tauri dev",
+    "build": "pnpm py:clean && pnpm py:build && tauri build",
     "tauri": "tauri"
   },
   "devDependencies": {

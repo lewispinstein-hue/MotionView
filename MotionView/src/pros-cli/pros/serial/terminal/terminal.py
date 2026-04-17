@@ -171,7 +171,8 @@ class Terminal(object):
     """This class is loosely based off of the pyserial miniterm"""
 
     def __init__(self, port_instance: StreamDevice, transformations=(),
-                 output_raw: bool = False, request_banner: bool = True):
+                 output_raw: bool = False, request_banner: bool = True,
+                 allow_input: bool = True):
         self.device = port_instance
         self.device.subscribe(b'sout')
         self.device.subscribe(b'serr')
@@ -183,6 +184,7 @@ class Terminal(object):
         self.alive = threading.Event()  # type: threading.Event
         self.output_raw = output_raw
         self.request_banner = request_banner
+        self.allow_input = allow_input
         self.no_sigint = True  # SIGINT flag
         signal.signal(signal.SIGINT, self.catch_sigint)  # SIGINT handler
         self.console = Console()
@@ -222,6 +224,7 @@ class Terminal(object):
             try:
                 data = self.device.read()
                 if not data:
+                    time.sleep(0.01)
                     continue
 
                 if self.output_raw:
@@ -310,7 +313,8 @@ class Terminal(object):
         self.console.setup()
         self.alive.clear()
         self._start_rx()
-        self._start_tx()
+        if self.allow_input:
+            self._start_tx()
 
     # noinspection PyUnusedLocal
     def stop(self, *args):
@@ -319,16 +323,16 @@ class Terminal(object):
             logger(__name__).warning('Stopping terminal')
             self.alive.set()
             self.device.destroy()
-            if threading.current_thread() != self.transmitter_thread and self.transmitter_thread.is_alive():
+            if self.transmitter_thread and threading.current_thread() != self.transmitter_thread and self.transmitter_thread.is_alive():
                 self.console.cleanup()
                 self.console.cancel()
             logger(__name__).info('All done!')
 
     def join(self):
         try:
-            if self.receiver_thread.is_alive():
+            if self.receiver_thread and self.receiver_thread.is_alive():
                 self.receiver_thread.join()
-            if self.transmitter_thread.is_alive():
+            if self.transmitter_thread and self.transmitter_thread.is_alive():
                 self.transmitter_thread.join()
         except:
             self.stop()
