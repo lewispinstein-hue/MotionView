@@ -25,9 +25,8 @@ namespace mvlib {
  *
  * Binds a pose getter that reads from lemlib::Chassis::getPose() and
  * forwards the values into mvlib::Pose. If the chassis pointer is null,
- * the getter returns std::nullopt. syntactically
+ * the getter returns std::nullopt.
  *
- * @param logger The Logger instance that will consume the pose getter.
  * @param chassis Pointer to the LemLib chassis supplying pose data.
  *
  * @warning The caller must ensure the chassis pointer remains valid for
@@ -42,12 +41,13 @@ namespace mvlib {
  * extern lemlib::Chassis chassis;
  *
  * void initialize() {
+ *   auto& logger = mvlib::Logger::getInstance();
  *   mvlib::setOdom(&chassis);
  *   logger.start();
  * }
  * @endcode
  */
-inline void setOdom(lemlib::Chassis* chassis) {
+inline void setOdom(lemlib::Chassis *chassis) {
   mvlib::Logger::getInstance().setPoseGetter([chassis]() -> std::optional<Pose> {
     if (!chassis) return std::nullopt;
     auto p = chassis->getPose();

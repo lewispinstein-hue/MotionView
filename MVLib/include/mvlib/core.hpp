@@ -21,7 +21,9 @@
  * #include "mvlib/Optional/customOdom.hpp"
  * void initialize() {
  *   auto& logger = mvlib::Logger::getInstance();
- *   mvlib::setOdom([]() -> std::optional<Pose { ... });
+ *   mvlib::setOdom([]() -> std::optional<mvlib::Pose> {
+ *     return mvlib::Pose{0.0, 0.0, 0.0};
+ *   });
  *   logger.setRobot({
  *     .leftDrivetrain = &leftMg,
  *     .rightDrivetrain = &rightMg
@@ -37,12 +39,13 @@
 #include "waypoint.hpp"
 
 #include <atomic>
+#include <cmath>
 #include <optional>
 #include <utility>
 #include <vector>
 #include <string>
 
-#define MVLIB_VERSION 100100L // 1.1.0
+#define MVLIB_VERSION 200000L // 2.0.0
 
 namespace mvlib {
 
@@ -109,7 +112,7 @@ enum class LogLevel : uint8_t {
 };
 
 // ---------- Generic variable watches ----------
-using WatchId = uint64_t;
+using WatchId = uint16_t;
 
 /**
  * @struct LevelOverride
@@ -163,14 +166,23 @@ std::function<bool(const T&)> asPredicate(Pred &&p) {
  * @struct Pose struct used internally that represents the robot's x, y, and theta values.
 */
 struct Pose {
-  double x{0};
-  double y{0};
-  double theta{0};
+  double x{};
+  double y{};
+  double theta{};
 };
 
 /**
  * @class Logger
  * @brief Singleton logging + telemetry manager.
+ *
+ * @warning After creating the logger instance (Logger::getInstance()), the
+ *          standard PROS terminal multiplexers (sout/serr) and native COBS 
+ *          encoding are deactivated to optimize VEXnet bandwidth. Do not 
+ *          use standard print functions (e.g., printf, std::cout) after 
+ *          instantiating the logger. Raw text will collide with the high-speed 
+ *          binary telemetry stream, resulting in corrupted packets and undefined 
+ *          behavior during decoder. Use Logger::info(), warn(), etc. for
+ *          safe logging.
  */
 class Logger {
 public:
@@ -301,8 +313,27 @@ public:
     /**
      * @brief SD file flush interval. At 1s (default), 
      *        SD card flushes out of RAM every 1 second.
+     *
+     * @note This interval is used to flush the file buffer. 
+     *       It uses the standard fflush(file) function for flushing.
+     *
     */
-    uint32_t sd_buffer_flush_interval = 1000;
+    uint32_t sdBufferFlushInterval = 1000;
+    
+    /**
+     * @brief Terminal output flush interval. At 1s (default), 
+     *        terminal output flushes out of its buffer
+     *        every 1 second. 
+     *
+     * @note This interval is used to flush the stdout buffer. 
+     *       It uses the standard fflush(stdout) function for flushing.
+     *
+     * @warning Use this to tune flushes to your specific robot
+     *          configuration. Lower values force the buffer to 
+     *          be flushed more frequently, while higher values
+     *          force flush the buffer less frequently.
+    */
+    uint32_t stdoutBufferFlushInterval = 400;
 
     /**
      * @brief Controls how often mvlib polls for new data and logs it. Default: 120ms
@@ -315,7 +346,7 @@ public:
      *          connection to be completely dropped and cease logging 
      *          or transmission lag.
     */
-    uint32_t sd_polling_rate = 80;
+    uint32_t sdPollingRate = 80;
 
     /**
      * @brief Controls how often mvlib polls for new data and logs it. Default: 80ms
@@ -324,7 +355,14 @@ public:
      *       controls how often that buffer is written too. Faster polling
      *       rates may lead to resource starvation of other tasks.
     */
-    uint32_t terminal_polling_rate = 120;
+    uint32_t terminalPollingRate = 120;
+
+    /**
+     * @brief Minimum interval between watch and waypoint roster sync beacons.
+     *
+     * @note Lower values improve late-join recovery at the cost of bandwidth.
+    */
+    uint32_t rosterSyncAllInterval = 8000;
   };
 
   /**
@@ -346,7 +384,8 @@ public:
    * @brief Provide a custom pose getter (for any odometry library).
    * @param getter Callable that returns a Pose or std::nullopt if unavailable.
    *
-   * @note Prefer the adapters based on you odom library from include/mvlib/Optional
+   * @note Prefer the adapter that matches your odometry library from
+   *       include/mvlib/Optional when one is available.
    *
    * \b Example
    * @code
@@ -359,7 +398,7 @@ public:
    *   logger.setPoseGetter([&]() -> std::optional<mvlib::Pose> {
    *     lemlib::Pose pose = chassis.getPose(); 
    *     if (!std::isfinite(pose.x) || !std::isfinite(pose.y)) return std::nullopt;
-   *     return mvlib::Pose(pose.x, pose.y, pose.theta);
+   *     return mvlib::Pose{pose.x, pose.y, pose.theta};
    *   });
    * }
    * @endcode
@@ -369,20 +408,47 @@ public:
   /**
    * @brief Provide robot component references used by telemetry helpers.
    * @param drivetrain drivetrain refs.
-   * \return True if refs were accepted (e.g., non-null and consistent).
+   * @param useSpeedEstimation If true, uses speed estimation from odometry if
+   *                           available instead of actual motor-reported velocity.
+   *
+   * \return True if refs were accepted (e.g., non-null and consistent), false
+   *         otherwise.
    *
    * @note If you do not call this, drivetrain speed will be approximated from 
    *       pose. This is not recommended.
    */
   bool setRobot(Drivetrain drivetrain, bool useSpeedEstimation = false);
 
+  /**
+  * @brief Sets the SD card directory for saving log files.
+  *
+  * @note The folder must already exist on the SD card.
+  * @note Pass a PROS SD path relative to `/usd`, starting with `\\`
+  *       (for example `\\logs`, not `/usd/logs`).
+  *
+  * @param folder        Absolute path to the directory (e.g. "\\logs").
+  * @param disableOnFail If true, permanently locks/disables SD logging if the folder is missing.
+  *                      If false, the logger falls back to the SD card root directory on failure.
+  *
+  * \return true if the folder exists and was set successfully, false otherwise. 
+  *
+  * \b Example
+  * @code
+  * auto& logger = mvlib::Logger::getInstance();
+  * // Route logs to "\telemetry". Disable SD logging entirely if the folder doesn't exist.
+  * if (!logger.setLoggingFolder("\\telemetry", true)) {
+  *   logger.warn("SD logging disabled: \\telemetry folder not found.");
+  * }
+  * @endcode
+  */
+  bool setLoggingFolder(const char *folder, bool disableOnFail = false);
   // ------------------------------------------------------------------------
   // Logging
   // ------------------------------------------------------------------------
 
   /**
    * @brief Emit a computer-formatted log message to MotionView. Unlike the LOG_
-   *        macros, these function will produce logs MotionView will parse and 
+   *        macros, these functions produce logs MotionView can parse and
    *        display. These functions only differ in the severity level that they 
    *        log at. 
    *
@@ -437,36 +503,43 @@ public:
   /**
    * @brief Add a waypoint to the logger.
    * @param name Name of the waypoint.
-   * @param details Required waypoint details (x, y, theta, tol, etx)
+   * @param details Waypoint target and tolerance settings.
    * @return A handle to the waypoint.
    *
    * @note To access value of the waypoint, use the handle returned by this 
    *       function.
    *
-   * @warning @c name is moved into the handle. Do not use @c name after passing 
-   *          it to this function.
+   * @note For performance reasons, names are truncated to 24 characters long.
    *
    * \b Example
    * @code
    * auto& logger = mvlib::Logger::getInstance();
    * auto BL_MTL = logger.addWaypoint("Blue left matchloader", {
-   *   .tarX = 70, 
-   *   .tarY = -47, 
+   *   .tarX = 70,
+   *   .tarY = -47,
    *   .tarT = 0,
    *   .linearTol = 2,
    *   .thetaTol = 10,
    *   .timeoutMs = 5_mvS,
-   *   .printOffsetEveryMs = 1_mvS
    * });
    * auto off = BL_MTL.getOffset();
-   * printf("BL_MTL CURRENT OFFSET: %.1f, %.1f, %.1f.\n", off.offX, off.offY, off.offT.value());
+   * logger.info("BL_MTL offset: %.1f, %.1f, %.1f",
+   *             off.offX, off.offY, off.offT.value_or(0.0));
    * @endcode
    * This example creates a waypoint named "Blue left matchloader" with a 
    * target position of (70, -47), XY tolerance of 2, theta tolerance of 
-   * 10 degrees, and a timeout of 5 seconds. It will also print the offset
-   * every 1000ms to MotionView.
+   * 10 degrees, and a timeout of 5 seconds.
    */
   WaypointHandle addWaypoint(std::string name, WaypointParams details);
+
+  /**
+   * @brief Re-send roster entries for all active waypoints. Use this to fix issues 
+   *        of waypoints not appearing in MotionView.
+   *
+   * @note Inactive waypoints are intentionally omitted so they stay dropped
+   *       from the viewer roster.
+   */
+  void resyncAllWaypointsRoster();
   
   // ------------------------------------------------------------------------
   // Watches
@@ -485,13 +558,24 @@ public:
   bool setDefaultWatches(const DefaultWatches& watches);
 
   /**
+   * @brief Re-send roster entries for all watches. Use this to fix issues 
+   *        of watches not appearing in MotionView.
+   *
+   * @note Watches with an elevated/predicate label will send both the default
+   *       and elevated roster labels.
+   */
+  void resyncAllWatchesRoster();
+
+  /**
    * @brief Register a periodic watch on a getter function. The 
    *        getter is sampled every intervalMs and printed at baseLevel, unless
    *        the optional override predicate elevates the level.
    *
-   * @note Adding a watch is computationally expensive. Don't call logger.watch() 
-   *       repeatedly. Additionally, if the same .watch() is called 
-   *       multible times, each watch will be separate and logged independently.
+   * @note Adding a watch is computationally expensive. Don't call logger.watch()
+   *       repeatedly. Additionally, if the same .watch() is called
+   *       multiple times, each watch will be separate and logged independently.
+   *
+   * @note For performance reasons, names are truncated to 24 characters long.
    *
    * @tparam Getter Callable that returns the value to render (numeric/bool/string/cstr).
    * @param label Display label for the watch.
@@ -531,9 +615,11 @@ public:
   /**
    * @brief Register a watch that prints only when the rendered value changes.
    *
-   * @note Adding a watch is computationally expensive. Don't call 
-   *       logger.watch() repeatedly. If the same .watch() is called 
-   *       multible times, each watch will be separate and logged independently.
+   * @note Adding a watch is computationally expensive. Don't call
+   *       logger.watch() repeatedly. If the same .watch() is called
+   *       multiple times, each watch will be separate and logged independently.
+   *
+   * @note For performance reasons, names are truncated to 24 characters long.
    *
    * @tparam Getter Callable that returns the value to render.
    * @param label Display label for the watch.
@@ -613,18 +699,34 @@ private:
    * @brief Internal watch record.
    */
   struct InternalWatch {
-    WatchId id{};                       /// @brief Watch identifier.
-    std::string label;                  /// @brief Watch display label.
-    LogLevel baseLevel{LogLevel::INFO}; /// @brief Base log level for normal samples.
-    uint32_t intervalMs{1000};          /// @brief Print interval (ms) when not onChange.
-    uint32_t lastPrintMs{0};            /// @brief Last print timestamp (ms).
-    std::string fmt;                    /// @brief Optional numeric format string.
+    /// @brief Watch identifier.
+    WatchId id{};
+    /// @brief Watch display label.
+    std::string label;
 
-    bool onChange = false;             /// @brief If true, prints only when value changes.
-    std::optional<std::string> lastValue = std::nullopt; /// @brief Last rendered value (for onChange).
+    /// @brief Alternate label used when the watch predicate is tripped.
+    std::string elevatedLabel;
+    
+    /// @brief Base log level for normal samples.
+    LogLevel baseLevel{LogLevel::INFO};
 
-    /// @brief Computes (level, rendered eval string, label) for the current sample.
-    std::function<std::tuple<LogLevel, std::string, std::string>()> eval;
+    /// @brief Print interval (ms) when not onChange.
+    uint32_t intervalMs{1000};
+    
+    /// @brief Last print timestamp (ms).
+    uint32_t lastPrintMs{0};
+
+    /// @brief Optional numeric format string.
+    std::string fmt{};
+
+    /// @brief If true, prints only when value changes.
+    bool onChange = false;
+
+    /// @brief Last rendered value (for onChange).
+    std::optional<std::string> lastValue = std::nullopt;
+
+    /// @brief Computes (level, rendered eval string, label, predicate) for the current sample.
+    std::function<std::tuple<LogLevel, std::string, std::string, bool>()> eval;  
   };
 
   /// @brief Next watch id to assign.
@@ -662,6 +764,7 @@ private:
     InternalWatch w;
     w.id = m_nextId++;
     w.label = std::move(label);
+    w.elevatedLabel = ov.label;
     w.baseLevel = baseLevel;
     w.intervalMs = intervalMs;
     w.onChange = onChange;
@@ -677,7 +780,7 @@ private:
     // When w.eval is called, it returns final log level, getter eval, final label
     w.eval = [baseLevel, labelCopy, fmtCopy, g = std::move(g), 
               ov = std::move(ov)]() mutable -> 
-              std::tuple<LogLevel, std::string, std::string> {
+              std::tuple<LogLevel, std::string, std::string, bool> {
 
       T v = static_cast<T>(g());
 
@@ -691,7 +794,7 @@ private:
       // Get label based on predicate 
       std::string displayOut = (tripped && !ov.label.empty()) ? ov.label : labelCopy;
 
-      return {lvl, std::move(rawOut), std::move(displayOut)};
+      return {lvl, std::move(rawOut), std::move(displayOut), tripped};
     };
 
     WatchId id = w.id;
@@ -707,12 +810,20 @@ private:
   // Waypoint internals
   // ------------------------------------------------------------------------
   struct InternalWaypoint {
-    WPId id{};               /// Internal ID
-    std::string name{};      /// Name as inputted by user
-    WaypointParams params;   /// Waypoint parameters
-    uint32_t lastPrintMs{};  /// Last time the waypoint was printed (params.printOffsetEveryMs)
-    uint32_t startTimeMs;    /// Creation time of the waypoint
-    bool active = true;      /// Is the waypoint active (not yet reached or timed out)?
+    /// @brief Internal ID
+    WPId id{};
+    
+    /// @brief Name as inputted by user
+    std::string name{};
+
+    /// @brief Waypoint parameters
+    WaypointParams params;
+
+    /// @brief Creation time of the waypoint
+    uint32_t startTimeMs;
+
+    /// @brief Is the waypoint active (not yet reached or timed out)?
+    bool active = true;
     bool prevReached = false;
   };
 
@@ -735,6 +846,18 @@ private:
   /// @brief Get the name of the WPId
   std::string getWaypointName(WPId id);
 
+  /// @brief Get the name of the WPId without taking m_mutex.
+  std::optional<std::string> m_getWaypointNameUnlocked(WPId id) const;
+
+  /// @brief Get the name of the WatchId without taking m_mutex.
+  std::optional<std::string> m_getWatchNameUnlocked(WatchId id, bool isElevated) const;
+
+  /// @brief Get the roster label for an ID without taking m_mutex.
+  std::optional<std::string> m_getRosterNameUnlocked(uint16_t id, bool isElevated) const;
+
+  /// @brief Re-send the roster entry for a single waypoint.
+  bool resyncWaypointsRoster(WPId id);
+
   /// @brief Returns true if the robot has reached the WPId
   bool isWaypointReached(WPId id);
 
@@ -748,8 +871,7 @@ private:
    * @brief Emit a formatted log message. Automatically handles 
    *        terminal/SD logging.
    */
-  _MVLIB_PRINTF_CHECK(3, 4)
-  void logMessage(const LogLevel& level, const char *fmt, ...);
+  void logMessage(const LogLevel& level, const char *fmt, va_list args);
 
   /**
    * @brief Write a formatted log line to the SD log file.
@@ -763,21 +885,16 @@ private:
 
   LoggerConfig m_config{};
   LoggerTimings m_timings{};
-  LogLevel m_minLogLevel = LogLevel::INFO;
 
-  /** 
-   * @note A different mutex is needed for sd and terminal 
-   *       because user can call independently of system, leading 
-   *       to deadlocks / race conditions
-  */
-  pros::Mutex m_terminalMutex;
   pros::Mutex m_sdMutex;
   pros::Mutex m_mutex;
 
   uint32_t m_lastFileFlush{0};
   FILE *m_sdFile = nullptr;
-  char m_currentFilename[128] = "";
+  char m_currentFilename[128] = {};
   const char *date = __DATE__; // Last upload date as fallback for no RTC
+  char m_loggingFolder[24] = "\\";
+
 
   volatile bool m_sdLocked = false;    // Has sd card failed?
   bool m_started = false;     // Has start() been called?
@@ -796,7 +913,11 @@ private:
   // Position getters
   std::function<std::optional<Pose>()> m_getPose = nullptr;
   
+  uint32_t m_lastRosterFlush{0};
+  uint32_t m_lastTerminalFlush{0};
+
   // Friend classes
   friend class WaypointHandle;
+  friend class Telemetry;
 };
 } // namespace mvlib

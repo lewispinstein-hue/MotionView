@@ -10,7 +10,7 @@
 #include <string>
 
 namespace mvlib {
-using WPId = uint64_t;
+using WPId = uint16_t;
 
 /**
  * @struct Waypoint
@@ -35,9 +35,6 @@ struct WaypointParams {
 
   /// @brief Tolerance to be considered at the point for theta
   std::optional<float> thetaTol = std::nullopt;
-
-  /// @brief Print the offset of the waypoint every N ms (optional)
-  std::optional<uint32_t> logOffsetEveryMs = std::nullopt;
 
   /// @brief Make waypoint retriggerable. It will always log when reached, 
   ///        and deactivate only on timeout (if provided)
@@ -116,5 +113,11 @@ public:
    * \return Returns true if the waypoint is active
   */
   bool active() const;
+
+  /**
+   * @brief Re-send this waypoint's roster entry over telemetry.
+   * \return Returns true if the waypoint exists and was re-sent.
+  */
+  bool resyncRoster() const;
 };
 }

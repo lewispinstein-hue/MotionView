@@ -3738,10 +3738,11 @@ function renderLogList() {
         </div>
         <div class="muted">${entry.t != null ? (String(fmtNum(entry.t / 1000, 2)) + "s") : "—"}</div>
       </div>
-      <div class="bigValue">${escapeHtml(String(entry.message ?? entry.value ?? ""))}</div>
+      <div class="bigValue selectableText">${escapeHtml(String(entry.message ?? entry.value ?? ""))}</div>
     `;
     div.addEventListener('pointerdown', (ev) => {
       if (ev.button !== 0) return;
+      if (ev.target instanceof Element && ev.target.closest('.selectableText')) return;
       ev.preventDefault();
       selectedLogTime = entry.t ?? null;
       selectedWaypointId = null;
@@ -4264,10 +4265,12 @@ function drawWaypointOffsetOverlay(pose) {
   const pillBorder = "rgba(255, 255, 255, 0.15)";
   const xParts = formatUnitsParts(dxIn);
   const yParts = formatUnitsParts(dyIn);
+  const hyptText = thetaDelta ? " | " : "";
+  const thetaParts = thetaDelta ? formatThetaParts(thetaDelta) : [{text: "", kind: "unit"}];
   const hypParts = [
     ...formatUnitsParts(distanceIn),
-    { text: " | ", kind: "unit" },
-    ...formatThetaParts(thetaDelta),
+    { text: hyptText, kind: "unit" },
+    ...thetaParts,
   ];
   const uiScale = waypointOffsetUiScale();
 
@@ -5427,12 +5430,11 @@ function play() {
     playPose = interpolatePoseAtTime(playTimeMs);
     selectedIndex = findFloorIndexByTime(playTimeMs);
 
-    // Auto-open Watches and highlight the most recent watch hit
+    // Highlight the most recent watch hit without overriding the user's
+    // collapsed/expanded state for the Watches panel.
     const last = lastWatchAtTime(playTimeMs);
     if (last && (!selectedWatch || selectedWatch.marker?.t !== last.t)) {
       selectedWatch = { marker: last };
-      // open Watches panel during playback
-      if (secWatches) secWatches.open = true;
       highlightWatchInList(last.t, false);
     }
 

@@ -32,7 +32,6 @@ namespace mvlib {
  * - Pose{...} when pose is available
  *
  * @tparam Fn Any callable type such that Fn() returns std::optional<Pose>.
- * @param logger The Logger instance that will consume the pose getter.
  * @param poseGetter A callable that returns std::optional<Pose> on demand.
  *
  * @warning If your callable captures pointers/references, you are responsible for ensuring

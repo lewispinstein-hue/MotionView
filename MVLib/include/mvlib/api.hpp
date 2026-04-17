@@ -13,6 +13,7 @@
 #include "renderHelper.hpp"
 #include "literals.hpp"
 #include "waypoint.hpp"
+#include "telemetry.hpp"
 // IWYU pragma: end_keep
 
 /*

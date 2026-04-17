@@ -3,7 +3,6 @@
 #include "pros/misc.hpp"
 #include "pros/rtos.hpp"
 #include <cstdint>
-#include <sys/types.h>
 
 namespace mvlib {
 

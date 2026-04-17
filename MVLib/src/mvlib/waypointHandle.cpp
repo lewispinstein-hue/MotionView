@@ -25,4 +25,8 @@ bool WaypointHandle::timedOut() const {
 bool WaypointHandle::active() const {
   return Logger::getInstance().isWaypointActive(this->m_id);
 }
+
+bool WaypointHandle::resyncRoster() const {
+  return Logger::getInstance().resyncWaypointsRoster(this->m_id);
+}
 } // namespace mvlib

@@ -35,8 +35,9 @@ namespace mvlib {
  * - This implementation converts to **inches** for x/y and **degrees** for theta (matching the
  *   EZ-Template adapter we wrote and typical LemLib pose usage).
  *
- * If your downstream expects different units, change the conversions (or call the generic
- * setOdom(logger, getterFn) overload and do your own conversions).
+ * If your downstream expects different units, pass a different `units` value
+ * for x/y conversion, or use the generic custom odom overload and do your own
+ * conversions.
  *
  * @warning If the Okapi odometry isn't configured/enabled, getState() may still return
  *          values, but they won't be meaningful. If you want a "ready" gate, add your own
@@ -55,9 +56,9 @@ namespace mvlib {
  * }
  * @endcode
  */
-inline void setOdom(okapi::OdomChassisController* chassis, 
+inline void setOdom(okapi::OdomChassisController *chassis, 
                     okapi::QLength units = okapi::inch) {
-  mvlib::Logger::getInstance().setPoseGetter([chassis]() -> std::optional<Pose> {
+  mvlib::Logger::getInstance().setPoseGetter([chassis, units]() -> std::optional<Pose> {
     if (!chassis) return std::nullopt;
 
     const auto s = chassis->getState();

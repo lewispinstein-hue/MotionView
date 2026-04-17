@@ -1,3 +1,4 @@
+#include "pros/misc.hpp"
 #include "pros/rtos.hpp"
 #include "mvlib/core.hpp"
 #include "mvlib/private/forwardLogMacros.h"
@@ -35,32 +36,38 @@ std::string Logger::m_getTimestampedFile() {
   time_t now = time(0);
   tm *tstruct = localtime(&now);
 
-  char filename[128];
+  char filename[256]; // Increased size to accommodate folder + filename
   
-  // Add random variance to filename to avoid overwriting existing files
   const uint32_t randInt = getrandInt(0, 99999);
-  _MVLIB_FORWARD_DEBUG("Got Random Int: %d", randInt);
+  
+  // Prepend /usd 
+  char pathPrefix[64];
+  snprintf(pathPrefix, sizeof(pathPrefix), "/usd%s", m_loggingFolder);
 
   if (tstruct->tm_year < 100) {
-    _MVLIB_FORWARD_INFO("VEX RTC Inaccurate. Falling back to program duration and last upload date.");
-    // Use last upload and random number
-    snprintf(filename, sizeof(filename), "/usd/MVLIB_%s_%u-%u_%d.log",
-             date, pros::millis() / 1000, pros::millis() / 100, randInt);
+    _MVLIB_FORWARD_INFO("VEX RTC Inaccurate. Falling back to program duration.");
+    
+    snprintf(filename, sizeof(filename), "%s/MVLIB_%s_%u-%u_%d.log",
+             pathPrefix, date, pros::millis() / 1000, pros::millis() / 100, randInt);
   } else {
     _MVLIB_FORWARD_INFO("VEX RTC Plausible. Creating file name with date.");
-    char timeBuf[64];
-    strftime(timeBuf, sizeof(timeBuf),
-             "/usd/MVLIB_%Y-%m-%d_%H-%M", tstruct); // Get time
-    // Attach random number
-    snprintf(filename, sizeof(filename), "%s_%d.log", timeBuf, randInt); 
+    
+    char timeBuf[128];
+    // Format the date/time string
+    strftime(timeBuf, sizeof(timeBuf), "MVLIB_%Y-%m-%d_%H-%M", tstruct); 
+    
+    // Combine pathPrefix, formatted time, and random ID
+    snprintf(filename, sizeof(filename), "%s/%s_%d.log", pathPrefix, timeBuf, randInt); 
   }
+  
   return std::string(filename);
-} 
+}
 
 bool Logger::m_initSDLogger() {
+  if (m_sdLocked) return false;
+
   if (pros::usd::is_installed()) {
     _MVLIB_FORWARD_DEBUG("SD Card installed (On first attempt)");
-    pros::delay(500);
   } else {
     _MVLIB_FORWARD_DEBUG("SD Card not installed, rechecking...");
     for (int i = 0; i < 10; i++) {
@@ -69,7 +76,7 @@ bool Logger::m_initSDLogger() {
         break;
       }
       _MVLIB_FORWARD_DEBUG("Rechecking SD card installment... Attempts: %d/10", i);
-      pros::delay(200);
+      pros::delay(50);
     }
   }
 
@@ -95,6 +102,34 @@ bool Logger::m_initSDLogger() {
   return true;
 }
 
+bool Logger::setLoggingFolder(const char *folder, bool disableOnFail) {
+  unique_lock lock(m_mutex);
+  if (!lock.isLocked()) return false;
+  if (m_started) return false;
+
+  if (!folder || folder[0] == '\0' || folder[0] != '\\') {
+    m_sdLocked = disableOnFail;
+    return false;
+  }
+
+  std::string filenames{};
+  filenames.resize(2048); // Dozens of log files should not cause memory overflow
+
+  int err = pros::usd::list_files(folder, filenames.data(), filenames.size() - 1);
+  if (err != 1) {
+    if (err == ENOENT /* Cannot find path specified */) {
+      _MVLIB_FORWARD_ERROR("setLoggingFolder failed. System could not find the "
+        "path specified. Path: %s", folder);
+    }
+    m_sdLocked = disableOnFail;
+    return false;
+  }
+  
+  strncpy(m_loggingFolder, folder, sizeof(m_loggingFolder) - 1);
+  m_loggingFolder[sizeof(m_loggingFolder) - 1] = '\0';
+  return true;
+}
+
 void Logger::logToSD(const LogLevel& level, const char *fmt, ...) {
   if (!m_sdFile || m_sdLocked) return;
 
@@ -112,7 +147,7 @@ void Logger::logToSD(const LogLevel& level, const char *fmt, ...) {
 
   bool isError = (level == LogLevel::ERROR || level == LogLevel::FATAL);
 
-  if (isError || (now - m_lastFileFlush >= m_timings.sd_buffer_flush_interval)) {
+  if (isError || (now - m_lastFileFlush >= m_timings.sdBufferFlushInterval)) {
     fflush(m_sdFile);
     m_lastFileFlush = now;
   }

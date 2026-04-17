@@ -13,6 +13,64 @@
   --muted: #93a4b8;
   --line: #233244;
   overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input, textarea {
+  -webkit-user-select: auto;
+  user-select: auto;
+}
+
+#liveWin,
+#status,
+#status *,
+#logList,
+#logList *,
+#watchPopup,
+#watchPopup *,
+#floatBody,
+#floatBody *,
+.watchGraphBody,
+.watchGraphBody *,
+.watchItem,
+.watchItem *,
+.poseItem,
+.poseItem *,
+.planItem,
+.planItem *,
+.pinnedWatchBody,
+.pinnedWatchBody *,
+.modalBody,
+.modalBody *,
+.routeInfoRow,
+.routeInfoRow *,
+.routeInfoEmpty,
+.routeInfoEmpty * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.iconBtn,
+.iconBtn *,
+.watchActions,
+.watchActions *,
+.watchActionsPill,
+.watchActionsPill *,
+.watchGraphHeader,
+.watchGraphHeader *,
+.pinnedWatchHeader,
+.pinnedWatchHeader *,
+#floatHeader,
+#floatHeader *,
+#floatResizer,
+#watchGraphResizer,
+.splitterV,
+.splitterH,
+.chip,
+.chip, * {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 * {
@@ -339,6 +397,13 @@ label {
 
 .bigValue.isBooleanFalse {
   color: #c26262;
+}
+
+.selectableText,
+.selectableText * {
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .subValue {

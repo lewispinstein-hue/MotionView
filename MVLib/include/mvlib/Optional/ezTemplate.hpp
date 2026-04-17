@@ -25,7 +25,6 @@ namespace mvlib {
  * and forwards them into mvlib::Pose. If the drive pointer is null or
  * odometry is disabled, the getter returns std::nullopt.
  *
- * @param logger The Logger instance that will consume the pose getter.
  * @param chassis Pointer to the EZ-Template drive supplying pose data.
  *
  * @warning The caller must ensure the chassis pointer remains valid for
@@ -40,18 +39,19 @@ namespace mvlib {
  * extern ez::Drive chassis;
  *
  * void initialize() {
+ *   auto& logger = mvlib::Logger::getInstance();
  *   mvlib::setOdom(&chassis);
  *   logger.start();
  * }
  * @endcode
  */
-inline void setOdom(ez::Drive* chassis) {
+inline void setOdom(ez::Drive *chassis) {
   mvlib::Logger::getInstance().setPoseGetter([chassis]() -> std::optional<Pose> {
     if (!chassis || !chassis->odom_enabled()) return std::nullopt;
 
-    const float xIn   = chassis->odom_x_get();       // inches :contentReference[oaicite:1]{index=1}
-    const float yIn   = chassis->odom_y_get();       // inches :contentReference[oaicite:2]{index=2}
-    const float thDeg = chassis->odom_theta_get();   // degrees :contentReference[oaicite:3]{index=3}
+    const float xIn = chassis->odom_x_get();
+    const float yIn = chassis->odom_y_get();
+    const float thDeg = chassis->odom_theta_get();
 
     return Pose{xIn, yIn, thDeg};
   });
