@@ -2808,6 +2808,7 @@ let watchGraphPanelKey = null;
 let watchGraphCompareKey = "";
 let watchGraphChart = null;
 let watchGraphMarkersForKey = [];
+let watchGraphCompareMarkersForKey = [];
 let isWatchGraphDragging = false;
 let isWatchGraphResizing = false;
 let watchGraphDragStart = { x: 0, y: 0 };
@@ -3149,6 +3150,7 @@ function renderWatchGraphForKey(key) {
 
   const { primarySeries, compareSeries, primaryPoints, comparePoints, yRange } = buildWatchGraphDatasets(key, watchGraphCompareKey);
   watchGraphMarkersForKey = primarySeries.markers;
+  watchGraphCompareMarkersForKey = compareSeries.markers;
   const hasPrimaryPoints = primaryPoints.length > 0;
   const hasComparePoints = comparePoints.length > 0;
 
@@ -3263,11 +3265,13 @@ function clearWatchGraphHoverPreview({ restore = true } = {}) {
 }
 
 function watchGraphMarkerFromEvent(event) {
-  if (!watchGraphChart || !watchGraphMarkersForKey.length) return null;
+  if (!watchGraphChart) return null;
   const hits = watchGraphChart.getElementsAtEventForMode(event, "nearest", { intersect: false }, false);
   if (!Array.isArray(hits) || !hits.length) return null;
+  const datasetIndex = hits[0]?.datasetIndex;
   const pointIndex = hits[0]?.index;
   if (!Number.isInteger(pointIndex)) return null;
+  if (datasetIndex === 1) return watchGraphCompareMarkersForKey[pointIndex] ?? null;
   return watchGraphMarkersForKey[pointIndex] ?? null;
 }
 
@@ -3332,6 +3336,7 @@ function hideWatchGraphPanel({ preserveKey = false } = {}) {
     watchGraphCompareKey = "";
   }
   watchGraphMarkersForKey = [];
+  watchGraphCompareMarkersForKey = [];
   clearWatchGraphHoverPreview({ restore: true });
   if (!preserveKey && watchGraphChart) {
     watchGraphChart.destroy();
@@ -7560,11 +7565,13 @@ function serializeExportWatch(watch) {
 }
 
 function serializeExportLog(entry) {
+  const rawMessage = entry.message ?? entry.value ?? '';
+  const value = entry.isSystem ? `[MVLIB] ${rawMessage}` : rawMessage;
   return {
     t: entry.t ?? null,
     level: normalizeLogLevel(entry.level),
     label: entry.label ?? '',
-    value: entry.message ?? entry.value ?? '',
+    value,
   };
 }
 

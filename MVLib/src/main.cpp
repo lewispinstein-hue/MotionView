@@ -70,7 +70,7 @@ void initialize() {
 	logger.start();
 	
 	auto leftGoalWP = logger.addWaypoint("Left Goal", {
-	    .tarX = 10,  // Target 10 x
+		.tarX = 10,  // Target 10 x
 		.tarY = 8,   // 8 y
 		.tarT = 180, // And 180 degrees heading
 		.timeoutMs = 15_mvS, // Timeout after 15 seconds
