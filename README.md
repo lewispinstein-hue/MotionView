@@ -127,7 +127,7 @@ Use cases:
 
 Because MotionView and MVLib communicate using a custom data protocol, you must ensure your desktop app and your PROS library are compatible. 
 
-We highly recommend always updating to the latest versions for both.
+We highly recommend always updating to the latest versions for both. MVLib `v2.0.0` introduced binary logging which massively improves logging latency and bandwidth. It is essential to be using versions newer than/or `v2.0.0`
 
 | MotionView App | Requires MVLib | Notes |
 | :--- | :--- | :--- |
