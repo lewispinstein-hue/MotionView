@@ -137,7 +137,7 @@ jobs:
               done
             else
               # Fallback broader check
-              find src-tauri/target/release -name "*.dmg" -exec mv {} "src-tauri/artifacts/motionview-${OS_NAME}_${TAG_NAME}.dmg" \;
+              find src-tauri/target -name "*.dmg" -exec mv {} "src-tauri/artifacts/motionview-${OS_NAME}_${TAG_NAME}.dmg" \;
             fi
             
           elif [[ "$OS_NAME" == "windows" ]]; then
@@ -157,8 +157,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: motionview-${{ matrix.os_name }}_${{ needs.validate-version.outputs.tag_name }}
-          path: |
-            MotionView/src-tauri/target/release/bundle/dmg/*.dmg
-            MotionView/src-tauri/target/release/bundle/nsis/*.exe
-            MotionView/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          path: MotionView/src-tauri/artifacts/*
           if-no-files-found: error
