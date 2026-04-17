@@ -39,15 +39,18 @@ class UpgradeManifestV2(UpgradeManifestV1):
         if self._platform is not None:
             return self._platform
         if getattr(sys, 'frozen', False):
-            import _constants
-            frozen_platform = getattr(_constants, 'FROZEN_PLATFORM_V1', None)
-            if isinstance(frozen_platform, str):
-                if frozen_platform.startswith('Windows86'):
-                    self._platform = PlatformsV2.Windows86
-                elif frozen_platform.startswith('Windows64'):
-                    self._platform = PlatformsV2.Windows64
-                elif frozen_platform.startswith('MacOS'):
-                    self._platform = PlatformsV2.MacOS
+            try:
+                import _constants
+                frozen_platform = getattr(_constants, 'FROZEN_PLATFORM_V1', None)
+                if isinstance(frozen_platform, str):
+                    if frozen_platform.startswith('Windows86'):
+                        self._platform = PlatformsV2.Windows86
+                    elif frozen_platform.startswith('Windows64'):
+                        self._platform = PlatformsV2.Windows64
+                    elif frozen_platform.startswith('MacOS'):
+                        self._platform = PlatformsV2.MacOS
+            except ImportError:
+                pass
         else:
             try:
                 from pip._vendor import pkg_resources

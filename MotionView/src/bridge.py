@@ -9,6 +9,7 @@ from typing import Optional, Set, List
 import platform
 import re
 import time
+import zipfile
 from datetime import datetime
 
 from fastapi import FastAPI, Request
@@ -22,10 +23,6 @@ PROS_PROJECT_DIR = None
 # Lock will be created when needed (can't create Lock outside async context)
 PROS_PROJECT_DIR_LOCK = None
 
-# Optional override for PROS executable
-PROS_EXE_OVERRIDE = None
-PROS_EXE_LOCK = None
-
 def _get_lock():
     """Get or create the lock for PROS_PROJECT_DIR updates."""
     global PROS_PROJECT_DIR_LOCK
@@ -36,16 +33,6 @@ def _get_lock():
             # No event loop running, create new lock
             PROS_PROJECT_DIR_LOCK = asyncio.Lock()
     return PROS_PROJECT_DIR_LOCK
-
-def _get_pros_exe_lock():
-    """Get or create the lock for PROS_EXE_OVERRIDE updates."""
-    global PROS_EXE_LOCK
-    if PROS_EXE_LOCK is None:
-        try:
-            PROS_EXE_LOCK = asyncio.Lock()
-        except RuntimeError:
-            PROS_EXE_LOCK = asyncio.Lock()
-    return PROS_EXE_LOCK
 
 def _candidate_vscode_install_bases() -> List[Path]:
     """
@@ -145,55 +132,141 @@ def configure_pros_env_from_vscode() -> Optional[str]:
 
     return None
 
-def resolve_pros_exe() -> Optional[str]:
-    # Prefer explicit override, then VS Code-managed PROS, then PATH lookup
-    if PROS_EXE_OVERRIDE:
-        return str(PROS_EXE_OVERRIDE)
-    return configure_pros_env_from_vscode() or shutil.which("pros") or shutil.which("pros.exe")
+def resolve_bundled_pros_exe() -> Optional[str]:
+    exe_ext = ".exe" if platform.system() == "Windows" else ""
+    exact_names = [f"motionview-pros{exe_ext}"]
+    glob_patterns = [f"motionview-pros-*{exe_ext}"]
+    runtime_dirs = ["motionview-pros"]
+    archive_names = ["motionview-pros.zip"]
 
-# Prefer VS Code-managed PROS if present; else fall back to PATH lookup
-PROS_EXE = resolve_pros_exe()
-if not PROS_EXE:
-    print("[WARN] PROS CLI not found on PATH or VS Code install. Live streaming may not work.", file=sys.stderr)
-
-def _find_pros_executables() -> List[str]:
-    sysname = platform.system()
-    candidates: List[Path] = []
-
-    for base in _candidate_vscode_install_bases():
-        if sysname == "Darwin":
-            candidates.append(base / "pros-cli-macos" / "pros")
-        elif sysname == "Windows":
-            candidates.append(base / "pros-cli-windows" / "pros.exe")
-        else:
-            candidates.append(base / "pros-cli-linux" / "pros")
-
-    # PATH lookup
-    p = shutil.which("pros") or shutil.which("pros.exe")
-    if p:
-        candidates.append(Path(p))
-
-    # Common locations (best-effort)
-    if sysname == "Darwin":
-        candidates += [Path("/usr/local/bin/pros"), Path("/opt/homebrew/bin/pros")]
-    elif sysname == "Linux":
-        candidates += [Path("/usr/local/bin/pros"), Path("/usr/bin/pros")]
-
-    out: List[str] = []
-    seen = set()
-    for c in candidates:
+    roots: List[Path] = []
+    if getattr(sys, "frozen", False):
         try:
-            cp = c.expanduser().resolve()
+            exe_dir = Path(sys.executable).resolve().parent
+            roots.extend([
+                exe_dir,
+                exe_dir / "bin",
+                exe_dir.parent,
+                exe_dir.parent / "bin",
+                exe_dir.parent / "Resources",
+                exe_dir.parent / "Resources" / "bin",
+                exe_dir.parent / "Resources" / "_up_",
+                exe_dir.parent / "Resources" / "_up_" / "src-tauri" / "bin",
+                exe_dir.parent / "Resources" / "src-tauri" / "bin",
+                exe_dir.parent / "__up__",
+                exe_dir.parent / "__up__" / "bin",
+                exe_dir.parent / "__up__" / "src-tauri" / "bin",
+            ])
+        except Exception:
+            pass
+    else:
+        repo_root = Path(__file__).resolve().parent.parent
+        roots.extend([
+            repo_root / "src-tauri" / "bin",
+            repo_root / "dist",
+        ])
+
+    seen: Set[str] = set()
+    for root in roots:
+        try:
+            resolved_root = root.expanduser().resolve()
         except Exception:
             continue
-        if not cp.exists() or not cp.is_file():
+        if not resolved_root.is_dir():
             continue
-        s = str(cp)
-        if s in seen:
-            continue
-        seen.add(s)
-        out.append(s)
-    return out
+
+        candidates: List[Path] = []
+        for name in exact_names:
+            candidates.append(resolved_root / name)
+        for pattern in glob_patterns:
+            candidates.extend(sorted(resolved_root.glob(pattern)))
+        for runtime_dir in runtime_dirs:
+            candidates.append(resolved_root / runtime_dir / f"{runtime_dir}{exe_ext}")
+
+        for candidate in candidates:
+            try:
+                resolved_candidate = candidate.expanduser().resolve()
+            except Exception:
+                continue
+            key = str(resolved_candidate)
+            if key in seen:
+                continue
+            seen.add(key)
+            if resolved_candidate.exists() and resolved_candidate.is_file():
+                return key
+
+        if getattr(sys, "frozen", False):
+            for archive_name in archive_names:
+                archive_path = resolved_root / archive_name
+                try:
+                    resolved_archive = archive_path.expanduser().resolve()
+                except Exception:
+                    continue
+                if not resolved_archive.exists() or not resolved_archive.is_file():
+                    continue
+                extracted = extract_bundled_pros_archive(resolved_archive)
+                if extracted:
+                    return extracted
+
+    return None
+
+def motionview_support_dir() -> Path:
+    sys_name = platform.system()
+    if sys_name == "Darwin":
+        return Path.home() / "Library" / "Application Support" / "com.motionview.motionview"
+    if sys_name == "Windows":
+        base = os.environ.get("APPDATA")
+        if base:
+            return Path(base) / "com.motionview.motionview"
+        return Path.home() / "AppData" / "Roaming" / "com.motionview.motionview"
+    xdg = os.environ.get("XDG_DATA_HOME")
+    if xdg:
+        return Path(xdg) / "com.motionview.motionview"
+    return Path.home() / ".local" / "share" / "com.motionview.motionview"
+
+def extract_bundled_pros_archive(archive_path: Path) -> Optional[str]:
+    exe_ext = ".exe" if platform.system() == "Windows" else ""
+    runtime_root = motionview_support_dir() / "Runtime"
+    extract_root = runtime_root / "motionview-pros"
+    stamp_path = extract_root / ".archive-mtime"
+    expected_exe = extract_root / "motionview-pros" / f"motionview-pros{exe_ext}"
+    archive_mtime = str(int(archive_path.stat().st_mtime))
+
+    try:
+        current_stamp = stamp_path.read_text(encoding="utf-8").strip() if stamp_path.exists() else None
+        needs_extract = current_stamp != archive_mtime or not expected_exe.exists()
+        if needs_extract:
+            if extract_root.exists():
+                shutil.rmtree(extract_root, ignore_errors=True)
+            extract_root.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(archive_path) as zf:
+                zf.extractall(extract_root)
+            if platform.system() != "Windows":
+                try:
+                    executable = extract_root / "motionview-pros" / f"motionview-pros{exe_ext}"
+                    if executable.exists():
+                        executable.chmod(executable.stat().st_mode | 0o755)
+                except Exception:
+                    pass
+            stamp_path.write_text(archive_mtime, encoding="utf-8")
+        if expected_exe.exists() and expected_exe.is_file():
+            if platform.system() != "Windows":
+                try:
+                    expected_exe.chmod(expected_exe.stat().st_mode | 0o755)
+                except Exception:
+                    pass
+            return str(expected_exe.resolve())
+    except Exception:
+        return None
+    return None
+
+def resolve_pros_exe() -> Optional[str]:
+    return resolve_bundled_pros_exe()
+
+# MotionView must use the bundled MVLib-compatible PROS fork.
+PROS_EXE = resolve_pros_exe()
+if not PROS_EXE:
+    print("[WARN] Bundled MotionView PROS CLI not found. Live streaming may not work.", file=sys.stderr)
 # Resource paths (PyInstaller-friendly)
 # ----------------------------
 def resource_base_dir() -> Path:
@@ -282,6 +355,11 @@ async def broadcast(line: str):
         line = "The PROS Path selected is not inside of a PROS Project."
     elif "Couldn't find the response header in the device response after" in line:
         line = "Connected device disconnected."
+    elif ("NotOpenSSLWarning" in line
+        or "RequestsDependencyWarning" in line
+        or "currently the 'ssl' module is compiled with 'LibreSSL" in line
+        or "Unable to find acceptable character detection dependency" in line):
+        return
     elif ("Press Ctrl" in line
         or "Sentry is attempting to send" in line
         or "Waiting up to" in line):
@@ -582,7 +660,7 @@ async def api_start():
     try:
         return await runner.start()
     except FileNotFoundError:
-        return {"ok": False, "status": "`pros` not found on PATH"}
+        return {"ok": False, "status": "Bundled MotionView PROS CLI not found"}
     except Exception as e:
         return {"ok": False, "status": f"start failed: {e}"}
 
@@ -698,44 +776,6 @@ async def api_set_pros_dir(request: Request):
         return {"ok": True, "dir": str(PROS_PROJECT_DIR)}
     except Exception as e:
         return {"ok": False, "status": f"error: {e}"}
-
-@app.get("/api/pros-exe")
-async def api_get_pros_exe():
-    exe = resolve_pros_exe()
-    if exe:
-        return {"ok": True, "path": exe}
-    return {"ok": False, "status": "pros executable not found"}
-
-@app.post("/api/pros-exe")
-async def api_set_pros_exe(request: Request):
-    """Set the PROS CLI executable path. Expects JSON body with 'path' field."""
-    try:
-        body = await request.json()
-        path_str = body.get("path")
-        if not path_str:
-            return {"ok": False, "status": "missing 'path' field"}
-        path = Path(path_str).expanduser().resolve()
-        if not path.exists():
-            return {"ok": False, "status": f"path does not exist: {path}"}
-        if not path.is_file():
-            return {"ok": False, "status": f"path is not a file: {path}"}
-
-        lock = _get_pros_exe_lock()
-        async with lock:
-            global PROS_EXE_OVERRIDE, PROS_EXE
-            PROS_EXE_OVERRIDE = path
-            PROS_EXE = str(path)
-        return {"ok": True, "path": str(path)}
-    except Exception as e:
-        return {"ok": False, "status": f"error: {e}"}
-
-@app.get("/api/pros-exe/auto")
-async def api_auto_pros_exe():
-    try:
-        candidates = _find_pros_executables()
-        return {"ok": True, "candidates": candidates}
-    except Exception as e:
-        return {"ok": False, "status": f"error: {e}", "candidates": []}
 
 
 # ----------------------------

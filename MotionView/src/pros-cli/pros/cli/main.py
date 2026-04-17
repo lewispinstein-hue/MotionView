@@ -1,8 +1,21 @@
 import logging
+import warnings
 
 # Setup analytics first because it is used by other files
 
 import os.path
+
+try:
+    from urllib3.exceptions import NotOpenSSLWarning
+    warnings.filterwarnings("ignore", category=NotOpenSSLWarning)
+except Exception:
+    pass
+
+try:
+    from requests.exceptions import RequestsDependencyWarning
+    warnings.filterwarnings("ignore", category=RequestsDependencyWarning)
+except Exception:
+    pass
 
 import pros.common.sentry
 
@@ -16,18 +29,6 @@ from pros.cli.click_classes import *
 from pros.cli.common import default_options, root_commands
 from pros.common.utils import get_version, logger
 from pros.ga.analytics import analytics
-
-import jsonpickle
-import pros.cli.build
-import pros.cli.conductor
-import pros.cli.conductor_utils
-import pros.cli.terminal
-import pros.cli.upload
-import pros.cli.v5_utils
-import pros.cli.misc_commands
-import pros.cli.interactive
-import pros.cli.user_script
-import pros.conductor as c
 
 if sys.platform == 'win32':
     kernel32 = ctypes.windll.kernel32
@@ -50,14 +51,39 @@ if getattr(sys, 'frozen', False):
 else:
     exe_file = __file__
 
-if os.path.exists(os.path.join(os.path.dirname(exe_file), os.pardir, os.pardir, '.git')):
-    root_sources.append('test')
+def should_fast_path_terminal(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    commands = [arg for arg in argv if arg and not arg.startswith('-')]
+    return len(commands) >= 1 and commands[0] == 'terminal'
 
-if os.path.exists(os.path.join(os.path.dirname(exe_file), os.pardir, os.pardir, '.git')):
-    import pros.cli.test
+def load_root_sources():
+    sources = ['terminal'] if should_fast_path_terminal() else list(root_sources)
+    if os.path.exists(os.path.join(os.path.dirname(exe_file), os.pardir, os.pardir, '.git')) and 'test' not in sources:
+        sources.append('test')
 
-for root_source in root_sources:
-    __import__(f'pros.cli.{root_source}')
+    for root_source in sources:
+        if root_source == 'terminal':
+            import pros.cli.terminal
+        elif root_source == 'build':
+            import pros.cli.build
+        elif root_source == 'conductor':
+            import pros.cli.conductor
+        elif root_source == 'conductor_utils':
+            import pros.cli.conductor_utils
+        elif root_source == 'upload':
+            import pros.cli.upload
+        elif root_source == 'v5_utils':
+            import pros.cli.v5_utils
+        elif root_source == 'misc_commands':
+            import pros.cli.misc_commands
+        elif root_source == 'interactive':
+            import pros.cli.interactive
+        elif root_source == 'user_script':
+            import pros.cli.user_script
+        elif root_source == 'test':
+            import pros.cli.test
+
+load_root_sources()
 
 
 def main():
@@ -106,6 +132,7 @@ def use_analytics(ctx: click.Context, param, value):
 def use_early_access(ctx: click.Context, param, value):
     if value is None:
         return
+    import pros.conductor as c
     conductor = c.Conductor()
     value = str(value).lower()
     if value.startswith("t") or value in ["1", "yes", "y"]:

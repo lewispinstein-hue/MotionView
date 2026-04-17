@@ -24,7 +24,9 @@ dist-ssr
 .venv
 
 MotionView/motionview-py.spec
+MotionView/motionview-pros.spec
 MotionView/build/
+**__pycache__**
 
 MotionView/bin
 MotionView/src/sim-log.py

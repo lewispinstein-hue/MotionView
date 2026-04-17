@@ -25,6 +25,12 @@ class V5WirelessPort(BasePort):
         self.device.user_fifo_write(data)
 
     def read(self, n_bytes: int = 0) -> bytes:
+        if n_bytes <= 0:
+            self.buffer.extend(self.device.user_fifo_read())
+            ret = bytes(self.buffer)
+            self.buffer = bytearray()
+            return ret
+
         if n_bytes > len(self.buffer):
             self.buffer.extend(self.device.user_fifo_read())
         ret = self.buffer[:n_bytes]

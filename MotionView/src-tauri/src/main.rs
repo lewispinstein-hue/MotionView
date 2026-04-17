@@ -268,13 +268,23 @@ fn write_bridge_pid(app: &tauri::AppHandle, pid: u32) {
     }
 }
 
-fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child, tauri::Error> {
-    // Resolve the Sidecar Binary Path
-    let exe = resolve_bridge_bin(app).map_err(|e| {
-        eprintln!("BRIDGE ERROR: Could not resolve binary: {}", e);
-        e
-    })?;
+#[cfg(debug_assertions)]
+fn dev_bridge_python_and_script() -> Option<(PathBuf, PathBuf)> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent()?.to_path_buf();
+    let python = if cfg!(target_os = "windows") {
+        root.join(".venv").join("Scripts").join("python.exe")
+    } else {
+        root.join(".venv").join("bin").join("python")
+    };
+    let script = root.join("src").join("bridge.py");
+    if python.exists() && script.exists() {
+        Some((python, script))
+    } else {
+        None
+    }
+}
 
+fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child, tauri::Error> {
     // Setup Logging Directory and File
     // Prefer app_data_dir/Logs, falling back to project root/Logs if that fails
     let log_dir = app
@@ -310,7 +320,30 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child
     let log_err = log.try_clone().map_err(tauri::Error::Io)?;
 
     // Prepare Command
-    let mut cmd = std::process::Command::new(&exe);
+    #[cfg(debug_assertions)]
+    let (mut cmd, spawn_label) = if let Some((python, script)) = dev_bridge_python_and_script() {
+        let mut cmd = std::process::Command::new(&python);
+        cmd.arg(&script);
+        let label = format!("{} {}", python.display(), script.display());
+        (cmd, label)
+    } else {
+        let exe = resolve_bridge_bin(app).map_err(|e| {
+            eprintln!("BRIDGE ERROR: Could not resolve binary: {}", e);
+            e
+        })?;
+        let label = exe.display().to_string();
+        (std::process::Command::new(&exe), label)
+    };
+
+    #[cfg(not(debug_assertions))]
+    let (mut cmd, spawn_label) = {
+        let exe = resolve_bridge_bin(app).map_err(|e| {
+            eprintln!("BRIDGE ERROR: Could not resolve binary: {}", e);
+            e
+        })?;
+        let label = exe.display().to_string();
+        (std::process::Command::new(&exe), label)
+    };
 
     #[cfg(windows)]
     {
@@ -331,7 +364,7 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child
     }
 
     // Spawn
-    println!("SPAWNING BRIDGE: {:?} on port {}", exe, port);
+    println!("SPAWNING BRIDGE: {} on port {}", spawn_label, port);
 
     cmd.args(["--host", "127.0.0.1", "--port", &port.to_string()])
         .env("MOTIONVIEW_LOG_PATH", &log_path)

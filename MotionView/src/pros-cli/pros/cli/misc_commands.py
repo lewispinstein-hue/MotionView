@@ -61,8 +61,13 @@ _SCRIPT_FILES = {
 def _get_shell_script(shell: str) -> str:
     """Get the shell script for the specified shell."""
     script_file = Path(__file__).parent.parent / 'autocomplete' / _SCRIPT_FILES[shell]
-    with script_file.open('r') as f:
-        return f.read()
+    try:
+        with script_file.open('r') as f:
+            return f.read()
+    except FileNotFoundError:
+        # In bundled MotionView builds, shell autocomplete assets are not needed
+        # for terminal streaming. Do not crash CLI import if they were omitted.
+        return ""
 
 
 @add_completion_class

@@ -13,9 +13,16 @@ import pros
 
 @lru_cache(1)
 def get_version():
+    base_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..'))
     try:
-        ver = open(os.path.join(os.path.dirname(__file__), '..', '..', 'version')).read().strip()
-        if ver is not None:
+        ver = open(os.path.join(base_dir, 'version')).read().strip()
+        if ver:
+            return ver
+    except:
+        pass
+    try:
+        ver = open(os.path.join(base_dir, 'pip_version')).read().strip()
+        if ver:
             return ver
     except:
         pass
@@ -41,7 +48,7 @@ def get_version():
                     ver = dist.version
                     if ver is not None:
                         return ver
-    raise RuntimeError('Could not determine version')
+    return "unknown"
 
 def retries(func, retry: int = 3):
     @wraps(func)

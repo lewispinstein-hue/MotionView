@@ -25,11 +25,12 @@
     }
   },
   "bundle": {
-    "resources": [
-      "../src/bridge.py",
-      "../src/assets/",
-      "../package.json"
-    ],
+    "resources": {
+      "../src/bridge.py": "../src/bridge.py",
+      "../src/assets/": "../src/assets/",
+      "../src-tauri/bin/motionview-pros.zip": "../src-tauri/bin/motionview-pros.zip",
+      "../package.json": "../package.json"
+    },
     "active": true,
     "targets": "all",
     "icon": [

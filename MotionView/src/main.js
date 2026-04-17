@@ -1,9 +1,12 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
+import { resolveResource } from "@tauri-apps/api/path";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import Chart from "chart.js/auto";
+import iconsSpriteUrl from "./assets/svg/icons.svg?url";
 
 const isWindowsPlatform = typeof navigator === 'object' && /Windows/.test(navigator.userAgent);
+const isTauriRuntime = typeof window === "object" && !!window.__TAURI_INTERNALS__;
 
 let windowsFullscreenState = false;
 async function refreshWindowsFullscreenState() {
@@ -411,8 +414,6 @@ const btnSettingsClose = document.getElementById('btnSettingsClose');
 const modeViewingBtn = document.getElementById('modeViewing');
 const modePlanningBtn = document.getElementById('modePlanning');
 const prosDirInput = document.getElementById('prosDirInput');
-const prosExeInput = document.getElementById('prosExeInput');
-const btnProsExeAuto = document.getElementById('btnProsExeAuto');
 const btnProsDirAuto = document.getElementById('btnProsDirAuto');
 const btnUploadRobotImage = document.getElementById('btnUploadRobotImage');
 const robotImageFile = document.getElementById('robotImageFile');
@@ -450,14 +451,10 @@ document.getElementById('versionDisplay').innerHTML = APP_VERSION;
 const prosDirStatusEl = document.getElementById('prosDirStatus');
 const prosDirAutoStatusEl = document.getElementById('prosDirAutoStatus');
 const prosDirAutoResultsEl = document.getElementById('prosDirAutoResults');
-const prosExeStatusEl = document.getElementById('prosExeStatus');
-const prosExeAutoStatusEl = document.getElementById('prosExeAutoStatus');
-const prosExeAutoResultsEl = document.getElementById('prosExeAutoResults');
 let prosDirValid = false;
 let prosDirRetryTimer = null;
 let prosDirRetryAttempts = 0;
 let prosDirFromSettings = false;
-let prosExeFromSettings = false;
 let backendReady = false;
 let backendReadyAt = 0;
 let backendReadyProbeInFlight = null;
@@ -494,15 +491,19 @@ const MAX_PLAN_UNDO = 50;      // Max number of undo steps
 const HOVER_PIXEL_TOL = 14;
 const TRACK_HOVER_PAD_PX = 12; // How close to the track before snapping on
 
-const WAYPOINT_OFFSET_PILL_MAX_W_PX = 120;
+const WAYPOINT_OFFSET_PILL_MAX_W_PX = 150;
 const FIELD_WAYPOINT_MARKER_MAX_W_PX = 35;
 
 const CANVAS_ZOOM_MAX = 15; // Max zoom in
 const CANVAS_ZOOM_MIN = 0.15; // Max zoom out
 
 // FLOATING INFO WINDOW SIZE
-const minW = 30, maxW = 400;
-const minH = 49, maxH = 600;
+const floatingWindowBounds = {
+  minWidth: 30,
+  minHeight: 49,
+  maxWidth: 400,
+  maxHeight: 600
+}
 
 const WATCH_GRAPH_MIN_W = 420;
 const WATCH_GRAPH_MAX_W = 1600;
@@ -2088,8 +2089,40 @@ function loadFieldOptions() {
   }
 }
 
+async function resolveFieldImageSrc(fieldKey) {
+  if (!isTauriRuntime) return fieldKey;
+  const normalized = String(fieldKey || "").replace(/^\.\//, "");
+  const candidates = [
+    `_up_/src/${normalized}`,
+    `src/${normalized}`,
+    normalized,
+  ];
+  for (const candidate of candidates) {
+    try {
+      const resolved = await resolveResource(candidate);
+      if (resolved) return resolved;
+    } catch (_) {
+      // Try the next possible packaged location.
+    }
+  }
+  return fieldKey;
+}
+
 async function loadFieldImage(filename) {
   const nextField = FIELD_IMAGES.some((field) => field.key === filename) ? filename : DEFAULT_FIELD_KEY;
+  let imgSrc = nextField;
+  if (isTauriRuntime) {
+    try {
+      const resolvedPath = await resolveFieldImageSrc(nextField);
+      if (resolvedPath && resolvedPath !== nextField && !resolvedPath.startsWith("asset:") && !resolvedPath.startsWith("http")) {
+        imgSrc = await invoke('read_image_data', { path: resolvedPath });
+      } else {
+        imgSrc = resolvedPath;
+      }
+    } catch (_) {
+      imgSrc = nextField;
+    }
+  }
   const img = new Image();
   img.onload = () => { fieldImg = img; draw(); };
   img.onerror = () => {
@@ -2097,7 +2130,7 @@ async function loadFieldImage(filename) {
     draw();
     setStatus(`Could not load field image: ${nextField}`);
   };
-  img.src = nextField;
+  img.src = imgSrc;
   await captureTelemetry("field_image_loaded", {
     version: APP_VERSION,
     field: nextField,
@@ -2893,13 +2926,23 @@ function refreshWatchGraphCompareSelect() {
   watchGraphCompareSelect.disabled = options.length === 0;
 }
 
+function setSvgUseHref(useEl, href) {
+  if (!useEl || !href) return;
+  useEl.setAttribute("href", href);
+  useEl.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", href);
+}
+
+function svgIconHref(iconId) {
+  return `${iconsSpriteUrl}#${iconId}`;
+}
+
 function updateWatchVisibilityButtons(key) {
   if (!watchList || !key) return;
   const buttons = watchList.querySelectorAll(`.watchVisibilityBtn[data-watch-visibility-key="${key}"]`);
   for (const button of buttons) {
     const useEl = button.querySelector("use");
     const iconId = button.dataset.iconId || "icon-visibleWatch";
-    if (useEl) useEl.setAttribute("href", `assets/svg/icons.svg#${iconId}`);
+    if (useEl) setSvgUseHref(useEl, svgIconHref(iconId));
     button.title = button.dataset.title || "Toggle watch visibility";
     button.setAttribute("aria-label", button.dataset.title || "Toggle watch visibility");
   }
@@ -3506,18 +3549,18 @@ function createWatchListItem(m) {
         <div class="watchActions watchActionsPill pill">
           <button class="iconBtn watchPinBtn" type="button" title="Open watch graph">
               <svg width="20" height="20">
-                <use href="assets/svg/icons.svg#icon-pinWatch"></use>
+                <use href="${svgIconHref("icon-pinWatch")}" xlink:href="${svgIconHref("icon-pinWatch")}"></use>
               </svg>
           </button>
           <button class="iconBtn watchVisibilityBtn" type="button" title="Toggle watch visibility">
             <svg width="20" height="20">
-              <use href="assets/svg/icons.svg#${watchVisibilityIconId(w)}"></use>
+              <use href="${svgIconHref(watchVisibilityIconId(w))}" xlink:href="${svgIconHref(watchVisibilityIconId(w))}"></use>
             </svg>
           </button>
           ${showGraphButton ? `
           <button class="iconBtn watchGraphBtn" type="button" title="Open watch graph">
             <svg width="20" height="20">
-              <use href="assets/svg/icons.svg#icon-watchGraph"></use>
+              <use href="${svgIconHref("icon-watchGraph")}" xlink:href="${svgIconHref("icon-watchGraph")}"></use>
             </svg>
           </button>
           ` : ""}
@@ -3836,8 +3879,8 @@ function renderWaypointList() {
   waypointCount.textContent = `${visible.length}`;
 
   const ACTIVE_BACKGROUND = "rgba(0, 114, 176, 0.5)";
-  const TIMEDOUT_BACKGROUND = "#8a0000aa";
-  const REACHED_BACKGROUND = "#008a30aa";
+  const TIMEDOUT_BACKGROUND = "rgba(211, 24, 24, 0.45)";
+  const REACHED_BACKGROUND = "rgba(22, 183, 70, 0.4)";
 
   for (const { waypoint, event } of visible) {
     const div = document.createElement("div");
@@ -3847,7 +3890,7 @@ function renderWaypointList() {
     const stateLabel = waypoint.retriggerable ? "RETRIGGERABLE" : (waypoint.active ? "ACTIVE" : "INACTIVE");
     const stateFill = waypoint.retriggerable
       ? ((waypoint.terminalEvent?.type === "TIMEDOUT") ? TIMEDOUT_BACKGROUND : ACTIVE_BACKGROUND)
-      : (waypoint.active ? ACTIVE_BACKGROUND : (waypoint.terminalEvent?.type === "TIMEDOUT" ? TIMEDOUT_BACKGROUND : REACHED_BACKGROUND));
+      : (waypoint.active ? ACTIVE_BACKGROUND : (waypoint.terminalEvent?.type === "REACHED" ? REACHED_BACKGROUND : TIMEDOUT_BACKGROUND));
     const stateText = waypoint.retriggerable
       ? "#f1e7ff"
       : (waypoint.active ? "#e7f2ff" : "#d5e3f3ff");
@@ -4712,15 +4755,15 @@ window.addEventListener('mousemove', (e) => {
   }
 
   if (isResizing) {
-    // 1. Calculate the intended new size
+    // Calculate the intended new size
     let newWidth = e.clientX - floatWin.offsetLeft;
     let newHeight = e.clientY - floatWin.offsetTop;
 
-    // 3. Clamp the values
-    newWidth = Math.max(minW, Math.min(newWidth, maxW));
-    newHeight = Math.max(minH, Math.min(newHeight, maxH));
+    // Clamp the values
+    newWidth = Math.max(floatingWindowBounds.minWidth, Math.min(newWidth, floatingWindowBounds.maxWidth));
+    newHeight = Math.max(floatingWindowBounds.minHeight, Math.min(newHeight, floatingWindowBounds.maxHeight));
 
-    // 4. Apply to the element
+    // Apply to the element
     floatWin.style.width = `${newWidth}px`;
     floatWin.style.height = `${newHeight}px`;
   }
@@ -4961,7 +5004,7 @@ function resetFieldPosition() {
   updateFieldLayout(false); // sets full-field bounds + square layout
   btnFit.innerHTML = `
   <svg width="12" height="12">
-    <use href="assets/svg/icons.svg#icon-fit" style="color: #ffffff"></use>
+    <use href="${svgIconHref("icon-fit")}" xlink:href="${svgIconHref("icon-fit")}"></use>
   </svg>`;
   btnFit.title = 'Recenter field (square)';
 }
@@ -6738,6 +6781,7 @@ function getTimelineH() {
     if (draggingPlanList) {
       const dy = e.clientY - startPlanY;
       const rightH = rightPlanningEl?.getBoundingClientRect().height || window.innerHeight;
+      const minH = 120;
       const maxH = Math.max(COLLAPSE_WAYPOINTLIST_PX, rightH - 180);
       let next = clamp(startPlanH + dy, 0, maxH);
       if (next <= COLLAPSE_WAYPOINTLIST_PX) {
@@ -7100,10 +7144,6 @@ async function loadSettings() {
         prosDirInput.value = settings.prosDir;
         prosDirFromSettings = true;
       }
-      if (settings.prosExe && prosExeInput) {
-        prosExeInput.value = settings.prosExe;
-        prosExeFromSettings = true;
-      }
       if (settings.robotImageEnabled !== undefined) robotImageEnabled = settings.robotImageEnabled;
       if (settings.units) {
         if (settingsUnitsSelect) settingsUnitsSelect.value = settings.units;
@@ -7238,7 +7278,6 @@ async function saveSettings() {
   try {
     const settings = {
       prosDir: prosDirInput ? prosDirInput.value : '',
-      prosExe: prosExeInput ? prosExeInput.value : '',
       robotImageEnabled,
       units: settingsUnitsSelect ? settingsUnitsSelect.value : (unitsSelect ? unitsSelect.value : 'in'),
       robotW: robotWEl ? robotWEl.value : '12',
@@ -8150,14 +8189,6 @@ function setProsDirStatus(message, kind = 'info') {
   else prosDirStatusEl.style.color = 'var(--muted)';
 }
 
-function setProsExeStatus(message, kind = 'info') {
-  if (!prosExeStatusEl) return;
-  prosExeStatusEl.textContent = message;
-  if (kind === 'error') prosExeStatusEl.style.color = '#ff9b9b';
-  else if (kind === 'ok') prosExeStatusEl.style.color = '#9fddb0';
-  else prosExeStatusEl.style.color = 'var(--muted)';
-}
-
 function setAutoStatus(message, kind = 'info') {
   if (!prosDirAutoStatusEl) return;
   prosDirAutoStatusEl.textContent = message;
@@ -8168,14 +8199,6 @@ function setAutoStatus(message, kind = 'info') {
   } else {
     prosDirAutoStatusEl.style.color = 'var(--muted)';
   }
-}
-
-function setProsExeAutoStatus(message, kind = 'info') {
-  if (!prosExeAutoStatusEl) return;
-  prosExeAutoStatusEl.textContent = message;
-  if (kind === 'error') prosExeAutoStatusEl.style.color = '#ff9b9b';
-  else if (kind === 'ok') prosExeAutoStatusEl.style.color = '#9fddb0';
-  else prosExeAutoStatusEl.style.color = 'var(--muted)';
 }
 
 function renderAutoResults(candidates) {
@@ -8224,49 +8247,6 @@ function renderAutoResults(candidates) {
   }
 }
 
-function renderProsExeAutoResults(candidates) {
-  if (!prosExeAutoResultsEl) return;
-  prosExeAutoResultsEl.innerHTML = '';
-  prosExeAutoResultsEl.hidden = false;
-  if (!candidates || !candidates.length) {
-    prosExeAutoResultsEl.textContent = '';
-    prosExeAutoResultsEl.style.color = 'var(--muted)';
-    return;
-  }
-  for (const p of candidates) {
-    const row = document.createElement('div');
-    row.style.display = 'flex';
-    row.style.gap = '8px';
-    row.style.alignItems = 'center';
-    row.style.marginBottom = '6px';
-
-    const pathEl = document.createElement('div');
-    pathEl.textContent = p;
-    pathEl.style.flex = '1';
-    pathEl.style.fontFamily = 'monospace';
-    pathEl.style.fontSize = '12px';
-
-    const useBtn = document.createElement('button');
-    useBtn.className = 'iconBtn';
-    useBtn.style.fontSize = '11px';
-    useBtn.textContent = 'Use';
-    useBtn.addEventListener('click', () => {
-      if (!prosExeInput) return;
-      prosExeInput.value = p;
-      prosExeFromSettings = true;
-      updateProsExe(p);
-      saveSettings();
-      renderProsExeAutoResults([]);
-      setProsExeAutoStatus('Applied.', 'ok');
-      prosExeAutoResultsEl.hidden = true;
-    });
-
-    row.appendChild(pathEl);
-    row.appendChild(useBtn);
-    prosExeAutoResultsEl.appendChild(row);
-  }
-}
-
 function refreshWS() {
   if (!ensureBackendReady) return;
   refreshBridgeOrigin();
@@ -8275,12 +8255,8 @@ function refreshWS() {
   if (prosDirInput && prosDirInput.value && prosDirInput.value.trim()) updateProsDir(prosDirInput.value);
   else setProsDirStatus('PROS directory not set. Live viewing disabled.', 'error');
 
-  if (prosExeInput && prosExeInput.value && prosExeInput.value.trim()) updateProsExe(prosExeInput.value);
-  else setProsExeStatus('PROS CLI path not set. Auto-detect or enter a path.', 'info');
-
   // Best-effort refresh from backend
   loadProsDirFromAPI();
-  loadProsExeFromAPI();
 }
 
 // PROS directory input
@@ -8337,46 +8313,6 @@ async function updateProsDir(dir) {
   }
 }
 
-// PROS executable input
-async function updateProsExe(pathStr) {
-  const trimmed = (pathStr || '').trim();
-  if (!trimmed) {
-    prosExeValid = false;
-    setProsExeStatus('PROS CLI path not set. Auto-detect or enter a path.', 'info');
-    saveSettings();
-    return;
-  }
-  try {
-    const origin = refreshBridgeOrigin();
-    if (!origin || !(await ensureBackendReady())) {
-      prosExeValid = false;
-      setProsExeStatus('Bridge not ready yet. Retrying...', 'error');
-      return;
-    }
-    const response = await fetch(`${origin}/api/pros-exe`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: trimmed })
-    });
-    const result = await response.json();
-    if (result.ok) {
-      prosExeValid = true;
-      setStatus(`PROS CLI set to: ${result.path}`);
-      setProsExeStatus(`Using pros-cli: ${result.path}`, 'ok');
-      saveSettings();
-    } else {
-      prosExeValid = false;
-      setStatus(`Failed to set PROS CLI: ${result.status}`);
-      setProsExeStatus(`Invalid pros-cli: ${result.status}`, 'error');
-    }
-  } catch (e) {
-    prosExeValid = false;
-    console.error('Error updating PROS CLI:', e);
-    setStatus(`Error updating PROS CLI: ${e.message || e}`);
-    setProsExeStatus(`Error validating pros-cli: ${e.message || e}`, 'error');
-  }
-}
-
 if (prosDirInput) {
   let prosDirTimeout = null;
   prosDirInput.addEventListener('input', () => {
@@ -8384,17 +8320,6 @@ if (prosDirInput) {
     if (prosDirTimeout) clearTimeout(prosDirTimeout);
     prosDirTimeout = setTimeout(() => {
       updateProsDir(prosDirInput.value);
-    }, 500);
-    saveSettings();
-  });
-}
-
-if (prosExeInput) {
-  let prosExeTimeout = null;
-  prosExeInput.addEventListener('input', () => {
-    if (prosExeTimeout) clearTimeout(prosExeTimeout);
-    prosExeTimeout = setTimeout(() => {
-      updateProsExe(prosExeInput.value);
     }, 500);
     saveSettings();
   });
@@ -8427,32 +8352,6 @@ if (btnProsDirAuto) {
   });
 }
 
-if (btnProsExeAuto) {
-  btnProsExeAuto.addEventListener('click', async () => {
-    if (!refreshBridgeOrigin() || !(await ensureBackendReady())) {
-      setProsExeAutoStatus('Backend not ready.', 'error');
-      return;
-    }
-    setProsExeAutoStatus('Scanning…');
-    try {
-      const response = await fetch(`${ORIGIN}/api/pros-exe/auto`);
-      const result = await response.json();
-      if (!result.ok) {
-        setProsExeAutoStatus(result.status || 'Auto-detect failed.', 'error');
-        renderProsExeAutoResults([]);
-        return;
-      }
-      renderProsExeAutoResults(result.candidates || []);
-      setProsExeAutoStatus(`Found ${result.candidates?.length || 0} candidate(s).`, 'ok');
-    } catch (e) {
-      console.error('Auto-detect failed:', e);
-      setProsExeAutoStatus('Auto-detect failed.', 'error');
-      renderProsExeAutoResults([]);
-    }
-    refreshWS();
-  });
-}
-
 // Load PROS directory from API on startup
 async function loadProsDirFromAPI() {
   if (!refreshBridgeOrigin() || !(await ensureBackendReady())) return;
@@ -8473,27 +8372,6 @@ async function loadProsDirFromAPI() {
   } catch (e) {
     prosDirValid = false;
     console.error('Error loading PROS directory from API:', e);
-  }
-}
-
-async function loadProsExeFromAPI() {
-  if (!refreshBridgeOrigin() || !(await ensureBackendReady())) return;
-  try {
-    const response = await fetch(`${ORIGIN}/api/pros-exe`);
-    const result = await response.json();
-    if (result.ok && result.path && prosExeInput) {
-      const hasUserPath = prosExeFromSettings || (prosExeInput.value && prosExeInput.value.trim());
-      if (hasUserPath) return;
-      prosExeInput.value = result.path;
-      prosExeValid = true;
-      setProsExeStatus(`Using pros-cli: ${result.path}`, 'ok');
-      saveSettings();
-    } else {
-      prosExeValid = false;
-    }
-  } catch (e) {
-    prosExeValid = false;
-    console.error('Error loading PROS CLI:', e);
   }
 }
 
@@ -9224,10 +9102,6 @@ if (settingsModal) {
 setTimeout(() => {
   try {
     loadProsDirFromAPI();
-    loadProsExeFromAPI();
-    if (prosExeInput && prosExeInput.value && prosExeInput.value.trim()) {
-      updateProsExe(prosExeInput.value);
-    }
     updateConnectButtonState();
   } catch (e) {
     console.error('Error loading PROS dir:', e);
@@ -9243,10 +9117,6 @@ const bridgeReadyPoll = setInterval(() => {
     if (!(await waitForBackendReady(8000, 250))) return;
     clearInterval(bridgeReadyPoll);
     loadProsDirFromAPI();
-    loadProsExeFromAPI();
-    if (prosExeInput && prosExeInput.value && prosExeInput.value.trim()) {
-      updateProsExe(prosExeInput.value);
-    }
   })().finally(() => {
     bridgeReadyInitInFlight = false;
   });
