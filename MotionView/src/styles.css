@@ -561,6 +561,11 @@ header.topBar {
   -ms-overflow-style: none;
 }
 
+header.topBar:hover:not(:disabled) {
+  scrollbar-width: auto;
+  scrollbar-gutter: unset;
+}
+
 header.topBar::-webkit-scrollbar {
   width: 0;
   height: 0;

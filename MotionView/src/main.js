@@ -233,6 +233,7 @@ const TOP_BAR_CENTER_RIGHT_OVERLAP_TOLERANCE_PX = 0; // Allowed overlap with rig
 const TOP_BAR_CENTER_RIGHT_SCROLL_GAP_PX = 0; // Enter scroll mode if shifted center would be closer than this to the right side
 let topBarMaxObservedWidth = 0;
 let topBarMaxCenteredStatusWidth = 0;
+let topBarSavedScrollLeft = 0;
 
 function truncateTopBarStatus(msg) {
   const text = String(msg ?? '');
@@ -248,6 +249,7 @@ function updateTopBarStatusLayout() {
   if (!topBarEl || !topBarContentEl || !topBarLeftEl || !topBarCenterEl || !topBarRightEl || !statusEl) return;
 
   const fullText = statusEl.dataset.fullText ?? statusEl.textContent ?? "";
+  const previousScrollLeft = Math.max(topBarSavedScrollLeft, topBarEl.scrollLeft || 0);
   topBarEl.classList.remove("isOverflowing");
   topBarCenterEl.style.left = "50%";
   topBarCenterEl.style.top = "50%";
@@ -283,6 +285,7 @@ function updateTopBarStatusLayout() {
   if (!centeredCurrentlyTruncates && gapToRightWhileCentered >= TOP_BAR_CENTER_RIGHT_SCROLL_GAP_PX) {
     topBarCenterEl.style.left = "50%";
     statusEl.title = "";
+    topBarSavedScrollLeft = 0;
     return;
   }
 
@@ -299,6 +302,7 @@ function updateTopBarStatusLayout() {
     topBarCenterEl.style.left = "50%";
     statusEl.style.maxWidth = `${Math.max(0, desiredStatusWidth)}px`;
     statusEl.title = "";
+    topBarSavedScrollLeft = 0;
     return;
   }
 
@@ -306,6 +310,7 @@ function updateTopBarStatusLayout() {
     topBarCenterEl.style.left = `${shiftedCenterX}px`;
     statusEl.style.maxWidth = `${Math.max(0, desiredStatusWidth)}px`;
     statusEl.title = statusEl.scrollWidth > statusEl.clientWidth ? fullText : "";
+    topBarSavedScrollLeft = 0;
     return;
   }
 
@@ -315,6 +320,13 @@ function updateTopBarStatusLayout() {
   statusEl.style.maxWidth = `${Math.max(0, desiredStatusWidth)}px`;
   statusEl.textContent = fullText;
   statusEl.title = statusEl.scrollWidth > statusEl.clientWidth ? fullText : "";
+  requestAnimationFrame(() => {
+    if (!topBarEl?.classList.contains("isOverflowing")) return;
+    const maxScrollLeft = Math.max(0, topBarEl.scrollWidth - topBarEl.clientWidth);
+    const restoredScrollLeft = Math.min(previousScrollLeft, maxScrollLeft);
+    topBarEl.scrollLeft = restoredScrollLeft;
+    topBarSavedScrollLeft = restoredScrollLeft;
+  });
 }
 
 const scheduleTopBarStatusLayout = (() => {
@@ -8360,7 +8372,7 @@ async function loadProsDirFromAPI() {
   try {
     const response = await fetch(`${ORIGIN}/api/pros-dir`);
     const result = await response.json();
-    if (result.ok && result.dir && prosDirInput && result.dir != "None") {
+    if (result.ok && result.dir && prosDirInput && result.dir !== "None") {
       const hasUserDir = prosDirFromSettings || (prosDirInput.value && prosDirInput.value.trim());
       if (hasUserDir) return;
       prosDirInput.value = result.dir;
@@ -8369,7 +8381,6 @@ async function loadProsDirFromAPI() {
       saveSettings();
       if (btnLeftConnect) btnLeftConnect.disabled = false;
     } else {
-      prosDirInput.value = "";
       prosDirValid = false;
     }
   } catch (e) {
@@ -9141,6 +9152,12 @@ if (typeof ResizeObserver === 'function') {
   if (topBarLeftEl) topBarResizeObserver.observe(topBarLeftEl);
   if (topBarCenterEl) topBarResizeObserver.observe(topBarCenterEl);
   if (topBarRightEl) topBarResizeObserver.observe(topBarRightEl);
+}
+
+if (topBarEl) {
+  topBarEl.addEventListener('scroll', () => {
+    topBarSavedScrollLeft = topBarEl.scrollLeft || 0;
+  }, { passive: true });
 }
 
 updateFieldLayout(false);
