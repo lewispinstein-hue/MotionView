@@ -132,6 +132,43 @@ def configure_pros_env_from_vscode() -> Optional[str]:
 
     return None
 
+def _bundle_search_roots_from_env() -> List[Path]:
+    raw = os.environ.get("MOTIONVIEW_BUNDLE_ROOTS", "")
+    if not raw:
+        return []
+
+    roots: List[Path] = []
+    for part in raw.split(os.pathsep):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            roots.append(Path(part).expanduser().resolve())
+        except Exception:
+            continue
+    return roots
+
+def _expand_bundle_search_roots(base_roots: List[Path]) -> List[Path]:
+    expanded: List[Path] = []
+    for root in base_roots:
+        expanded.extend([
+            root,
+            root / "bin",
+            root / "src-tauri" / "bin",
+            root / "_up_",
+            root / "_up_" / "bin",
+            root / "_up_" / "src-tauri" / "bin",
+            root / "__up__",
+            root / "__up__" / "bin",
+            root / "__up__" / "src-tauri" / "bin",
+            root / "Resources",
+            root / "Resources" / "bin",
+            root / "Resources" / "src-tauri" / "bin",
+            root / "Resources" / "_up_",
+            root / "Resources" / "_up_" / "src-tauri" / "bin",
+        ])
+    return expanded
+
 def resolve_bundled_pros_exe() -> Optional[str]:
     exe_ext = ".exe" if platform.system() == "Windows" else ""
     exact_names = [f"motionview-pros{exe_ext}"]
@@ -140,12 +177,20 @@ def resolve_bundled_pros_exe() -> Optional[str]:
     archive_names = ["motionview-pros.zip"]
 
     roots: List[Path] = []
+    roots.extend(_expand_bundle_search_roots(_bundle_search_roots_from_env()))
     if getattr(sys, "frozen", False):
         try:
             exe_dir = Path(sys.executable).resolve().parent
             roots.extend([
                 exe_dir,
                 exe_dir / "bin",
+                exe_dir / "_up_",
+                exe_dir / "_up_" / "bin",
+                exe_dir / "_up_" / "src-tauri" / "bin",
+                exe_dir / "_up_" / "src-tauri" / "bin" / "motionview-pros" / "motionview-pros",
+                exe_dir / "__up__",
+                exe_dir / "__up__" / "bin",
+                exe_dir / "__up__" / "src-tauri" / "bin",
                 exe_dir.parent,
                 exe_dir.parent / "bin",
                 exe_dir.parent / "Resources",
@@ -156,6 +201,7 @@ def resolve_bundled_pros_exe() -> Optional[str]:
                 exe_dir.parent / "_up_",
                 exe_dir.parent / "_up_" / "bin",
                 exe_dir.parent / "_up_" / "src-tauri" / "bin",
+                exe_dir.parent / "_up_" / "src-tauri" / "bin" / "motionview-pros" / "motionview-pros",
                 exe_dir.parent / "__up__",
                 exe_dir.parent / "__up__" / "bin",
                 exe_dir.parent / "__up__" / "src-tauri" / "bin",
@@ -263,8 +309,30 @@ def extract_bundled_pros_archive(archive_path: Path) -> Optional[str]:
         return None
     return None
 
+def resolve_extracted_pros_exe() -> Optional[str]:
+    exe_ext = ".exe" if platform.system() == "Windows" else ""
+    runtime_root = motionview_support_dir() / "Runtime" / "motionview-pros"
+    candidates = [
+        runtime_root / "motionview-pros" / f"motionview-pros{exe_ext}",
+        runtime_root / f"motionview-pros{exe_ext}",
+    ]
+
+    for candidate in candidates:
+        try:
+            resolved = candidate.expanduser().resolve()
+        except Exception:
+            continue
+        if resolved.exists() and resolved.is_file():
+            if platform.system() != "Windows":
+                try:
+                    resolved.chmod(resolved.stat().st_mode | 0o755)
+                except Exception:
+                    pass
+            return str(resolved)
+    return None
+
 def resolve_pros_exe() -> Optional[str]:
-    return resolve_bundled_pros_exe()
+    return resolve_extracted_pros_exe() or resolve_bundled_pros_exe()
 
 # MotionView must use the bundled MVLib-compatible PROS fork.
 PROS_EXE = resolve_pros_exe()
@@ -352,20 +420,29 @@ async def ws_endpoint(websocket: WebSocket):
 
 async def broadcast(line: str):
     line = strip_ansi(line)
+    # Take useless lines and remove them
     if "resolve_v5_port - No v5 ports were found" in line:
         line = "No v5 devices were found."
-    elif "You must be in a PROS project directory" in line:
-        line = "The PROS Path selected is not inside of a PROS Project."
-    elif "Couldn't find the response header in the device response after" in line:
-        line = "Connected device disconnected."
-    elif ("NotOpenSSLWarning" in line
-        or "RequestsDependencyWarning" in line
-        or "currently the 'ssl' module is compiled with 'LibreSSL" in line
-        or "Unable to find acceptable character detection dependency" in line):
+    elif "PROS-CLI Version: " in line:
+        return
+    elif "Usage: pros terminal [OPTIONS] [PORT]" in line:
+        return
+    elif "Try 'pros terminal --help' for help" in line:
         return
     elif ("Press Ctrl" in line
         or "Sentry is attempting to send" in line
         or "Waiting up to" in line):
+        return
+    elif "You must be in a PROS project directory" in line:
+        line = "The PROS Path selected is not inside of a PROS Project."
+    elif "Couldn't find the response header in the device response after" in line:
+        line = "Connected device disconnected."
+    elif "The PROS Path selected is not inside of a PROS Project" in line:
+        line = "The PROS Path selected is not inside of a PROS Project."
+    elif ("NotOpenSSLWarning" in line
+        or "RequestsDependencyWarning" in line
+        or "currently the 'ssl' module is compiled with 'LibreSSL" in line
+        or "Unable to find acceptable character detection dependency" in line):
         return
 
     async with _clients_lock:
@@ -515,6 +592,7 @@ class ProsTerminalRunner:
                             ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
                             stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                             check=False,
                         )
                     except Exception:
@@ -532,6 +610,7 @@ class ProsTerminalRunner:
                             ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
                             stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                             check=False,
                         )
                     except Exception:

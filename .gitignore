@@ -26,6 +26,8 @@ dist-ssr
 MotionView/motionview-py.spec
 MotionView/motionview-pros.spec
 MotionView/build/
+MotionView/.pyinstaller
+MotionView/.pyinstaller-spec
 **__pycache__**
 
 MotionView/bin

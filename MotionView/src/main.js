@@ -8360,7 +8360,7 @@ async function loadProsDirFromAPI() {
   try {
     const response = await fetch(`${ORIGIN}/api/pros-dir`);
     const result = await response.json();
-    if (result.ok && result.dir && prosDirInput) {
+    if (result.ok && result.dir && prosDirInput && result.dir != "None") {
       const hasUserDir = prosDirFromSettings || (prosDirInput.value && prosDirInput.value.trim());
       if (hasUserDir) return;
       prosDirInput.value = result.dir;
@@ -8369,6 +8369,7 @@ async function loadProsDirFromAPI() {
       saveSettings();
       if (btnLeftConnect) btnLeftConnect.disabled = false;
     } else {
+      prosDirInput.value = "";
       prosDirValid = false;
     }
   } catch (e) {

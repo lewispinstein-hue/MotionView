@@ -53,13 +53,10 @@ fn pick_free_port() -> u16 {
 }
 
 fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBuf> {
-    // Build candidate file names. Prefer plain first to match bundled `externalBin`
-    // behavior, then try triple-suffixed as a fallback.
+    // Build candidate file names. Prefer the target-triple sidecar first so we
+    // do not accidentally keep launching a stale plain `motionview-py.exe`
+    // left behind by an older Windows install.
     let mut names: Vec<String> = Vec::new();
-    names.push(format!(
-        "motionview-py{}",
-        if cfg!(target_os = "windows") { ".exe" } else { "" }
-    ));
     if let Some(triple) = option_env!("TAURI_ENV_TARGET_TRIPLE") {
         names.push(format!(
             "motionview-py-{}{}",
@@ -67,6 +64,10 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
             if cfg!(target_os = "windows") { ".exe" } else { "" }
         ));
     }
+    names.push(format!(
+        "motionview-py{}",
+        if cfg!(target_os = "windows") { ".exe" } else { "" }
+    ));
 
     // Allow an explicit override for diagnostics or custom deployments.
     if let Ok(force) = std::env::var("MOTIONVIEW_BRIDGE_BIN") {
@@ -78,20 +79,35 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
     }
 
     // Collect search roots in priority order:
-    // 1) Dev bin/ (when running from source; skipped in release builds)
-    // 2) Bundled Resources/bin (Tauri default for externalBin)
-    // 3) Bundled executable directory (macOS puts externalBin in Contents/MacOS)
-    // 4) Bundled executable directory + bin/ (Windows MSI often flattens)
+    // 1) Dev resource bin folders (when running from source; skipped in release builds)
+    // 2) Bundled updater/resource bridge folders
+    // 3) Legacy sidecar locations for compatibility with existing installs
     let mut roots: Vec<std::path::PathBuf> = Vec::new();
     if cfg!(debug_assertions) {
+        roots.push(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("bin")
+                .join("motionview-bridge"),
+        );
         roots.push(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("bin"));
     }
     if let Ok(res_root) = app
         .path()
         .resolve("", tauri::path::BaseDirectory::Resource)
-        .map(|p| p.join("bin"))
+        .map(|p| {
+            let mut roots = vec![
+                p.join("_up_").join("src-tauri").join("bin").join("motionview-bridge"),
+                p.join("src-tauri").join("bin").join("motionview-bridge"),
+                p.join("src-tauri").join("bin"),
+                p.join("bin"),
+            ];
+            if cfg!(target_os = "windows") {
+                roots.push(p.join("_up_").join("src-tauri").join("bin"));
+            }
+            roots
+        })
     {
-        roots.push(res_root);
+        roots.extend(res_root);
     }
     if let Ok(exe_dir) = std::env::current_exe().and_then(|p| {
         p.parent()
@@ -103,12 +119,15 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
 
         // A bin/ next to the exe (some installers flatten to a bin folder)
         roots.push(exe_dir.join("bin"));
+        roots.push(exe_dir.join("_up_").join("src-tauri").join("bin").join("motionview-bridge"));
+        roots.push(exe_dir.join("_up_").join("src-tauri").join("bin"));
 
         // Also look one level up, because Windows installers sometimes place
         // sidecars beside the app root while the exe is under __up__/.
         if let Some(parent) = exe_dir.parent() {
             roots.push(parent.to_path_buf());
             roots.push(parent.join("bin"));
+            roots.push(parent.join("_up_").join("src-tauri").join("bin").join("motionview-bridge"));
             roots.push(parent.join("_up_"));
             roots.push(parent.join("_up_").join("bin"));
             roots.push(parent.join("_up_").join("src-tauri").join("bin"));
@@ -197,7 +216,7 @@ fn stop_bridge(state: &tauri::State<BridgeState>, app: &tauri::AppHandle) {
         }
         #[cfg(not(unix))]
         {
-            let _ = child.kill();
+            kill_pid(child.id());
         }
         // Reap in background to avoid blocking the main thread.
         std::thread::spawn(move || {
@@ -207,6 +226,8 @@ fn stop_bridge(state: &tauri::State<BridgeState>, app: &tauri::AppHandle) {
     if let Ok(path) = pid_path(app) {
         let _ = fs::remove_file(path);
     }
+    #[cfg(windows)]
+    cleanup_bridge_processes_by_name();
 }
 
 fn pid_path(app: &tauri::AppHandle) -> Result<PathBuf, tauri::Error> {
@@ -247,6 +268,35 @@ fn kill_pid(pid: u32) {
         .status();
 }
 
+#[cfg(windows)]
+fn cleanup_bridge_processes_by_name() {
+    let script = r#"
+$targets = Get-Process | Where-Object {
+  $_.ProcessName -like 'motionview-py*'
+}
+foreach ($proc in $targets) {
+  try {
+    Stop-Process -Id $proc.Id -Force -ErrorAction Stop
+  } catch {
+  }
+}
+"#;
+
+    let _ = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
 fn cleanup_previous_bridge(app: &tauri::AppHandle) {
     let path = match pid_path(app) {
         Ok(p) => p,
@@ -260,6 +310,8 @@ fn cleanup_previous_bridge(app: &tauri::AppHandle) {
         kill_pid(pid);
     }
     let _ = fs::remove_file(path);
+    #[cfg(windows)]
+    cleanup_bridge_processes_by_name();
 }
 
 fn write_bridge_pid(app: &tauri::AppHandle, pid: u32) {
@@ -285,6 +337,69 @@ fn dev_bridge_python_and_script() -> Option<(PathBuf, PathBuf)> {
     } else {
         None
     }
+}
+
+fn collect_bundle_roots(app: &tauri::AppHandle) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            roots.push(exe_dir.to_path_buf());
+            roots.push(exe_dir.join("_up_"));
+            roots.push(exe_dir.join("__up__"));
+        }
+    }
+
+    if let Ok(resource_dir) = app.path().resolve("", tauri::path::BaseDirectory::Resource) {
+        roots.push(resource_dir);
+    }
+
+    if let Ok(app_data_dir) = app.path().app_data_dir() {
+        roots.push(app_data_dir);
+    }
+
+    let mut deduped: Vec<PathBuf> = Vec::new();
+    for root in roots {
+        let normalized = root.canonicalize().unwrap_or(root);
+        if !deduped.iter().any(|existing| existing == &normalized) {
+            deduped.push(normalized);
+        }
+    }
+    deduped
+}
+
+fn stage_bridge_bin_for_runtime(
+    app: &tauri::AppHandle,
+    source: &std::path::Path,
+) -> Result<PathBuf, tauri::Error> {
+    let file_name = source.file_name().ok_or_else(|| {
+        tauri::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "bridge executable missing file name",
+        ))
+    })?;
+
+    let runtime_dir = app
+        .path()
+        .app_data_dir()
+        .map(|dir| dir.join("Runtime").join("motionview-bridge"))?;
+    fs::create_dir_all(&runtime_dir).map_err(tauri::Error::Io)?;
+
+    let staged = runtime_dir.join(file_name);
+    let needs_copy = match (fs::metadata(source), fs::metadata(&staged)) {
+        (Ok(src_meta), Ok(dst_meta)) => {
+            src_meta.len() != dst_meta.len()
+                || src_meta.modified().ok() != dst_meta.modified().ok()
+        }
+        (Ok(_), Err(_)) => true,
+        (Err(err), _) => return Err(tauri::Error::Io(err)),
+    };
+
+    if needs_copy {
+        fs::copy(source, &staged).map_err(tauri::Error::Io)?;
+    }
+
+    Ok(staged)
 }
 
 fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child, tauri::Error> {
@@ -334,8 +449,9 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child
             eprintln!("BRIDGE ERROR: Could not resolve binary: {}", e);
             e
         })?;
-        let label = exe.display().to_string();
-        (std::process::Command::new(&exe), label)
+        let staged = stage_bridge_bin_for_runtime(app, &exe)?;
+        let label = staged.display().to_string();
+        (std::process::Command::new(&staged), label)
     };
 
     #[cfg(not(debug_assertions))]
@@ -344,8 +460,9 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child
             eprintln!("BRIDGE ERROR: Could not resolve binary: {}", e);
             e
         })?;
-        let label = exe.display().to_string();
-        (std::process::Command::new(&exe), label)
+        let staged = stage_bridge_bin_for_runtime(app, &exe)?;
+        let label = staged.display().to_string();
+        (std::process::Command::new(&staged), label)
     };
 
     #[cfg(windows)]
@@ -369,8 +486,17 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child
     // Spawn
     println!("SPAWNING BRIDGE: {} on port {}", spawn_label, port);
 
+    let bundle_roots = collect_bundle_roots(app);
+    let bundle_root_env = std::env::join_paths(&bundle_roots).map_err(|e| {
+        tauri::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("failed to encode bundle roots: {e}"),
+        ))
+    })?;
+
     cmd.args(["--host", "127.0.0.1", "--port", &port.to_string()])
         .env("MOTIONVIEW_LOG_PATH", &log_path)
+        .env("MOTIONVIEW_BUNDLE_ROOTS", bundle_root_env)
         .stdout(std::process::Stdio::from(log))
         .stderr(std::process::Stdio::from(log_err))
         .spawn()

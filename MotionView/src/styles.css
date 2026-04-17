@@ -46,9 +46,18 @@ input, textarea {
 .routeInfoRow,
 .routeInfoRow *,
 .routeInfoEmpty,
-.routeInfoEmpty * {
+.routeInfoEmpty *,
+#timelineTop,
+#timelineTop *,
+#planningTimelineTop,
+#planningTimelineTop * {
   -webkit-user-select: text;
   user-select: text;
+}
+
+#timelineTop,
+#planningTimelineTop {
+  cursor: text;
 }
 
 .iconBtn,

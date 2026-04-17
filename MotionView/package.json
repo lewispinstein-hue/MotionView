@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "py:clean": "node scripts/clean_py.js",
     "py:build": "node scripts/build_py.js",
     "dev:web": "vite --config vite.config.js",
-    "py:clean": "rm -rf ./src-tauri/bin",
     "build:web": "vite build --config vite.config.js",
     "dev": "pnpm py:clean && pnpm py:build && tauri dev",
     "build": "pnpm py:clean && pnpm py:build && tauri build",

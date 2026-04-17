@@ -3,6 +3,7 @@ rich-click==1.7.4
 pyserial
 cachetools
 requests
+charset-normalizer
 requests-futures
 tabulate
 jsonpickle

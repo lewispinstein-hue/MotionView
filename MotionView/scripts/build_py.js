@@ -7,6 +7,9 @@ const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), "..");
 const distDir = path.join(repoRoot, "dist");
 const binDir = path.join(repoRoot, "src-tauri", "bin");
+const bridgeBinDir = path.join(binDir, "motionview-bridge");
+const pyInstallerWorkDir = path.join(repoRoot, ".pyinstaller");
+const pyInstallerSpecDir = path.join(repoRoot, ".pyinstaller-spec");
 const bridgeEntry = path.join(repoRoot, "src", "bridge.py");
 const bridgeRequirements = path.join(repoRoot, "requirements.txt");
 const prosRoot = path.join(repoRoot, "src", "pros-cli");
@@ -33,6 +36,10 @@ function getRustTargetTriple() {
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
+}
+
+function resetPath(targetPath) {
+  fs.rmSync(targetPath, { recursive: true, force: true });
 }
 
 function copyResolvedTree(src, dest) {
@@ -84,7 +91,16 @@ function removeObsoletePyInstallerPackages() {
 
 function buildPyInstaller(name, entry, extraArgs = [], { noConsole = false } = {}) {
   const oneDir = extraArgs.includes("--onedir");
-  const args = ["-m", "PyInstaller", oneDir ? "--onedir" : "-F", ...extraArgs.filter((arg) => arg !== "--onedir")];
+  const args = [
+    "-m", "PyInstaller",
+    "--clean",
+    "--noconfirm",
+    "--distpath", distDir,
+    "--workpath", path.join(pyInstallerWorkDir, name),
+    "--specpath", pyInstallerSpecDir,
+    oneDir ? "--onedir" : "-F",
+    ...extraArgs.filter((arg) => arg !== "--onedir"),
+  ];
   if (noConsole && process.platform === "win32") {
     args.push("--noconsole");
   }
@@ -101,15 +117,20 @@ function copySidecar(baseName) {
 
   const triple = getRustTargetTriple();
   ensureDir(binDir);
+  ensureDir(bridgeBinDir);
 
   const sidecarName = `${baseName}-${triple}${exeExt}`;
   const sidecarPath = path.join(binDir, sidecarName);
   const fallbackPath = path.join(binDir, outName);
+  const bridgeSidecarPath = path.join(bridgeBinDir, sidecarName);
+  const bridgeFallbackPath = path.join(bridgeBinDir, outName);
 
   fs.copyFileSync(distExe, sidecarPath);
   fs.copyFileSync(distExe, fallbackPath);
-
+  fs.copyFileSync(distExe, bridgeSidecarPath);
+  fs.copyFileSync(distExe, bridgeFallbackPath);
   console.log(`Copied sidecar to ${sidecarPath}`);
+  console.log(`Copied updater bridge to ${bridgeFallbackPath}`);
 }
 
 function copyRuntimeDir(baseName) {
@@ -140,6 +161,13 @@ function copyRuntimeArchive(baseName) {
   ]);
   console.log(`Copied runtime archive to ${archivePath}`);
 }
+
+resetPath(path.join(distDir, "motionview-py"));
+resetPath(path.join(distDir, `motionview-py${exeExt}`));
+resetPath(path.join(distDir, "motionview-pros"));
+resetPath(path.join(distDir, `motionview-pros${exeExt}`));
+resetPath(pyInstallerWorkDir);
+resetPath(pyInstallerSpecDir);
 
 // Build the bridge sidecar first from the bridge dependency set so it does not
 // inherit extra PROS CLI packages that can destabilize startup.
@@ -172,6 +200,8 @@ buildPyInstaller(
     "--onedir",
     "--paths", prosRoot,
     "--collect-all", "pros",
+    "--collect-all", "requests",
+    "--collect-all", "charset_normalizer",
   ],
 );
 copyRuntimeDir("motionview-pros");

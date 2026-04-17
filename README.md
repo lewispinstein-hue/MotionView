@@ -71,24 +71,16 @@ Key capabilities:
 MotionView requires nothing out of the box to load files, but some features require external dependencies. 
 1. **Live streaming:** This feature requires you to have both a PROS Project locally on your computer, and to have the [`PROS Extension`](https://marketplace.visualstudio.com/items?itemName=sigbots.pros) installed through `VS Code` or `Cursor`.
 
-## Livestream Setup
-Livestreaming lets you watch a robot's pose logger in real time without opening a saved file.
-
-Core requirements:
-1. Be connected to your robot (controller/brain) that has a `Pose logger`.
-> Use [`MVLib`](</MVLib/README.md>) as a simple and feature full bridge between MotionView and your robot.
-2. Settings must point to a valid `PROS Project Directory`. If you do not have robot code locally, install the PROS VS Code Extension, create a new PROS project, and MotionView will auto-detect it.
-3. MotionView will attempt to auto-detect `PROS-CLI` on your PATH. If it fails, refer to the [Setup Guide](/Guides/MotionView/Setup-Livestreaming.md).
-
-What Livestream mode gives you:
+## Live Streaming
+Live streaming allows you to:
 - A live-updating field view with the current pose, heading, and speed so you can monitor motion as it happens.
 - Watch values appear alongside poses, showing sensor states, pneumatics, or other telemetry the logger emits.
 - A timeline lets you scrub through the poses and watch values, or step forward/backward in real time.
 
-Use cases:
+Some use cases:
 - Warm up the robot and verify that the logger is working before grabbing a file.
 - Compare live motion to saved plans to confirm sensors/fire sequences are firing when expected.
-- Capture a run simply by letting it stream and hitting `Cmd + O` to save the generated log afterward if needed.
+- Capture a run simply by letting it stream and exporting to save the generated log afterward for later review.
 
 ## Keybinds
 

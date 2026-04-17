@@ -28,6 +28,7 @@
     "resources": {
       "../src/bridge.py": "../src/bridge.py",
       "../src/assets/": "../src/assets/",
+      "../src-tauri/bin/motionview-bridge/": "../src-tauri/bin/motionview-bridge/",
       "../src-tauri/bin/motionview-pros.zip": "../src-tauri/bin/motionview-pros.zip",
       "../package.json": "../package.json"
     },
@@ -39,9 +40,6 @@
       "icons/icon.icns",
       "icons/icon.png",
       "icons/icon.ico"
-    ],
-    "externalBin": [
-      "bin/motionview-py"
     ]
   },
   "plugins": {
