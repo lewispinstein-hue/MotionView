@@ -70,13 +70,12 @@ void initialize() {
 	logger.start();
 	
 	auto leftGoalWP = logger.addWaypoint("Left Goal", {
-		.tarX = 10,  // Target 10 x
+	    .tarX = 10,  // Target 10 x
 		.tarY = 8,   // 8 y
 		.tarT = 180, // And 180 degrees heading
 		.timeoutMs = 15_mvS, // Timeout after 15 seconds
 		.linearTol = 1.5, // Consider reached if within 1.5 units
 		.thetaTol = 8, // Consider reached if within 8 degrees
-		.logOffsetEveryMs = 3_mvS // Log offset every 3 seconds
 	});
 
 	// Store the offset

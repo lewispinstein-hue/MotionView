@@ -32,7 +32,9 @@
       "../package.json": "../package.json"
     },
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/icon.icns",
       "icons/icon.png",
