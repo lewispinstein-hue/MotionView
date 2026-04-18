@@ -1,5 +1,5 @@
 # Running
-Please download the latest version of MotionView from [this link](https://github.com/lewispinstein-hue/MotionView/tree/main/Releases/Windows)
+Please download the latest version of MotionView from [this link](https://github.com/lewispinstein-hue/MotionView/releases)
 Double-click to install. If you are updating, it is best to uninstall before re-installing.
 
 ## Windows protected your PC message

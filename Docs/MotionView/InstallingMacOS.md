@@ -1,7 +1,7 @@
 # Running MotionView
 
 ## Install MotionView
-1. Download MotionView from the official [GitHub release page](https://github.com/lewispinstein-hue/MotionView/tree/main/Releases/MacOS)
+1. Download MotionView from the official [GitHub release page](https://github.com/lewispinstein-hue/MotionView/releases)
 3. Double-click the downloaded file.
 4. When prompted, drag MotionView.app into your Applications folder.
 
