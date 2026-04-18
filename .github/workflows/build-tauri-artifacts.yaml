@@ -56,8 +56,10 @@ jobs:
         include:
           - os: macos-14
             os_name: macos
+            bundle_ext: dmg
           - os: windows-latest
             os_name: windows
+            bundle_ext: exe
 
     runs-on: ${{ matrix.os }}
 
@@ -120,42 +122,51 @@ jobs:
         shell: bash
 
       - name: Build app
-        run: pnpm build
+        run: |
+          if [[ "${{ matrix.os_name }}" == "macos" ]]; then
+            pnpm py:clean
+            pnpm py:build
+            pnpm tauri build --bundles dmg
+          elif [[ "${{ matrix.os_name }}" == "windows" ]]; then
+            pnpm py:clean
+            pnpm py:build
+            pnpm tauri build --bundles nsis
+          else
+            echo "::error::Unsupported OS name: ${{ matrix.os_name }}"
+            exit 1
+          fi
+        shell: bash
 
       - name: Rename and Collect Output Binaries
         run: |
           TAG_NAME="${{ needs.validate-version.outputs.tag_name }}"
           OS_NAME="${{ matrix.os_name }}"
+          BUNDLE_EXT="${{ matrix.bundle_ext }}"
+          OUTPUT_PATH="src-tauri/artifacts/motionview-${OS_NAME}_${TAG_NAME}.${BUNDLE_EXT}"
           
           mkdir -p src-tauri/artifacts
-          
-          if [[ "$OS_NAME" == "macos" ]]; then
-            # More specific check
-            if ls src-tauri/target/release/dmg/*.dmg 1> /dev/null 2>&1; then
-              for file in src-tauri/target/release/dmg/*.dmg; do
-                mv "$file" "src-tauri/artifacts/motionview-${OS_NAME}_${TAG_NAME}.dmg"
-              done
-            else
-              # Fallback broader check
-              find src-tauri/target -name "*.dmg" -exec mv {} "src-tauri/artifacts/motionview-${OS_NAME}_${TAG_NAME}.dmg" \;
-            fi
-            
-          elif [[ "$OS_NAME" == "windows" ]]; then
-            if ls src-tauri/target/release/nsis/*.exe 1> /dev/null 2>&1 || ls src-tauri/target/x86_64-pc-windows-msvc/release/nsis/*.exe 1> /dev/null 2>&1; then
-              for file in src-tauri/target/release/nsis/*.exe src-tauri/target/x86_64-pc-windows-msvc/release/nsis/*.exe; do
-                if [ -f "$file" ]; then
-                  mv "$file" "src-tauri/artifacts/motionview-${OS_NAME}_${TAG_NAME}.exe"
-                fi
-              done
-            else
-              find src-tauri/target -path "*/nsis/*.exe" -exec mv {} "src-tauri/artifacts/motionview-${OS_NAME}_${TAG_NAME}.exe" \;
-            fi
+
+          SOURCE_FILE="$(find src-tauri/target \
+            -type f \
+            -path '*/bundle/*' \
+            -name "*.${BUNDLE_EXT}" \
+            ! -name '*.sig' \
+            ! -name '*.msi' \
+            -print | head -n 1)"
+
+          if [[ -z "$SOURCE_FILE" ]]; then
+            echo "::error::No bundled .$BUNDLE_EXT artifact found for $OS_NAME under src-tauri/target"
+            find src-tauri/target -maxdepth 6 -type f | sort | sed -n '1,200p'
+            exit 1
           fi
+
+          cp "$SOURCE_FILE" "$OUTPUT_PATH"
+          ls -lah src-tauri/artifacts
         shell: bash
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: motionview-${{ matrix.os_name }}_${{ needs.validate-version.outputs.tag_name }}
-          path: MotionView/src-tauri/artifacts/*
+          path: MotionView/src-tauri/artifacts
           if-no-files-found: error
