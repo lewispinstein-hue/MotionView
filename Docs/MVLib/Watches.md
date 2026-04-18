@@ -1,27 +1,22 @@
 # MVLib Watches
 
-Watches are MVLib's way of sampling a value over time and sending it to MotionView in a structured format.
+Watches sample a value over time and send it to MotionView in a structured way.
 
-They are useful for values that matter during a run but are not part of robot pose, such as:
+Use them for values like:
 
 - battery voltage
 - flywheel RPM
-- intake current
-- motor temperature
+- current draw
+- temperature
+- booleans or state flags
 - auton stage
-- lift height
 
-In MotionView, watches show up in the watch list, and the viewer can associate nearby watch values with points in the run.
+## Main API
 
-## The Main API: `logger.watch(...)`
+MVLib provides 2 watch styles:
 
-MVLib provides two watch styles:
-
-- interval-based watches, which print every N milliseconds
-- change-based watches, which print only when the value changes
-
-<details>
-  <summary><tiny>View Source Code</tiny></summary>
+- interval-based watches
+- on-change watches
 
 ```cpp
 template <class Getter, class U>
@@ -32,134 +27,121 @@ template <class Getter, class U>
 WatchId watch(std::string label, LogLevel baseLevel, bool onChange,
               Getter&& getter, LevelOverride<U> ov, std::string fmt = {});
 ```
-</details>
 
-Both overloads need the same core pieces:
+The core parameters are:
 
-- `label`: the name MotionView shows
-- `baseLevel`: the normal log level
-- `getter`: a callable that returns the current value
-- `ov`: an optional `LevelOverride`
-- `fmt`: an optional format string for numeric output
+- `label`: watch name shown in MotionView
+- `baseLevel`: normal severity
+- `getter`: callable returning the current value
+- `ov`: optional `LevelOverride`
+- `fmt`: optional numeric formatting string
 
-The difference is the third argument:
+The 3rd argument decides the mode:
 
-- `intervalMs` means "print every N milliseconds"
-- `onChange` means "print only when the rendered value changes"
+- `intervalMs` means sample every N ms
+- `true` means print only when the rendered value changes
 
 ## Interval-Based Watches
 
-Use the interval overload when the value changes constantly and you want a steady sample rate.
+Use this for continuously changing values:
 
 ```cpp
-logger.watch("Flywheel RPM:", mvlib::LogLevel::INFO, 1_mvS,
+logger.watch("Flywheel RPM", mvlib::LogLevel::INFO, 1_mvS,
   [&]() { return flywheel.get_actual_velocity(); },
-  mvlib::LevelOverride<double>{}, "%.1f");
+  mvlib::LevelOverride<double>{},
+  "%.1f");
 ```
 
-This is a good fit for:
+Good fits:
 
 - RPM
 - temperature
 - current draw
-- sensor values that update continuously
+- analog sensor values
 
-Advice:
+## On-Change Watches
 
-- Do not set the interval lower than you actually need.
-- Faster watch rates create more output and more work for the logger.
-
-## Change-Based Watches
-
-Use the change overload when the value is event-like and repeated polling would just spam the same meaning over and over.
+Use this for event-like values:
 
 ```cpp
-logger.watch("Auton Stage:", mvlib::LogLevel::INFO, true,
+logger.watch("Auton Stage", mvlib::LogLevel::INFO, true,
   [&]() { return static_cast<int>(autonStage); },
-  mvlib::LevelOverride<int>{}, "%d");
+  mvlib::LevelOverride<int>{});
 ```
 
-This is a good fit for:
+Good fits:
 
-- auton stages
-- mode flags
 - booleans
-- values that change rarely but matter a lot when they do
+- mode/state enums converted to integers or strings
+- values that only matter when they change
 
-Important detail:
+Important:
 
-- change-based watches compare the rendered output, not the raw variable in isolation. If the final printed value stays the same, MVLib does not print again.
+- on-change watches compare the rendered output string
+- if the rendered string does not change, MVLib does not emit another sample
 
 ## `LevelOverride`
 
-`LevelOverride` lets a watch temporarily promote itself when a condition becomes true.
-
-<details>
-  <summary><tiny>View Source Code</tiny></summary>
+`LevelOverride<T>` lets a watch promote itself to a higher severity when a predicate trips.
 
 ```cpp
-template<class T> struct LevelOverride {
+template<class T>
+struct LevelOverride {
   LogLevel elevatedLevel = LogLevel::WARN;
-  std::function<bool(const T &)> predicate;
+  std::function<bool(const T&)> predicate;
   std::string label;
 };
 ```
-</details>
-
-Use it when you want a watch to be normal most of the time, but more urgent when a threshold is crossed.
 
 Example:
 
 ```cpp
-logger.watch("Intake Current:", mvlib::LogLevel::INFO, 1_mvS,
+logger.watch("Intake Current", mvlib::LogLevel::INFO, 750_mvMs,
   [&]() { return intake.get_current_draw(); },
   mvlib::LevelOverride<int32_t>{
     .elevatedLevel = mvlib::LogLevel::WARN,
     .predicate = PREDICATE(v > 2000),
-    .label = "Intake Current High:"
-  }, "%d");
+    .label = "Intake Current High"
+  });
 ```
 
-What happens here:
+That means:
 
-- the watch normally logs at `INFO`
-- once current exceeds 2000, it logs at `WARN`
-- when elevated, it can also use a different label
+- normal samples log at `INFO`
+- samples above 2000 log at `WARN`
+- the elevated sample can use a different label
 
-### Exact type matching matters
+## Exact Type Matching Matters
 
-The type inside `LevelOverride<T>` must exactly match the getter's return type after decay.
+`LevelOverride<T>` must match the getter return type after decay.
 
 Examples:
 
-- getter returns `int32_t` -> use `LevelOverride<int32_t>`
 - getter returns `double` -> use `LevelOverride<double>`
+- getter returns `int32_t` -> use `LevelOverride<int32_t>`
 - getter returns `int` -> use `LevelOverride<int>`
+- getter returns `bool` -> use `LevelOverride<bool>`
 
-If the types do not match, the code will not compile.
+If the types do not match, the watch overload is designed to fail at compile time.
 
-## `PREDICATE` and `asPredicate`
+## `PREDICATE(...)` And `asPredicate<T>(...)`
 
-`PREDICATE(...)` is the short form for simple integer-based watch predicates.
-
-<details>
-  <summary><tiny>View Source Code</tiny></summary>
+`PREDICATE(...)` is only for `int32_t` predicates:
 
 ```cpp
 #define PREDICATE(func) \
-mvlib::asPredicate<int32_t>([](int32_t v) { return func; })
+  mvlib::asPredicate<int32_t>([](int32_t v) -> bool { return func; })
 ```
-</details>
 
-For example:
+Use it when the getter returns an `int32_t`-compatible type.
+
+Example:
 
 ```cpp
 .predicate = PREDICATE(v > 50)
 ```
 
-That works well when your getter returns an `int32_t`-compatible value.
-
-If your getter returns another type, use `mvlib::asPredicate<T>(...)` directly:
+If your getter returns another type, use `asPredicate<T>(...)` directly:
 
 ```cpp
 .predicate = mvlib::asPredicate<double>([](const double& v) {
@@ -167,97 +149,104 @@ If your getter returns another type, use `mvlib::asPredicate<T>(...)` directly:
 })
 ```
 
-Use `PREDICATE` for quick integer conditions. Use `asPredicate<T>` when the getter type is not `int32_t` or when you want to be explicit.
-
 ## Formatting With `fmt`
 
-The final `fmt` argument controls how numeric values are rendered.
+`fmt` is only used for floating-point rendering.
 
 Examples:
 
-- `"%d"` for integers
-- `"%.0f"` for rounded floating-point values
-- `"%.1f"` for one decimal place
-- `"%.2f"` for two decimal places
+- `"%.0f"`
+- `"%.1f"`
+- `"%.2f"`
 
 Example:
 
 ```cpp
-logger.watch("Avg Temp:", mvlib::LogLevel::INFO, 5_mvS,
-  [&]() { return (left_mg.get_temperature() + right_mg.get_temperature()) / 2; },
+logger.watch("Avg Temp", mvlib::LogLevel::INFO, 5_mvS,
+  [&]() {
+    return (left_mg.get_temperature() + right_mg.get_temperature()) / 2.0;
+  },
   mvlib::LevelOverride<double>{},
   "%.0f");
 ```
 
-If you use change-based watches, formatting matters even more, because formatting affects whether two values are considered the same rendered output.
+Important `v2.0.0` detail:
+
+- floating-point watches use `fmt` if you provide one
+- integral watches ignore `fmt` and use `std::to_string(...)`
+- `bool` renders as `"t"` or `"f"`
+- `std::string` and `const char*` are sent as text watches
+
+Because on-change watches compare the rendered string, formatting can change when two float values count as "the same".
+
+## What MotionView Receives
+
+When terminal output is enabled:
+
+- numeric watch values are sent as binary numeric watch packets when possible
+- non-numeric values are sent as structured text-watch packets
+
+When SD logging is enabled:
+
+- watches are also written as readable `[WATCH],...` lines
+
+## Resync Helpers
+
+If MotionView joins late and a watch name is missing, re-send watch roster metadata with:
+
+```cpp
+logger.resyncAllWatchesRoster();
+```
+
+This is especially useful in `v2.0.0`, where roster metadata is its own live telemetry channel.
 
 ## Practical Examples
 
-### Battery
+### Battery voltage
 
 ```cpp
-logger.watch("Battery Voltage:", mvlib::LogLevel::INFO, true,
+logger.watch("Battery Voltage", mvlib::LogLevel::INFO, 1_mvS,
   []() { return pros::battery::get_voltage(); },
-  mvlib::LevelOverride<int32_t>{},
-  "%d");
+  mvlib::LevelOverride<int32_t>{});
 ```
 
-Good for brownout awareness and quick system checks.
-
-### Temperature
+### Temperature with alerting
 
 ```cpp
-logger.watch("Avg Temp:", mvlib::LogLevel::INFO, 5_mvS,
-  [&]() { return (left_mg.get_temperature() + right_mg.get_temperature()) / 2; },
+logger.watch("Avg Temp", mvlib::LogLevel::INFO, 5_mvS,
+  [&]() {
+    return (left_mg.get_temperature() + right_mg.get_temperature()) / 2.0;
+  },
   mvlib::LevelOverride<double>{
     .elevatedLevel = mvlib::LogLevel::WARN,
-    .predicate = mvlib::asPredicate<double>([](const double& v) { return v > 50.0; })
+    .predicate = mvlib::asPredicate<double>([](const double& v) {
+      return v > 50.0;
+    }),
+    .label = "Avg Temp High"
   },
   "%.0f");
 ```
 
-Good for spotting overheating.
-
-### RPM
+### Boolean state
 
 ```cpp
-logger.watch("Flywheel RPM:", mvlib::LogLevel::INFO, 500_mvMs,
-  [&]() { return flywheel.get_actual_velocity(); },
-  mvlib::LevelOverride<double>{},
-  "%.1f");
+logger.watch("Clamp Closed", mvlib::LogLevel::INFO, true,
+  [&]() { return clampClosed; },
+  mvlib::LevelOverride<bool>{});
 ```
 
-Good for spin-up consistency and shot timing.
-
-### Current draw
+### Text state
 
 ```cpp
-logger.watch("Intake Current:", mvlib::LogLevel::INFO, 750_mvMs,
-  [&]() { return intake.get_current_draw(); },
-  mvlib::LevelOverride<int32_t>{
-    .elevatedLevel = mvlib::LogLevel::WARN,
-    .predicate = PREDICATE(v > 2000),
-    .label = "Intake Current High:"
-  },
-  "%d");
+logger.watch("Mode", mvlib::LogLevel::INFO, true,
+  [&]() { return currentModeName; },
+  mvlib::LevelOverride<std::string>{});
 ```
-
-Good for jam detection.
-
-## What MotionView Gets
-
-When watches are enabled, MVLib prints structured watch lines for MotionView. That is what powers:
-
-- the watch list
-- the severity level shown for a watch
-- the value shown near points in the run
-
-If `logger.setPrintWatches(false)` is used, the watches remain registered in code, but MotionView will not receive their output.
 
 ## Common Mistakes
 
-- Calling `logger.watch(...)` repeatedly in a loop instead of registering it once.
+- Registering the same watch repeatedly inside a loop.
 - Using the wrong `LevelOverride<T>` type.
-- Using `PREDICATE(...)` for non-`int32_t` values.
-- Setting watch intervals much faster than you actually need.
-- Using change-based watches for values that always fluctuate.
+- Using `PREDICATE(...)` for non-`int32_t` watch types.
+- Expecting integer watches to honor `fmt`.
+- Assuming long labels will always survive intact in live telemetry; MotionView roster names are limited by the telemetry packet format.

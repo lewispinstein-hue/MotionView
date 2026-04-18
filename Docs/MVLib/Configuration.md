@@ -1,16 +1,17 @@
 # MVLib Configuration
 
-This page covers the two parts of MVLib configuration:
+This page covers the runtime configuration surface in MVLib.
 
-- `LoggerConfig`, which controls the output behavior
-- `LoggerTimings`, which controls timing for polling/flushing behavior
+There are 2 main groups:
+
+- `LoggerConfig`: output toggles
+- `LoggerTimings`: polling, flushing, and roster-sync timing
+
+All configuration is done through `mvlib::Logger`.
 
 ## `LoggerConfig`
 
-`LoggerConfig` is the logger's output configuration struct.
-
-<details>
-  <summary><small>View Source Code</small></summary>
+`LoggerConfig` is the logger's runtime output state:
 
 ```cpp
 struct LoggerConfig {
@@ -22,13 +23,12 @@ struct LoggerConfig {
   std::atomic<bool> logSystemInfo{true};
 };
 ```
-</details>
 
-All five settings default to `true`.
-
-These values are mostly exposed through logger setter functions such as:
+You normally change these through setters:
 
 ```cpp
+auto& logger = mvlib::Logger::getInstance();
+
 logger.setLogToTerminal(true);
 logger.setLogToSD(true);
 logger.setPrintWatches(true);
@@ -37,187 +37,242 @@ logger.setPrintWaypoints(true);
 logger.setLogSystemInfo(true);
 ```
 
-That is how you should change them.
+## Output Toggles
 
-## Output Settings
+### `setLogToTerminal(bool)`
 
-### `logToTerminal`
+Controls whether MVLib sends live telemetry and logs over the robot terminal link.
 
-Controls whether MVLib writes logs to the PROS terminal.
+Leave this on when:
 
-Use it when:
-
-- you want live output while testing
-- you want MotionView data to be visible through terminal logging
+- you want MotionView live streaming
+- you want live watches, logs, and waypoint events
 
 Turn it off when:
 
-- you want less output noise
-- you are narrowing a problem to SD-only logging
-- terminal traffic is becoming a problem during testing
+- you only want SD logging
+- you are intentionally disabling all terminal-side MVLib traffic
 
-Notes:
-- If this is off, you lose the easiest live view of what MVLib is doing.
-- Leave this on unless you have a clear reason to reduce terminal output.
+Important:
 
-### `logToSD`
+- In `v2.0.0`, terminal output is not the old plain-text MotionView stream. MVLib now uses a binary telemetry protocol for live MotionView data.
+- If this is off, MotionView will not receive live telemetry from MVLib.
+
+### `setLogToSD(bool)`
 
 Controls whether MVLib writes logs to the SD card.
 
-Use it when:
+Leave this on when:
 
-- you want logs saved for later review
-- you want to compare runs after the robot stops
+- you want saved logs after the run
+- you want to review logs without live streaming
 
 Turn it off when:
 
 - you are not using an SD card
-- you want to avoid SD writes entirely during testing
+- you want to avoid SD writes entirely
 
 Notes:
-- SD logging may become locked after `logger.start()` if MVLib detects a failure. That means toggling SD behavior after startup may not work the way you expect.
-- Decide whether you want SD logging before `logger.start()`. If you are not using SD logs, disabling is the best option.
 
-### `printWatches`
+- SD logging can become locked after startup if MVLib encounters an SD error.
+- Decide on SD behavior before `logger.start()` whenever possible.
 
-Controls whether registered watches are printed.
+### `setPrintWatches(bool)`
 
-Use it when:
+Controls whether registered watches are emitted.
 
-- you want values like battery, RPM, current draw, or auton state to appear in MotionView
+If disabled:
 
-Turn it off when:
+- the watches stay registered
+- MotionView will not receive watch samples until you re-enable watch printing
 
-- watch output is drowning out other signals
-- you want to focus on path or waypoint behavior only
+### `setPrintTelemetry(bool)`
 
-Notes:
-- If this is off, your watches still exist, but they will not produce the output you added them for until you turn it back on.
-- Leave it on in normal use. Turn it off temporarily when debugging something narrower.
+Controls whether MVLib emits periodic pose/drivetrain telemetry.
 
-### `printTelemetry`
+If disabled:
 
-Controls whether MVLib prints periodic telemetry.
+- MotionView can still receive logs and watches
+- path/pose-driven features will stop updating
 
-This is the output MotionView uses for ongoing robot state such as pose and related telemetry.
+### `setPrintWaypoints(bool)`
 
-Turn it off when:
+Controls whether MVLib emits waypoint events.
 
-- you only care about watches
-- you want to isolate whether a problem is coming from telemetry output or another part of the logger
+In `v2.0.0`, that means:
 
-Notes:
-- If this is off, MotionView loses the main telemetry stream. Watches will still update, but path and pose-driven features will not update.
-- Leave this on unless you are intentionally disabling telemetry for a test.
+- `CREATED`
+- `REACHED`
+- `TIMEDOUT`
 
-### `printWaypoints`
+It does not mean periodic waypoint offset streaming anymore. That old terminal-side offset event flow was removed.
 
-Controls whether waypoint events are printed.
+### `setLogSystemInfo(bool)`
 
-Use it when:
+Controls whether MVLib emits its own internal/system messages.
 
-- you want MotionView to show waypoint creation, reached, timedout, and offset events
+This is useful when:
 
-Turn it off when:
+- bringing MVLib up for the first time
+- debugging configuration or SD issues
 
-- you are not using waypoints
-- waypoint spam is making other output harder to read
+Turn it off if you want MotionView to stay focused on your own logs and telemetry.
 
-Notes:
-- If this is off, waypoints can still exist in your code, but MotionView will not receive the waypoint event stream and your robot will not compute waypoint-based telemetry.
-- Keep it on if you are using `logger.addWaypoint(...)`.
+## `LoggerTimings`
 
-### `logSystemInfo`
-
-Controls whether MVLib will log information related to its own operation.
-
-Use it when:
-
-- you want to know what MVLib is doing
-- you're setting up / debugging MVLib
-
-Turn it off when:
-
-- you don't need (or don't care) to know what MVLib is doing
-- you don't want to clutter the MotionView GUI with system prints
-
-## Timing Settings
-
-<details>
-  <summary><small>View Source Code</small></summary>
+`LoggerTimings` is the runtime timing struct in `v2.0.0`:
 
 ```cpp
 struct LoggerTimings {
-  uint32_t sd_buffer_flush_interval = 1000;
-  uint32_t sd_polling_rate = 80;
-  uint32_t terminal_polling_rate = 120;
+  uint32_t sdBufferFlushInterval = 1000;
+  uint32_t stdoutBufferFlushInterval = 400;
+  uint32_t sdPollingRate = 80;
+  uint32_t terminalPollingRate = 120;
+  uint32_t rosterSyncAllInterval = 8000;
 };
 ```
-</details>
 
-### `sd_buffer_flush_interval`
+Set it with:
 
-Default: `1_mvS`
+```cpp
+logger.setTimings({
+  .sdBufferFlushInterval = 1000,
+  .stdoutBufferFlushInterval = 400,
+  .sdPollingRate = 80,
+  .terminalPollingRate = 120,
+  .rosterSyncAllInterval = 8000
+});
+```
 
-This controls how often buffered SD output is flushed from RAM to the SD card.
+## Timing Fields
+
+### `sdBufferFlushInterval`
+
+Default: `1000`
+
+How often MVLib flushes the SD file buffer with `fflush(file)`.
 
 Lower values:
 
-- save data to the card more often
-- reduce how much buffered data is waiting in memory
-- but also lead to possible loss of information from crash or interruption
+- reduce buffered data waiting in RAM
+- increase flush frequency
 
 Higher values:
 
-- reduce flush frequency
-- may be gentler on performance
+- reduce flush overhead
+- increase the amount of data sitting in memory before a flush
 
-Warning:
-- Extremely aggressive flushing can add unnecessary overhead. The default is a good starting point. Only change this if you know why you're doing it.
+Also note:
 
-### `terminal_polling_rate`
+- `ERROR` and `FATAL` SD writes are flushed immediately.
 
-Default: `120_mvMs`
+### `stdoutBufferFlushInterval`
 
-This controls how often MVLib polls for new data and emits terminal-facing output.
+Default: `400`
 
-Note:
-- If MVLib is logging to both terminal and SD, the terminal polling rate wins.
+How often MVLib flushes the terminal/stdout buffer.
 
-Lower values:
+Use this cautiously. Lower values increase flush frequency and terminal pressure.
 
-- make telemetry feel more responsive
-- increase output frequency
+### `sdPollingRate`
 
-Higher values:
+Default: `80`
 
-- reduce overhead
-- reduce log traffic
-
-Risk:
-
-- This is a dangerous setting to push too low. An overly fast terminal polling rate can overwhelm the brain-to-controller connection, causing lag or even dropped communication.
-
-- Leave this alone unless you have measured reason to change it.
-- If you do tune it, change it cautiously and test on real hardware.
-
-### `sd_polling_rate`
-
-Default: `80_mvMs`
-
-This controls how often MVLib writes new data into the SD buffer.
-
-It does not directly control flush timing. Flush timing is handled by `sd_flush`.
+How often MVLib polls and writes SD-side data.
 
 Lower values:
 
-- make SD-side updates happen more often
-- increase background work
+- increase SD-side work
+- make SD updates happen more frequently
 
 Higher values:
 
 - reduce SD-side activity
-- may reduce task pressure
+- may reduce logger overhead
 
-Notes:
-- Pushing this too low may starve other tasks or create avoidable overhead. Keep the default unless you are tuning SD behavior specifically.
+### `terminalPollingRate`
+
+Default: `120`
+
+How often MVLib polls and emits terminal/live telemetry data.
+
+Lower values:
+
+- make MotionView feel more responsive
+- increase live telemetry traffic
+
+Higher values:
+
+- reduce live traffic
+- reduce logger overhead
+
+Warning:
+
+- Setting this too low can overwhelm the brain-to-controller link.
+
+### `rosterSyncAllInterval`
+
+Default: `8000`
+
+How often MVLib re-sends watch and waypoint roster metadata for late joiners.
+
+Lower values:
+
+- improve recovery if MotionView attaches late
+- increase bandwidth usage
+
+Higher values:
+
+- reduce metadata traffic
+- may make late-join recovery slower
+
+## `setLoggingFolder(...)`
+
+MVLib `v2.0.0` also adds SD log folder routing:
+
+```cpp
+bool setLoggingFolder(const char *folder, bool disableOnFail = false);
+```
+
+Example:
+
+```cpp
+if (!logger.setLoggingFolder("\\telemetry", true)) {
+  logger.warn("SD logging disabled: \\\\telemetry folder not found.");
+}
+```
+
+Rules:
+
+- pass a path relative to `/usd`
+- start it with `\\`
+- the folder must already exist on the SD card
+
+Example valid value:
+
+- `\\logs`
+
+Example invalid value:
+
+- `/usd/logs`
+
+## Minimum Log Level
+
+Use `setLoggerMinLevel(...)` to filter normal log output:
+
+```cpp
+logger.setLoggerMinLevel(mvlib::LogLevel::WARN);
+```
+
+That filters out:
+
+- `DEBUG`
+- `INFO`
+
+And still allows:
+
+- `WARN`
+- `ERROR`
+- `FATAL`
+
+This affects MVLib's standard log methods such as `logger.info(...)` and elevated watch output levels.

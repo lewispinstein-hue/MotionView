@@ -123,6 +123,6 @@ We highly recommend always updating to the latest versions for both. MVLib `v2.0
 
 | MotionView App | Requires MVLib | Notes |
 | :--- | :--- | :--- |
-| **v1.2.x** | **v1.1.x** <br> **v2.0.0** | Current Latest Release |
+| **v1.2.x** | **v2.0.0** | Current Latest Release |
 | **v1.1.x** | **v1.1.x** | Altered data protocol |
 | **v1.0.x** | **v1.0.x** | Legacy data protocol (missing some features) |

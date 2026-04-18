@@ -4,7 +4,7 @@ Double-click to install. If you are updating, it is best to uninstall before re-
 
 ## Windows protected your PC message
 This issue is because I am not a licensed Microsoft app vendor. This popup occurs because I am not a known publisher, so Microsoft blocks the app from starting without warning. 
-If you just want to see the app, click "More Info" in the middle-left area of the popup, and then click "Run anyway." This will then open up the installer.
+To bypass this message, click "More Info" in the middle-left area of the popup, and then click "Run anyway." This will then open up the installer.
 
 **Note:** This project is completely open-source, but you may still choose to not trust it. 
 <p align="left">
