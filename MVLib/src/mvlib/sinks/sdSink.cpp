@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <random>
+#include <cerrno>
 
 namespace mvlib {
 
@@ -40,6 +41,9 @@ std::string Logger::m_getTimestampedFile() {
   
   const uint32_t randInt = getrandInt(0, 99999);
   
+  // Replace the PROS FatFs '\' prefix with POSIX-compliant '/'
+  std::replace(m_loggingFolder, m_loggingFolder + sizeof(m_loggingFolder), '\\', '/');
+
   // Prepend /usd 
   char pathPrefix[64];
   snprintf(pathPrefix, sizeof(pathPrefix), "/usd%s", m_loggingFolder);
@@ -113,13 +117,15 @@ bool Logger::setLoggingFolder(const char *folder, bool disableOnFail) {
   }
 
   std::string filenames{};
-  filenames.resize(2048); // Dozens of log files should not cause memory overflow
+  filenames.resize(4096); // Dozens of log files should not cause memory overflow
 
   int err = pros::usd::list_files(folder, filenames.data(), filenames.size() - 1);
   if (err != 1) {
-    if (err == ENOENT /* Cannot find path specified */) {
-      _MVLIB_FORWARD_ERROR("setLoggingFolder failed. System could not find the "
-        "path specified. Path: %s", folder);
+    if (errno == ENOENT /* Cannot find path specified */) {
+      _MVLIB_FORWARD_ERROR("setLoggingFolder could not find the path specified. "
+        "Path: %s", folder);
+    } else {
+      _MVLIB_FORWARD_ERROR("setLoggingFolder failed setting errno: %d", errno);
     }
     m_sdLocked = disableOnFail;
     return false;

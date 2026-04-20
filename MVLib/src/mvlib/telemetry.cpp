@@ -1,7 +1,6 @@
 #include "mvlib/telemetry.hpp"
 #include "core.hpp"
 #include "pros/rtos.hpp"
-#include "pros/apix.h"
 #include <algorithm>
 #include <array>
 #include <cstdarg>
@@ -105,6 +104,24 @@ bool Telemetry::shouldLog(LogLevel level) const {
 
   // Casting to uint8_t ensures numeric comparison works for LogLevel enum
   return static_cast<uint8_t>(level) >= static_cast<uint8_t>(m_minLevel);
+}
+
+double normalizeDegrees360(double degrees) {
+  if (!std::isfinite(degrees)) return 0.0;
+  double normalized = std::fmod(degrees, 360.0);
+  if (normalized < 0.0) normalized += 360.0;
+  return normalized;
+}
+
+uint16_t packTelemetryTheta(double degrees) {
+  // Encode [0, 360) into the full uint16 ring. Decoder should use 360 / 65536.
+  double kThetaScale = 65536.0 / 360.0;
+  return static_cast<uint16_t>(std::floor(normalizeDegrees360(degrees) * kThetaScale));
+}
+
+int8_t packTelemetryVelocity(double velocity) {
+  if (!std::isfinite(velocity)) return 0;
+  return static_cast<int8_t>(std::lround(std::clamp(velocity, -127.0, 127.0)));
 }
 
 // --- High-Level Senders ---

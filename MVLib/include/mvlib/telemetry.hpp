@@ -2,6 +2,7 @@
 #include "core.hpp"
 #include <cstddef>
 #include <cstdint>
+#include <cmath>
 #include <string>
 
 namespace mvlib {
@@ -30,23 +31,9 @@ static constexpr uint8_t encodeMsgAll(LogLevel lvl, MsgType type, uint8_t subTyp
   return t | l | (subType & 0x03);
 }
 
-inline double normalizeDegrees360(double degrees) {
-  if (!std::isfinite(degrees)) return 0.0;
-  double normalized = std::fmod(degrees, 360.0);
-  if (normalized < 0.0) normalized += 360.0;
-  return normalized;
-}
-
-inline uint16_t packTelemetryTheta(double degrees) {
-  // Encode [0, 360) into the full uint16 ring. Decoder should use 360 / 65536.
-  constexpr double kThetaScale = 65536.0 / 360.0;
-  return static_cast<uint16_t>(std::floor(normalizeDegrees360(degrees) * kThetaScale));
-}
-
-inline int8_t packTelemetryVelocity(double velocity) {
-  if (!std::isfinite(velocity)) return 0;
-  return static_cast<int8_t>(std::lround(std::clamp(velocity, -127.0, 127.0)));
-}
+double normalizeDegrees360(double degrees);
+uint16_t packTelemetryTheta(double degrees);
+int8_t packTelemetryVelocity(double velocity);
 
 // Optimized Packets
 struct __attribute__((packed)) PosePacket {

@@ -7,10 +7,10 @@
 namespace mvlib {
 
 struct WatchInfo {
-  int16_t currVal{0};
-  int16_t prevVal{0};
   double displayValue{0};
   uint32_t lastLogTime{0};
+  int16_t currVal{0};
+  int16_t prevVal{0};
 };  
 
 bool Logger::setDefaultWatches(const DefaultWatches& watches) {
@@ -32,8 +32,8 @@ bool Logger::setDefaultWatches(const DefaultWatches& watches) {
   if (w.leftDrivetrainWatchdog) {
     Logger::getInstance().watch("Left Drivetrain OK", LogLevel::INFO, true,
       [info = WatchInfo{
-        .prevVal = (int16_t)(m_pLeftDrivetrain ? m_pLeftDrivetrain->get_temperature() : 0),
-        .displayValue = m_pLeftDrivetrain ? m_pLeftDrivetrain->get_temperature() : 0
+        .displayValue = m_pLeftDrivetrain ? m_pLeftDrivetrain->get_temperature() : 0,
+        .prevVal = (int16_t)(m_pLeftDrivetrain ? m_pLeftDrivetrain->get_temperature() : 0)
       }, this, TEMP_THRESHOLD, DEBOUNCE_MS]() mutable {
         info.currVal = m_pLeftDrivetrain ? (int16_t)m_pLeftDrivetrain->get_temperature() : 0;
         uint32_t now = pros::millis();
@@ -72,8 +72,8 @@ bool Logger::setDefaultWatches(const DefaultWatches& watches) {
   if (w.rightDrivetrainWatchdog) {
     Logger::getInstance().watch("Right Drivetrain OK", LogLevel::INFO, true,
       [info = WatchInfo{
-        .prevVal = (int16_t)(m_pRightDrivetrain ? m_pRightDrivetrain->get_temperature() : 0),
-        .displayValue = m_pRightDrivetrain ? m_pRightDrivetrain->get_temperature() : 0
+        .displayValue = m_pRightDrivetrain ? m_pRightDrivetrain->get_temperature() : 0,
+        .prevVal = (int16_t)(m_pRightDrivetrain ? m_pRightDrivetrain->get_temperature() : 0)
       }, this, TEMP_THRESHOLD, DEBOUNCE_MS]() mutable {
         info.currVal = m_pRightDrivetrain ? (int16_t)m_pRightDrivetrain->get_temperature() : 0;
         uint32_t now = pros::millis();
@@ -112,8 +112,8 @@ bool Logger::setDefaultWatches(const DefaultWatches& watches) {
     // Battery Temperature Watch
     Logger::getInstance().watch("Battery Temp OK", LogLevel::INFO, true,
       [info = WatchInfo{
-        .prevVal = (int16_t)pros::battery::get_temperature(),
-        .displayValue = pros::battery::get_temperature()
+        .displayValue = pros::battery::get_temperature(),
+        .prevVal = (int16_t)pros::battery::get_temperature()
       }, BAT_TEMP_THRESHOLD, DEBOUNCE_MS]() mutable {
         info.currVal = (int16_t)pros::battery::get_temperature();
         uint32_t now = pros::millis();
@@ -151,8 +151,8 @@ bool Logger::setDefaultWatches(const DefaultWatches& watches) {
 
     Logger::getInstance().watch("Battery Voltage OK", LogLevel::INFO, true,
       [info = WatchInfo{
-        .prevVal = (int16_t)pros::battery::get_voltage(),
-        .displayValue = (double)pros::battery::get_voltage()
+        .displayValue = (double)pros::battery::get_voltage(),
+        .prevVal = (int16_t)pros::battery::get_voltage()
       }, MIN_BAT_VOLT, MAX_BAT_VOLT, DEBOUNCE_MS, this]() mutable {
         info.currVal = (int16_t)pros::battery::get_voltage();
         uint32_t now = pros::millis();

@@ -16,8 +16,7 @@ void Logger::logMessage(const LogLevel& level, const char *fmt, va_list args) {
   }
 
   if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
-    logToSD(level, "%s", buffer);
+    logToSD(level, "[LOG],%d,%s,%s", pros::millis(), m_levelToString(level), buffer);
   }
 }
-
 } // namespace mvlib

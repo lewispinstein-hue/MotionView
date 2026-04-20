@@ -39,7 +39,7 @@
 #include "waypoint.hpp"
 
 #include <atomic>
-#include <cmath>
+#include <cstddef>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -530,7 +530,14 @@ public:
    * target position of (70, -47), XY tolerance of 2, theta tolerance of 
    * 10 degrees, and a timeout of 5 seconds.
    */
-  WaypointHandle addWaypoint(std::string name, WaypointParams details);
+  template<size_t len>
+  WaypointHandle addWaypoint(const char (&name)[len], WaypointParams details) {
+    static_assert(len <= 25,
+                "\n\n\n------------------------------------------------------------------------"
+                "\nLogger::addWaypoint assigned with name too long. Max is 24 characters.\n"
+                "------------------------------------------------------------------------\n\n\n");
+    return internalRegisterWaypoint(std::move(name), std::move(details));
+  }
 
   /**
    * @brief Re-send roster entries for all active waypoints. Use this to fix issues 
@@ -599,14 +606,17 @@ public:
    * "%.0f");
    * @endcode
    */
-  template<class Getter, class U>
+  template<class Getter, class U, size_t len>
     requires std::invocable<Getter&> &&
              std::same_as<std::decay_t<U>,
              std::decay_t<std::invoke_result_t<Getter&>>>
-  WatchId watch(std::string label, LogLevel baseLevel, uint32_t intervalMs,
+  WatchId watch(const char (&label)[len], LogLevel baseLevel, uint32_t intervalMs,
         Getter &&getter, LevelOverride<U> ov = {}, std::string fmt = {}) {
     using T = std::decay_t<std::invoke_result_t<Getter &>>;
-
+    static_assert(len <= 25,
+        "\n\n\n------------------------------------------------------------------------"
+        "\nLogger::watch assigned with name too long. Max is 24 characters.\n"
+        "------------------------------------------------------------------------\n\n\n");
     return addWatch<T>(std::move(label), baseLevel, intervalMs,
                        std::forward<Getter>(getter), std::move(ov),
                        std::move(fmt));
@@ -630,13 +640,17 @@ public:
    * @param fmt Optional printf-style format for numeric values.
    * \return WatchId of the registered watch.
    */
-  template<class Getter, class U>
+  template<class Getter, class U, size_t len>
     requires std::invocable<Getter&> &&
              std::same_as<std::decay_t<U>,
              std::decay_t<std::invoke_result_t<Getter&>>>
-  WatchId watch(std::string label, LogLevel baseLevel, bool onChange, 
-                Getter&& getter, LevelOverride<U> ov, std::string fmt = {}) { 
-                  
+  WatchId watch(const char (&label)[len], LogLevel baseLevel, bool onChange, 
+                Getter&& getter, LevelOverride<U> ov, std::string fmt = {}) {
+    static_assert(len <= 25,
+        "\n\n\n------------------------------------------------------------------------"
+        "\nLogger::watch assigned with name too long. Max is 24 characters.\n"
+        "------------------------------------------------------------------------\n\n\n");
+
     using T = std::decay_t<std::invoke_result_t<Getter&>>;
     return addWatch<T>(std::move(label), baseLevel, uint32_t{0},
                        std::forward<Getter>(getter), std::move(ov),
@@ -830,6 +844,8 @@ private:
   /// @brief Waypoint registry
   std::vector<InternalWaypoint> m_waypoints;
 
+  WaypointHandle internalRegisterWaypoint(std::string name, WaypointParams details);
+
   /// @brief Get the offset of the robot in WaypointOffset from the WPId
   WaypointOffset getWaypointOffset(WPId id);
 
@@ -893,7 +909,7 @@ private:
   FILE *m_sdFile = nullptr;
   char m_currentFilename[128] = {};
   const char *date = __DATE__; // Last upload date as fallback for no RTC
-  char m_loggingFolder[24] = "\\";
+  char m_loggingFolder[24] = "";
 
 
   volatile bool m_sdLocked = false;    // Has sd card failed?

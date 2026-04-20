@@ -138,7 +138,7 @@ static std::string formatParams(const WaypointParams& params) {
   return std::string(buf);
 }
 
-WaypointHandle Logger::addWaypoint(std::string name, WaypointParams details) {
+WaypointHandle Logger::internalRegisterWaypoint(std::string name, WaypointParams details) {
   unique_lock lock(m_mutex);
   if (!lock.isLocked()) return WaypointHandle(0);
   if (!m_config.logToTerminal.load() && !m_config.logToSD.load()) return WaypointHandle(0);
