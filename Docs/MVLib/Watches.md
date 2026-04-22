@@ -174,7 +174,6 @@ Important `v2.0.0` detail:
 
 - floating-point watches use `fmt` if you provide one
 - integral watches ignore `fmt` and use `std::to_string(...)`
-- `bool` renders as `"t"` or `"f"`
 - `std::string` and `const char*` are sent as text watches
 
 Because on-change watches compare the rendered string, formatting can change when two float values count as "the same".

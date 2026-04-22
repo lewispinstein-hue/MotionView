@@ -234,6 +234,8 @@ MVLib `v2.0.0` also adds SD log folder routing:
 bool setLoggingFolder(const char *folder, bool disableOnFail = false);
 ```
 
+Call this before `logger.start()`.
+
 Example:
 
 ```cpp
@@ -246,7 +248,9 @@ Rules:
 
 - pass a path relative to `/usd`
 - start it with `\\`
+- must not have a trailing `/`
 - the folder must already exist on the SD card
+- call it before `logger.start()`
 
 Example valid value:
 
@@ -254,7 +258,20 @@ Example valid value:
 
 Example invalid value:
 
-- `/usd/logs`
+- `/usd/logs/`
+
+Behavior:
+
+- returns `true` only if the folder exists and MVLib accepts it
+- returns `false` for an invalid path, non-existent folder, error during folder verification, or calls made after the logger has started
+- if `disableOnFail` is `true`, a failed call locks SD logging off
+- if `disableOnFail` is `false`, a failed call leaves MVLib able to fall back to the SD card root directory instead of a custom folder
+
+Notes:
+
+- MVLib checks folder existence with `pros::usd::list_files(...)`
+- log files are written under `/usd<folder>/...`
+- the generated log filename still uses the normal timestamp/randomized MVLib naming
 
 ## Minimum Log Level
 

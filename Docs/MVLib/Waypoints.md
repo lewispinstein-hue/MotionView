@@ -7,18 +7,15 @@ Waypoints are named target poses you register so MotionView can tell you when th
 - should expose the target in the viewer roster
 
 They are most useful for autonomous debugging.
+Also useful for driver practice. For example, set up waypoints with timeouts to practice timed runs.
 
 ## What You Need First
 
 Waypoints depend on pose data.
 
-That means you should already have:
+That means you should already have odometry attached through one of the supported adapters or a custom pose getter
 
-- MVLib installed
-- `logger.start()` called
-- odometry attached through one of the supported adapters or a custom pose getter
-
-Without pose data, waypoint creation still succeeds, but reach/offset math will not be meaningful.
+Without pose data, waypoint creation still succeeds, but reach math will not happen.
 
 ## Main API
 

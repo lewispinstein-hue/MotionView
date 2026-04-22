@@ -12,11 +12,11 @@ At a high level:
 6. Call `logger.start()`
 ## 1. Install MVLib
 
-Use the `v2.0.0` package:
+Use the `v2.0.1` package:
 
 ```bash
-pros c fetch libmvlib@2.0.0.zip
-pros c apply libmvlib@2.0.0
+pros c fetch libmvlib@2.0.1.zip
+pros c apply libmvlib@2.0.1
 pros make all
 ```
 
@@ -58,7 +58,7 @@ mvlib::LogLevel::INFO
 mvlib::literals::operator"" _mvS(...)
 ```
 
-## 3. Important `v2.0.0` Terminal Note
+## 3. Important `v2.0.1` Terminal Note
 
 As soon as you create the logger instance:
 
