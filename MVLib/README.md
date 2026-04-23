@@ -25,7 +25,7 @@ Detailed Guides:
 - [`Configuration.md`](../Guides/MVLib/Configuration.md): user-configurable settings in `include/mvlib/config.hpp` and `LoggerConfig`.
 - [`Watches.md`](../Guides/MVLib/Watches.md): the `logger.watch(...)` overloads, `LevelOverride`, `PREDICATE`, formatting, and examples.
 - [`Waypoint.md`](../Guides/MVLib/Waypoint.md): `logger.addWaypoint(...)`, waypoint structs, waypoint handles, and waypoint usage patterns.
-- [`StandardLog.md`](../Guides/MVLib/StandardLog.md): the MotionView-formatted `debug`, `info`, `warn`, `error`, and `fatal` log functions.
+- [`Logs.md`](../Guides/MVLib/Logs.md): the MotionView-formatted `debug`, `info`, `warn`, `error`, and `fatal` log functions.
 
 ## What MotionView Gets From MVLib
 
@@ -102,20 +102,20 @@ Example:
 ```cpp
 auto& logger = mvlib::Logger::getInstance();
 
-logger.watch("Flywheel RPM:", mvlib::LogLevel::INFO, 1_mvS,
+logger.watch("Flywheel RPM", LogLevel::INFO, 1_mvS,
   [&]() { return flywheel.get_actual_velocity(); },
   mvlib::LevelOverride<double>{}, "%.1f");
 
-logger.watch("Auton Stage:", mvlib::LogLevel::INFO, true,
+logger.watch("Auton Stage", LogLevel::INFO, true,
   [&]() { return (int)autonStage; },
-  mvlib::LevelOverride<int>{}, "%d");
+  mvlib::LevelOverride<int>{});
 ```
 
 MotionView shows these in the watch list and can associate nearby watch values with points in the run.
 
 For the detailed watch guide, including overloads, `LevelOverride`, `PREDICATE`, formatting, and more examples, see [`Watches.md`](../Guides/MVLib/Watches.md).
 
-## Standard Logs
+## Logs
 
 MVLib also has MotionView-formatted event logs:
 
@@ -134,7 +134,7 @@ logger.warn("Intake current high: %d", intake.get_current_draw());
 logger.error("Failed to detect ring at expected point");
 ```
 
-These show up in MotionView as normal run events with a severity level and timestamp. For the full reference, see the [StandardLog Guide](../Guides/MVLib/StandardLog.md).
+These show up in MotionView as normal run events with a severity level and timestamp. For the full reference, see the [Logs Guide](../Guides/MVLib/Logs.md).
 
 ## Waypoints
 
@@ -186,7 +186,6 @@ For the full waypoint guide, including `WaypointParams`, `WaypointHandle`, `Wayp
 ## What You Need
 
 - **PROS V5** project
-- **C++** (mvlib uses standard C++ features)
 - Optional: an **SD card** for saving logs
 - Optional: **odom library** (LemLib / EZ‑Template / Okapi / custom) if you want path tracking
 
