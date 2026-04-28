@@ -25,7 +25,7 @@ Detailed Docs:
 - [`Configurables`](../Docs/MVLib/Configuration.md): user-configurable settings in `include/mvlib/config.hpp` and `LoggerConfig`.
 - [`Watches`](../Docs/MVLib/Watches.md): the `logger.watch(...)` overloads, `LevelOverride`, `PREDICATE`, formatting, and examples.
 - [`Waypoints`](../Docs/MVLib/Waypoints.md): `logger.addWaypoint(...)`, waypoint structs, waypoint handles, and waypoint usage patterns.
-- [`Logs'](../Docs/MVLib/Logs.md): the MotionView-formatted `debug`, `info`, `warn`, `error`, and `fatal` log functions.
+- [`Logs`](../Docs/MVLib/Logs.md): the MotionView-formatted `debug`, `info`, `warn`, `error`, and `fatal` log functions.
 
 ## What MotionView Gets From MVLib
 
