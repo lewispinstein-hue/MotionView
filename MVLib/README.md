@@ -19,13 +19,13 @@
 5. Add the `mvlib` headers to your project, and finally run `pros make all` to finish.
 
 ## Documentation
-Detailed Guides:
+Detailed Docs:
 
-- [`Setup.md`](../Guides/MVLib/Setup.md): installation, logger startup, odometry and drivetrain setup.
-- [`Configuration.md`](../Guides/MVLib/Configuration.md): user-configurable settings in `include/mvlib/config.hpp` and `LoggerConfig`.
-- [`Watches.md`](../Guides/MVLib/Watches.md): the `logger.watch(...)` overloads, `LevelOverride`, `PREDICATE`, formatting, and examples.
-- [`Waypoint.md`](../Guides/MVLib/Waypoint.md): `logger.addWaypoint(...)`, waypoint structs, waypoint handles, and waypoint usage patterns.
-- [`Logs.md`](../Guides/MVLib/Logs.md): the MotionView-formatted `debug`, `info`, `warn`, `error`, and `fatal` log functions.
+- [`Initial setup`](../Docs/MVLib/Setup.md): installation, logger startup, odometry and drivetrain setup.
+- [`Configurables`](../Docs/MVLib/Configuration.md): user-configurable settings in `include/mvlib/config.hpp` and `LoggerConfig`.
+- [`Watches`](../Docs/MVLib/Watches.md): the `logger.watch(...)` overloads, `LevelOverride`, `PREDICATE`, formatting, and examples.
+- [`Waypoints`](../Docs/MVLib/Waypoints.md): `logger.addWaypoint(...)`, waypoint structs, waypoint handles, and waypoint usage patterns.
+- [`Logs'](../Docs/MVLib/Logs.md): the MotionView-formatted `debug`, `info`, `warn`, `error`, and `fatal` log functions.
 
 ## What MotionView Gets From MVLib
 
@@ -40,7 +40,7 @@ This is exactly what MotionView is built to consume, so MVLib is the easiest way
 
 ## Quick Setup (PROS V5)
 
-1. Install MVlib .zip into your PROS project.
+1. Install MVlib .zip into your PROS project. View the setup guide [here](../Docs/MVLib/Setup.md)
 2. Include the api header:
 
 ```cpp
@@ -106,14 +106,14 @@ logger.watch("Flywheel RPM", LogLevel::INFO, 1_mvS,
   [&]() { return flywheel.get_actual_velocity(); },
   mvlib::LevelOverride<double>{}, "%.1f");
 
-logger.watch("Auton Stage", LogLevel::INFO, true,
+logger.watch("Auton Stage", LogLevel::INFO, 250_mvMs,
   [&]() { return (int)autonStage; },
   mvlib::LevelOverride<int>{});
 ```
 
 MotionView shows these in the watch list and can associate nearby watch values with points in the run.
 
-For the detailed watch guide, including overloads, `LevelOverride`, `PREDICATE`, formatting, and more examples, see [`Watches.md`](../Guides/MVLib/Watches.md).
+For the detailed watch guide, including overloads, `LevelOverride`, `PREDICATE`, formatting, and more examples, see the [`Watches Guide`](../Docs/MVLib/Watches.md).
 
 ## Logs
 
@@ -134,7 +134,7 @@ logger.warn("Intake current high: %d", intake.get_current_draw());
 logger.error("Failed to detect ring at expected point");
 ```
 
-These show up in MotionView as normal run events with a severity level and timestamp. For the full reference, see the [Logs Guide](../Guides/MVLib/Logs.md).
+These show up in MotionView as normal run events with a severity level and timestamp. For the full reference, see the [Logs Guide](../Docs/MVLib/Logs.md).
 
 ## Waypoints
 
@@ -155,13 +155,12 @@ mvlib::setOdom(...);
 logger.setRobot({ ... });
 
 auto goalPickup = logger.addWaypoint("Goal Pickup", {
-  .tarX = 48,         // Target 48 X
-  .tarY = -24,        // Target -24 Y
-  .tarT = 90,         // Target 90 degrees heading
-  .linearTol = 2.0f,  // +/- 2 from target before "reached"
-  .thetaTol = 10.0f,  // +/- 10 degrees before "reached"
-  .timeoutMs = 3_mvS, // Timeout after 3 seconds of not reaching
-  .printOffsetEveryMs = 0.5x_mvS // Log offset every 0.5 seconds (optional)
+  .tarX = 48,          // Target 48 X
+  .tarY = -24,         // Target -24 Y
+  .tarT = 90,          // Target 90 degrees heading
+  .linearTol = 2.0f,   // +/- 2 from target before "reached"
+  .thetaTol = 10.0f,   // +/- 10 degrees before "reached"
+  .timeoutMs = 10_mvS, // Timeout if not reached within 10 seconds
 });
 
 auto off = goalPickup.getOffset();
@@ -181,7 +180,7 @@ Practical use cases:
 - verifying wall-stake or goal approach alignment
 - proving that an auton miss came from lateness rather than just bad accuracy
 
-For the full waypoint guide, including `WaypointParams`, `WaypointHandle`, `WaypointOffset`, and more examples, see the [Waypoint Guide](../Guides/MVLib/Waypoint.md). Note that a pose getter needs to be set for waypoints to work.
+For the full waypoint guide, including `WaypointParams`, `WaypointHandle`, `WaypointOffset`, and more examples, see the [Waypoint Guide](../Docs/MVLib/Waypoints.md). Note that a pose getter needs to be set for waypoints to work.
 
 ## What You Need
 
@@ -191,13 +190,10 @@ For the full waypoint guide, including `WaypointParams`, `WaypointHandle`, `Wayp
 
 ## Incompatible With
 
-- **Non‑PROS projects** (VEXcode, RobotMesh, etc.)
+- **Non‑PROS projects** (VEXcode, Vexide, etc.)
 - **Non‑V5 targets**
-- Including **more than one** optional odom adapter header at the same time
 
-## Notes for Teams
-
-- If you don’t have odometry, you can still use watches and logs.
-- With odometry, MVLib (and MotionView) become much more powerful.
-- If you have a drivetrain that can't be represented with 2 MotorGroups, you can leave the robot unset and MVLib will estimate your robot's speed using its pose.
-
+## Notes
+Even without odometry, MVLib can be a replacement for `printf` debugging. Use watches and logs to organize and structure your debugging.
+With odometry, MVLib (and MotionView) are much more powerful.
+If you have a drivetrain that can't be represented with 2 MotorGroups, you can leave the robot unset and MVLib will estimate your robot's speed using its pose.
