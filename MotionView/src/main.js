@@ -4,6 +4,7 @@ import { resolveResource } from "@tauri-apps/api/path";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import Chart from "chart.js/auto";
 import iconsSpriteUrl from "./assets/svg/icons.svg?url";
+import demoRouteUrl from "./assets/demo/getting-started-route.json?url";
 
 const isWindowsPlatform = typeof navigator === 'object' && /Windows/.test(navigator.userAgent);
 const isTauriRuntime = typeof window === "object" && !!window.__TAURI_INTERNALS__;
@@ -48,6 +49,7 @@ let ORIGIN = window.__BRIDGE_ORIGIN__ ?? null;
 let WS_ORIGIN = ORIGIN ? ORIGIN.replace(/^http/, "ws") : null;
 
 const root = document.documentElement;
+let persistedAppState = null;
 
 const posthog = (() => {
   const enabled = () => true;
@@ -1181,6 +1183,7 @@ function buildSavedPathsPayload() {
       level: normalizeLogLevel(entry.level),
       label: entry.label ?? "",
       value: entry.message ?? entry.value ?? "",
+      isSystem: entry.isSystem === true,
     })),
     "waypoints": waypoints.map((waypoint) => ({
       id: waypoint.id,
@@ -1450,7 +1453,49 @@ function angLerpDeg(a, b, t) {
   let diff = (b - a + 540) % 360 - 180;
   return normalizeDeg(a + diff * t);
 }
-function fmtNum(v, d = 2) { if (typeof v !== 'number' || !isFinite(v)) return "—"; return v.toFixed(d); }
+
+function formatNumberString(value, decimals = 2, invalidValue = "—") {
+  if (value === null || value === "" || typeof value === 'boolean' || isNaN(value)) {
+    return invalidValue;
+  }
+
+  const num = Number(value);
+  if (!Number.isFinite(num)) return invalidValue;
+
+  const places = Math.max(0, Math.trunc(decimals) || 0);
+  const factor = [1, 10, 100, 1000, 10000][places] ?? Math.pow(10, places);
+
+  // This handles the binary "rounding toward zero" bug
+  let rounded = Math.round((Math.abs(num) + Number.EPSILON) * factor) / factor * Math.sign(num);
+
+  if (rounded === 0 && (1 / rounded) === -Infinity) {
+    rounded = 0;
+  }
+
+  return String(rounded);
+}
+
+function formatFixedNumberString(value, decimals = 2, invalidValue = "—") {
+  if (value === null || value === "" || typeof value === 'boolean' || isNaN(value)) {
+    return invalidValue;
+  }
+
+  const num = Number(value);
+  if (!Number.isFinite(num)) return invalidValue;
+
+  const places = Math.max(0, Math.trunc(decimals) || 0);
+  const factor = [1, 10, 100, 1000, 10000][places] ?? Math.pow(10, places);
+
+  let rounded = Math.round((Math.abs(num) + Number.EPSILON) * factor) / factor * Math.sign(num);
+  if (rounded === 0 && (1 / rounded) === -Infinity) {
+    rounded = 0;
+  }
+
+  return rounded.toFixed(places);
+}
+
+
+function fmtNum(v, d = 2) { return formatNumberString(v, d); }
 function setStatus(msg, log = true) {
   const fullText = String(msg ?? '');
   statusEl.dataset.fullText = fullText;
@@ -1698,10 +1743,6 @@ function getMinMaxSpeed() {
   return { minV, maxV };
 }
 
-function computeSpeedNorm() {
-  computeSpeedNormRange(0);
-}
-
 function computeSpeedNormRange(startIndex = 0) {
   const { minV, maxV } = getMinMaxSpeed();
   const denom = (maxV - minV) || 1;
@@ -1908,8 +1949,6 @@ function computeTransform() {
   baseScale = Math.min((w - pad * 2) / worldW, (h - pad * 2) / worldH);
 
   const side = squareMode ? Math.min(w, h) : null;
-  const viewW = squareMode ? side : w;
-  const viewH = squareMode ? side : h;
 
   // these center the square viewport
   const vx = squareMode ? (w - side) / 2 : 0;
@@ -2286,6 +2325,7 @@ function normalizeLogs(arr) {
     if (t == null) continue;
 
     const parsed = normalizeSystemLogMessage(entry.message ?? entry.value ?? entry.val ?? "");
+    const isSystem = entry.isSystem === true || parsed.isSystem;
     if (!parsed.message) continue;
 
     out.push({
@@ -2294,7 +2334,7 @@ function normalizeLogs(arr) {
       label: entry.label ?? "",
       value: parsed.message,
       message: parsed.message,
-      isSystem: parsed.isSystem,
+      isSystem,
     });
   }
 
@@ -2371,8 +2411,7 @@ function parseWaypointParams(type, paramsText) {
 }
 
 function fmtNumToString(value, decimals = 2) {
-  if (typeof value !== 'number' || !isFinite(value)) return null;
-  return Number(value.toFixed(decimals)).toString();
+  return formatNumberString(value, decimals);
 }
 
 function fmtSecondsToString(ms) {
@@ -3034,7 +3073,7 @@ function findWatchByKeyAtOrBeforeTime(key, tMs) {
 function formatWatchGraphNumericStat(value) {
   if (!Number.isFinite(value)) return "—";
   if (Number.isInteger(value)) return String(value);
-  return Number(value).toFixed(3);
+  return formatNumberString(value, 3);
 }
 
 function formatWatchGraphCountStat(value) {
@@ -3394,9 +3433,9 @@ function toggleCurrentWatchGraphPanel() {
 
 function fmtPose(p) {
   if (!p) return "—";
-  const x = (p.x ?? 0).toFixed(1);
-  const y = (p.y ?? 0).toFixed(1);
-  const th = (p.theta ?? 0).toFixed(1);
+  const x = formatNumberString(p.x, 1, "0");
+  const y = formatNumberString(p.y, 1, "0");
+  const th = formatNumberString(p.theta, 1, "0");
   return `X: ${x} Y: ${y} θ: ${th}°`;
 }
 
@@ -3969,7 +4008,7 @@ function createPoseListItem(i) {
   const p = rawPoses[i];
   const t = (typeof p.t === 'number') ? Math.round(p.t) : "—";
   const pi = poseToInches(p);
-  const poseSummary = `X: ${(pi.x ?? 0).toFixed(1)}in, Y: ${(pi.y ?? 0).toFixed(1)}in, θ: ${(pi.theta ?? 0).toFixed(1)}°`;
+  const poseSummary = `X: ${formatNumberString(pi.x, 1, "0")}in, Y: ${formatNumberString(pi.y, 1, "0")}in, θ: ${formatNumberString(pi.theta, 1, "0")}°`;
   const div = document.createElement('div');
   div.className = 'poseItem';
   if (i === selectedIndex) div.classList.add('selected');
@@ -4710,7 +4749,7 @@ function updateDeltaReadout() {
   const hoveredTime = hoverTimelineTime !== null ? hoverTimelineTime : lockedTime;
   const delta = Math.abs(hoveredTime - lockedTime) / 1000;
   if (deltaPill) {
-    deltaPill.textContent = `Δ: ${delta.toFixed(2)}s`;
+    deltaPill.textContent = `Δ: ${formatFixedNumberString(delta, 2, "0.00")}s`;
   }
 }
 
@@ -4868,7 +4907,7 @@ function updateFloatingInfo(pose, idx) {
   if (result) {
     const { watch, diffMs } = result;
     const direction = (watch.t > pose.t) ? "ahead" : "ago";
-    const seconds = (diffMs / 1000).toFixed(1);
+    const seconds = formatNumberString(diffMs / 1000, 1, "0");
 
     // Display the label and the time offset
     waypointLabel.textContent = ` ${watch.label}`;
@@ -4891,7 +4930,7 @@ function updateFloatingInfo(pose, idx) {
     // hoverTimelineTime is the time currently under the cursor
     const hoveredTime = hoverTimelineTime !== null ? hoverTimelineTime : lockedTime;
     const delta = Math.abs(hoveredTime - lockedTime) / 1000;
-    deltaTime.textContent = `${delta.toFixed(2)}s`;
+    deltaTime.textContent = `${formatNumberString(delta, 2, "0")}s`;
   } else {
     waypointLabel.textContent = " —";
     waypointValue.textContent = " —";
@@ -4962,7 +5001,7 @@ function updatePoseReadout() {
   }
 
   const total = rawPoses.length;
-  timePill.textContent = (t == null) ? "Time: —" : `Time: ${(t / 1000).toFixed(2)}s`;
+  timePill.textContent = (t == null) ? "Time: —" : `Time: ${formatFixedNumberString(t / 1000, 2)}s`;
   pointPill.textContent = `Point: ${Math.max(1, idx + 1)}/${total}`;
 
   const spNorm = (p?.speed_norm != null) ? p.speed_norm : (rawPoses[idx]?.speed_norm ?? null);
@@ -5389,7 +5428,7 @@ function pause() {
   raf = null;
   playPose = null;
   lastWall = null;
-  setStatus(`Paused at time ${((rawPoses[selectedIndex]?.t ?? 0) / 1000).toFixed(1)}s`);
+  setStatus(`Paused at time ${formatNumberString((rawPoses[selectedIndex]?.t ?? 0) / 1000, 1, "0")}s`);
 }
 
 function planPause() {
@@ -5418,7 +5457,7 @@ function play() {
   selectedWatch = null;
   selectedLogTime = null;
   timelineHoverSaved = null;
-  setStatus(`Playing from time ${((rawPoses[selectedIndex]?.t ?? 0) / 1000).toFixed(1)}s`);
+  setStatus(`Playing from time ${formatNumberString((rawPoses[selectedIndex]?.t ?? 0) / 1000, 1, "0")}s`);
 
   const tStart = rawPoses[selectedIndex]?.t;
   playTimeMs = (typeof tStart === 'number') ? tStart : (rawPoses[0]?.t ?? 0);
@@ -5687,7 +5726,7 @@ canvas.addEventListener('mouseleave', () => {
 
 canvas.addEventListener('click', (e) => {
   if (appMode === "planning") return;
-  if (!data || playing) return;
+  if (!data) return;
   if (suppressNextClick) { suppressNextClick = false; return; }
 
   const isLiveStreaming = window.__live && window.__live.streaming;
@@ -5713,6 +5752,7 @@ canvas.addEventListener('click', (e) => {
     return;
   }
 
+  if (playing) return;
   if (isLiveStreaming) return;
 
   const hit = pickTrackPose(e.clientX, e.clientY);
@@ -6319,7 +6359,7 @@ async function connectLeft() {
   leftWs.addEventListener("message", (ev) => {
     const raw = (typeof ev.data === 'string') ? ev.data : "";
     const trimmed = stripToTag(raw);
-    const malformedWaypoint = trimmed && parseWaypointLine(trimmed).malformed;
+    const isStreamData = !!trimmed;
     if (trimmed) {
       livePendingLines.push(trimmed);
       // cap pending buffer to avoid unbounded growth
@@ -6331,12 +6371,15 @@ async function connectLeft() {
       }
     }
 
-    if (trimmed && !malformedWaypoint) {
-      // Attach green for processed
-      liveAppendLine("\x1b[32m|\x1b[0m " + raw);
-    } else {
-      // Red if not
+    if (!isStreamData) {
       liveAppendLine("\x1b[31m|\x1b[0m " + raw);
+    } else {
+      const malformedWaypoint = parseWaypointLine(trimmed).malformed;
+      if (!malformedWaypoint) {
+        liveAppendLine("\x1b[32m|\x1b[0m " + raw);
+      } else {
+        liveAppendLine("\x1b[31m|\x1b[0m " + raw);
+      }
     }
   });
 
@@ -6418,7 +6461,6 @@ async function doLeftRefresh() {
       selectedIndex = rawPoses.length - 1;
       lastPoseIndex = selectedIndex;
       updatePoseReadout();
-      requestDrawAll();
     } else if (!liveAutoFollowHead && rawPoses.length && hoverTimelineTime == null && !playing && !trackLockActive && !(trackHover && (trackHover.pose || trackHover.t))) {
       selectedIndex = lastPoseIndex;
     }
@@ -6439,7 +6481,8 @@ async function doLeftRefresh() {
   }
   livePendingConsumed = endIdx;
 
-  if (posesAdded === 0 && watchesAdded === 0 && logsAdded === 0 && waypointsAdded === 0) return;
+  const hasNewData = posesAdded > 0 || watchesAdded > 0 || logsAdded > 0 || waypointsAdded > 0;
+  if (!hasNewData) return;
 
   // Keep watches sorted (poses are appended monotonically by t)
   if (watchesAdded > 0) {
@@ -6487,13 +6530,22 @@ async function doLeftRefresh() {
   }
 
   updatePoseReadout();
-  requestDrawAll();
+  if (
+    rawPoses.length !== liveLastPoseCount
+    || watches.length !== liveLastWatchCount
+    || livePendingConsumed !== liveLastRenderAt
+  ) {
+    requestDrawAll();
+    liveLastPoseCount = rawPoses.length;
+    liveLastWatchCount = watches.length;
+    liveLastRenderAt = livePendingConsumed;
+  }
   scheduleSavedPathsSave();
 
   const t1 = performance.now();
   const dt = t1 - t0;
   if (dt > 100) {
-    dbgLive(`doLeftRefresh: ${dt.toFixed(1)}ms (poses=${rawPoses.length}, watches=${watches.length}, pending=${livePendingLines.length - livePendingConsumed})`);
+    dbgLive(`doLeftRefresh: ${formatNumberString(dt, 1, "0")}ms (poses=${rawPoses.length}, watches=${watches.length}, pending=${livePendingLines.length - livePendingConsumed})`);
   }
 }
 
@@ -6976,7 +7028,7 @@ function finalizeLoadedData() {
   setUnitsFactorFromSelect(currentUnits);
   updateOffsetsFromInputs();
 
-  computeSpeedNorm();
+  computeSpeedNormRange();
   scheduleSavedPathsSave();
 
   // Sync to settings modal and save
@@ -7159,6 +7211,9 @@ async function loadSettings() {
     } else console.warn('Settings persistence is unavailable (Tauri invoke missing).');
 
     if (settings) {
+      if (settings.appState && typeof settings.appState === 'object' && !Array.isArray(settings.appState)) {
+        persistedAppState = { ...settings.appState };
+      }
       if (settings.prosDir && prosDirInput) {
         prosDirInput.value = settings.prosDir;
         prosDirFromSettings = true;
@@ -7285,11 +7340,37 @@ async function loadSettings() {
       }
       applySavedLayout(settings);
       updateOffsetsFromInputs();
-      computeSpeedNorm();
+      computeSpeedNormRange();
       if (robotImageToggle) robotImageToggle.checked = robotImageEnabled;
     }
   } catch (e) {
     console.error('Failed to load settings:', e);
+  }
+}
+
+async function loadDemoRouteIfUpgraded() {
+  if (!invoke) return false;
+
+  try {
+    const upgradeState = await invoke('was_previous_version_old');
+    persistedAppState = {
+      ...(persistedAppState && typeof persistedAppState === 'object' ? persistedAppState : {}),
+      lastSeenAppVersion: APP_VERSION,
+    };
+    if (!upgradeState?.wasPreviousVersionOlder) return false;
+
+    const response = await fetch(demoRouteUrl, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const obj = await response.json();
+    setData(obj);
+    setStatus('Loaded getting started demo route after app upgrade.');
+    return true;
+  } catch (e) {
+    console.warn('Failed to load upgrade demo route:', e);
+    return false;
   }
 }
 
@@ -7331,6 +7412,9 @@ async function saveSettings() {
       layoutTimelineHeight: readRootCssNumber('--timelineH', 180),
       layoutPlanningWaypointHeight: readRootCssNumber('--planListH', 240),
     };
+    if (persistedAppState && typeof persistedAppState === 'object' && !Array.isArray(persistedAppState)) {
+      settings.appState = { ...persistedAppState };
+    }
     const payload = JSON.stringify(settings);
     if (invoke) {
       await invoke('write_settings', { contents: payload });
@@ -7374,7 +7458,7 @@ function syncSettingsToMain() {
   }
   if (settingsMinSpeed && minSpeedEl && settingsMinSpeed.value !== minSpeedEl.value) {
     minSpeedEl.value = settingsMinSpeed.value;
-    computeSpeedNorm();
+    computeSpeedNormRange();
     recomputeWatchMarkers();
     rebuildWatchMarkersByTime();
     requestDrawAll();
@@ -7382,7 +7466,7 @@ function syncSettingsToMain() {
   }
   if (settingsMaxSpeed && maxSpeedEl && settingsMaxSpeed.value !== maxSpeedEl.value) {
     maxSpeedEl.value = settingsMaxSpeed.value;
-    computeSpeedNorm();
+    computeSpeedNormRange();
     recomputeWatchMarkers();
     rebuildWatchMarkersByTime();
     requestDrawAll();
@@ -7785,7 +7869,7 @@ async function applyImportedRunSettings() {
   sanitizeOffsetInputs();
   syncMainToSettings();
   updateOffsetsFromInputs();
-  computeSpeedNorm();
+  computeSpeedNormRange();
   renderPoseList();
   renderWatchFilter();
   renderWatchList();
@@ -8579,7 +8663,7 @@ if (settingsRobotImgAlpha) settingsRobotImgAlpha.addEventListener('input', onRob
 
 
 settingsMinSpeed.addEventListener('input', () => {
-  computeSpeedNorm();
+  computeSpeedNormRange();
   recomputeWatchMarkers();
   rebuildWatchMarkersByTime();
   requestDrawAll();
@@ -8589,7 +8673,7 @@ settingsMinSpeed.addEventListener('input', () => {
 });
 
 settingsMaxSpeed.addEventListener('input', () => {
-  computeSpeedNorm();
+  computeSpeedNormRange();
   recomputeWatchMarkers();
   rebuildWatchMarkersByTime();
   requestDrawAll();
@@ -9052,8 +9136,9 @@ sanitizeExportFilename();
 // -------- init --------
 await initPosthogTelemetry();
 loadFieldOptions();
-void loadSettings();
-void loadSavedPaths();
+await loadSettings();
+await loadSavedPaths();
+await loadDemoRouteIfUpgraded();
 setMode("viewing");
 
 async function appExit() {
@@ -9097,12 +9182,36 @@ async function appExit() {
 const setupExitHandler = async () => {
   const appWindow = getCurrentWindow();
   if (!appWindow?.listen) return;
+  let appQuitInFlight = false;
+
+  const beginAppQuit = async () => {
+    if (appQuitInFlight) return;
+    appQuitInFlight = true;
+    setStatus("App closing");
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await appExit();
+    try {
+      await invoke("finalize_app_quit");
+    } catch (err) {
+      console.error("Failed to finalize app quit:", err);
+      appQuitInFlight = false;
+    }
+  };
 
   // Listen for the user clicking the 'X'
   await appWindow.listen("tauri://close-requested", async () => {
-    setStatus("App closing");
-    await appExit();
-    appWindow.destroy();
+    await beginAppQuit();
+  });
+
+  await appWindow.listen("motionview://app-quit-requested", async () => {
+    await beginAppQuit();
+  });
+
+  window.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && (event.key === "q" || event.key === "Q")) {
+      event.preventDefault();
+      void beginAppQuit();
+    }
   });
 };
 

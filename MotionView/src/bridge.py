@@ -503,19 +503,16 @@ class ProsTerminalRunner:
                 self._pty_master_fd = None
                 self._pty_buf = b""
 
-            # Prefer PTY on Unix-like systems
-            if os.name != "nt":
-                try:
-                    await asyncio.wait_for(self._start_unix_pty(), timeout=3.0)
-                    return {"ok": True, "status": "started", "pid": self.pid, "mode": "pty"}
-                except Exception as e:
-                    # Fall back to pipes if PTY fails
-                    print(f"WARNING: PTY start failed, falling back to pipes: {e}", file=sys.stderr)
-
             try:
                 await asyncio.wait_for(self._start_pipes(), timeout=3.0)
                 return {"ok": True, "status": "started", "pid": self.pid, "mode": "pipes"}
             except Exception as e:
+                if os.name != "nt":
+                    try:
+                        await asyncio.wait_for(self._start_unix_pty(), timeout=3.0)
+                        return {"ok": True, "status": "started", "pid": self.pid, "mode": "pty"}
+                    except Exception as pty_error:
+                        return {"ok": False, "status": f"start failed: pipes={e}; pty={pty_error}"}
                 return {"ok": False, "status": f"start failed: {e}"}
 
     async def stop(self) -> dict:
@@ -651,6 +648,8 @@ class ProsTerminalRunner:
         lock = _get_lock()
         async with lock:
             pros_dir = str(PROS_PROJECT_DIR)
+        env = os.environ.copy()
+        env["MOTIONVIEW_HEADLESS"] = "1"
         # Spawn `pros terminal` with stdio attached to PTY slave
         self.proc = await asyncio.create_subprocess_exec(
             PROS_EXE, "terminal", "--no-banner",
@@ -658,7 +657,8 @@ class ProsTerminalRunner:
             stdout=slave_fd,
             stderr=slave_fd,
             preexec_fn=_preexec,
-            cwd=pros_dir
+            cwd=pros_dir,
+            env=env,
         )
 
         # Parent closes slave; we only read from master
@@ -676,6 +676,16 @@ class ProsTerminalRunner:
         try:
             data = os.read(self._pty_master_fd, 4096)
         except OSError:
+            try:
+                self._loop.remove_reader(self._pty_master_fd)
+            except Exception:
+                pass
+            try:
+                os.close(self._pty_master_fd)
+            except Exception:
+                pass
+            self._pty_master_fd = None
+            self._pty_buf = b""
             return
         if not data:
             # EOF: remove reader to avoid busy loop, and close master.

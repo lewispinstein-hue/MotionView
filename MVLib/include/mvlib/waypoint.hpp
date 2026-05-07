@@ -15,6 +15,12 @@ using WPId = uint16_t;
 /**
  * @struct Waypoint
  * @brief Holds a location and tolerances for a point.
+ *
+ * \b Example
+ * @code{.cpp}
+ * WaypointHandle waypoint = logger.addWaypoint(...);
+ * logger.info("Waypoint name: %s", waypoint.getLabel().c_str());
+ * @endcode
 */
 struct WaypointParams {
   /// @brief The target X value of the point
@@ -29,7 +35,6 @@ struct WaypointParams {
   /// @brief Time within construction before considering point to be not reached
   std::optional<uint32_t> timeoutMs = std::nullopt;
 
-
   /// @brief Tolerance to be considered at the point for X and Y
   float linearTol;
 
@@ -41,6 +46,18 @@ struct WaypointParams {
   bool retriggerable = false;
 };
 
+/**
+ * @struct WaypointOffset
+ * @brief Holds offset data for the current pose of the robot to the waypoint
+ *
+ * \b Example
+ * @code{.cpp}
+ * WaypointHandle waypoint = logger.addWaypoint(...);
+ * WaypointOffset offset = waypoint.getOffset();
+ * logger.info("Distance: %.1f, Theta off: %.1f, Time left: %d",
+ *             offset.totalOffset, offset.offT.value_or(0.0), offset.remainingTimeout.value_or(0));
+ * @endcode
+ */
 struct WaypointOffset {
   /// @brief Linear distance between current pose and target pose
   double totalOffset;
@@ -101,7 +118,8 @@ public:
   bool reached() const;
 
   /** 
-   * @brief Check if the waypoint has timed out
+   * @brief Check if the waypoint has timed out.
+   *        A timed out waypoint continues reporting true after timeout deactivates it.
    * \return Returns true if the waypoint has timed out
   */
   bool timedOut() const;
@@ -120,4 +138,4 @@ public:
   */
   bool resyncRoster() const;
 };
-}
+} // namespace mvlib

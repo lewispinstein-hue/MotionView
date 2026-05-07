@@ -12,6 +12,7 @@
 #ifndef _MVLIB_OPTIONAL_USED
 #define _MVLIB_OPTIONAL_USED "customOdom"
 #include "mvlib/core.hpp" // IWYU pragma: keep
+#include "mvlib/types.hpp"
 
 #include <optional>
 #include <type_traits>
@@ -43,13 +44,13 @@ namespace mvlib {
  * 2) Convert sensor units into a consistent Pose
  * 3) Return std::nullopt while invalid/uninitialized
  *
+ * \b Example
  * @code{.cpp}
  * #include "mvlib/api.hpp"
  * #include "mvlib/Optional/customOdom.hpp"  
  * 
  * // Custom / Unsupported odom
  * #include "mylib.hpp"
- *
  * 
  * void initialize() {
  *   mvlib::setOdom([]() -> std::optional<mvlib::Pose> {
@@ -80,7 +81,7 @@ inline void setOdom(Fn&& poseGetter) {
 template<class Fn>
   requires (!std::is_same_v<std::invoke_result_t<Fn&>, std::optional<Pose>>) 
 inline void setOdom(Fn&&) {
-  static_assert(always_false_v<Fn>,
+  static_assert(detail::always_false_v<Fn>,
               "\n\n\n------------------------------------------------------------------------"
               "\nLogger::setOdom(/* customOdom */): Type mismatch.\n"
               "Pose getter must return std::optional<Pose>.\n"

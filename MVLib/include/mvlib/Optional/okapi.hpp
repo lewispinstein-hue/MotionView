@@ -12,9 +12,11 @@
 #ifndef _MVLIB_OPTIONAL_USED
 #define _MVLIB_OPTIONAL_USED "okapi"
 #include "mvlib/core.hpp" // IWYU pragma: keep
-#include "okapi/api.h"    // IWYU pragma: keep
+#include "okapi/api.h" // IWYU pragma: keep
+#include "mvlib/types.hpp" // IWYU pragma: keep
 
 #include <optional>
+
 namespace mvlib {
 /**
  * @brief Attach an OkapiLib odometry getter to the Logger.
@@ -43,16 +45,16 @@ namespace mvlib {
  *          values, but they won't be meaningful. If you want a "ready" gate, add your own
  *          check and return std::nullopt until calibrated.
  *
- * @par Example
+ * \b Example
  * @code{.cpp}
  * // Suppose you built an Okapi odom chassis controller somewhere:
- * okapi::OdomChassisController odomChassis = okapi::ChassisControllerBuilder()
+ * std::shared_ptr<okapi::OdomChassisController> odomChassis = okapi::ChassisControllerBuilder()
  *   .withMotors({1, 2}, {-3, -4})
  *   .withDimensions(okapi::AbstractMotor::gearset::green, {{4_in, 11.5_in}, okapi::imev5GreenTPR})
  *   .withOdometry()
  *   .buildOdometry();
  * void initialize() {
- *   mvlib::setOdom(&odomChassis);
+ *   mvlib::setOdom(odomChassis.get());
  * }
  * @endcode
  */

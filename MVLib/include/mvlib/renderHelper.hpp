@@ -29,7 +29,9 @@ static std::string renderValue(const char *v, const std::string&) {
   * @brief Render a boolean as "t"/"f".
   * \return Rendered boolean string.
   */
-static std::string renderValue(bool v, const std::string&) { return v ? "t" : "f"; }
+static std::string renderValue(bool v, const std::string&) {
+  return v ? "t" : "f";
+}
 
 /**
   * @brief Render arithmetic types using an optional printf-style format.

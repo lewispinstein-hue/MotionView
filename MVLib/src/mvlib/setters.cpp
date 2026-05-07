@@ -1,12 +1,15 @@
 #include "mvlib/core.hpp"
+#include "mvlib/private/telemetry.hpp"
+#include "types.hpp"
+#define _MVLIB_PREVENT_MACRO_CLEANUP
 #include "mvlib/private/forwardLogMacros.h"
-#include "mvlib/telemetry.hpp"
+#include "mvlib/private/raii.hpp"
 
 namespace mvlib {
 
 void Logger::setLogToTerminal(bool v) {
   m_config.logToTerminal.store(v);
-  _MVLIB_FORWARD_DEBUG("logToTerminal set to: %d", v);
+  _MVLIB_FORWARD_DEBUG("logToTerminal() set to: %d", v);
 }
 
 void Logger::setLogToSD(bool v) {
@@ -43,16 +46,23 @@ void Logger::setTimings(LoggerTimings timings) {
   m_timings = timings;
 }
 
-void Logger::setLoggerMinLevel(LogLevel level) {
-  _MVLIB_FORWARD_DEBUG("SetLoggerMinLevel set to: %d", (int)level);
+void Logger::setMinLogLevel(LogLevel level) {
+  if (level == LogLevel::OVERRIDE) return;
+
   // Telemetry engine is now the source of truth for the min log level
-  Telemetry::getInstance().setMinLevel(level);
+  detail::Telemetry::getInstance().setMinLevel(level);
+  _MVLIB_FORWARD_DEBUG("SetLoggerMinLevel set to: %d", (int)level);
 }
 
 void Logger::setPoseGetter(std::function<std::optional<Pose>()> getter) {
-  unique_lock m(m_mutex, TIMEOUT_MAX);
-  if (!m.isLocked() || !getter) return;
-  _MVLIB_FORWARD_DEBUG("SetPoseGetter callback. Address: %p", (void*)&getter);
+  detail::uniqueLock m(m_mutex);
+  if (!m.isLocked() || !getter) {
+    _MVLIB_FORWARD_DEBUG("Unable to set pose getter because mutex failed "
+                         "to lock. Try adding delay or calling at a different "
+                         "time.");
+    return;
+  }
+  _MVLIB_FORWARD_DEBUG("SetPoseGetter set callback.");
   m_getPose = std::move(getter);
 }
 } // namespace mvlib

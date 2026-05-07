@@ -7,7 +7,6 @@
 
 namespace mvlib {
 namespace literals {
-
 /**
  * @brief Operator for .watch() intervalMs. Allows number_mvMs 
  *        instead of uint32_t{number}
@@ -20,7 +19,7 @@ namespace literals {
  * @endcode
 */
 constexpr uint32_t operator""_mvMs(unsigned long long int ms) {
-    return static_cast<uint32_t>(ms);
+  return static_cast<uint32_t>(ms);
 }
 
 /**
@@ -36,7 +35,7 @@ constexpr uint32_t operator""_mvMs(unsigned long long int ms) {
  * @endcode
 */
 constexpr uint32_t operator""_mvS(long double s) {
-    return static_cast<uint32_t>(s * 1000);
+  return static_cast<uint32_t>(s * 1000);
 }
 
 /** 
@@ -48,8 +47,8 @@ constexpr uint32_t operator""_mvS(long double s) {
  * logger.watch("foo", mvlib::LogLevel::INFO, 1_mvS, ...);
  * @endcode
 */
-constexpr uint32_t operator""_mvS(unsigned long long s) {
-    return static_cast<uint32_t>(s * 1000);
+constexpr uint32_t operator""_mvS(unsigned long long int s) {
+  return static_cast<uint32_t>(s * 1000);
 }
 } // namespace literals
 } // namespace mvlib

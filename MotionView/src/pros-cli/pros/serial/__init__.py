@@ -10,6 +10,7 @@ from typing import DefaultDict, Dict, List, Optional, Tuple, Union
 DEFAULT_ROSTER: Dict[int, str] = {}
 ELEVATED_ROSTER: Dict[int, str] = {}
 PENDING_ROSTER_EVENTS: DefaultDict[int, List[Tuple[object, ...]]] = defaultdict(list)
+MAX_PENDING_ROSTER_EVENTS_PER_ID = 100
 LAST_TIMESTAMP_RAW: Optional[int] = None
 TIMESTAMP_WRAP_OFFSET = 0
 STREAM_BUFFER = bytearray()
@@ -193,10 +194,19 @@ def _render_pending_event(event: Tuple[object, ...], label: str) -> str:
     return ""
 
 
+def _queue_pending_event(item_id: int, event: Tuple[object, ...]) -> None:
+    pending = PENDING_ROSTER_EVENTS[item_id]
+    # Keep a bounded backlog per roster id so early events survive until the
+    # matching roster arrives without allowing unbounded memory growth.
+    if len(pending) >= MAX_PENDING_ROSTER_EVENTS_PER_ID:
+        pending.pop(0)
+    pending.append(event)
+
+
 def _emit_rostered_event(item_id: int, prefer_elevated: bool, event: Tuple[object, ...]) -> str:
     label = _resolve_roster_label(item_id, prefer_elevated)
     if label is None:
-        PENDING_ROSTER_EVENTS[item_id].append(event)
+        _queue_pending_event(item_id, event)
         return ""
     return _render_pending_event(event, label)
 
@@ -368,6 +378,24 @@ def _parse_binary_frame(frame: bytes) -> Optional[str]:
 
 
 
+def _decode_plain_text_or_hex(frame: bytes, encoding: str = "utf-8") -> str:
+    candidates = [frame]
+    try:
+        decoded_cobs = cobs_decode(frame)
+        if decoded_cobs and decoded_cobs != frame:
+            candidates.append(decoded_cobs)
+    except Exception:
+        pass
+
+    for candidate in candidates:
+        try:
+            return _decode_text_chunk(candidate, encoding=encoding, errors="strict")
+        except Exception:
+            continue
+
+    return bytes_to_str(frame) + "\n"
+
+
 def _decode_binary_frame(frame: bytes) -> str:
     try:
         parsed = _parse_binary_frame(frame)
@@ -375,7 +403,7 @@ def _decode_binary_frame(frame: bytes) -> str:
             return parsed
     except Exception:
         pass
-    return bytes_to_str(frame) + "\n"
+    return _decode_plain_text_or_hex(frame)
 
 
 def _decode_text_chunk(chunk: bytes, encoding: str, errors: str) -> str:

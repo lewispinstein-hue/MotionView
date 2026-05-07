@@ -6,17 +6,19 @@ use std::{
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
+    time::Duration,
 };
 #[cfg(not(unix))]
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tauri::{Manager, RunEvent, State, Window};
+use tauri::{Emitter, Manager, RunEvent, State, Window};
 use tauri_plugin_posthog::{init as posthog_init, PostHogConfig, PostHogOptions};
 mod export;
 mod settings;
 
 struct BridgeState(Mutex<Option<Child>>);
 struct BridgeOrigin(Mutex<Option<String>>);
+struct QuitState(Mutex<bool>);
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -196,23 +198,7 @@ fn stop_bridge(state: &tauri::State<BridgeState>, app: &tauri::AppHandle) {
     if let Some(mut child) = state.0.lock().unwrap().take() {
         #[cfg(unix)]
         {
-            let pid = child.id() as i32;
-            // Try graceful stop of the process group first
-            let _ = Command::new("kill")
-                .arg("-TERM")
-                .arg(format!("-{}", pid))
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status();
-            // Ensure the process group is gone
-            let _ = Command::new("kill")
-                .arg("-KILL")
-                .arg(format!("-{}", pid))
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status();
+            terminate_child_group(&mut child, Duration::from_secs(3));
         }
         #[cfg(not(unix))]
         {
@@ -228,6 +214,36 @@ fn stop_bridge(state: &tauri::State<BridgeState>, app: &tauri::AppHandle) {
     }
     #[cfg(windows)]
     cleanup_bridge_processes_by_name();
+}
+
+#[cfg(unix)]
+fn signal_process_group(pid: u32, signal: &str) {
+    let _ = Command::new("kill")
+        .arg(signal)
+        .arg(format!("-{}", pid))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
+#[cfg(unix)]
+fn terminate_child_group(child: &mut Child, graceful_timeout: Duration) {
+    let pid = child.id();
+
+    signal_process_group(pid, "-TERM");
+
+    let start = std::time::Instant::now();
+    while start.elapsed() < graceful_timeout {
+        match child.try_wait() {
+            Ok(Some(_)) => return,
+            Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+            Err(_) => break,
+        }
+    }
+
+    signal_process_group(pid, "-KILL");
+    let _ = child.wait();
 }
 
 fn pid_path(app: &tauri::AppHandle) -> Result<PathBuf, tauri::Error> {
@@ -533,6 +549,13 @@ fn get_bridge_origin(state: State<'_, BridgeOrigin>) -> Option<String> {
 }
 
 #[tauri::command]
+fn finalize_app_quit(app: tauri::AppHandle, state: State<'_, QuitState>) -> Result<(), String> {
+    *state.0.lock().unwrap() = true;
+    app.exit(0);
+    Ok(())
+}
+
+#[tauri::command]
 fn get_posthog_distinct_id(app: tauri::AppHandle) -> Result<String, String> {
     let path = posthog_id_path(&app).map_err(|err| err.to_string())?;
     if let Ok(existing) = fs::read_to_string(&path) {
@@ -570,9 +593,11 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .manage(BridgeState(Mutex::new(None)))
         .manage(BridgeOrigin(Mutex::new(None)))
+        .manage(QuitState(Mutex::new(false)))
         .invoke_handler(tauri::generate_handler![
             settings::read_settings,
             settings::write_settings,
+            settings::was_previous_version_old,
             settings::read_image_data,
             settings::save_robot_image,
             settings::read_saved_paths,
@@ -584,7 +609,8 @@ fn main() {
             get_window_fullscreen_state,
             get_system_info,
             get_bridge_origin,
-            get_posthog_distinct_id
+            get_posthog_distinct_id,
+            finalize_app_quit
         ])
         .setup(|app| {
             cleanup_previous_bridge(app.handle());
@@ -647,7 +673,16 @@ fn main() {
                 }
 
                 // Fires on quit requests (Cmd+Q / Dock Quit / menu Quit)
-                RunEvent::ExitRequested { .. } => {
+                RunEvent::ExitRequested { api, .. } => {
+                    let quit_ready = *app_handle.state::<QuitState>().0.lock().unwrap();
+                    if !quit_ready {
+                        api.prevent_exit();
+                        if let Some(win) = app_handle.get_webview_window("main") {
+                            let _ = win.emit("motionview://app-quit-requested", ());
+                        }
+                        return;
+                    }
+
                     persist_window_state(&app_handle);
                     stop_bridge(&app_handle.state::<BridgeState>(), app_handle);
                 }

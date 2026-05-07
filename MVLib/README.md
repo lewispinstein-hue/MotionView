@@ -1,5 +1,8 @@
 # MVLib: Telemetry + Logging For MotionView
 
+<p align="center">
+  <img src="https://github.com/lewispinstein-hue/MotionView/blob/main/assets/MotionView/viewing_hypermode.png" alt="MotionView Logo" width="180" />
+</p>
 # What is this?
 `MVLib` is a simple logging and telemetry library for PROS V5 teams that want **clear, replayable data** in MotionView. It gives you structured logs, live “watches,” and pose data so MotionView can draw your robot path, list watches, and show details when you hover or click the field.
 
@@ -23,7 +26,7 @@ Detailed Docs:
 
 - [`Initial setup`](../Docs/MVLib/Setup.md): installation, logger startup, odometry and drivetrain setup.
 - [`Configurables`](../Docs/MVLib/Configuration.md): user-configurable settings in `include/mvlib/config.hpp` and `LoggerConfig`.
-- [`Watches`](../Docs/MVLib/Watches.md): the `logger.watch(...)` overloads, `LevelOverride`, `PREDICATE`, formatting, and examples.
+- [`Watches`](../Docs/MVLib/Watches.md): `logger.watch(...)`, `WatchMode`, optional `LevelOverride`, on-change debounce behavior, `PREDICATE`, formatting, and examples.
 - [`Waypoints`](../Docs/MVLib/Waypoints.md): `logger.addWaypoint(...)`, waypoint structs, waypoint handles, and waypoint usage patterns.
 - [`Logs`](../Docs/MVLib/Logs.md): the MotionView-formatted `debug`, `info`, `warn`, `error`, and `fatal` log functions.
 
@@ -97,23 +100,31 @@ Teams usually use them for:
 - intake current
 - constant monitoring
 
+Every watch returns a `WatchHandle`.
+`LevelOverride` is optional, and on `WatchMode::onChange` watches `intervalMs` is the debounce interval.
+
 Example:
 
 ```cpp
 auto& logger = mvlib::Logger::getInstance();
 
-logger.watch("Flywheel RPM", LogLevel::INFO, 1_mvS,
+logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval, 1_mvS,
   [&]() { return flywheel.get_actual_velocity(); },
-  mvlib::LevelOverride<double>{}, "%.1f");
+  "%.1f");
 
-logger.watch("Auton Stage", LogLevel::INFO, 250_mvMs,
-  [&]() { return (int)autonStage; },
-  mvlib::LevelOverride<int>{});
+logger.watch("Auton Stage", LogLevel::INFO, WatchMode::onChange, 250_mvMs,
+  [&]() { return (int)autonStage; });
 ```
+
+That means:
+
+- `WatchMode::onInterval` watches emit on their normal interval
+- `WatchMode::onChange` watches emit only after the rendered value changes and the debounce interval has elapsed
+- you only need `LevelOverride` when you want elevated severity and/or an alternate label
 
 MotionView shows these in the watch list and can associate nearby watch values with points in the run.
 
-For the detailed watch guide, including overloads, `LevelOverride`, `PREDICATE`, formatting, and more examples, see the [`Watches Guide`](../Docs/MVLib/Watches.md).
+For the detailed watch guide, including `WatchMode`, optional `LevelOverride`, on-change debounce, `PREDICATE`, formatting, and more examples, see the [`Watches Guide`](../Docs/MVLib/Watches.md).
 
 ## Logs
 
@@ -164,7 +175,7 @@ auto goalPickup = logger.addWaypoint("Goal Pickup", {
 });
 
 auto off = goalPickup.getOffset();
-printf("Distance to target: %.2f\n", off.totalOffset);
+logger.info("Distance to target: %.2f\n", off.totalOffset);
 ```
 
 This waypoint:

@@ -99,7 +99,7 @@ typedef struct imu_raw_s imu_accel_s_t;
 typedef struct __attribute__((__packed__)) euler_s {
 	double pitch;
 	double roll;
-	double yaw;
+	double yaw;	
 } euler_s_t;
 
 #ifdef __cplusplus

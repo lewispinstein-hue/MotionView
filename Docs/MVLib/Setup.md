@@ -55,6 +55,7 @@ Without it, use the fully qualified names:
 
 ```cpp
 mvlib::LogLevel::INFO
+mvlib::WatchMode::onChange
 mvlib::literals::operator"" _mvS(...)
 ```
 
@@ -272,18 +273,21 @@ void initialize() {
 ## 9. Add A First Watch
 
 ```cpp
-logger.watch("Battery Voltage", mvlib::LogLevel::INFO, 1_mvS,
-  []() { return pros::battery::get_voltage(); },
-  mvlib::LevelOverride<int32_t>{});
+mvlib::WatchHandle batteryWatch = logger.watch("Battery Voltage", LogLevel::INFO,
+  WatchMode::onInterval, 1_mvS, []() { return pros::battery::get_voltage(); });
 ```
 
-For event-like values, use the on-change overload:
+For event-like values, use `WatchMode::onChange`:
 
 ```cpp
-logger.watch("Auton Stage", mvlib::LogLevel::INFO, true,
-  []() { return static_cast<int>(autonStage); },
-  mvlib::LevelOverride<int>{});
+logger.watch("Auton Stage", LogLevel::INFO, WatchMode::onChange, 250_mvMs,
+  []() { return static_cast<int>(autonStage); });
 ```
+
+You can keep the returned `WatchHandle` if you want to enable/disable the watch,
+change its interval, force an evaluation, or re-send its roster entry later.
+For `WatchMode::onChange` watches, `250_mvMs` above is the debounce interval.
+`LevelOverride` is optional.
 
 ## 10. Optional Runtime Controls
 
@@ -297,13 +301,13 @@ logger.setPrintWatches(true);
 logger.setPrintWaypoints(true);
 logger.setLogSystemInfo(true);
 
-logger.setLoggerMinLevel(mvlib::LogLevel::INFO);
+logger.setMinLogLevel(LogLevel::INFO);
 
 logger.setTimings({
   .sdBufferFlushInterval = 1000,
   .stdoutBufferFlushInterval = 400,
   .sdPollingRate = 80,
-  .terminalPollingRate = 120,
+  .terminalPollingRate = 100,
   .rosterSyncAllInterval = 8000
 });
 ```

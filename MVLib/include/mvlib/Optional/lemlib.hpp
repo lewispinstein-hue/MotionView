@@ -12,14 +12,16 @@
 #ifndef _MVLIB_OPTIONAL_USED
 #define _MVLIB_OPTIONAL_USED "lemlib"
 #include "mvlib/core.hpp" // IWYU pragma: keep
+#include "mvlib/types.hpp" // IWYU pragma: keep
+
 /* 
  * Depending on your version of LemLib, this include might be outdated.
  * If lemlib/api.hpp is not found, it is likely this instead:
  * lemlib/lemlib.hpp
 */
 #include "lemlib/api.hpp"  // IWYU pragma: keep
-namespace mvlib {
 
+namespace mvlib {
 /**
  * @brief Attach LemLib odometry to the Logger.
  *
@@ -32,7 +34,7 @@ namespace mvlib {
  * @warning The caller must ensure the chassis pointer remains valid for
  *          as long as the Logger might invoke the callback.
  *
- * @par Example: LemLib odometry
+ * \b Example
  * @code{.cpp}
  * #include "mvlib/api.hpp"
  * #include "mvlib/Optional/lemlib.hpp"

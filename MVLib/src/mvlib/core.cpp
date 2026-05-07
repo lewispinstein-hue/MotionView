@@ -1,14 +1,26 @@
 #include "pros/rtos.hpp"
 #include "mvlib/core.hpp"
+#define _MVLIB_PREVENT_MACRO_CLEANUP
 #include "mvlib/private/forwardLogMacros.h"
-#include "mvlib/telemetry.hpp"
+#include "mvlib/private/telemetry.hpp"
 #include "pros/apix.h"
 #include <cmath>
 #include <algorithm>
 
 namespace mvlib {
+namespace {
+float estimateSpeed(const Pose& prevPose, const Pose& pose) {
+  static uint32_t prevMs = pros::millis();
+  uint32_t nowMs = pros::millis();
+  const float dt = (nowMs - prevMs) / 1000.0;
+  const float vx = (dt > 0) ? (pose.x - prevPose.x) / dt : 0.0;
+  const float vy = (dt > 0) ? (pose.y - prevPose.y) / dt : 0.0;
+  prevMs = nowMs;
+  return std::sqrt(vx * vx + vy * vy);
+}
+} // namespace
 
-Logger &Logger::getInstance() {
+Logger& Logger::getInstance() {
   static Logger instance;
   return instance;
 }
@@ -20,32 +32,34 @@ bool Logger::setRobot(Drivetrain drivetrain, bool useSpeedEstimation) {
   }
   m_forceSpeedEstimation = useSpeedEstimation;
 
+  bool retval = true;
   if (!drivetrain.leftDrivetrain || !drivetrain.rightDrivetrain) {
     _MVLIB_FORWARD_FATAL("setRobot(Drivetrain) called with nullptr drivetrain arguments!");
-    return false;
+    retval = false;
   }
 
   m_pLeftDrivetrain = drivetrain.leftDrivetrain;
   m_pRightDrivetrain = drivetrain.rightDrivetrain;
 
-  _MVLIB_FORWARD_DEBUG("setRobot() successfully set variables!");
+  _MVLIB_FORWARD_DEBUG("setRobot(Drivetrain) successfully set variables!");
 
-  m_configValid = m_checkRobotConfig();
+  checkRobotConfig();
   m_configSet = true;
-  return true;
+  return retval;
 }
 
-bool Logger::m_checkRobotConfig() {
-  unique_lock m(m_mutex, TIMEOUT_MAX);
+bool Logger::checkRobotConfig() {
+  detail::uniqueLock m(m_mutex, TIMEOUT_MAX);
 
   bool allValid = true;
 
   if (!m_pLeftDrivetrain) {
-    _MVLIB_FORWARD_ERROR("Left Drivetrain pointer is NULL!");
+    _MVLIB_FORWARD_ERROR("checkRobotConfig() Left Drivetrain pointer is null!");
     allValid = false;
   }
+
   if (!m_pRightDrivetrain) {
-    _MVLIB_FORWARD_ERROR("Right Drivetrain pointer is NULL!");
+    _MVLIB_FORWARD_ERROR("checkRobotConfig() Right Drivetrain pointer is null!");
     allValid = false;
   }
 
@@ -57,54 +71,12 @@ Logger::Logger() {
   m_waypoints.reserve(16);
 
   // Begin IO Handle for user logs by constructing singleton
-  (void) Telemetry::getInstance(); 
+  (void) detail::Telemetry::getInstance(); 
 
   // Disable PROS CBOS; we do it ourselves
   pros::c::serctl(SERCTL_DISABLE_COBS, nullptr);
   // Disable PROS prepending messages with "sout"
   pros::c::serctl(SERCTL_DEACTIVATE, (void*)0x74756f73);
-}
-
-uint32_t Logger::status() const {
-  if (!m_task) return pros::E_TASK_STATE_INVALID;
-  return m_task->get_state();
-}
-
-void Logger::pause(bool byForce) {
-  uint32_t st = status();
-  bool isPauseable = st != pros::E_TASK_STATE_DELETED && 
-                     st != pros::E_TASK_STATE_INVALID &&
-                     st != pros::E_TASK_STATE_SUSPENDED;
-
-  if (isPauseable && byForce) {
-    m_task->suspend();
-    _MVLIB_FORWARD_DEBUG("Logger force suspended.");
-  } else if (isPauseable) {
-    m_pauseRequested.store(true);
-    _MVLIB_FORWARD_DEBUG("Logger paused.");
-  } else {
-    _MVLIB_FORWARD_DEBUG("Logger cannot be paused as it is not in a running state.");
-  }
-}
-
-void Logger::resume() {
-  uint32_t st = status();
-  bool wasPaused = false;
-
-  if (m_pauseRequested.exchange(false)) wasPaused = true;
-
-  if (st != pros::E_TASK_STATE_DELETED && 
-      st != pros::E_TASK_STATE_INVALID && 
-      st == pros::E_TASK_STATE_SUSPENDED) {
-    m_task->resume();
-    wasPaused = true;
-  }
-
-  if (wasPaused) {
-    _MVLIB_FORWARD_DEBUG("Logger resumed.");
-  } else {
-    _MVLIB_FORWARD_DEBUG("Logger cannot be resumed as it is not paused.");
-  }
 }
 
 void Logger::start() {
@@ -116,19 +88,18 @@ void Logger::start() {
 
   // SD init
   if (m_config.logToSD.load() && !m_sdFile) {
-    bool success = m_initSDLogger();
+    bool success = initSDLogger();
     if (!success) {
       m_config.logToSD.store(false);
       m_sdLocked = true;
-      _MVLIB_FORWARD_FATAL("initSDCard failed! Unable to initialize SD card.");
+      _MVLIB_FORWARD_FATAL("start() initSDCard failed! Unable to initialize SD card.");
     } else {
-      _MVLIB_FORWARD_INFO("Successfully initialized SD card with filename: %s", m_currentFilename);
+      _MVLIB_FORWARD_INFO("start() Successfully initialized SD card with filename: %s", m_currentFilename);
     }
   }
-    
-  m_configValid = m_checkRobotConfig();
-  if (!m_configValid) {
-    _MVLIB_FORWARD_ERROR("At least one pointer set by setRobot(Drivetrain) is nullptr. Using speed estimation.");
+
+  if (!checkRobotConfig()) {
+    _MVLIB_FORWARD_ERROR("start() failed! At least one pointer set by setRobot(Drivetrain) is nullptr. Using speed estimation.");
   }
 
   m_task = std::make_unique<pros::Task>([this]() mutable {
@@ -136,7 +107,7 @@ void Logger::start() {
     uint32_t now = pros::millis();
     while (true) {
       if (m_pauseRequested.load()) {
-        pros::delay(200);
+        pros::delay(100);
         continue;
       }
 
@@ -157,6 +128,7 @@ void Logger::start() {
       }
     }
   }, TASK_PRIORITY_DEFAULT, TASK_STACK_DEPTH_DEFAULT, "MVLib Logger");
+  _MVLIB_FORWARD_INFO("start() Background logger task started.");
 }
 
 void Logger::Update() {
@@ -175,12 +147,16 @@ void Logger::Update() {
   std::optional<Pose> pose = std::nullopt;
 
   if (m_getPose) {
-    unique_lock lock(m_mutex);
+    detail::uniqueLock lock(m_mutex);
     pose = m_getPose();
   }
-  
-  if (m_configValid && m_pLeftDrivetrain && m_pRightDrivetrain && !m_forceSpeedEstimation) {
-    auto norm = [&](const double& rpm, const pros::MotorGears& gearset) {
+
+  const bool useSpeedEstimation =
+    !configValid() ||
+    m_forceSpeedEstimation;
+
+  if (!useSpeedEstimation) {
+    static auto norm = [&](const double& rpm, const pros::MotorGears& gearset) {
       double maxRpm = 100.0;
       if (gearset == pros::MotorGears::rpm_200) maxRpm = 200.0;
       else if (gearset == pros::MotorGears::rpm_600) maxRpm = 600.0;
@@ -190,44 +166,45 @@ void Logger::Update() {
     leftVelocity = norm(m_pLeftDrivetrain->get_actual_velocity(), m_pLeftDrivetrain->get_gearing());
     rightVelocity = norm(m_pRightDrivetrain->get_actual_velocity(), m_pRightDrivetrain->get_gearing());
   } else {
-    static Pose prevPose;
-    static uint32_t prevMs = pros::millis();
     static double fallbackSpeed = 0.0;
+    static Pose prevPose{};
     if (pose.has_value()) {
-      uint32_t nowMs = pros::millis();
-      double dt = (nowMs - prevMs) / 1000.0;
-      double vx = (dt > 0) ? (pose->x - prevPose.x) / dt : 0.0;
-      double vy = (dt > 0) ? (pose->y - prevPose.y) / dt : 0.0;
-      double avgSpeed = std::sqrt(vx * vx + vy * vy);
-      leftVelocity = rightVelocity = fallbackSpeed = avgSpeed;
+      leftVelocity = rightVelocity = fallbackSpeed = estimateSpeed(prevPose, pose.value());
       prevPose = pose.value();
-      prevMs = nowMs;
     } else {
       leftVelocity = rightVelocity = fallbackSpeed;
     }
   }
 
-  if (m_config.printTelemetry.load() && pose.has_value()) {
-    const double normTheta = normalizeDegrees360(pose->theta);
-    
-    if (std::isfinite(pose->x) && std::isfinite(pose->y) && std::isfinite(pose->theta)) {
-      // Send binary through terminal
-      if (m_config.logToTerminal.load()) {
-        PosePacket pkt;
-        pkt.timestamp = static_cast<uint16_t>(pros::millis());
-        pkt.x = (float)pose->x;
-        pkt.y = (float)pose->y;
-        pkt.theta = packTelemetryTheta(pose->theta);
-        pkt.leftVel = packTelemetryVelocity(leftVelocity);
-        pkt.rightVel = packTelemetryVelocity(rightVelocity);
-        Telemetry::getInstance().sendPose(pkt);
-      }
+  const bool validPose =
+    pose.has_value() &&
+    std::isfinite(pose->x) &&
+    std::isfinite(pose->y) &&
+    std::isfinite(pose->theta);
 
-      // Log standard ANSII to the sd card
-      if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
-        logToSD(LogLevel::OVERRIDE, "[POSE],%u,%.2f,%.2f,%.2f,%.0f,%.0f", 
-                pros::millis(), pose->x, pose->y, normTheta, leftVelocity, rightVelocity);
-      }
+  if (validPose && m_config.printTelemetry.load()) {
+
+    // Send binary through terminal
+    if (m_config.logToTerminal.load()) {
+      detail::PosePacket pkt;
+      pkt.timestamp = static_cast<uint16_t>(pros::millis());
+      pkt.x = static_cast<float>(pose->x);
+      pkt.y = static_cast<float>(pose->y);
+      pkt.theta = detail::packTelemetryTheta(pose->theta);
+      pkt.leftVel = detail::packTelemetryVelocity(leftVelocity);
+      pkt.rightVel = detail::packTelemetryVelocity(rightVelocity);
+      detail::Telemetry::getInstance().sendPose(pkt);
+    }
+
+    // Log standard ANSII to the sd card
+    if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
+      const double normTheta = [pose]() {
+        double theta = fmod(pose->theta, 360.0);
+        if (theta < 0.0) theta += 360.0;
+        return theta;
+      }();
+      logToSD(LogLevel::OVERRIDE, "[POSE],%u,%.2f,%.2f,%.2f,%.0f,%.0f",
+              pros::millis(), pose->x, pose->y, normTheta, leftVelocity, rightVelocity);
     }
   }
 }

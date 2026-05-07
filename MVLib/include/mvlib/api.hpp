@@ -13,7 +13,8 @@
 #include "renderHelper.hpp"
 #include "literals.hpp"
 #include "waypoint.hpp"
-#include "telemetry.hpp"
+#include "watches.hpp"
+#include "types.hpp"
 // IWYU pragma: end_keep
 
 /*
@@ -23,4 +24,5 @@
 #ifdef MVLIB_USE_SIMPLES
 using namespace mvlib::literals;
 using LogLevel = mvlib::LogLevel;
+using WatchMode = mvlib::WatchMode;
 #endif

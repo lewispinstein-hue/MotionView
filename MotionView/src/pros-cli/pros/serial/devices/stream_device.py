@@ -42,7 +42,12 @@ class RawStreamDevice(StreamDevice):
         pass
 
     def read(self) -> Tuple[bytes, bytes]:
-        return b'', self.port.read_all()
+        # Block for the first byte so the terminal reader does not hot-spin
+        # polling read_all() when the serial stream is idle.
+        first = self.port.read(1)
+        if not first:
+            return b'', b''
+        return b'', first + self.port.read()
 
     def write(self, data: Union[bytes, str]):
         self.port.write(data)

@@ -1,11 +1,12 @@
 #include "mvlib/core.hpp"
-#include "mvlib/telemetry.hpp"
+#include "mvlib/private/telemetry.hpp"
+#include "mvlib/private/raii.hpp"
 #include <cmath>
 
 namespace mvlib {
 
 void Logger::printWaypoints() {
-  unique_lock lock(m_mutex);
+  detail::uniqueLock lock(m_mutex);
   if (!lock.isLocked()) return;
 
   uint32_t nowMs = pros::millis();
@@ -39,21 +40,26 @@ void Logger::printWaypoints() {
       if (elapsed >= wp.params.timeoutMs.value()) {
         off.timedOut = true;
         off.remainingTimeout = 0;
+        wp.timedOut = true;
       } else {
         off.remainingTimeout = wp.params.timeoutMs.value() - elapsed;
         off.timedOut = false;
+        wp.timedOut = false;
       }
+    } else {
+      wp.timedOut = false;
     }
     
     uint8_t subType = 0;
     bool shouldTrigger = false;
-    const char* statusStr = nullptr;
+    const char *statusStr = nullptr;
 
     if (off.reached && (!wp.prevReached || !wp.params.retriggerable)) {
       subType = 2; // REACHED
       statusStr = "REACHED";
       shouldTrigger = true;
       wp.prevReached = true;
+      wp.timedOut = false;
       wp.active = wp.params.retriggerable;
     } else if (!off.reached && wp.prevReached) {
       wp.prevReached = false;
@@ -61,6 +67,7 @@ void Logger::printWaypoints() {
       subType = 3; // TIMEDOUT
       statusStr = "TIMEDOUT";
       shouldTrigger = true;
+      wp.timedOut = true;
       wp.active = false;
     }
 
@@ -68,13 +75,13 @@ void Logger::printWaypoints() {
 
     // Send binary through terminal
     if (m_config.logToTerminal.load()) {
-      Telemetry::getInstance().sendWaypointStatus(wp.id, subType);
+      detail::Telemetry::getInstance().sendWaypointStatus(wp.id, subType);
     }
 
     // Log standard ANSII to the sd card
     if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
       logToSD(LogLevel::OVERRIDE, "[WPOINT],%u,%s,%u,%s",
-              nowMs, statusStr, wp.id, wp.name.c_str());
+              nowMs, statusStr ? statusStr : "", wp.id, wp.name.c_str());
     }
   }
 }

@@ -15,6 +15,7 @@ pub fn run() {
             greet,
             settings::read_settings,
             settings::write_settings,
+            settings::was_previous_version_old,
             settings::read_image_data,
             settings::save_robot_image,
             settings::read_saved_paths,

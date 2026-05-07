@@ -20,7 +20,8 @@ Without pose data, waypoint creation still succeeds, but reach math will not hap
 ## Main API
 
 ```cpp
-WaypointHandle addWaypoint(std::string name, WaypointParams details);
+template<size_t len>
+WaypointHandle addWaypoint(const char (&name)[len], WaypointParams details);
 ```
 
 Example:
@@ -29,7 +30,7 @@ Example:
 auto goalPickup = logger.addWaypoint("Goal Pickup", {
   .tarX = 48,
   .tarY = -24,
-  .linearTol = 2.0f
+  .linearTol = 2
 });
 ```
 
@@ -81,8 +82,8 @@ Timeouts start when the waypoint is created:
 auto goal = logger.addWaypoint("Goal", {
   .tarX = 48,
   .tarY = -24,
-  .linearTol = 2.0f,
-  .timeoutMs = 3000
+  .linearTol = 2,
+  .timeoutMs = 3_mvS
 });
 ```
 
@@ -127,9 +128,16 @@ public:
 
 ### `getOffset()`
 
-Returns the current `WaypointOffset`.
+Returns the current `WaypointOffset` for this waypoint.
 
-Use this when you want the raw error numbers:
+Behavior:
+
+- if pose data is available, the offset is computed from the robot's current pose to this waypoint's target
+- if the waypoint tracks heading, `offT` is included
+- if the waypoint has a timeout, timeout-related fields are included
+- if pose data is unavailable, the returned offset is effectively empty/defaulted
+
+Use this when you want the raw positional error and timeout state:
 
 ```cpp
 auto off = goalPickup.getOffset();
@@ -138,29 +146,60 @@ logger.info("Goal offset: %.2f, %.2f", off.offX, off.offY);
 
 ### `getParams()`
 
-Returns the original waypoint parameters.
+Returns the waypoint's stored `WaypointParams`.
+
+This is the waypoint configuration MVLib is currently using for target position, tolerances, timeout, and retriggerability.
 
 ### `getLabel()`
 
-Returns the waypoint name.
+Returns the waypoint's label exactly as it was registered.
 
 ### `reached()`
 
 Returns whether the waypoint is currently within tolerance.
 
+Behavior:
+
+- position must be within `linearTol`
+- if the waypoint has a target heading, heading must also be within `thetaTol`
+- this is the current geometric state, not "has this ever been reached"
+
+For retriggerable waypoints, `reached()` can become true more than once over the waypoint's lifetime.
+
 ### `timedOut()`
 
-Returns whether the waypoint has timed out.
+Returns whether the waypoint has timed out. A waypoint becomes timed out after it has existed longer than its `timeoutMs` allows.
+
+Behavior:
+
+- only waypoints with `timeoutMs` can time out
+- a timed out waypoint is automatically deactivated
+- once a waypoint times out, `timedOut()` continues returning `true` for that waypoint
+- if no timeout was configured, this returns `false`
 
 ### `active()`
 
-Returns whether MVLib is still actively tracking the waypoint.
+Returns whether MVLib is still actively tracking this waypoint.
+
+Active means the waypoint is still participating in MVLib's internal waypoint lifecycle: it can still be checked for `REACHED` or `TIMEDOUT`, and it is still eligible for active waypoint behavior.
+
+Behavior:
+
+- a non-retriggerable waypoint becomes inactive after its first `REACHED`
+- a retriggerable waypoint stays active after `REACHED`
+- any waypoint becomes inactive after `TIMEDOUT`
+- an inactive waypoint remains registered, but MVLib no longer treats it as an active waypoint target
 
 ### `resyncRoster()`
 
 Re-sends this waypoint's roster metadata to MotionView.
 
-Use it when the waypoint exists but its name did not appear in the viewer.
+Use it when the waypoint exists but its name did not appear in the viewer because MotionView joined late or missed the original roster packet.
+
+Behavior:
+
+- returns `true` if this waypoint's roster entry was actually re-sent
+- returns `false` if the waypoint is no longer active, does not exist, or roster output is not currently available
 
 ## `WaypointOffset`
 

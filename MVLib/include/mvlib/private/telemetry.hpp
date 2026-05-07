@@ -1,13 +1,19 @@
 #pragma once
-#include "core.hpp"
+
+/**
+ * @file telemetry.hpp
+ * @brief Internal MVLib telemetry engine
+ */
+
+#include "mvlib/core.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <cmath>
 #include <string>
 
 namespace mvlib {
-
-inline constexpr std::size_t kTelemetryMaxTextBytes = 511;
+namespace detail {
+inline constexpr size_t kTelemetryMaxTextBytes = 511;
 
 /**
  * @enum MsgType
@@ -31,7 +37,6 @@ static constexpr uint8_t encodeMsgAll(LogLevel lvl, MsgType type, uint8_t subTyp
   return t | l | (subType & 0x03);
 }
 
-double normalizeDegrees360(double degrees);
 uint16_t packTelemetryTheta(double degrees);
 int8_t packTelemetryVelocity(double velocity);
 
@@ -99,7 +104,7 @@ public:
   void sendWatch(WatchId id, LogLevel lvl, float val, bool tripped);
   void sendWatchText(WatchId id, LogLevel lvl, const std::string& text, bool tripped);
   void sendRoster(uint16_t id, const std::string& name, bool isElevated = false);
-  void sendLog(LogLevel level, const char* fmt, ...);
+  void sendLog(LogLevel level, const char *fmt, ...);
   void notifyTransmitTask();
 
 private:
@@ -109,7 +114,8 @@ private:
 
   LogLevel m_minLevel;
   std::unique_ptr<pros::Task> m_transmitHandleTask = nullptr;
-  void writeFrameDirect(const uint8_t* data, size_t len);
-  void transmit(uint8_t header, const uint8_t* data, size_t len); // Use raw header
+  void writeFrameDirect(const uint8_t *data, size_t len);
+  void transmit(uint8_t header, const uint8_t *data, size_t len); // Use raw header
 };
 } // namespace mvlib
+} // namespace telemetry

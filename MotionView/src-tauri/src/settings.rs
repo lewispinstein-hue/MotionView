@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::{collections::HashMap, fs};
 
 use base64::Engine as _;
+use semver::Version;
 use tauri::{AppHandle, Manager};
 
 const SETTINGS_FILE: &str = "user-preferences.json";
@@ -11,6 +12,15 @@ const SAVED_PATHS_FILE: &str = "saved-paths.json";
 #[allow(dead_code)]
 const WINDOW_STATE_FILE: &str = "window-state.json";
 const AUX_WINDOW_STATE_FILE: &str = "aux-window-state.json";
+const APP_STATE_KEY: &str = "appState";
+const LAST_SEEN_APP_VERSION_KEY: &str = "lastSeenAppVersion";
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviousVersionStatus {
+    pub previous_version: Option<String>,
+    pub was_previous_version_older: bool,
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -98,6 +108,68 @@ pub fn write_settings(app: AppHandle, contents: String) -> Result<(), String> {
     serde_json::from_str::<serde_json::Value>(&contents).map_err(|e| e.to_string())?;
     let path = settings_path(&app)?;
     std::fs::write(path, contents).map_err(|e| e.to_string())
+}
+
+fn read_settings_value(app: &AppHandle) -> Result<serde_json::Value, String> {
+    match read_settings(app.clone())? {
+        Some(contents) => serde_json::from_str(&contents).map_err(|e| e.to_string()),
+        None => Ok(serde_json::json!({})),
+    }
+}
+
+fn write_settings_value(app: &AppHandle, value: &serde_json::Value) -> Result<(), String> {
+    let path = settings_path(app)?;
+    let contents = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
+    std::fs::write(path, contents).map_err(|e| e.to_string())
+}
+
+fn parse_version(value: &str) -> Option<Version> {
+    Version::parse(value).ok().or_else(|| {
+        let trimmed = value.trim();
+        trimmed
+            .strip_prefix('v')
+            .and_then(|rest| Version::parse(rest).ok())
+    })
+}
+
+#[tauri::command]
+pub fn was_previous_version_old(app: AppHandle) -> Result<PreviousVersionStatus, String> {
+    let mut settings = read_settings_value(&app)?;
+    let root = settings
+        .as_object_mut()
+        .ok_or_else(|| "settings root must be a JSON object".to_string())?;
+
+    let app_state = root
+        .entry(APP_STATE_KEY.to_string())
+        .or_insert_with(|| serde_json::json!({}));
+    let app_state_obj = app_state
+        .as_object_mut()
+        .ok_or_else(|| "settings.appState must be a JSON object".to_string())?;
+
+    let current_version = app.package_info().version.to_string();
+    let previous_version = app_state_obj
+        .get(LAST_SEEN_APP_VERSION_KEY)
+        .and_then(|value| value.as_str())
+        .map(|value| value.to_string());
+
+    let was_previous_version_older = match previous_version.as_deref() {
+        Some(previous) => match (parse_version(previous), parse_version(&current_version)) {
+            (Some(prev), Some(curr)) => prev < curr,
+            _ => previous != current_version,
+        },
+        None => false,
+    };
+
+    app_state_obj.insert(
+        LAST_SEEN_APP_VERSION_KEY.to_string(),
+        serde_json::Value::String(current_version),
+    );
+    write_settings_value(&app, &settings)?;
+
+    Ok(PreviousVersionStatus {
+        previous_version,
+        was_previous_version_older,
+    })
 }
 
 #[tauri::command]

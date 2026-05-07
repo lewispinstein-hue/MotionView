@@ -187,7 +187,8 @@ class Terminal(object):
         self.allow_input = allow_input
         self.no_sigint = True  # SIGINT flag
         signal.signal(signal.SIGINT, self.catch_sigint)  # SIGINT handler
-        self.console = Console()
+        use_interactive_console = allow_input and hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
+        self.console = Console() if use_interactive_console else ConsoleBase()
         self.console.output = colorama.AnsiToWin32(self.console.output).stream
 
     def _start_rx(self):

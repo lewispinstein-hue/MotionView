@@ -1,5 +1,5 @@
-#include "mvlib/telemetry.hpp"
-#include "core.hpp"
+#include "mvlib/private/telemetry.hpp"
+#include "mvlib/core.hpp"
 #include "pros/rtos.hpp"
 #include <algorithm>
 #include <array>
@@ -9,12 +9,14 @@
 #include <unistd.h>
 
 namespace mvlib {
+namespace detail {
 namespace {
-constexpr size_t kTelemetryMaxPayloadBytes =
-  std::max(sizeof(LogPacketHeader), sizeof(WatchTextPacketHeader)) + kTelemetryMaxTextBytes;
+constexpr size_t kTelemetryMaxPayloadBytes = std::max(
+                 sizeof(LogPacketHeader), 
+                 sizeof(WatchTextPacketHeader)) + kTelemetryMaxTextBytes;
 constexpr size_t kTelemetryMaxRawFrameBytes = kTelemetryMaxPayloadBytes + 1;
-constexpr size_t kTelemetryMaxEncodedFrameBytes =
-  kTelemetryMaxRawFrameBytes + (kTelemetryMaxRawFrameBytes / 254) + 2;
+constexpr size_t kTelemetryMaxEncodedFrameBytes = kTelemetryMaxRawFrameBytes + 
+                 (kTelemetryMaxRawFrameBytes / 254) + 2;
 
 constexpr size_t kTelemetryQueueCapacity = 64;
 constexpr uint32_t kTelemetryQueueLockTimeoutMs = 2;
@@ -51,7 +53,7 @@ bool enqueueTelemetryFrame(const uint8_t *data, size_t len) {
 
   // If we successfully added a frame, wake up the background tasks
   if (hasCapacity) {
-    mvlib::Telemetry::getInstance().notifyTransmitTask();
+    Telemetry::getInstance().notifyTransmitTask();
   }
 
   return hasCapacity;
@@ -71,7 +73,7 @@ bool dequeueTelemetryFrame(TelemetryFrame& frame) {
   return hasFrame;
 }
 
-void writeFrameBlocking(const uint8_t * data, size_t len) {
+void writeFrameBlocking(const uint8_t *data, size_t len) {
   telemetryWriteMutex.take();
   size_t totalWritten = 0;
   size_t retryCount = 0;
@@ -106,17 +108,15 @@ bool Telemetry::shouldLog(LogLevel level) const {
   return static_cast<uint8_t>(level) >= static_cast<uint8_t>(m_minLevel);
 }
 
-double normalizeDegrees360(double degrees) {
-  if (!std::isfinite(degrees)) return 0.0;
-  double normalized = std::fmod(degrees, 360.0);
-  if (normalized < 0.0) normalized += 360.0;
-  return normalized;
-}
-
 uint16_t packTelemetryTheta(double degrees) {
   // Encode [0, 360) into the full uint16 ring. Decoder should use 360 / 65536.
-  double kThetaScale = 65536.0 / 360.0;
-  return static_cast<uint16_t>(std::floor(normalizeDegrees360(degrees) * kThetaScale));
+  constexpr double kThetaScale = 65536.0 / 360.0;
+  double normalized = [degrees]() {
+    if (!std::isfinite(degrees)) return 0.0;
+    return std::fmod(degrees, 360.0) < 0.0 ? degrees + 360.0 : degrees;
+  }();
+
+  return static_cast<uint16_t>(std::floor(normalized * kThetaScale));
 }
 
 int8_t packTelemetryVelocity(double velocity) {
@@ -145,7 +145,7 @@ void Telemetry::sendWaypointStatus(WPId id, uint8_t subType) {
   WaypointStatusPacket pkt;
   pkt.timestamp = static_cast<uint16_t>(pros::millis());
   pkt.id = id;
-  
+
   transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::WPOINT, subType), 
            reinterpret_cast<const uint8_t *>(&pkt), sizeof(WaypointStatusPacket));
 }
@@ -157,7 +157,7 @@ void Telemetry::sendWatch(WatchId id, LogLevel lvl, float val, bool tripped) {
   pkt.timestamp = static_cast<uint16_t>(pros::millis());
   pkt.id = id;
   pkt.value = val;
-  
+
   // SubType 1 indicates the watch predicate was tripped (elevated)
   transmit(encodeMsgAll(lvl, MsgType::WATCH, tripped ? 1 : 0), 
            reinterpret_cast<const uint8_t *>(&pkt), sizeof(WatchPacket));
@@ -186,7 +186,7 @@ void Telemetry::sendRoster(uint16_t id, const std::string& name, bool isElevated
   pkt.id = id;
   memset(pkt.name, 0, sizeof(pkt.name));
   strncpy(pkt.name, name.c_str(), sizeof(pkt.name) - 1);
-  
+
   // SubType 1 indicates this is the secondary/elevated label for the ID
   transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::ROSTER, isElevated ? 1 : 0), 
            reinterpret_cast<const uint8_t *>(&pkt), sizeof(RosterPacket));
@@ -195,7 +195,7 @@ void Telemetry::sendRoster(uint16_t id, const std::string& name, bool isElevated
 void Telemetry::sendLog(LogLevel level, const char *fmt, ...) {
   if (!shouldLog(level)) return;
 
-  // 1. Format the string
+  // Format the string
   std::array<char, kTelemetryMaxTextBytes + 1> textBuf{};
   va_list args;
   va_start(args, fmt);
@@ -207,7 +207,7 @@ void Telemetry::sendLog(LogLevel level, const char *fmt, ...) {
     textLen = static_cast<int>(textBuf.size()) - 1;
   }
 
-  // 2. Prepare the binary frame (16-bit Timestamp Header + String)
+  // Prepare the binary frame (16-bit Timestamp Header + String)
   LogPacketHeader header;
   header.timestamp = static_cast<uint16_t>(pros::millis());
 
@@ -272,7 +272,7 @@ void Telemetry::notifyTransmitTask() {
   m_transmitHandleTask->notify();
 }
 
-void Telemetry::writeFrameDirect(const uint8_t * data, size_t len) {
+void Telemetry::writeFrameDirect(const uint8_t *data, size_t len) {
   writeFrameBlocking(data, len);
 }
 
@@ -319,3 +319,4 @@ void Telemetry::transmit(uint8_t header, const uint8_t *data, size_t len) {
   enqueueTelemetryFrame(encodedBuf.data(), writePos);
 }
 } // namespace mvlib
+} // namespace detail

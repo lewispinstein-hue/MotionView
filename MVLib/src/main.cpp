@@ -1,8 +1,7 @@
 #include "main.h"
-#include "pros/misc.hpp"
 
 #define MVLIB_USE_SIMPLES
-#include "mvlib/api.hpp" 
+#include "mvlib/api.hpp"
 #include "mvlib/Optional/customOdom.hpp"
 
 // Creating motors and controller
@@ -57,31 +56,36 @@ void initialize() {
 		.rightDrivetrain = &right_mg
 	});
 
-	// Log average drivetrain temperature only if overheating
-	logger.watch("Avg Temp", LogLevel::OFF, 1_mvS, // We do not log at all normally
-		[]() { return (left_mg.get_temperature() + right_mg.get_temperature()) / 2; },
-		mvlib::LevelOverride<double>{ // Use LevelOverride to only log if overheating
-			.elevatedLevel = LogLevel::WARN,
-			.predicate = PREDICATE(v > 50), 
-			.label = "Overheating Drivetrain"
-		}, "%.0f");
+	// Set the default smart watches for motor temps, battery voltage, etc
+	logger.setDefaultWatches({});
 
-	// Start main telemetry stream
-	logger.start();
-	
-	auto leftGoalWP = logger.addWaypoint("Left Goal", {
+	// Log average drivetrain temperature 
+	mvlib::WatchHandle avgTempWatch = 
+		logger.watch("Avg Temp", LogLevel::OFF, WatchMode::onChange, 1_mvS,
+		[]() {
+			return (left_mg.get_temperature() + right_mg.get_temperature()) / 2; 
+		}, "%.1f",
+		mvlib::LevelOverride<double>{
+			.elevatedLevel = LogLevel::WARN,
+			.predicate = PREDICATE(v > 50),
+			.label = "Avg Temp over 50"
+	});
+
+	mvlib::WaypointHandle leftGoalWP = logger.addWaypoint("Left Goal", {
 		.tarX = 10,  // Target 10 x
 		.tarY = 8,   // 8 y
 		.tarT = 180, // And 180 degrees heading
 		.timeoutMs = 15_mvS, // Timeout after 15 seconds
 		.linearTol = 1.5, // Consider reached if within 1.5 units
-		.thetaTol = 8, // Consider reached if within 8 degrees
+		.thetaTol = 8 // Consider reached if within 8 degrees
 	});
-
-	// Store the offset
+	
+	// Store and print the offset
 	auto off = leftGoalWP.getOffset();
-	// Print the offset
 	logger.info("Left Goal Distance: %.1f, %.1f\n", off.totalOffset, off.offT.value_or(0));
+	
+	// Start main telemetry stream
+	logger.start();
 	logger.info("Finished initialization!");
 }
 
@@ -90,7 +94,10 @@ void initialize() {
  * the VEX Competition Switch, following either autonomous or opcontrol. When
  * the robot is enabled, this task will exit.
  */
-void disabled() {}
+void disabled() {
+	auto& logger = mvlib::Logger::getInstance();
+	logger.info("Disabled!");
+}
 
 /**
  * Runs after initialize(), and before autonomous when connected to the Field
@@ -101,7 +108,10 @@ void disabled() {}
  * This task will exit when the robot is enabled and autonomous or opcontrol
  * starts.
  */
-void competition_initialize() {}
+void competition_initialize() {
+	auto& logger = mvlib::Logger::getInstance();
+	logger.info("Competition Initialize!");
+}
 
 /**
  * Runs the user autonomous code. This function will be started in its own task
@@ -114,7 +124,17 @@ void competition_initialize() {}
  * will be stopped. Re-enabling the robot will restart the task, not re-start it
  * from where it left off.
  */
-void autonomous() {}
+void autonomous() {
+	auto& logger = mvlib::Logger::getInstance();
+	logger.info("Starting autonomous!");
+	uint32_t startTime = pros::millis();
+
+	//
+	// Your autonomous code ...
+	//
+
+	logger.info("Finished autonomous! Time: %d ms", pros::millis() - startTime);
+}
 
 /**
  * Runs the operator control code. This function will be started in its own task
@@ -130,6 +150,13 @@ void autonomous() {}
  * task, not resume it from where it left off.
  */
 void opcontrol() {
+	auto& logger = mvlib::Logger::getInstance();
+	logger.info("Starting opcontrol!");
+
+	mvlib::WatchHandle joystickWatch = 
+		logger.watch("Joystick Right X", LogLevel::INFO, WatchMode::onInterval, 100_mvMs,
+		[]() { return master.get_analog(ANALOG_RIGHT_X); });
+
 	while (true) {
 		pros::lcd::print(0, "%d %d %d", (pros::lcd::read_buttons() & LCD_BTN_LEFT) >> 2,
 		                 (pros::lcd::read_buttons() & LCD_BTN_CENTER) >> 1,
@@ -140,6 +167,6 @@ void opcontrol() {
 		int turn = master.get_analog(ANALOG_RIGHT_X);  // Gets the turn left/right from right joystick
 		left_mg.move(dir - turn);                      // Sets left motor voltage
 		right_mg.move(dir + turn);                     // Sets right motor voltage
-		pros::delay(20);                               // Run for 20 ms then update
+		pros::delay(20);                          // Run for 20 ms then update
 	}
 }

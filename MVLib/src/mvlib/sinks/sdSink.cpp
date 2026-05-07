@@ -1,7 +1,10 @@
+#include "mvlib/private/telemetry.hpp"
 #include "pros/misc.hpp"
 #include "pros/rtos.hpp"
 #include "mvlib/core.hpp"
+#define _MVLIB_PREVENT_MACRO_CLEANUP
 #include "mvlib/private/forwardLogMacros.h"
+#include "mvlib/private/raii.hpp"
 #include <cstdarg>
 #include <cstdint>
 #include <cstring>
@@ -9,7 +12,7 @@
 #include <cerrno>
 
 namespace mvlib {
-
+namespace {
 uint32_t getrandInt(const uint32_t& min, const uint32_t& max) {
   /**
     * @note This method of generation is needed because the v5 brain is 
@@ -32,12 +35,13 @@ uint32_t getrandInt(const uint32_t& min, const uint32_t& max) {
   std::uniform_int_distribution<> dis(min, max);
   return dis(gen);
 }
+} // namespace
 
-std::string Logger::m_getTimestampedFile() {
+void Logger::getTimestampedFile(char *buffer, size_t len) {
+  if (!buffer || len == 0) return;
+
   time_t now = time(0);
   tm *tstruct = localtime(&now);
-
-  char filename[256]; // Increased size to accommodate folder + filename
   
   const uint32_t randInt = getrandInt(0, 99999);
   
@@ -51,8 +55,8 @@ std::string Logger::m_getTimestampedFile() {
   if (tstruct->tm_year < 100) {
     _MVLIB_FORWARD_INFO("VEX RTC Inaccurate. Falling back to program duration.");
     
-    snprintf(filename, sizeof(filename), "%s/MVLIB_%s_%u-%u_%d.log",
-             pathPrefix, date, pros::millis() / 1000, pros::millis() / 100, randInt);
+    snprintf(buffer, len, "%s/MVLIB_%s_%u-%u_%d.log",
+             pathPrefix, m_date, pros::millis() / 1000, pros::millis() / 100, randInt);
   } else {
     _MVLIB_FORWARD_INFO("VEX RTC Plausible. Creating file name with date.");
     
@@ -61,13 +65,11 @@ std::string Logger::m_getTimestampedFile() {
     strftime(timeBuf, sizeof(timeBuf), "MVLIB_%Y-%m-%d_%H-%M", tstruct); 
     
     // Combine pathPrefix, formatted time, and random ID
-    snprintf(filename, sizeof(filename), "%s/%s_%d.log", pathPrefix, timeBuf, randInt); 
+    snprintf(buffer, len, "%s/%s_%d.log", pathPrefix, timeBuf, randInt); 
   }
-  
-  return std::string(filename);
 }
 
-bool Logger::m_initSDLogger() {
+bool Logger::initSDLogger() {
   if (m_sdLocked) return false;
 
   if (pros::usd::is_installed()) {
@@ -89,9 +91,7 @@ bool Logger::m_initSDLogger() {
     return false;
   }
 
-  strncpy(m_currentFilename, m_getTimestampedFile().c_str(), sizeof(m_currentFilename) - 1);
-
-  // Apply null terminator 
+  getTimestampedFile(m_currentFilename, sizeof(m_currentFilename));
   m_currentFilename[sizeof(m_currentFilename) - 1] = '\0';
 
   m_sdFile = fopen(m_currentFilename, "w");
@@ -107,9 +107,9 @@ bool Logger::m_initSDLogger() {
 }
 
 bool Logger::setLoggingFolder(const char *folder, bool disableOnFail) {
-  unique_lock lock(m_mutex);
+  detail::uniqueLock lock(m_mutex);
   if (!lock.isLocked()) return false;
-  if (m_started) return false;
+  if (m_started || m_sdLocked) return false;
 
   if (!folder || folder[0] == '\0' || folder[0] != '\\') {
     m_sdLocked = disableOnFail;
@@ -139,8 +139,9 @@ bool Logger::setLoggingFolder(const char *folder, bool disableOnFail) {
 void Logger::logToSD(const LogLevel& level, const char *fmt, ...) {
   if (!m_sdFile || m_sdLocked) return;
 
-  unique_lock m(m_sdMutex);
+  detail::uniqueLock m(m_sdMutex);
   if (!m.isLocked()) return;
+  if (!detail::Telemetry::getInstance().shouldLog(level)) return;
   
   uint32_t now = pros::millis();
 

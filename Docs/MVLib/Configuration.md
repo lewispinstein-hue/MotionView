@@ -192,7 +192,7 @@ Higher values:
 
 ### `terminalPollingRate`
 
-Default: `120`
+Default: `100`
 
 How often MVLib polls and emits terminal/live telemetry data.
 
@@ -275,10 +275,10 @@ Notes:
 
 ## Minimum Log Level
 
-Use `setLoggerMinLevel(...)` to filter normal log output:
+Use `setMinLogLevel(...)` to filter normal log output:
 
 ```cpp
-logger.setLoggerMinLevel(mvlib::LogLevel::WARN);
+logger.setMinLogLevel(LogLevel::WARN);
 ```
 
 That filters out:
@@ -292,4 +292,4 @@ And still allows:
 - `ERROR`
 - `FATAL`
 
-This affects MVLib's standard log methods such as `logger.info(...)` and elevated watch output levels.
+This affects MVLib's standard log methods such as `logger.info(...)` and watch output levels.
