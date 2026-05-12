@@ -2,7 +2,7 @@
 #include <utility>
 
 namespace mvlib {
-const char *Logger::levelToString(const LogLevel& level) const {
+const char* Logger::levelToString(const LogLevel& level) const {
   switch (level) {
   case LogLevel::DEBUG:    return "DEBUG";
   case LogLevel::INFO:     return "INFO";

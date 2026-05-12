@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MotionView Popout Windows</title>
+  <link rel="stylesheet" href="./popout-windows.css" />
+</head>
+
+<body>
+  <main class="popoutPreview">
+    <div id="floatingInfo">
+      <div id="floatHeader">
+        <div class="float-title">
+          <span class="float-title-text">Point Details</span>
+          <span class="float-subtitle" id="fcount">Point: 24/180</span>
+        </div>
+        <button id="btnCloseFloat" class="iconBtn" aria-label="Close" type="button">✕</button>
+      </div>
+
+      <div id="floatBody">
+        <div class="float-section">
+          <div class="float-row"><span class="k">X</span><span class="v" id="fx">18.42</span></div>
+          <div class="float-row"><span class="k">Y</span><span class="v" id="fy">53.11</span></div>
+          <div class="float-row"><span class="k">θ</span><span class="v" id="ft">90.0°</span></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="float-section">
+          <div class="float-row"><span class="k">Time</span><span class="v" id="ftime">2.40s</span></div>
+          <div class="float-row"><span class="k">Δ</span><span class="v" id="fdeltat">0.05s</span></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="float-section">
+          <div class="float-row"><span class="k">Avg Vel</span><span class="v" id="favg">31.8</span></div>
+          <div class="float-row"><span class="k">L Vel</span><span class="v" id="flv">32.1</span></div>
+          <div class="float-row"><span class="k">R Vel</span><span class="v" id="frv">31.5</span></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="float-watch" id="fwatchblock">
+          <div class="float-watch-head">
+            <span class="chip" id="fwatchclickable">Closest Watch</span>
+            <span class="float-watch-time" id="fwatchtime">2.41s</span>
+          </div>
+
+          <div class="float-row"><span class="k">Label</span><span class="v v-soft"
+              id="fwatchlabel">Drive Temperature</span></div>
+          <div class="float-row"><span class="k">Value</span><span class="v v-soft" id="fwatchvalue">41.7 °C</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="floatResizer" aria-hidden="false"></div>
+    </div>
+
+    <div id="pinnedWatchHost" aria-live="polite">
+      <section class="pinnedWatchPanel" data-watch-id="preview-watch">
+        <div class="pinnedWatchHeader">
+          <div class="pinnedWatchName">Drive Temperature</div>
+        </div>
+        <button class="iconBtn pinnedWatchClose" type="button" aria-label="Close pinned watch">✕</button>
+        <div class="pinnedWatchBody">
+          <div class="pinnedWatchValue">41.7 °C</div>
+        </div>
+      </section>
+    </div>
+  </main>
+</body>
+
+</html>

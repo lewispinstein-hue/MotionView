@@ -173,7 +173,6 @@ window.addEventListener('mousemove', (e) => { lastMouseClient = { x: e.clientX, 
 const ctx = canvas.getContext('2d');
 const timelineCanvas = document.getElementById('timelineCanvas');
 const tctx = timelineCanvas.getContext('2d');
-const planningTimelineBar = document.getElementById('planningTimelineBar');
 const planningTimelineCanvas = document.getElementById('planningTimelineCanvas');
 const planTimePill = document.getElementById('planTimePill');
 const planPointPill = document.getElementById('planPointPill');
@@ -228,24 +227,11 @@ const layoutState = {
   lastTimelineH: 260,
 };
 
-const TOP_BAR_STATUS_CHAR_LIMIT = 72;     // Length before truncation of top status
-const TOP_BAR_OVERFLOW_TOLERANCE_PX = 0; // Extra px before scroll mode engages
 const TOP_BAR_CENTER_STATUS_GAP_PX = 16;  // Gap between status text and center control
-const TOP_BAR_CENTER_RIGHT_OVERLAP_TOLERANCE_PX = 0; // Allowed overlap with right controls before scrolling
 const TOP_BAR_CENTER_RIGHT_SCROLL_GAP_PX = 0; // Enter scroll mode if shifted center would be closer than this to the right side
 let topBarMaxObservedWidth = 0;
 let topBarMaxCenteredStatusWidth = 0;
 let topBarSavedScrollLeft = 0;
-
-function truncateTopBarStatus(msg) {
-  const text = String(msg ?? '');
-  if (text.length <= TOP_BAR_STATUS_CHAR_LIMIT) return text;
-  return `${text.slice(0, TOP_BAR_STATUS_CHAR_LIMIT - 1).trimEnd()}…`;
-}
-
-function fmtTopBarRect(rect) {
-  return `L${Math.round(rect.left)} R${Math.round(rect.right)} W${Math.round(rect.width)}`;
-}
 
 function updateTopBarStatusLayout() {
   if (!topBarEl || !topBarContentEl || !topBarLeftEl || !topBarCenterEl || !topBarRightEl || !statusEl) return;
@@ -356,7 +342,6 @@ function readRootCssNumber(prop, fallback = 0) {
 
 const watchList = document.getElementById('watchList');
 const watchCount = document.getElementById('watchCount');
-const secWatches = document.getElementById('secWatches');
 const logList = document.getElementById('logList');
 const logCount = document.getElementById('logCount');
 const waypointList = document.getElementById('waypointList');
@@ -476,10 +461,14 @@ let backendReadyLastCheckAt = 0;
 
 // --- FIELD IMAGES ---
 const FIELD_IMAGES = [
+  { key: "./assets/fields/v5_match_field_2026-2027_override.png", label: "Match Field (V5 Override)" },
+  { key: "./assets/fields/v5_skills_field_2026-2027_override.png", label: "Skills Field (V5 Override)" },
+  { key: "./assets/fields/vU_match_field_2026-2027_override.png", label: "Match Field (VU Override)" },
+  { key: "./assets/fields/vU_skills_field_2026-2027_override.png", label: "Skills Field (VU Override)" },
   { key: "./assets/fields/v5_match_field_2025-2026_pushback.png", label: "Match Field (V5 Pushback)" },
   { key: "./assets/fields/v5_skills_field_2025-2026_pushback.png", label: "Skills Field (V5 Pushback)" },
   { key: "./assets/fields/vU_field_2025-2026_pushback.png", label: "VexU Field (VU Pushback)" },
-  { key: "./assets/fields/v5_field_perimeter.png", label: "Field Perimeter (V5 Pushback)" },
+  { key: "./assets/fields/v5_field_perimeter.png", label: "Field Perimeter" },
 ];
 
 // Default field image
@@ -506,7 +495,6 @@ const HOVER_PIXEL_TOL = 14;
 const TRACK_HOVER_PAD_PX = 12; // How close to the track before snapping on
 
 const WAYPOINT_OFFSET_PILL_MAX_W_PX = 150;
-const FIELD_WAYPOINT_MARKER_MAX_W_PX = 35;
 
 const CANVAS_ZOOM_MAX = 15; // Max zoom in
 const CANVAS_ZOOM_MIN = 0.15; // Max zoom out
@@ -734,7 +722,6 @@ let planWaypoints = []; // {x,y} in inches
 let planSelected = -1;
 let planDragging = false;
 let planPointerId = null;
-let planDragOffset = { x: 0, y: 0 };
 let planSelectedSet = new Set();
 let planDragStart = { x: 0, y: 0 };
 let planDragOrig = [];
@@ -748,7 +735,6 @@ let planPlaying = false;
 let planRaf = null;
 let planPlayDist = 0;
 let planLastWall = null;
-const PLAN_SPEED = 1; // units per second
 const PLAN_POINT_R = 11; // Size of waypoint in planning mode
 const PLAN_OVERLAY_POINT_R = 7; // Size of waypoint in overlay (viewing) mode
 const PLAN_THETA_HANDLE_R = 6; // Radius of theta handle
@@ -1026,7 +1012,7 @@ function applySavedLayout(settings) {
   const leftWidth = parseLayoutNumber(settings.layoutLeftSidebarWidth);
   if (leftWidth !== null) {
     const next = clamp(leftWidth, 0, MAX_PX_LIVEWIN);
-    root?.style.setProperty('--leftSidebarW', `${next}px`);
+    root.style.setProperty('--leftSidebarW', `${next}px`);
     layoutChanged = true;
     if (next <= COLLAPSE_PX_LEFTSIDEBAR) {
       leftEl?.classList?.add('isCollapsed');
@@ -1041,7 +1027,7 @@ function applySavedLayout(settings) {
   const rightViewingWidth = parseLayoutNumber(settings.layoutRightSidebarWidthViewing);
   if (rightViewingWidth !== null) {
     const next = clamp(rightViewingWidth, 0, MAX_SIDEBAR_W_PX);
-    root?.style.setProperty('--rightSidebarWViewing', `${next}px`);
+    root.style.setProperty('--rightSidebarWViewing', `${next}px`);
     layoutChanged = true;
     if (next <= COLLAPSE_PX_SIDEBAR) {
       rightViewingEl?.classList?.add('isCollapsed');
@@ -1054,7 +1040,7 @@ function applySavedLayout(settings) {
   const rightPlanningWidth = parseLayoutNumber(settings.layoutRightSidebarWidthPlanning);
   if (rightPlanningWidth !== null) {
     const next = clamp(rightPlanningWidth, 0, MAX_SIDEBAR_W_PX);
-    root?.style.setProperty('--rightSidebarWPlanning', `${next}px`);
+    root.style.setProperty('--rightSidebarWPlanning', `${next}px`);
     layoutChanged = true;
     if (next <= COLLAPSE_PX_SIDEBAR) {
       rightPlanningEl?.classList?.add('isCollapsed');
@@ -1067,7 +1053,7 @@ function applySavedLayout(settings) {
   const timelineHeight = parseLayoutNumber(settings.layoutTimelineHeight);
   if (timelineHeight !== null) {
     const next = clamp(timelineHeight, 0, MAX_TIMELINE_H_PX);
-    root?.style.setProperty('--timelineH', `${next}px`);
+    root.style.setProperty('--timelineH', `${next}px`);
     layoutChanged = true;
     if (next <= COLLAPSE_PX_TIMELINE) {
       timelineBar?.classList?.add('isCollapsed');
@@ -1082,7 +1068,7 @@ function applySavedLayout(settings) {
     const rightH = rightPlanningEl?.getBoundingClientRect().height || window.innerHeight;
     const maxPlanH = Math.max(COLLAPSE_WAYPOINTLIST_PX, rightH - 180);
     const next = clamp(planHeight, 0, maxPlanH);
-    root?.style.setProperty('--planListH', `${next}px`);
+    root.style.setProperty('--planListH', `${next}px`);
     layoutChanged = true;
     if (next <= COLLAPSE_WAYPOINTLIST_PX) {
       rightPlanningEl?.classList?.add('planListCollapsed');
@@ -1344,9 +1330,10 @@ function drawPlanningOverlay(force = false) {
     const sp = worldToScreen(p.x, p.y);
     const isSel = planSelectedSet.has(i);
     const baseR = (appMode !== "planning") ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
-
-    if (appMode === "viewing") var r = Math.min(baseR, PLAN_MARKER_MAX_IN_VIEWING * scale);
-    else var r = Math.min(baseR, PLAN_MARKER_MAX_IN * scale);
+    
+    let r = 0;
+    if (appMode === "viewing") r = Math.min(baseR, PLAN_MARKER_MAX_IN_VIEWING * scale);
+    else r = Math.min(baseR, PLAN_MARKER_MAX_IN * scale);
 
     ctx.beginPath();
     ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
@@ -1371,8 +1358,7 @@ function drawPlanningOverlay(force = false) {
 
     if (isSel) {
       if (appMode === "viewing") var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN_VIEWING * scale);
-      else
-        var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN * scale);
+      else var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN * scale);
 
       const dist = r + PLAN_THETA_HANDLE_OFFSET;
       const hx = sp.x + Math.sin(theta) * dist;
@@ -4140,13 +4126,14 @@ function drawWatchDots() {
     const p = worldToScreen(pose.x, pose.y);
 
     const isHover = (hoverWatch === m);
-    const r = isHover ? 5.6 : 4.2;
+    const baseDiameter = isHover ? 11.2 : 8.4;
+    const r = scaledViewingFieldRadius(baseDiameter);
     const fillA = 0.40;
 
     ctx.save();
     ctx.fillStyle = st.fill.replace("rgb(", "rgba(").replace(")", `,${fillA})`);
     ctx.strokeStyle = "rgba(255,255,255,0.95)";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = Math.max(1, 2 * viewingFieldMarkerStyleScale());
     ctx.beginPath();
     ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
     ctx.fill();
@@ -4159,16 +4146,19 @@ function drawWatchDots() {
     const pose = selectedWatch.marker.pose;
     const p = worldToScreen(pose.x, pose.y);
 
+    const outerR = scaledViewingFieldRadius(18);
+    const innerR = scaledViewingFieldRadius(13);
+
     ctx.save();
     ctx.strokeStyle = "rgba(255,255,255,0.95)";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = Math.max(1, 2 * viewingFieldMarkerStyleScale());
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 9.0, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, outerR, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.fillStyle = st.fill.replace("rgb(", "rgba(").replace(")", ",0.35)");
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, innerR, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -4183,15 +4173,14 @@ function drawWaypointDots() {
     const isSelected = selectedWaypointId === waypoint.id;
     const fill = waypoint.active ? "rgba(0,0,0,0.10)" : "rgba(120,120,120,0.10)";
     const stroke = "rgba(255,255,255,0.96)";
-    const markerScale = clamp(viewZoom, 0.25, FIELD_WAYPOINT_MARKER_MAX_W_PX / 12);
     const baseDiameter = isSelected ? 15 : 12;
-    const radius = Math.min(baseDiameter * markerScale, FIELD_WAYPOINT_MARKER_MAX_W_PX) / 2;
-    const selectedRingGap = 4 * markerScale;
+    const radius = scaledViewingFieldRadius(baseDiameter);
+    const selectedRingGap = 4 * viewingFieldMarkerStyleScale();
 
     ctx.save();
     ctx.fillStyle = fill;
     ctx.strokeStyle = stroke;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = Math.max(1, 2 * viewingFieldMarkerStyleScale());
     ctx.beginPath();
     ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
     ctx.fill();
@@ -4199,7 +4188,7 @@ function drawWaypointDots() {
 
     if (isSelected) {
       ctx.strokeStyle = "rgba(255,255,255,0.85)";
-      ctx.lineWidth = 2;
+      ctx.lineWidth = Math.max(1, 2 * viewingFieldMarkerStyleScale());
       ctx.beginPath();
       ctx.arc(p.x, p.y, radius + selectedRingGap, 0, Math.PI * 2);
       ctx.stroke();
@@ -4234,12 +4223,37 @@ function waypointOffsetUiScale() {
   return clamp(viewZoom, 0.25, 1);
 }
 
+function viewingFieldMarkerScale() {
+  return Math.max(viewZoom, CANVAS_ZOOM_MIN);
+}
+
+function viewingFieldMarkerStyleScale() {
+  return clamp(viewZoom, CANVAS_ZOOM_MIN, 1.75);
+}
+
+function scaledViewingFieldDiameter(baseDiameterPx, maxDiameterPx = Infinity) {
+  return Math.min(baseDiameterPx * viewingFieldMarkerScale(), maxDiameterPx);
+}
+
+function scaledViewingFieldRadius(baseDiameterPx, maxDiameterPx = Infinity) {
+  return scaledViewingFieldDiameter(baseDiameterPx, maxDiameterPx) / 2;
+}
+
+function waypointByIdLike(id) {
+  if (id == null) return null;
+  return waypointsById.get(Number(id))
+    || waypoints.find((waypoint) => String(waypoint?.id) === String(id))
+    || null;
+}
+
 function selectedWaypointForOverlay() {
   if (appMode !== "viewing") return null;
-  if (selectedWaypointId == null) return null;
-  const waypoint = waypointsById.get(Number(selectedWaypointId))
-    || waypoints.find((waypoint) => String(waypoint?.id) === String(selectedWaypointId))
-    || null;
+  const filter = waypointFilterValue();
+  const overlayWaypointId = (filter !== "all" && filter !== "active")
+    ? filter
+    : selectedWaypointId;
+  if (overlayWaypointId == null) return null;
+  const waypoint = waypointByIdLike(overlayWaypointId);
   return waypoint && waypointFilterMatches(waypoint) ? waypoint : null;
 }
 
@@ -5016,24 +5030,6 @@ function updatePoseReadout() {
   refreshPinnedWatchPanels();
 }
 
-// -------- fit --------
-function fitToPoses() {
-  const poses = getPosesInches();
-  if (!poses.length) return;
-  let minX = poses[0].x, maxX = poses[0].x;
-  let minY = poses[0].y, maxY = poses[0].y;
-  for (const p of poses) {
-    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
-    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
-  }
-  const margin = 6;
-  bounds.minX = minX - margin; bounds.maxX = maxX + margin;
-  bounds.minY = minY - margin; bounds.maxY = maxY + margin;
-  bounds.pad = FIELD_BOUNDS_IN.pad;
-  computeTransform();
-  requestDrawAll();
-}
-
 // -------- view controls (square maximize + pan/zoom) --------
 function resetView() {
   panDelta = 0;
@@ -5379,17 +5375,18 @@ function hitTestWatchAtClient(clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
   const x = clientX - rect.left;
   const y = clientY - rect.top;
-  const tol = 10;
   let best = null;
-  let bestD2 = tol * tol;
+  let bestD2 = Infinity;
   for (const m of watchMarkers) {
     if (!isWatchMarkerVisible(m)) continue;
     if (!m.pose) continue;
     const p = worldToScreen(m.pose.x, m.pose.y);
+    const baseDiameter = hoverWatch === m ? 11.2 : 8.4;
+    const tol = Math.max(8, scaledViewingFieldRadius(baseDiameter) + 5);
     const dx = p.x - x;
     const dy = p.y - y;
     const d2 = dx * dx + dy * dy;
-    if (d2 <= bestD2) { bestD2 = d2; best = m; }
+    if (d2 <= tol * tol && d2 <= bestD2) { bestD2 = d2; best = m; }
   }
   return best;
 }
@@ -5399,17 +5396,19 @@ function hitTestWaypointAtClient(clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
   const x = clientX - rect.left;
   const y = clientY - rect.top;
-  const tol = 12;
   let best = null;
-  let bestD2 = tol * tol;
+  let bestD2 = Infinity;
 
   for (const waypoint of waypoints) {
     if (!waypointFilterMatches(waypoint)) continue;
     const p = worldToScreen(waypoint.target.x, waypoint.target.y);
+    const isSelected = selectedWaypointId === waypoint.id;
+    const baseDiameter = isSelected ? 15 : 12;
+    const tol = Math.max(9, scaledViewingFieldRadius(baseDiameter) + 6);
     const dx = p.x - x;
     const dy = p.y - y;
     const d2 = dx * dx + dy * dy;
-    if (d2 <= bestD2) {
+    if (d2 <= tol * tol && d2 <= bestD2) {
       bestD2 = d2;
       best = waypoint;
     }
@@ -6345,7 +6344,9 @@ async function connectLeft() {
     return;
   }
   pause();
-  stopStreaming(false, false);
+  if (leftStreaming) {
+    await stopStreaming(false, false);
+  }
 
   if (leftWs) return;
   leftWs = new WebSocket(`${WS_ORIGIN}/ws`);
@@ -6401,12 +6402,15 @@ async function connectLeft() {
     liveAppendLine("[WS] error");
   });
 
-  leftSetUI("Connecting…");
+  leftSetUI("Connecting...");
 }
 
-function disconnectLeft() {
+async function disconnectLeft() {
   dbgLive("disconnectLeft: begin");
   const wasStreaming = leftStreaming;
+  if (wasStreaming) {
+    await stopStreaming(false, false);
+  }
   if (leftWs) {
     try { leftWs.close(); } catch (e) { }
   }
@@ -6560,7 +6564,7 @@ async function startStreaming() {
     liveAppendLine(`[api] start failed (${e?.message || e})`);
     // Retry once after reconnecting
     try {
-      disconnectLeft();
+      await disconnectLeft();
       await connectLeft();
       r = await withTimeout(apiPost("/api/start"), 5000, "start");
     } catch (e2) {
@@ -6628,7 +6632,7 @@ btnLeftConnectEl?.addEventListener('click', async () => {
   setLeftActionInFlight(true);
   setLeftUi();
   try {
-    if (leftConnected) disconnectLeft();
+    if (leftConnected) await disconnectLeft();
     else await connectLeft();
   } finally {
     setLeftActionInFlight(false);
@@ -8928,7 +8932,7 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'c' || e.key === 'C') {
       e.preventDefault();
       if (appMode !== "viewing") return;
-      if (leftConnected) disconnectLeft();
+      if (leftConnected) void disconnectLeft();
       else void connectLeft();
       return;
     }

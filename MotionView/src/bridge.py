@@ -169,12 +169,37 @@ def _expand_bundle_search_roots(base_roots: List[Path]) -> List[Path]:
         ])
     return expanded
 
+def _is_dev_target_build_root(root: Path) -> bool:
+    return (
+        not getattr(sys, "frozen", False)
+        and "target" in root.parts
+        and any(part in {"debug", "release"} for part in root.parts)
+    )
+
+def _ensure_executable(path: Path) -> Optional[str]:
+    if not path.exists() or not path.is_file():
+        return None
+    if platform.system() != "Windows":
+        try:
+            path.chmod(path.stat().st_mode | 0o755)
+        except Exception:
+            pass
+    try:
+        return str(path.resolve())
+    except Exception:
+        return str(path)
+
+def _bridge_log(message: str) -> None:
+    print(f"[MotionView Bridge] {message}", file=sys.stderr, flush=True)
+
+def _pros_launch_env() -> dict:
+    env = os.environ.copy()
+    env["MOTIONVIEW_HEADLESS"] = "1"
+    env["PYTHONWARNINGS"] = "ignore"
+    return env
+
 def resolve_bundled_pros_exe() -> Optional[str]:
     exe_ext = ".exe" if platform.system() == "Windows" else ""
-    exact_names = [f"motionview-pros{exe_ext}"]
-    glob_patterns = [f"motionview-pros-*{exe_ext}"]
-    runtime_dirs = ["motionview-pros"]
-    archive_names = ["motionview-pros.zip"]
 
     roots: List[Path] = []
     roots.extend(_expand_bundle_search_roots(_bundle_search_roots_from_env()))
@@ -224,35 +249,33 @@ def resolve_bundled_pros_exe() -> Optional[str]:
         if not resolved_root.is_dir():
             continue
 
-        candidates: List[Path] = []
-        for name in exact_names:
-            candidates.append(resolved_root / name)
-        for pattern in glob_patterns:
-            candidates.extend(sorted(resolved_root.glob(pattern)))
-        for runtime_dir in runtime_dirs:
-            candidates.append(resolved_root / runtime_dir / f"{runtime_dir}{exe_ext}")
+        candidate_groups: List[List[Path]] = [
+            [resolved_root / "motionview-pros" / f"motionview-pros{exe_ext}"],
+        ]
+        if not _is_dev_target_build_root(resolved_root):
+            candidate_groups.extend([
+                [resolved_root / f"motionview-pros{exe_ext}"],
+                sorted(resolved_root.glob(f"motionview-pros-*{exe_ext}")),
+            ])
 
-        for candidate in candidates:
-            try:
-                resolved_candidate = candidate.expanduser().resolve()
-            except Exception:
-                continue
-            key = str(resolved_candidate)
-            if key in seen:
-                continue
-            seen.add(key)
-            if resolved_candidate.exists() and resolved_candidate.is_file():
-                return key
+        for candidates in candidate_groups:
+            for candidate in candidates:
+                normalized = candidate.expanduser()
+                key = str(normalized)
+                if key in seen:
+                    continue
+                seen.add(key)
+                resolved = _ensure_executable(normalized)
+                if resolved:
+                    return resolved
 
         if getattr(sys, "frozen", False):
-            for archive_name in archive_names:
-                archive_path = resolved_root / archive_name
-                try:
-                    resolved_archive = archive_path.expanduser().resolve()
-                except Exception:
-                    continue
-                if not resolved_archive.exists() or not resolved_archive.is_file():
-                    continue
+            archive_path = resolved_root / "motionview-pros.zip"
+            try:
+                resolved_archive = archive_path.expanduser().resolve()
+            except Exception:
+                resolved_archive = None
+            if resolved_archive and resolved_archive.exists() and resolved_archive.is_file():
                 extracted = extract_bundled_pros_archive(resolved_archive)
                 if extracted:
                     return extracted
@@ -290,54 +313,44 @@ def extract_bundled_pros_archive(archive_path: Path) -> Optional[str]:
             extract_root.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(archive_path) as zf:
                 zf.extractall(extract_root)
-            if platform.system() != "Windows":
-                try:
-                    executable = extract_root / "motionview-pros" / f"motionview-pros{exe_ext}"
-                    if executable.exists():
-                        executable.chmod(executable.stat().st_mode | 0o755)
-                except Exception:
-                    pass
             stamp_path.write_text(archive_mtime, encoding="utf-8")
-        if expected_exe.exists() and expected_exe.is_file():
-            if platform.system() != "Windows":
-                try:
-                    expected_exe.chmod(expected_exe.stat().st_mode | 0o755)
-                except Exception:
-                    pass
-            return str(expected_exe.resolve())
+        return _ensure_executable(expected_exe)
     except Exception:
         return None
-    return None
 
 def resolve_extracted_pros_exe() -> Optional[str]:
     exe_ext = ".exe" if platform.system() == "Windows" else ""
-    runtime_root = motionview_support_dir() / "Runtime" / "motionview-pros"
     candidates = [
-        runtime_root / "motionview-pros" / f"motionview-pros{exe_ext}",
-        runtime_root / f"motionview-pros{exe_ext}",
+        motionview_support_dir() / "Runtime" / "motionview-pros" / "motionview-pros" / f"motionview-pros{exe_ext}",
+        motionview_support_dir() / "Runtime" / "motionview-pros" / f"motionview-pros{exe_ext}",
     ]
 
     for candidate in candidates:
-        try:
-            resolved = candidate.expanduser().resolve()
-        except Exception:
-            continue
-        if resolved.exists() and resolved.is_file():
-            if platform.system() != "Windows":
-                try:
-                    resolved.chmod(resolved.stat().st_mode | 0o755)
-                except Exception:
-                    pass
-            return str(resolved)
+        resolved = _ensure_executable(candidate.expanduser())
+        if resolved:
+            return resolved
     return None
 
 def resolve_pros_exe() -> Optional[str]:
     return resolve_extracted_pros_exe() or resolve_bundled_pros_exe()
 
+def current_bridge_exe() -> str:
+    if getattr(sys, "frozen", False):
+        try:
+            return str(Path(sys.executable).resolve())
+        except Exception:
+            return str(sys.executable)
+    try:
+        return str(Path(__file__).resolve())
+    except Exception:
+        return str(__file__)
+
 # MotionView must use the bundled MVLib-compatible PROS fork.
 PROS_EXE = resolve_pros_exe()
+_bridge_log(f"bridge executable: {current_bridge_exe()}")
+_bridge_log(f"resolved motionview-pros: {PROS_EXE}")
 if not PROS_EXE:
-    print("[WARN] Bundled MotionView PROS CLI not found. Live streaming may not work.", file=sys.stderr)
+    _bridge_log("Bundled MotionView PROS CLI not found. Live streaming may not work.")
 # Resource paths (PyInstaller-friendly)
 # ----------------------------
 def resource_base_dir() -> Path:
@@ -433,6 +446,8 @@ async def broadcast(line: str):
         or "Sentry is attempting to send" in line
         or "Waiting up to" in line):
         return
+    elif "warnings.warn(" in line:
+        return
     elif "You must be in a PROS project directory" in line:
         line = "The PROS Path selected is not inside of a PROS Project."
     elif "Couldn't find the response header in the device response after" in line:
@@ -475,6 +490,20 @@ class ProsTerminalRunner:
         self._pty_buf: bytes = b""
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
+    def _close_pty_reader(self):
+        if self._loop is not None and self._pty_master_fd is not None:
+            try:
+                self._loop.remove_reader(self._pty_master_fd)
+            except Exception:
+                pass
+        if self._pty_master_fd is not None:
+            try:
+                os.close(self._pty_master_fd)
+            except Exception:
+                pass
+            self._pty_master_fd = None
+        self._pty_buf = b""
+
     @property
     def running(self) -> bool:
         return self.proc is not None and self.proc.returncode is None
@@ -491,17 +520,8 @@ class ProsTerminalRunner:
             self._loop = asyncio.get_running_loop()
 
             # If a previous session exited without cleanup, clear stale PTY/reader state.
-            if self._loop is not None and self._pty_master_fd is not None:
-                try:
-                    self._loop.remove_reader(self._pty_master_fd)
-                except Exception:
-                    pass
-                try:
-                    os.close(self._pty_master_fd)
-                except Exception:
-                    pass
-                self._pty_master_fd = None
-                self._pty_buf = b""
+            if self._pty_master_fd is not None:
+                self._close_pty_reader()
 
             try:
                 await asyncio.wait_for(self._start_pipes(), timeout=3.0)
@@ -555,18 +575,7 @@ class ProsTerminalRunner:
             self.reader_task = None
 
         # Close PTY reader hook + fds on Unix
-        if self._loop is not None and self._pty_master_fd is not None:
-            try:
-                self._loop.remove_reader(self._pty_master_fd)
-            except Exception:
-                pass
-        if self._pty_master_fd is not None:
-            try:
-                os.close(self._pty_master_fd)
-            except Exception:
-                pass
-            self._pty_master_fd = None
-            self._pty_buf = b""
+        self._close_pty_reader()
 
         proc = self.proc
         self.proc = None
@@ -648,9 +657,9 @@ class ProsTerminalRunner:
         lock = _get_lock()
         async with lock:
             pros_dir = str(PROS_PROJECT_DIR)
-        env = os.environ.copy()
-        env["MOTIONVIEW_HEADLESS"] = "1"
+        env = _pros_launch_env()
         # Spawn `pros terminal` with stdio attached to PTY slave
+        _bridge_log(f"launching motionview-pros (pty): {PROS_EXE}")
         self.proc = await asyncio.create_subprocess_exec(
             PROS_EXE, "terminal", "--no-banner",
             stdin=slave_fd,
@@ -676,29 +685,11 @@ class ProsTerminalRunner:
         try:
             data = os.read(self._pty_master_fd, 4096)
         except OSError:
-            try:
-                self._loop.remove_reader(self._pty_master_fd)
-            except Exception:
-                pass
-            try:
-                os.close(self._pty_master_fd)
-            except Exception:
-                pass
-            self._pty_master_fd = None
-            self._pty_buf = b""
+            self._close_pty_reader()
             return
         if not data:
             # EOF: remove reader to avoid busy loop, and close master.
-            try:
-                self._loop.remove_reader(self._pty_master_fd)
-            except Exception:
-                pass
-            try:
-                os.close(self._pty_master_fd)
-            except Exception:
-                pass
-            self._pty_master_fd = None
-            self._pty_buf = b""
+            self._close_pty_reader()
             return
 
         self._pty_buf += data
@@ -725,8 +716,8 @@ class ProsTerminalRunner:
         lock = _get_lock()
         async with lock:
             pros_dir = str(PROS_PROJECT_DIR)
-        env = os.environ.copy()
-        env["MOTIONVIEW_HEADLESS"] = "1"
+        env = _pros_launch_env()
+        _bridge_log(f"launching motionview-pros (pipes): {PROS_EXE}")
         self.proc = await asyncio.create_subprocess_exec(
             PROS_EXE, "terminal", "--no-banner",
             stdout=asyncio.subprocess.PIPE,

@@ -23,13 +23,13 @@ pros::MotorGroup right_mg({-4, 5, -6},
  * "I was pressed!" and nothing.
  */
 void on_center_button() {
-	static bool pressed = false;
-	pressed = !pressed;
-	if (pressed) {
-		pros::lcd::set_text(2, "I was pressed!");
-	} else {
-		pros::lcd::clear_line(2);
-	}
+  static bool pressed = false;
+  pressed = !pressed;
+  if (pressed) {
+    pros::lcd::set_text(2, "I was pressed!");
+  } else {
+    pros::lcd::clear_line(2);
+  }
 }
 
 /**
@@ -39,56 +39,42 @@ void on_center_button() {
  * to keep execution time for this mode under a few seconds.
  */
 void initialize() {
-	pros::lcd::initialize();
-	pros::lcd::set_text(1, "Hello PROS User!");
+  pros::lcd::initialize();
+  pros::lcd::set_text(1, "Hello PROS User!");
 
-	auto& logger = mvlib::Logger::getInstance(); // Get the logger object
+  auto& logger = mvlib::Logger::getInstance(); // Get the logger object
 
-	// Mock odom setup. Replace with your real odom system.
-	mvlib::setOdom([]() -> std::optional<mvlib::Pose> {
-		return mvlib::Pose{0, 0, 0}; 
-	});
+  // Mock odom setup. Replace with your real odom system.
+  mvlib::setOdom([]() -> std::optional<mvlib::Pose> {
+    return mvlib::Pose{0, 0, 0}; 
+  });
 
-	// Attach our left and right drivetrain MotorGroups to it
-	logger.setRobot({
-		.leftDrivetrain = &left_mg,
-		.rightDrivetrain = &right_mg
-	});
+  // Attach our left and right drivetrain MotorGroups to it
+  logger.setRobot({
+    .leftDrivetrain = &left_mg,
+    .rightDrivetrain = &right_mg
+  });
 
-	// Set the default smart watches for motor temps, battery voltage, etc
-	logger.setDefaultWatches({});
+  // Set the default smart watches for motor temps, battery voltage, etc
+  logger.setDefaultWatches({});
 
-	// Log average drivetrain temperature 
-	mvlib::WatchHandle avgTempWatch = 
-		logger.watch("Avg Temp", LogLevel::OFF, WatchMode::onChange, 1_mvS,
-		[]() {
-			// We round to 1 decimal place
-			return std::round(
-				(left_mg.get_temperature() +
-				 right_mg.get_temperature()) / 2);
-		}, "%.1f",
-		mvlib::LevelOverride<double>{
-			.elevatedLevel = LogLevel::WARN,
-			.predicate = PREDICATE(v > 50),
-			.label = "Avg Temp over 50"
-	});
-	
-	mvlib::WaypointHandle leftGoalWP = logger.addWaypoint("Left Goal", {
-		.tarX = 10,  // Target 10 x
-		.tarY = 8,   // 8 y
-		.tarT = 180, // And 180 degrees heading
-		.timeoutMs = 15_mvS, // Timeout after 15 seconds
-		.linearTol = 1.5, // Consider reached if within 1.5 units
-		.thetaTol = 8 // Consider reached if within 8 degrees
-	});
-	
-	// Store and print the offset
-	auto off = leftGoalWP.getOffset();
-	logger.info("Left Goal Distance: %.1f, %.1f\n", off.totalOffset, off.offT.value_or(0));
+  mvlib::WaypointHandle leftGoalWP = 
+    logger.addWaypoint("Left Goal", {
+      .tarX = 10,  // Target 10 x
+      .tarY = 8,   // 8 y
+      .tarT = 180, // And 180 degrees heading
+      .timeoutMs = 15_mvS, // Timeout after 15 seconds
+      .linearTol = 1.5, // Consider reached if within 1.5 units
+      .thetaTol = 8 // Consider reached if within 8 degrees
+    });
 
-	// Start main telemetry stream
-	logger.start();
-	logger.info("Finished initialization!");
+  // Store and print the offset
+  auto off = leftGoalWP.getOffset();
+  logger.info("Left Goal Distance: %.1f, %.1f\n", off.totalOffset, off.offT.value_or(0));
+
+  // Start main telemetry stream
+  logger.start();
+  logger.info("Finished initialization!");
 }
 
 /**
@@ -97,8 +83,8 @@ void initialize() {
  * the robot is enabled, this task will exit.
  */
 void disabled() {
-	auto& logger = mvlib::Logger::getInstance();
-	logger.info("Disabled!");
+  auto& logger = mvlib::Logger::getInstance();
+  logger.info("Disabled!");
 }
 
 /**
@@ -111,8 +97,8 @@ void disabled() {
  * starts.
  */
 void competition_initialize() {
-	auto& logger = mvlib::Logger::getInstance();
-	logger.info("Competition Initialize!");
+  auto& logger = mvlib::Logger::getInstance();
+  logger.info("Competition Initialize!");
 }
 
 /**
@@ -127,15 +113,15 @@ void competition_initialize() {
  * from where it left off.
  */
 void autonomous() {
-	auto& logger = mvlib::Logger::getInstance();
-	logger.info("Starting autonomous!");
-	uint32_t startTime = pros::millis();
+  auto& logger = mvlib::Logger::getInstance();
+  logger.info("Starting autonomous!");
+  uint32_t startTime = pros::millis();
 
-	//
-	// Your autonomous code ...
-	//
+  //
+  // Your autonomous code...
+  //
 
-	logger.info("Finished autonomous! Time: %d ms", pros::millis() - startTime);
+  logger.info("Finished autonomous! Time: %d ms", pros::millis() - startTime);
 }
 
 /**
@@ -152,25 +138,25 @@ void autonomous() {
  * task, not resume it from where it left off.
  */
 void opcontrol() {
-	auto& logger = mvlib::Logger::getInstance();
-	logger.info("Starting opcontrol!");
+  auto& logger = mvlib::Logger::getInstance();
+  logger.info("Starting opcontrol!");
 
-	mvlib::WatchHandle joystickWatch =
-		logger.watch("Joystick Right X", LogLevel::INFO, WatchMode::onInterval, 100_mvMs,
-		[]() { return master.get_analog(ANALOG_RIGHT_X); });
+  mvlib::WatchHandle joystickWatch =
+    logger.watch("Joystick Right X", LogLevel::INFO, WatchMode::onInterval, 100_mvMs,
+    []() { return master.get_analog(ANALOG_RIGHT_X); });
 
-	joystickWatch.resyncRoster(); // Make sure roster is synced to MotionView
-	
-	while (true) {
-		pros::lcd::print(0, "%d %d %d", (pros::lcd::read_buttons() & LCD_BTN_LEFT) >> 2,
-		                 (pros::lcd::read_buttons() & LCD_BTN_CENTER) >> 1,
-		                 (pros::lcd::read_buttons() & LCD_BTN_RIGHT) >> 0);  // Prints status of the emulated screen LCDs
+  joystickWatch.resyncRoster(); // Make sure roster is synced to MotionView
 
-		// Arcade control scheme
-		int dir = master.get_analog(ANALOG_LEFT_Y);    // Gets amount forward/backward from left joystick
-		int turn = master.get_analog(ANALOG_RIGHT_X);  // Gets the turn left/right from right joystick
-		left_mg.move(dir - turn);                      // Sets left motor voltage
-		right_mg.move(dir + turn);                     // Sets right motor voltage
-		pros::delay(20);                          // Run for 20 ms then update
-	}
+  while (true) {
+    pros::lcd::print(0, "%d %d %d", (pros::lcd::read_buttons() & LCD_BTN_LEFT) >> 2,
+                     (pros::lcd::read_buttons() & LCD_BTN_CENTER) >> 1,
+                     (pros::lcd::read_buttons() & LCD_BTN_RIGHT) >> 0);  // Prints status of the emulated screen LCDs
+
+    // Arcade control scheme
+    int dir = master.get_analog(ANALOG_LEFT_Y);    // Gets amount forward/backward from left joystick
+    int turn = master.get_analog(ANALOG_RIGHT_X);  // Gets the turn left/right from right joystick
+    left_mg.move(dir - turn);                      // Sets left motor voltage
+    right_mg.move(dir + turn);                     // Sets right motor voltage
+    pros::delay(20);                          // Run for 20 ms then update
+  }
 }

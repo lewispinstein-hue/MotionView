@@ -12,7 +12,7 @@ WaypointParams WaypointHandle::getParams() const {
   detail::uniqueLock lock(logger.m_mutex);
   if (!lock.isLocked() || logger.m_waypoints.empty()) return {};
 
-  const Logger::InternalWaypoint *waypoint = logger.m_findWaypointUnlocked(this->m_id);
+  const Logger::InternalWaypoint* waypoint = logger.m_findWaypointUnlocked(this->m_id);
   return waypoint ? waypoint->params : WaypointParams{};
 }
 
@@ -25,7 +25,7 @@ std::string WaypointHandle::getLabel() const {
   detail::uniqueLock lock(logger.m_mutex);
   if (!lock.isLocked() || logger.m_waypoints.empty()) return {};
 
-  const Logger::InternalWaypoint *waypoint = logger.m_findWaypointUnlocked(this->m_id);
+  const Logger::InternalWaypoint* waypoint = logger.m_findWaypointUnlocked(this->m_id);
   return waypoint ? waypoint->name : std::string{};
 }
 
@@ -34,7 +34,7 @@ bool WaypointHandle::timedOut() const {
   detail::uniqueLock lock(logger.m_mutex);
   if (!lock.isLocked() || logger.m_waypoints.empty()) return false;
 
-  const Logger::InternalWaypoint *waypoint = logger.m_findWaypointUnlocked(this->m_id);
+  const Logger::InternalWaypoint* waypoint = logger.m_findWaypointUnlocked(this->m_id);
   return waypoint ? waypoint->timedOut : false;
 }
 
@@ -43,7 +43,7 @@ bool WaypointHandle::active() const {
   detail::uniqueLock lock(logger.m_mutex);
   if (!lock.isLocked() || logger.m_waypoints.empty()) return false;
 
-  const Logger::InternalWaypoint *waypoint = logger.m_findWaypointUnlocked(this->m_id);
+  const Logger::InternalWaypoint* waypoint = logger.m_findWaypointUnlocked(this->m_id);
   return waypoint ? waypoint->active : false;
 }
 

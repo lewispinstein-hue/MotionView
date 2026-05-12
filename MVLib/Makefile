@@ -15,6 +15,7 @@ INCDIR=$(ROOT)/include
 WARNFLAGS+=
 EXTRA_CFLAGS += -fanalyzer
 EXTRA_CXXFLAGS += -fanalyzer
+EXTRA_CXXFLAGS += -Wno-analyzer-use-of-uninitialized-value
 
 # Set to 1 to enable hot/cold linking
 USE_PACKAGE:=1

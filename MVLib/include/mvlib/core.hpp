@@ -71,10 +71,10 @@ public:
    */
   struct Drivetrain {
     /// @brief Left drivetrain motors for velocity.
-    pros::MotorGroup *leftDrivetrain;
+    pros::MotorGroup* leftDrivetrain;
 
     /// @brief Right drivetrain motors for velocity. 
-    pros::MotorGroup *rightDrivetrain;
+    pros::MotorGroup* rightDrivetrain;
   }; 
 
   /**
@@ -411,7 +411,7 @@ public:
    * @endcode
    */
   template <class Getter, size_t len>
-    requires std::invocable<Getter&>
+
   WatchHandle watch(const char (&label)[len], LogLevel baseLevel, WatchMode type, 
                     uint32_t intervalMs, Getter&& getter, std::string fmt = {},
                     LevelOverride<std::decay_t<std::invoke_result_t<
@@ -454,7 +454,7 @@ private:
    * @param level Log level to convert.
    * \return C-string representation of the level.
    */
-  const char *levelToString(const LogLevel& level) const;
+  const char* levelToString(const LogLevel& level) const;
 
   /**
    * @struct Watch
@@ -508,10 +508,10 @@ private:
   bool resyncWatchRoster(WatchId id);
 
   /// @brief Find a watch without taking m_mutex.
-  InternalWatch *m_findWatchUnlocked(WatchId id);
+  InternalWatch* m_findWatchUnlocked(WatchId id);
 
   /// @brief Find a const watch without taking m_mutex.
-  const InternalWatch *m_findWatchUnlocked(WatchId id) const;
+  const InternalWatch* m_findWatchUnlocked(WatchId id) const;
 
   /**
    * @brief Internal watch registration routine.
@@ -620,10 +620,10 @@ private:
   std::optional<std::string> m_getRosterNameUnlocked(uint16_t id, bool isElevated) const;
 
   /// @brief Find a waypoint without taking m_mutex.
-  InternalWaypoint *m_findWaypointUnlocked(WPId id);
+  InternalWaypoint* m_findWaypointUnlocked(WPId id);
 
   /// @brief Find a const waypoint without taking m_mutex.
-  const InternalWaypoint *m_findWaypointUnlocked(WPId id) const;
+  const InternalWaypoint* m_findWaypointUnlocked(WPId id) const;
 
   /// @brief Re-send the roster entry for a single waypoint.
   bool resyncWaypointRoster(WPId id);
@@ -657,9 +657,9 @@ private:
   pros::Mutex m_mutex;
 
   uint32_t m_lastFileFlush{0};
-  FILE *m_sdFile = nullptr;
+  FILE* m_sdFile = nullptr;
   char m_currentFilename[128] = {};
-  const char *m_date = detail::getBuildDate(); 
+  const char* m_date = detail::getBuildDate(); 
   char m_loggingFolder[24] = "";
 
 
@@ -671,8 +671,8 @@ private:
   std::atomic<bool> m_pauseRequested{false}; 
   
   // Robot refs
-  pros::MotorGroup *m_pLeftDrivetrain = nullptr; 
-  pros::MotorGroup *m_pRightDrivetrain = nullptr; 
+  pros::MotorGroup* m_pLeftDrivetrain = nullptr; 
+  pros::MotorGroup* m_pRightDrivetrain = nullptr; 
 
   std::unique_ptr<pros::Task> m_task;
 

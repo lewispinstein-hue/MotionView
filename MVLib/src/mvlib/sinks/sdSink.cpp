@@ -41,10 +41,10 @@ void Logger::getTimestampedFile(char *buffer, size_t len) {
   if (!buffer || len == 0) return;
 
   time_t now = time(0);
-  tm *tstruct = localtime(&now);
-  
+  tm* tstruct = localtime(&now);
+
   const uint32_t randInt = getrandInt(0, 99999);
-  
+
   // Replace the PROS FatFs '\' prefix with POSIX-compliant '/'
   std::replace(m_loggingFolder, m_loggingFolder + sizeof(m_loggingFolder), '\\', '/');
 
@@ -54,16 +54,16 @@ void Logger::getTimestampedFile(char *buffer, size_t len) {
 
   if (tstruct->tm_year < 100) {
     _MVLIB_FORWARD_INFO("VEX RTC Inaccurate. Falling back to program duration.");
-    
+
     snprintf(buffer, len, "%s/MVLIB_%s_%u-%u_%d.log",
              pathPrefix, m_date, pros::millis() / 1000, pros::millis() / 100, randInt);
   } else {
     _MVLIB_FORWARD_INFO("VEX RTC Plausible. Creating file name with date.");
-    
+
     char timeBuf[128];
     // Format the date/time string
     strftime(timeBuf, sizeof(timeBuf), "MVLIB_%Y-%m-%d_%H-%M", tstruct); 
-    
+
     // Combine pathPrefix, formatted time, and random ID
     snprintf(buffer, len, "%s/%s_%d.log", pathPrefix, timeBuf, randInt); 
   }
@@ -130,7 +130,7 @@ bool Logger::setLoggingFolder(const char *folder, bool disableOnFail) {
     m_sdLocked = disableOnFail;
     return false;
   }
-  
+
   strncpy(m_loggingFolder, folder, sizeof(m_loggingFolder) - 1);
   m_loggingFolder[sizeof(m_loggingFolder) - 1] = '\0';
   return true;
@@ -142,7 +142,7 @@ void Logger::logToSD(const LogLevel& level, const char *fmt, ...) {
   detail::uniqueLock m(m_sdMutex);
   if (!m.isLocked()) return;
   if (!detail::Telemetry::getInstance().shouldLog(level)) return;
-  
+
   uint32_t now = pros::millis();
 
   va_list args;

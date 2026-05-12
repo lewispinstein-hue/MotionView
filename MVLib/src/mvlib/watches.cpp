@@ -7,20 +7,20 @@
 #include <cstdlib>
 
 namespace mvlib {
-Logger::InternalWatch *Logger::m_findWatchUnlocked(WatchId id) {
+Logger::InternalWatch* Logger::m_findWatchUnlocked(WatchId id) {
   auto it = std::find_if(m_watches.begin(), m_watches.end(),
                          [id](const InternalWatch& watch) { return watch.id == id; });
   return (it == m_watches.end()) ? nullptr : &(*it);
 }
 
-const Logger::InternalWatch *Logger::m_findWatchUnlocked(WatchId id) const {
+const Logger::InternalWatch* Logger::m_findWatchUnlocked(WatchId id) const {
   auto it = std::find_if(m_watches.begin(), m_watches.end(),
                          [id](const InternalWatch& watch) { return watch.id == id; });
   return (it == m_watches.end()) ? nullptr : &(*it);
 }
 
 std::optional<std::string> Logger::m_getWatchNameUnlocked(WatchId id, bool isElevated) const {
-  const InternalWatch *watch = m_findWatchUnlocked(id);
+  const InternalWatch* watch = m_findWatchUnlocked(id);
   if (!watch) return std::nullopt;
 
   if (isElevated && !watch->elevatedLabel.empty()) return watch->elevatedLabel;
@@ -71,7 +71,7 @@ std::string Logger::evaluateWatch(WatchId id, bool emit) {
     if (!lock.isLocked()) return {};
     if (m_watches.empty()) return {};
 
-    InternalWatch *watch = m_findWatchUnlocked(id);
+    InternalWatch* watch = m_findWatchUnlocked(id);
     if (!watch || !watch->eval) return {};
 
     std::tie(lvl, valueStr, label, tripped) = watch->eval();
@@ -86,7 +86,7 @@ std::string Logger::evaluateWatch(WatchId id, bool emit) {
     bool sentAsBinary = false;
 
     if (!valueStr.empty()) {
-      char *end = nullptr;
+      char* end = nullptr;
       errno = 0;
       const float numericVal = std::strtof(valueStr.c_str(), &end);
       if (end != valueStr.c_str() && end != nullptr && *end == '\0' &&

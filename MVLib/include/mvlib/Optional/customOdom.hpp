@@ -16,7 +16,6 @@
 
 #include <optional>
 #include <type_traits>
-#include <utility>
 
 namespace mvlib {
 
@@ -81,7 +80,7 @@ inline void setOdom(Fn&& poseGetter) {
 template <class Fn>
   requires (!std::is_same_v<std::invoke_result_t<Fn&>, std::optional<Pose>>) 
 inline void setOdom(Fn&&) {
-  static_assert(detail::always_false_v<Fn>,
+  static_assert(!std::is_same_v<Fn, Fn>,
               "\n\n\n------------------------------------------------------------------------"
               "\nLogger::setOdom(/* customOdom */): Type mismatch.\n"
               "Pose getter must return std::optional<Pose>.\n"

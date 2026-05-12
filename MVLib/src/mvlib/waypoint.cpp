@@ -23,13 +23,13 @@ std::string formatParams(const WaypointParams& params) {
 }
 } // namespace
 
-Logger::InternalWaypoint *Logger::m_findWaypointUnlocked(WPId id) {
+Logger::InternalWaypoint* Logger::m_findWaypointUnlocked(WPId id) {
   auto it = std::find_if(m_waypoints.begin(), m_waypoints.end(),
                          [id](const InternalWaypoint& waypoint) { return waypoint.id == id; });
   return (it == m_waypoints.end()) ? nullptr : &(*it);
 }
 
-const Logger::InternalWaypoint *Logger::m_findWaypointUnlocked(WPId id) const {
+const Logger::InternalWaypoint* Logger::m_findWaypointUnlocked(WPId id) const {
   auto it = std::find_if(m_waypoints.begin(), m_waypoints.end(),
                          [id](const InternalWaypoint& waypoint) { return waypoint.id == id; });
   return (it == m_waypoints.end()) ? nullptr : &(*it);
@@ -39,7 +39,7 @@ WaypointOffset Logger::getWaypointOffset(WPId id) {
   detail::uniqueLock lock(m_mutex);
   if (!lock.isLocked()) return {};
 
-  const InternalWaypoint *waypoint = m_findWaypointUnlocked(id);
+  const InternalWaypoint* waypoint = m_findWaypointUnlocked(id);
   if (!waypoint || !waypoint->active) return {};
 
   WaypointOffset offset;
@@ -88,7 +88,7 @@ bool Logger::isWaypointReached(WPId id) {
   detail::uniqueLock lock(m_mutex);
   if (!lock.isLocked()) return false;
 
-  const InternalWaypoint *waypoint = m_findWaypointUnlocked(id);
+  const InternalWaypoint* waypoint = m_findWaypointUnlocked(id);
   if (!waypoint || !waypoint->active) return {};
 
   auto pose = m_getPose ? m_getPose() : std::nullopt;
@@ -162,7 +162,7 @@ WaypointHandle Logger::internalRegisterWaypoint(std::string name, WaypointParams
 }
 
 std::optional<std::string> Logger::m_getRosterNameUnlocked(uint16_t id, bool isElevated) const {
-  if (const InternalWaypoint *waypoint = m_findWaypointUnlocked(id)) return waypoint->name;
+  if (const InternalWaypoint* waypoint = m_findWaypointUnlocked(id)) return waypoint->name;
   return m_getWatchNameUnlocked(id, isElevated);
 }
 
@@ -171,7 +171,7 @@ bool Logger::resyncWaypointRoster(WPId id) {
   if (!lock.isLocked()) return false;
   if (m_waypoints.empty() || !m_config.logToTerminal.load()) return false;
 
-  InternalWaypoint *waypoint = m_findWaypointUnlocked(id);
+  InternalWaypoint* waypoint = m_findWaypointUnlocked(id);
   if (!waypoint || !waypoint->active) return false;
 
   detail::Telemetry::getInstance().sendRoster(waypoint->id, waypoint->name);

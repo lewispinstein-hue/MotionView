@@ -13,7 +13,7 @@ const pyInstallerSpecDir = path.join(repoRoot, ".pyinstaller-spec");
 const bridgeEntry = path.join(repoRoot, "src", "bridge.py");
 const bridgeRequirements = path.join(repoRoot, "requirements.txt");
 const prosRoot = path.join(repoRoot, "src", "pros-cli");
-const prosEntry = path.join(prosRoot, "pros", "cli", "main.py");
+const prosEntry = path.join(prosRoot, "motionview_terminal_entry.py");
 const prosRequirements = path.join(prosRoot, "requirements.txt");
 
 function run(cmd, args) {
@@ -199,6 +199,7 @@ buildPyInstaller(
   [
     "--onedir",
     "--paths", prosRoot,
+    "--add-data", `${path.join(prosRoot, "pros", "autocomplete")}${path.delimiter}pros/autocomplete`,
     "--collect-all", "pros",
     "--collect-all", "requests",
     "--collect-all", "charset_normalizer",

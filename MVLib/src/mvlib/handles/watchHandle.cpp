@@ -12,7 +12,7 @@ bool WatchHandle::active() const {
   detail::uniqueLock lock(logger.m_mutex);
   if (!lock.isLocked() || logger.m_watches.empty()) return false;
 
-  const Logger::InternalWatch *watch = logger.m_findWatchUnlocked(this->m_id);
+  const Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);
   return watch ? watch->active : false;
 }
 
@@ -22,7 +22,7 @@ void WatchHandle::setActive(bool v) {
   detail::uniqueLock lock(logger.m_mutex);
   if (!lock.isLocked() || logger.m_watches.empty()) return;
 
-  Logger::InternalWatch *watch = logger.m_findWatchUnlocked(this->m_id);
+  Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);
   if (!watch) return;
   watch->active = v;
 }
@@ -33,7 +33,7 @@ uint32_t WatchHandle::intervalMs() const {
   detail::uniqueLock lock(logger.m_mutex);
   if (!lock.isLocked() || logger.m_watches.empty()) return static_cast<uint32_t>(-1);
 
-  const Logger::InternalWatch *watch = logger.m_findWatchUnlocked(this->m_id);
+  const Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);
   return watch ? watch->intervalMs : static_cast<uint32_t>(-1);
 }
 
@@ -43,7 +43,7 @@ bool WatchHandle::onChange() const {
   detail::uniqueLock lock(logger.m_mutex);
   if (!lock.isLocked() || logger.m_watches.empty()) return false;
 
-  const Logger::InternalWatch *watch = logger.m_findWatchUnlocked(this->m_id);
+  const Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);
   return watch ? watch->onChange : false;
 }
 
@@ -53,7 +53,7 @@ void WatchHandle::setIntervalMs(uint32_t intervalMs) {
   detail::uniqueLock lock(logger.m_mutex);
   if (!lock.isLocked() || logger.m_watches.empty()) return;
 
-  Logger::InternalWatch *watch = logger.m_findWatchUnlocked(this->m_id);
+  Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);
   if (!watch) return;
   watch->intervalMs = intervalMs;
 }
@@ -64,7 +64,7 @@ void WatchHandle::setOnChange(bool v) {
   detail::uniqueLock lock(logger.m_mutex);
   if (!lock.isLocked() || logger.m_watches.empty()) return;
 
-  Logger::InternalWatch *watch = logger.m_findWatchUnlocked(this->m_id);
+  Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);
   if (!watch) return;
   watch->onChange = v;
 }

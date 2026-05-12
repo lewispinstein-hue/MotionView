@@ -45,7 +45,7 @@ void Logger::printWatches() {
       
       // Prefer the compact binary watch packet when the rendered value is a pure float.
       if (!valueStr.empty()) {
-        char *end = nullptr;
+        char* end = nullptr;
         errno = 0;
         const float numericVal = std::strtof(valueStr.c_str(), &end);
         if (end != valueStr.c_str() && end != nullptr && *end == '\0' &&

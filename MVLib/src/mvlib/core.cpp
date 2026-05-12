@@ -9,6 +9,8 @@
 
 namespace mvlib {
 namespace {
+double leftVelocity, rightVelocity;
+
 float estimateSpeed(const Pose& prevPose, const Pose& pose) {
   static uint32_t prevMs = pros::millis();
   uint32_t nowMs = pros::millis();
@@ -143,7 +145,6 @@ void Logger::Update() {
     m_lastRosterFlush = pros::millis();
   }
 
-  static double leftVelocity, rightVelocity;
   std::optional<Pose> pose = std::nullopt;
 
   detail::uniqueLock lock(m_mutex);
@@ -183,14 +184,13 @@ void Logger::Update() {
     std::isfinite(pose->theta);
 
   if (validPose && m_config.printTelemetry.load()) {
-
     // Send binary through terminal
     if (m_config.logToTerminal.load()) {
       detail::PosePacket pkt;
       pkt.timestamp = static_cast<uint16_t>(pros::millis());
-      pkt.x = static_cast<float>(pose->x);
-      pkt.y = static_cast<float>(pose->y);
-      pkt.theta = detail::packTelemetryTheta(pose->theta);
+      pkt.x = static_cast<float>(pose.value().x);
+      pkt.y = static_cast<float>(pose.value().y);
+      pkt.theta = detail::packTelemetryTheta(pose.value().theta);
       pkt.leftVel = detail::packTelemetryVelocity(leftVelocity);
       pkt.rightVel = detail::packTelemetryVelocity(rightVelocity);
       detail::Telemetry::getInstance().sendPose(pkt);
@@ -199,7 +199,7 @@ void Logger::Update() {
     // Log standard ANSII to the sd card
     if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
       const double normTheta = [pose]() {
-        double theta = fmod(pose->theta, 360.0);
+        double theta = fmod(pose.value().theta, 360.0);
         if (theta < 0.0) theta += 360.0;
         return theta;
       }();

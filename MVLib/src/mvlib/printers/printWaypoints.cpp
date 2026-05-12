@@ -52,7 +52,7 @@ void Logger::printWaypoints() {
     
     uint8_t subType = 0;
     bool shouldTrigger = false;
-    const char *statusStr = nullptr;
+    const char* statusStr = nullptr;
 
     if (off.reached && (!wp.prevReached || !wp.params.retriggerable)) {
       subType = 2; // REACHED

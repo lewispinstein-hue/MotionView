@@ -6,7 +6,6 @@ from click.shell_completion import CompletionItem, add_completion_class, ZshComp
 
 import pros.common.ui as ui
 from pros.cli.common import *
-from pros.ga.analytics import analytics
 
 @pros_root
 def misc_commands_cli():
@@ -25,27 +24,7 @@ def upgrade(force_check, no_install):
     """
     with ui.Notification():
         ui.echo('The "pros upgrade" command is currently non-functioning. Did you mean to run "pros c upgrade"?', color='yellow')
-        
-    return # Dead code below
-    
-    analytics.send("upgrade")
-    from pros.upgrade import UpgradeManager
-    manager = UpgradeManager()
-    manifest = manager.get_manifest(force_check)
-    ui.logger(__name__).debug(repr(manifest))
-    if manager.has_stale_manifest:
-        ui.logger(__name__).error('Failed to get latest upgrade information. '
-                                  'Try running with --debug for more information')
-        return -1
-    if not manager.needs_upgrade:
-        ui.finalize('upgradeInfo', 'PROS CLI is up to date')
-    else:
-        ui.finalize('upgradeInfo', manifest)
-        if not no_install:
-            if not manager.can_perform_upgrade:
-                ui.logger(__name__).error(f'This manifest cannot perform the upgrade.')
-                return -3
-            ui.finalize('upgradeComplete', manager.perform_upgrade())
+    return
 
 
 # Script files for each shell
@@ -59,11 +38,9 @@ _SCRIPT_FILES = {
 
 
 def _get_shell_script(shell: str) -> str:
-    """Get the shell script for the specified shell."""
     script_file = Path(__file__).parent.parent / 'autocomplete' / _SCRIPT_FILES[shell]
     try:
-        with script_file.open('r') as f:
-            return f.read()
+        return script_file.read_text()
     except FileNotFoundError:
         # In bundled MotionView builds, shell autocomplete assets are not needed
         # for terminal streaming. Do not crash CLI import if they were omitted.

@@ -129,13 +129,13 @@ int8_t packTelemetryVelocity(double velocity) {
 void Telemetry::sendPose(const PosePacket& pkt) {
   // Pose is high-priority system data, so it gets OVERRIDE level
   transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::POSE),
-           reinterpret_cast<const uint8_t *>(&pkt), sizeof(PosePacket));
+           reinterpret_cast<const uint8_t*>(&pkt), sizeof(PosePacket));
 }
 
 void Telemetry::sendWaypointCreated(const WaypointCreatedPacket& pkt) {
   // SubType 1 = Created
   transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::WPOINT, 1), 
-           reinterpret_cast<const uint8_t *>(&pkt), sizeof(WaypointCreatedPacket));
+           reinterpret_cast<const uint8_t*>(&pkt), sizeof(WaypointCreatedPacket));
 }
 
 void Telemetry::sendWaypointStatus(WPId id, uint8_t subType) {
@@ -147,7 +147,7 @@ void Telemetry::sendWaypointStatus(WPId id, uint8_t subType) {
   pkt.id = id;
 
   transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::WPOINT, subType), 
-           reinterpret_cast<const uint8_t *>(&pkt), sizeof(WaypointStatusPacket));
+           reinterpret_cast<const uint8_t*>(&pkt), sizeof(WaypointStatusPacket));
 }
 
 void Telemetry::sendWatch(WatchId id, LogLevel lvl, float val, bool tripped) {
@@ -160,7 +160,7 @@ void Telemetry::sendWatch(WatchId id, LogLevel lvl, float val, bool tripped) {
 
   // SubType 1 indicates the watch predicate was tripped (elevated)
   transmit(encodeMsgAll(lvl, MsgType::WATCH, tripped ? 1 : 0), 
-           reinterpret_cast<const uint8_t *>(&pkt), sizeof(WatchPacket));
+           reinterpret_cast<const uint8_t*>(&pkt), sizeof(WatchPacket));
 }
 
 void Telemetry::sendWatchText(WatchId id, LogLevel lvl, const std::string& text, bool tripped) {
@@ -189,7 +189,7 @@ void Telemetry::sendRoster(uint16_t id, const std::string& name, bool isElevated
 
   // SubType 1 indicates this is the secondary/elevated label for the ID
   transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::ROSTER, isElevated ? 1 : 0), 
-           reinterpret_cast<const uint8_t *>(&pkt), sizeof(RosterPacket));
+           reinterpret_cast<const uint8_t*>(&pkt), sizeof(RosterPacket));
 }
 
 void Telemetry::sendLog(LogLevel level, const char *fmt, ...) {

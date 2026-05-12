@@ -5,7 +5,6 @@
  *       to handling and creating watches
  */
 
-#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <string>
