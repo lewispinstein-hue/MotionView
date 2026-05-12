@@ -14,9 +14,8 @@ void Logger::printWatches() {
 
   for (auto& watch : m_watches) {
     if (!watch.active || !watch.eval) continue;
-    if (!watch.onChange && watch.lastPrintMs != 0 && (nowMs - watch.lastPrintMs) < watch.intervalMs) {
-      continue;
-    }
+    if (!watch.onChange && watch.lastPrintMs != 0 &&
+        (nowMs - watch.lastPrintMs) < watch.intervalMs) continue;
 
     auto [lvl, valueStr, label, tripped] = watch.eval();
 

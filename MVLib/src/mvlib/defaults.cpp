@@ -168,9 +168,9 @@ bool Logger::setDefaultWatches(const DefaultWatches& watches) {
       }, "%.1f",
       LevelOverride<double>{
         .elevatedLevel = LogLevel::WARN,
-        .predicate = PREDICATE(
-          (v * 1000) <= MIN_BAT_VOLT || (v * 1000) >= MAX_BAT_VOLT
-        ),
+        .predicate = asPredicate<double>([](const double& v) {
+          return (v * 1000) <= MIN_BAT_VOLT || (v * 1000) >= MAX_BAT_VOLT;
+      }),
         .label = "Battery Voltage Warning"
       });
 

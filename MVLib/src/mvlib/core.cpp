@@ -146,8 +146,8 @@ void Logger::Update() {
   static double leftVelocity, rightVelocity;
   std::optional<Pose> pose = std::nullopt;
 
-  if (m_getPose) {
-    detail::uniqueLock lock(m_mutex);
+  detail::uniqueLock lock(m_mutex);
+  if (m_getPose && lock.isLocked()) {
     pose = m_getPose();
   }
 

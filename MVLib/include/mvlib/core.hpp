@@ -41,7 +41,6 @@
 #include "private/raii.hpp"
 
 #include <atomic>
-#include <concepts>
 #include <cstddef>
 #include <optional>
 #include <utility>
@@ -318,7 +317,7 @@ public:
    * target position of (70, -47), XY tolerance of 2, theta tolerance of 
    * 10 degrees, and a timeout of 5 seconds.
    */
-  template<size_t len>
+  template <size_t len>
   WaypointHandle addWaypoint(const char (&name)[len], WaypointParams details) {
     static_assert(len <= 25,
                 "\n\n\n------------------------------------------------------------------------"
@@ -411,7 +410,7 @@ public:
    *   [&]() { return static_cast<int>(autonStage); });
    * @endcode
    */
-  template<class Getter, size_t len>
+  template <class Getter, size_t len>
     requires std::invocable<Getter&>
   WatchHandle watch(const char (&label)[len], LogLevel baseLevel, WatchMode type, 
                     uint32_t intervalMs, Getter&& getter, std::string fmt = {},
@@ -423,13 +422,11 @@ public:
         "\nwatch() assigned with name too long. Max is 24 characters.\n"
         "------------------------------------------------------------------------\n\n\n");
 
-    const bool onChange = (type == WatchMode::onChange);
-
     return WatchHandle(addWatch<T>(label, baseLevel, intervalMs,
                        std::forward<Getter>(getter),
                        std::move(ov),
                        std::move(fmt),
-                       onChange));
+                       (type == WatchMode::onChange)));
   }
 
 private:

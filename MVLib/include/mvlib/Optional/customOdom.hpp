@@ -69,7 +69,7 @@ namespace mvlib {
  * }
  * @endcode
  */
-template<class Fn>
+template <class Fn>
   requires std::is_same_v<std::invoke_result_t<Fn&>, std::optional<Pose>> 
 inline void setOdom(Fn&& poseGetter) {
   auto getter = std::forward<Fn>(poseGetter);
@@ -78,7 +78,7 @@ inline void setOdom(Fn&& poseGetter) {
   });
 }
 
-template<class Fn>
+template <class Fn>
   requires (!std::is_same_v<std::invoke_result_t<Fn&>, std::optional<Pose>>) 
 inline void setOdom(Fn&&) {
   static_assert(detail::always_false_v<Fn>,

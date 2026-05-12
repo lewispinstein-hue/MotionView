@@ -1,4 +1,5 @@
 #include "main.h"
+#include "mvlib/watches.hpp"
 
 #define MVLIB_USE_SIMPLES
 #include "mvlib/api.hpp"
@@ -41,8 +42,6 @@ void initialize() {
 	pros::lcd::initialize();
 	pros::lcd::set_text(1, "Hello PROS User!");
 
-	pros::lcd::register_btn1_cb(on_center_button);
-
 	auto& logger = mvlib::Logger::getInstance(); // Get the logger object
 
 	// Mock odom setup. Replace with your real odom system.
@@ -63,14 +62,17 @@ void initialize() {
 	mvlib::WatchHandle avgTempWatch = 
 		logger.watch("Avg Temp", LogLevel::OFF, WatchMode::onChange, 1_mvS,
 		[]() {
-			return (left_mg.get_temperature() + right_mg.get_temperature()) / 2; 
+			// We round to 1 decimal place
+			return std::round(
+				(left_mg.get_temperature() +
+				 right_mg.get_temperature()) / 2);
 		}, "%.1f",
 		mvlib::LevelOverride<double>{
 			.elevatedLevel = LogLevel::WARN,
 			.predicate = PREDICATE(v > 50),
 			.label = "Avg Temp over 50"
 	});
-
+	
 	mvlib::WaypointHandle leftGoalWP = logger.addWaypoint("Left Goal", {
 		.tarX = 10,  // Target 10 x
 		.tarY = 8,   // 8 y
@@ -83,7 +85,7 @@ void initialize() {
 	// Store and print the offset
 	auto off = leftGoalWP.getOffset();
 	logger.info("Left Goal Distance: %.1f, %.1f\n", off.totalOffset, off.offT.value_or(0));
-	
+
 	// Start main telemetry stream
 	logger.start();
 	logger.info("Finished initialization!");
@@ -153,10 +155,12 @@ void opcontrol() {
 	auto& logger = mvlib::Logger::getInstance();
 	logger.info("Starting opcontrol!");
 
-	mvlib::WatchHandle joystickWatch = 
+	mvlib::WatchHandle joystickWatch =
 		logger.watch("Joystick Right X", LogLevel::INFO, WatchMode::onInterval, 100_mvMs,
 		[]() { return master.get_analog(ANALOG_RIGHT_X); });
 
+	joystickWatch.resyncRoster(); // Make sure roster is synced to MotionView
+	
 	while (true) {
 		pros::lcd::print(0, "%d %d %d", (pros::lcd::read_buttons() & LCD_BTN_LEFT) >> 2,
 		                 (pros::lcd::read_buttons() & LCD_BTN_CENTER) >> 1,

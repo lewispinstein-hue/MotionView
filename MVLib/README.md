@@ -47,7 +47,7 @@ This is exactly what MotionView is built to consume, so MVLib is the easiest way
 2. Include the api header:
 
 ```cpp
-#define USING_MVLIB_SIMPLES // Optional; for more concise code
+#define MVLIB_USE_SIMPLES // Optional; for more concise code
 #include "mvlib/api.hpp"
 ```
 
@@ -182,8 +182,8 @@ This waypoint:
 
 - targets a specific field position
 - also requires the robot to face the right direction
-- times out after 3 seconds if it is not reached
-- prints periodic offset updates while active
+- times out after 10 seconds if it is not reached
+- can be queried at runtime with `getOffset()`, `reached()`, and `timedOut()`
 
 Practical use cases:
 

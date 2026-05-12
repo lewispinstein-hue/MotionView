@@ -109,14 +109,14 @@ bool Telemetry::shouldLog(LogLevel level) const {
 }
 
 uint16_t packTelemetryTheta(double degrees) {
+  if (!std::isfinite(degrees)) return 0;
   // Encode [0, 360) into the full uint16 ring. Decoder should use 360 / 65536.
   constexpr double kThetaScale = 65536.0 / 360.0;
-  double normalized = [degrees]() {
-    if (!std::isfinite(degrees)) return 0.0;
-    return std::fmod(degrees, 360.0) < 0.0 ? degrees + 360.0 : degrees;
-  }();
 
-  return static_cast<uint16_t>(std::floor(normalized * kThetaScale));
+  double normalized = std::fmod(degrees, 360.0);
+  if (normalized < 0.0) normalized += 360.0;
+
+  return static_cast<uint16_t>(normalized * kThetaScale);
 }
 
 int8_t packTelemetryVelocity(double velocity) {

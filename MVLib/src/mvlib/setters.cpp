@@ -1,6 +1,6 @@
 #include "mvlib/core.hpp"
 #include "mvlib/private/telemetry.hpp"
-#include "types.hpp"
+#include "mvlib/types.hpp"
 #define _MVLIB_PREVENT_MACRO_CLEANUP
 #include "mvlib/private/forwardLogMacros.h"
 #include "mvlib/private/raii.hpp"

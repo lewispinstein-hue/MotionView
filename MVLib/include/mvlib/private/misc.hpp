@@ -9,7 +9,7 @@
 
 namespace mvlib {
 namespace detail {
-template<class>
+template <class>
 inline constexpr bool always_false_v = false;
 
 // Attribute for printf format checks

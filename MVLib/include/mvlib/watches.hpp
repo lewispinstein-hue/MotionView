@@ -21,7 +21,7 @@ using WatchId = uint16_t;
  * A watch has a base log level (e.g., INFO). If predicate(expression) evaluates to
  * true, the watch sample is emitted at elevatedLevel instead.
  */
-template<class T>
+template <class T>
 struct LevelOverride {
   /// @brief Level used when predicate returns true.
   LogLevel elevatedLevel = LogLevel::WARN;
@@ -57,7 +57,7 @@ struct LevelOverride {
  * @param p Predicate callable.
  * \return A std::function wrapper calling p(const T&).
  */
-template<class T, class Pred>
+template <class T, class Pred>
 std::function<bool(const T&)> asPredicate(Pred&& p) {
   return std::function<bool(const T&)>(std::forward<Pred>(p));
 }
