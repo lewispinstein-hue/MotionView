@@ -25,21 +25,10 @@
 Detailed Docs:
 
 - [`Initial setup`](../Docs/MVLib/Setup.md): installation, logger startup, odometry and drivetrain setup.
-- [`Configurables`](../Docs/MVLib/Configuration.md): user-configurable settings in `include/mvlib/config.hpp` and `LoggerConfig`.
-- [`Watches`](../Docs/MVLib/Watches.md): `logger.watch(...)`, `WatchMode`, optional `LevelOverride`, on-change debounce behavior, `PREDICATE`, formatting, and examples.
-- [`Waypoints`](../Docs/MVLib/Waypoints.md): `logger.addWaypoint(...)`, waypoint structs, waypoint handles, and waypoint usage patterns.
+- [`Configurables`](../Docs/MVLib/Configuration.md): user-configurable settings for the logger.
+- [`Watches`](../Docs/MVLib/Watches.md): `logger.watch(...)` and everything related, examples and documentation
+- [`Waypoints`](../Docs/MVLib/Waypoints.md): `logger.addWaypoint(...)`, waypoint handles, usage, and examples.
 - [`Logs`](../Docs/MVLib/Logs.md): the MotionView-formatted `debug`, `info`, `warn`, `error`, and `fatal` log functions.
-
-## What MotionView Gets From MVLib
-
-MotionView recognizes two kinds of lines that mvlib prints:
-
-- **Pose data** so it can draw your path, speed, and show pose readouts.
-- **Watch data** so it can list watches in the sidebar and show the closest watch value when you hover points on the field.
-
-This is exactly what MotionView is built to consume, so MVLib is the easiest way to feed it.
-
-> **Note:** MVLib is not strictly necessary. However, MVLib provides easy setup, cross-library support, seamless integration with MotionView, and tons of features, which is why it's recommended.
 
 ## Quick Setup (PROS V5)
 
