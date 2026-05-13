@@ -17,22 +17,22 @@
       <div class="topBarLeft">
         <button id="btnFit" class="iconBtn pillAction" title="Maximize field (square)">
           <svg width="12" height="12">
-            <use href="assets/svg/icons.svg#icon-fit" style="color: #ffffff"></use>
+            <use href="./assets/svg/icons.svg#icon-fit" style="color: #ffffff"></use>
           </svg>
         </button>
         <button id="btnSettings" class="iconBtn pillAction" title="Settings">
           <svg width="18" height="18">
-            <use href="assets/svg/icons.svg#icon-settings" style="color: #ffffff"></use>
+            <use href="./assets/svg/icons.svg#icon-settings" style="color: #ffffff"></use>
           </svg>
         </button>
         <button class="iconBtn pillAction" id="btnClearField" style="font-size: 12px" title="Clear field">
           <svg width="17" height="17">
-            <use href="assets/svg/icons.svg#icon-clear" style="color: #ff0000"></use>
+            <use href="./assets/svg/icons.svg#icon-clear" style="color: #ff0000"></use>
           </svg>
         </button>
         <button id="btnHelp" class="iconBtn pillAction" style="font-size: 12px" title="Help">
           <svg width="20" height="20" style="color: #ffffff; vector-effect: non-scaling-stroke; stroke-width: 5px;">
-            <use href="assets/svg/icons.svg#icon-help"></use>
+            <use href="./assets/svg/icons.svg#icon-help"></use>
           </svg>
         </button>
         <span class="topStatus muted" id="status">Open a robot log to get
@@ -212,7 +212,7 @@
           <div class="settingsGroupHeader">
             <div class="settingsGroupIcon">
               <svg width="40" height="40" style="color: #ffffff; vector-effect: non-scaling-stroke; stroke-width: 5px;">
-                <use href="assets/svg/icons.svg#icon-stgProsDir"></use>
+                <use href="./assets/svg/icons.svg#icon-stgProsDir"></use>
               </svg>
             </div>
             <div class="settingsGroupTitle">PROS Directory</div>
@@ -242,7 +242,7 @@
           <div class="settingsGroupHeader">
             <div class="settingsGroupIcon">
               <svg width="40" height="40" style="color: #ffffff; vector-effect: non-scaling-stroke; stroke-width: 5px;">
-                <use href="assets/svg/icons.svg#icon-stgRobot"></use>
+                <use href="./assets/svg/icons.svg#icon-stgRobot"></use>
               </svg>
             </div>
             <div class="settingsGroupTitle">Robot Image</div>
@@ -290,7 +290,7 @@
           <div class="settingsGroupHeader">
             <div class="settingsGroupIcon">
               <svg width="40" height="40" style="color: #70daed">
-                <use href="assets/svg/icons.svg#icon-stgUnits"></use>
+                <use href="./assets/svg/icons.svg#icon-stgUnits"></use>
               </svg>
             </div>
             <div class="settingsGroupTitle">Units & Robot Size</div>
@@ -332,7 +332,11 @@
         <!-- Offsets Section -->
         <div class="settingsSection settingsViewing settingsGroup" title="Adjust the position of the displayed path.">
           <div class="settingsGroupHeader">
-            <div class="settingsGroupIcon">⚡</div>
+            <div class="settingsGroupIcon">
+              <svg width="40" height="40" style="color: #70daed">
+                <use href="./assets/svg/icons.svg#icon-stgOffsets"></use>
+              </svg>
+            </div>
             <div class="settingsGroupTitle">Offsets</div>
           </div>
           <div class="settingsGroupBody">
@@ -381,6 +385,28 @@
 
         <div class="divider settingsViewing" style="margin:10px 0;"></div>
 
+        <!-- Fields Section -->
+        <div class="settingsSection settingsViewing settingsGroup"
+          title="Choose whether previous seasons' field images appear in the field selector.">
+          <div class="settingsGroupHeader">
+            <div class="settingsGroupIcon">
+              <svg width="40" height="40">
+                <use href="./assets/svg/icon-ShowAllFields.svg#icon-stgShowAllFields"></use>
+              </svg>
+            </div>
+            <div class="settingsGroupTitle">Fields</div>
+          </div>
+          <div class="settingsGroupBody">
+            <div class="settingsRow" style="align-items:center !important;">
+              <label class="settingsLabel" for="settingsShowPreviousYearFields">Show previous years' fields</label>
+              <input id="settingsShowPreviousYearFields" type="checkbox"
+                style="width:18px;height:18px;cursor:pointer" />
+            </div>
+          </div>
+        </div>
+
+        <div class="divider settingsViewing" style="margin:10px 0;"></div>
+
         <!-- Developer Section -->
         <div class="settingsSection settingsViewing settingsGroup"
           title="Advanced debug tools for troubleshooting livestreaming issues">
@@ -404,7 +430,7 @@
           <div class="settingsGroupHeader">
             <div class="settingsGroupIcon">
               <svg width="18" height="18">
-                <use href="assets/svg/icons.svg#icon-planOverlay" style="color: #ffffff"></use>
+                <use href="./assets/svg/icons.svg#icon-planOverlay" style="color: #ffffff"></use>
               </svg>
             </div>
             <div class="settingsGroupTitle">Planning</div>
@@ -548,27 +574,27 @@
           <div class="rowline">
             <button id="btnFile" class="iconBtn" accept=".txt,.log,.json" title="Open File">
               <svg width="22" height="22">
-                <use href="assets/svg/icons.svg#icon-fileOpen" style="color: #c8c8c8"></use>
+                <use href="./assets/svg/icons.svg#icon-fileOpen" style="color: #c8c8c8"></use>
               </svg>
             </button>
             <button id="btnRouteInfo" class="iconBtn" title="Route Info" disabled>
               <svg width="18" height="18">
-                <use href="assets/svg/icons.svg#icon-pathInfo" style="color: #ffffff"></use>
+                <use href="./assets/svg/icons.svg#icon-pathInfo" style="color: #ffffff"></use>
               </svg>
             </button>
             <button id="btnExport" class="iconBtn" title="Export JSON">
               <svg width="18" height="18">
-                <use href="assets/svg/icons.svg#icon-exportPath" style="color: #ffffff"></use>
+                <use href="./assets/svg/icons.svg#icon-exportPath" style="color: #ffffff"></use>
               </svg>
             </button>
             <button id="btnToggleFloat" class="iconBtn" title="Toggle Info Window">
               <svg width="18" height="18">
-                <use href="assets/svg/icons.svg#icon-floatingWin" style="color: #ffffff"></use>
+                <use href="./assets/svg/icons.svg#icon-floatingWin" style="color: #ffffff"></use>
               </svg>
             </button>
             <button id="btnTogglePlanOverlay" class="iconBtn" title="Toggle Planning Path overlay">
               <svg width="18" height="18">
-                <use href="assets/svg/icons.svg#icon-planOverlay" style="color: #ffffff"></use>
+                <use href="./assets/svg/icons.svg#icon-planOverlay" style="color: #ffffff"></use>
               </svg>
             </button>
           </div>
@@ -744,7 +770,7 @@
               <div class="settingsGroupIcon">
                 <svg width="30" height="30"
                   style="color: #ffffff; vector-effect: non-scaling-stroke; stroke-width: 5px;">
-                  <use href="assets/svg/icons.svg#icon-exportPath"></use>
+                  <use href="./assets/svg/icons.svg#icon-exportPath"></use>
                 </svg>
               </div>
               <div class="settingsGroupTitle" style="font-size: 20px;">Export Path</div>
@@ -817,7 +843,7 @@
               <div class="settingsGroupIcon">
                 <svg width="30" height="30"
                   style="color: #ffffff; vector-effect: non-scaling-stroke; stroke-width: 5px;">
-                  <use href="assets/svg/icons.svg#icon-pathInfo"></use>
+                  <use href="./assets/svg/icons.svg#icon-pathInfo"></use>
                 </svg>
               </div>
               <div class="settingsGroupTitle" style="font-size: 20px;">Metadata</div>

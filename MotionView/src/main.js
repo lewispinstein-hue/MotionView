@@ -6,7 +6,7 @@ import Chart from "chart.js/auto";
 import iconsSpriteUrl from "./assets/svg/icons.svg?url";
 import demoRouteUrl from "./assets/demo/getting-started-route.json?url";
 
-const isWindowsPlatform = typeof navigator === 'object' && /Windows/.test(navigator.userAgent);
+const isWindowsPlatform = typeof navigator === "object" && /Windows/.test(navigator.userAgent);
 const isTauriRuntime = typeof window === "object" && !!window.__TAURI_INTERNALS__;
 
 let windowsFullscreenState = false;
@@ -165,61 +165,61 @@ window.posthog = posthog;
 // Live streaming state shared across handlers (avoids TDZ issues)
 window.__live = window.__live || { connected: false, streaming: false };
 
-const canvas = document.getElementById('c');
+const canvas = document.getElementById("c");
 // Track last mouse position (for small popups)
 let lastMouseClient = { x: 20, y: 20 };
-window.addEventListener('mousemove', (e) => { lastMouseClient = { x: e.clientX, y: e.clientY }; }, { passive: true });
+window.addEventListener("mousemove", (e) => { lastMouseClient = { x: e.clientX, y: e.clientY }; }, { passive: true });
 
-const ctx = canvas.getContext('2d');
-const timelineCanvas = document.getElementById('timelineCanvas');
-const tctx = timelineCanvas.getContext('2d');
-const planningTimelineCanvas = document.getElementById('planningTimelineCanvas');
-const planTimePill = document.getElementById('planTimePill');
-const planPointPill = document.getElementById('planPointPill');
-const pctx = planningTimelineCanvas ? planningTimelineCanvas.getContext('2d') : null;
+const ctx = canvas.getContext("2d");
+const timelineCanvas = document.getElementById("timelineCanvas");
+const tctx = timelineCanvas.getContext("2d");
+const planningTimelineCanvas = document.getElementById("planningTimelineCanvas");
+const planTimePill = document.getElementById("planTimePill");
+const planPointPill = document.getElementById("planPointPill");
+const pctx = planningTimelineCanvas ? planningTimelineCanvas.getContext("2d") : null;
 
-const topBarEl = document.getElementById('topBar');
-const topBarContentEl = document.querySelector('.topBarContent');
-const topBarLeftEl = document.querySelector('.topBarLeft');
-const topBarCenterEl = document.querySelector('.topBarCenter');
-const topBarRightEl = document.querySelector('.topBarRight');
-const statusEl = document.getElementById('status');
-const fileEl = document.getElementById('file');
-const btnPlay = document.getElementById('btnPlay');
-const btnFit = document.getElementById('btnFit');
-const btnFile = document.getElementById('btnFile');
-const btnHelp = document.getElementById('btnHelp');
-const btnLeftStop = document.getElementById('btnLeftStop');
-const btnLeftConnect = document.getElementById('btnLeftConnect');
-const btnLeftRefresh = document.getElementById('btnLeftRefresh');
-const btnTogglePlanOverlay = document.getElementById('btnTogglePlanOverlay');
-const helpModal = document.getElementById('helpModal');
-const btnHelpClose = document.getElementById('btnHelpClose');
-const btnHelpKeybinds = document.getElementById('btnHelpKeybinds');
-const keybindsModal = document.getElementById('keybindsModal');
-const btnKeybindsClose = document.getElementById('btnKeybindsClose');
-const speedSelect = document.getElementById('speedSelect');
-const logSort = document.getElementById('logSort');
-const waypointFilter = document.getElementById('waypointFilter');
-const watchFilter = document.getElementById('watchFilter');
-const watchSort = document.getElementById('watchSort');
-const vSplit = document.getElementById('vSplit');
-const hSplit = document.getElementById('hSplit');
-const timePill = document.getElementById('timePill');
-const deltaPill = document.getElementById('deltaPill');
-const pointPill = document.getElementById('pointPill');
-const posePill = document.getElementById('posePill');
-const cursorPill = document.getElementById('cursorPill');
-const planCursorPill = document.getElementById('planCursorPill');
+const topBarEl = document.getElementById("topBar");
+const topBarContentEl = document.querySelector(".topBarContent");
+const topBarLeftEl = document.querySelector(".topBarLeft");
+const topBarCenterEl = document.querySelector(".topBarCenter");
+const topBarRightEl = document.querySelector(".topBarRight");
+const statusEl = document.getElementById("status");
+const fileEl = document.getElementById("file");
+const btnPlay = document.getElementById("btnPlay");
+const btnFit = document.getElementById("btnFit");
+const btnFile = document.getElementById("btnFile");
+const btnHelp = document.getElementById("btnHelp");
+const btnLeftStop = document.getElementById("btnLeftStop");
+const btnLeftConnect = document.getElementById("btnLeftConnect");
+const btnLeftRefresh = document.getElementById("btnLeftRefresh");
+const btnTogglePlanOverlay = document.getElementById("btnTogglePlanOverlay");
+const helpModal = document.getElementById("helpModal");
+const btnHelpClose = document.getElementById("btnHelpClose");
+const btnHelpKeybinds = document.getElementById("btnHelpKeybinds");
+const keybindsModal = document.getElementById("keybindsModal");
+const btnKeybindsClose = document.getElementById("btnKeybindsClose");
+const speedSelect = document.getElementById("speedSelect");
+const logSort = document.getElementById("logSort");
+const waypointFilter = document.getElementById("waypointFilter");
+const watchFilter = document.getElementById("watchFilter");
+const watchSort = document.getElementById("watchSort");
+const vSplit = document.getElementById("vSplit");
+const hSplit = document.getElementById("hSplit");
+const timePill = document.getElementById("timePill");
+const deltaPill = document.getElementById("deltaPill");
+const pointPill = document.getElementById("pointPill");
+const posePill = document.getElementById("posePill");
+const cursorPill = document.getElementById("cursorPill");
+const planCursorPill = document.getElementById("planCursorPill");
 
-const rightViewingEl = document.getElementById('rightViewing');
-const rightPlanningEl = document.getElementById('rightPlanning');
-const leftEl = document.getElementById('left');
-const vSplitL = document.getElementById('vSplitL');
-const rowGrid = document.querySelector('.row');
+const rightViewingEl = document.getElementById("rightViewing");
+const rightPlanningEl = document.getElementById("rightPlanning");
+const leftEl = document.getElementById("left");
+const vSplitL = document.getElementById("vSplitL");
+const rowGrid = document.querySelector(".row");
 
-const timelineBar = document.getElementById('timelineBar');
-const timelineTop = document.getElementById('timelineTop');
+const timelineBar = document.getElementById("timelineBar");
+const timelineTop = document.getElementById("timelineTop");
 
 const layoutState = {
   lastLeftSidebarW: 360,
@@ -340,116 +340,117 @@ function readRootCssNumber(prop, fallback = 0) {
   return Number.isFinite(num) ? num : fallback;
 }
 
-const watchList = document.getElementById('watchList');
-const watchCount = document.getElementById('watchCount');
-const logList = document.getElementById('logList');
-const logCount = document.getElementById('logCount');
-const waypointList = document.getElementById('waypointList');
-const waypointCount = document.getElementById('waypointCount');
-const fieldSelect = document.getElementById('fieldSelect');
+const watchList = document.getElementById("watchList");
+const watchCount = document.getElementById("watchCount");
+const logList = document.getElementById("logList");
+const logCount = document.getElementById("logCount");
+const waypointList = document.getElementById("waypointList");
+const waypointCount = document.getElementById("waypointCount");
+const fieldSelect = document.getElementById("fieldSelect");
 
-const poseList = document.getElementById('poseList');
-const poseCount = document.getElementById('poseCount');
+const poseList = document.getElementById("poseList");
+const poseCount = document.getElementById("poseCount");
 
-const offXEl = document.getElementById('settingsOffX');
-const offYEl = document.getElementById('settingsOffY');
-const offThetaEl = document.getElementById('settingsOffTheta');
-const unitsSelect = document.getElementById('unitsSelect');
-const robotWEl = document.getElementById('settingsRobotW');
-const robotHEl = document.getElementById('settingsRobotH');
-const robotImgControlsEl = document.getElementById('robotImgControls');
-const robotImgScaleEl = document.getElementById('robotImgScale');
-const robotImgOffXEl = document.getElementById('robotImgOffX');
-const robotImgOffYEl = document.getElementById('robotImgOffY');
-const robotImgRotEl = document.getElementById('robotImgRot');
-const robotImgAlphaEl = document.getElementById('robotImgAlpha');
-const minSpeedEl = document.getElementById('settingsMinSpeed');
-const maxSpeedEl = document.getElementById('settingsMaxSpeed');
-const btnExport = document.getElementById('btnExport');
-const btnRouteInfo = document.getElementById('btnRouteInfo');
-const exportModal = document.getElementById('exportModal');
-const btnExportClose = document.getElementById('btnExportClose');
-const exportPathNameInput = document.getElementById('exportPathName');
-const exportFilenameInput = document.getElementById('exportFilename');
-const exportFilenameHint = document.getElementById('exportFilenameHint');
-const exportLocationSelect = document.getElementById('exportLocation');
-const exportCustomPathWrap = document.getElementById('exportCustomPathWrap');
-const exportCustomPathInput = document.getElementById('exportCustomPath');
-const exportCustomPathHint = document.getElementById('exportCustomPathHint');
-const exportValidationMessage = document.getElementById('exportValidationMessage');
-const exportSuccessMessage = document.getElementById('exportSuccessMessage');
-const btnExportCancel = document.getElementById('btnExportCancel');
-const btnExportConfirm = document.getElementById('btnExportConfirm');
-const routeInfoModal = document.getElementById('routeInfoModal');
-const btnRouteInfoClose = document.getElementById('btnRouteInfoClose');
-const routeInfoList = document.getElementById('routeInfoList');
-const btnApplyRunSettings = document.getElementById('btnApplyRunSettings');
-const watchGraphPanel = document.getElementById('watchGraphPanel');
-const btnCloseWatchGraph = document.getElementById('btnCloseWatchGraph');
-const watchGraphHeader = document.getElementById('watchGraphHeader');
-const watchGraphResizer = document.getElementById('watchGraphResizer');
-const watchGraphSubtitle = document.getElementById('watchGraphSubtitle');
-const watchGraphTitle = document.getElementById('watchGraphTitle');
-const watchGraphCompareSelect = document.getElementById('watchGraphCompareSelect');
-const watchGraphLatest = document.getElementById('watchGraphLatest');
-const watchGraphCompareLatest = document.getElementById('watchGraphCompareLatest');
-const watchGraphCount = document.getElementById('watchGraphCount');
-const watchGraphAvg = document.getElementById('watchGraphAvg');
-const watchGraphMin = document.getElementById('watchGraphMin');
-const watchGraphMax = document.getElementById('watchGraphMax');
-const watchGraphCompareCount = document.getElementById('watchGraphCompareCount');
-const watchGraphCompareAvg = document.getElementById('watchGraphCompareAvg');
-const watchGraphCompareMin = document.getElementById('watchGraphCompareMin');
-const watchGraphCompareMax = document.getElementById('watchGraphCompareMax');
-const watchGraphCanvas = document.getElementById('watchGraphCanvas');
-const watchGraphEmpty = document.getElementById('watchGraphEmpty');
-const pinnedWatchHost = document.getElementById('pinnedWatchHost');
-const pinnedWatchTemplate = document.getElementById('pinnedWatchTemplate');
+const offXEl = document.getElementById("settingsOffX");
+const offYEl = document.getElementById("settingsOffY");
+const offThetaEl = document.getElementById("settingsOffTheta");
+const unitsSelect = document.getElementById("unitsSelect");
+const robotWEl = document.getElementById("settingsRobotW");
+const robotHEl = document.getElementById("settingsRobotH");
+const robotImgControlsEl = document.getElementById("robotImgControls");
+const robotImgScaleEl = document.getElementById("robotImgScale");
+const robotImgOffXEl = document.getElementById("robotImgOffX");
+const robotImgOffYEl = document.getElementById("robotImgOffY");
+const robotImgRotEl = document.getElementById("robotImgRot");
+const robotImgAlphaEl = document.getElementById("robotImgAlpha");
+const minSpeedEl = document.getElementById("settingsMinSpeed");
+const maxSpeedEl = document.getElementById("settingsMaxSpeed");
+const btnExport = document.getElementById("btnExport");
+const btnRouteInfo = document.getElementById("btnRouteInfo");
+const exportModal = document.getElementById("exportModal");
+const btnExportClose = document.getElementById("btnExportClose");
+const exportPathNameInput = document.getElementById("exportPathName");
+const exportFilenameInput = document.getElementById("exportFilename");
+const exportFilenameHint = document.getElementById("exportFilenameHint");
+const exportLocationSelect = document.getElementById("exportLocation");
+const exportCustomPathWrap = document.getElementById("exportCustomPathWrap");
+const exportCustomPathInput = document.getElementById("exportCustomPath");
+const exportCustomPathHint = document.getElementById("exportCustomPathHint");
+const exportValidationMessage = document.getElementById("exportValidationMessage");
+const exportSuccessMessage = document.getElementById("exportSuccessMessage");
+const btnExportCancel = document.getElementById("btnExportCancel");
+const btnExportConfirm = document.getElementById("btnExportConfirm");
+const routeInfoModal = document.getElementById("routeInfoModal");
+const btnRouteInfoClose = document.getElementById("btnRouteInfoClose");
+const routeInfoList = document.getElementById("routeInfoList");
+const btnApplyRunSettings = document.getElementById("btnApplyRunSettings");
+const watchGraphPanel = document.getElementById("watchGraphPanel");
+const btnCloseWatchGraph = document.getElementById("btnCloseWatchGraph");
+const watchGraphHeader = document.getElementById("watchGraphHeader");
+const watchGraphResizer = document.getElementById("watchGraphResizer");
+const watchGraphSubtitle = document.getElementById("watchGraphSubtitle");
+const watchGraphTitle = document.getElementById("watchGraphTitle");
+const watchGraphCompareSelect = document.getElementById("watchGraphCompareSelect");
+const watchGraphLatest = document.getElementById("watchGraphLatest");
+const watchGraphCompareLatest = document.getElementById("watchGraphCompareLatest");
+const watchGraphCount = document.getElementById("watchGraphCount");
+const watchGraphAvg = document.getElementById("watchGraphAvg");
+const watchGraphMin = document.getElementById("watchGraphMin");
+const watchGraphMax = document.getElementById("watchGraphMax");
+const watchGraphCompareCount = document.getElementById("watchGraphCompareCount");
+const watchGraphCompareAvg = document.getElementById("watchGraphCompareAvg");
+const watchGraphCompareMin = document.getElementById("watchGraphCompareMin");
+const watchGraphCompareMax = document.getElementById("watchGraphCompareMax");
+const watchGraphCanvas = document.getElementById("watchGraphCanvas");
+const watchGraphEmpty = document.getElementById("watchGraphEmpty");
+const pinnedWatchHost = document.getElementById("pinnedWatchHost");
+const pinnedWatchTemplate = document.getElementById("pinnedWatchTemplate");
 
 // Settings modal elements
-const btnSettings = document.getElementById('btnSettings');
-const settingsModal = document.getElementById('settingsModal');
-const btnSettingsClose = document.getElementById('btnSettingsClose');
-const modeViewingBtn = document.getElementById('modeViewing');
-const modePlanningBtn = document.getElementById('modePlanning');
-const prosDirInput = document.getElementById('prosDirInput');
-const btnProsDirAuto = document.getElementById('btnProsDirAuto');
-const btnUploadRobotImage = document.getElementById('btnUploadRobotImage');
-const robotImageFile = document.getElementById('robotImageFile');
-const robotImageToggle = document.getElementById('robotImageToggle');
-const settingsRobotImgControls = document.getElementById('settingsRobotImgControls');
-const settingsRobotImgScale = document.getElementById('settingsRobotImgScale');
-const settingsRobotImgOffX = document.getElementById('settingsRobotImgOffX');
-const settingsRobotImgOffY = document.getElementById('settingsRobotImgOffY');
-const settingsRobotImgRot = document.getElementById('settingsRobotImgRot');
-const settingsRobotImgAlpha = document.getElementById('settingsRobotImgAlpha');
-const settingsFieldRotation = document.getElementById('settingsFieldRotation');
-const settingsUnitsSelect = document.getElementById('settingsUnitsSelect');
-const settingsRobotW = document.getElementById('settingsRobotW');
-const settingsRobotH = document.getElementById('settingsRobotH');
-const settingsOffX = document.getElementById('settingsOffX');
-const settingsOffY = document.getElementById('settingsOffY');
-const settingsOffTheta = document.getElementById('settingsOffTheta');
-const settingsMinSpeed = document.getElementById('settingsMinSpeed');
-const settingsMaxSpeed = document.getElementById('settingsMaxSpeed');
-const settingsLiveDebug = document.getElementById('settingsLiveDebug');
-const settingsPlanMoveStep = document.getElementById('settingsPlanMoveStep');
-const settingsPlanSnapStep = document.getElementById('settingsPlanSnapStep');
-const settingsPlanThetaSnapStep = document.getElementById('settingsPlanThetaSnapStep');
-const settingsPlanLimitBounds = document.getElementById('settingsPlanLimitBounds');
-const planSplit = document.getElementById('planSplit');
-const settingsPlanSpeed = document.getElementById('settingsPlanSpeed');
-const planListEl = document.getElementById('planList');
-const planCountEl = document.getElementById('planCount');
-const planSelIndexEl = document.getElementById('planSelIndex');
-const planSelXEl = document.getElementById('planSelX');
-const planSelYEl = document.getElementById('planSelY');
-const planSelThetaEl = document.getElementById('planSelTheta');
-document.getElementById('versionDisplay').innerHTML = APP_VERSION;
+const btnSettings = document.getElementById("btnSettings");
+const settingsModal = document.getElementById("settingsModal");
+const btnSettingsClose = document.getElementById("btnSettingsClose");
+const modeViewingBtn = document.getElementById("modeViewing");
+const modePlanningBtn = document.getElementById("modePlanning");
+const prosDirInput = document.getElementById("prosDirInput");
+const btnProsDirAuto = document.getElementById("btnProsDirAuto");
+const btnUploadRobotImage = document.getElementById("btnUploadRobotImage");
+const robotImageFile = document.getElementById("robotImageFile");
+const robotImageToggle = document.getElementById("robotImageToggle");
+const settingsRobotImgControls = document.getElementById("settingsRobotImgControls");
+const settingsRobotImgScale = document.getElementById("settingsRobotImgScale");
+const settingsRobotImgOffX = document.getElementById("settingsRobotImgOffX");
+const settingsRobotImgOffY = document.getElementById("settingsRobotImgOffY");
+const settingsRobotImgRot = document.getElementById("settingsRobotImgRot");
+const settingsRobotImgAlpha = document.getElementById("settingsRobotImgAlpha");
+const settingsShowPreviousYearFields = document.getElementById("settingsShowPreviousYearFields");
+const settingsFieldRotation = document.getElementById("settingsFieldRotation");
+const settingsUnitsSelect = document.getElementById("settingsUnitsSelect");
+const settingsRobotW = document.getElementById("settingsRobotW");
+const settingsRobotH = document.getElementById("settingsRobotH");
+const settingsOffX = document.getElementById("settingsOffX");
+const settingsOffY = document.getElementById("settingsOffY");
+const settingsOffTheta = document.getElementById("settingsOffTheta");
+const settingsMinSpeed = document.getElementById("settingsMinSpeed");
+const settingsMaxSpeed = document.getElementById("settingsMaxSpeed");
+const settingsLiveDebug = document.getElementById("settingsLiveDebug");
+const settingsPlanMoveStep = document.getElementById("settingsPlanMoveStep");
+const settingsPlanSnapStep = document.getElementById("settingsPlanSnapStep");
+const settingsPlanThetaSnapStep = document.getElementById("settingsPlanThetaSnapStep");
+const settingsPlanLimitBounds = document.getElementById("settingsPlanLimitBounds");
+const planSplit = document.getElementById("planSplit");
+const settingsPlanSpeed = document.getElementById("settingsPlanSpeed");
+const planListEl = document.getElementById("planList");
+const planCountEl = document.getElementById("planCount");
+const planSelIndexEl = document.getElementById("planSelIndex");
+const planSelXEl = document.getElementById("planSelX");
+const planSelYEl = document.getElementById("planSelY");
+const planSelThetaEl = document.getElementById("planSelTheta");
+document.getElementById("versionDisplay").innerHTML = APP_VERSION;
 
-const prosDirStatusEl = document.getElementById('prosDirStatus');
-const prosDirAutoStatusEl = document.getElementById('prosDirAutoStatus');
-const prosDirAutoResultsEl = document.getElementById('prosDirAutoResults');
+const prosDirStatusEl = document.getElementById("prosDirStatus");
+const prosDirAutoStatusEl = document.getElementById("prosDirAutoStatus");
+const prosDirAutoResultsEl = document.getElementById("prosDirAutoResults");
 let prosDirValid = false;
 let prosDirRetryTimer = null;
 let prosDirRetryAttempts = 0;
@@ -460,6 +461,7 @@ let backendReadyProbeInFlight = null;
 let backendReadyLastCheckAt = 0;
 
 // --- FIELD IMAGES ---
+const CURRENT_GAME_YEAR = "2026-2027";
 const FIELD_IMAGES = [
   { key: "./assets/fields/v5_match_field_2026-2027_override.png", label: "Match Field (V5 Override)" },
   { key: "./assets/fields/v5_skills_field_2026-2027_override.png", label: "Skills Field (V5 Override)" },
@@ -512,6 +514,22 @@ const WATCH_GRAPH_MAX_W = 1600;
 const WATCH_GRAPH_MIN_H = 170;
 const WATCH_GRAPH_MARGIN = 16;
 let data = null;
+let showPreviousYearFields = false;
+
+function isFieldCurrentYear(field) {
+  return String(field?.key || "").includes(CURRENT_GAME_YEAR);
+}
+
+function getVisibleFieldImages() {
+  if (showPreviousYearFields) return FIELD_IMAGES;
+  return FIELD_IMAGES.filter((field) => isFieldCurrentYear(field) || field.label.includes("Field Perimeter"));
+}
+
+function getValidFieldKey(fieldKey) {
+  const visibleFields = getVisibleFieldImages();
+  if (visibleFields.some((field) => field.key === fieldKey)) return fieldKey;
+  return visibleFields[0]?.key || DEFAULT_FIELD_KEY;
+}
 
 function createPoseStore(initialCapacity = 1024) {
   let capacity = Math.max(16, Number(initialCapacity) || 16);
@@ -526,10 +544,8 @@ function createPoseStore(initialCapacity = 1024) {
   let speedRawValues = new Float32Array(capacity);
   let speedNormValues = new Float32Array(capacity);
 
-  const NULL_SENTINEL = Number.NaN;
-
   const readNullable = (value) => (Number.isNaN(value) ? null : value);
-  const writeNullable = (value) => (typeof value === "number" && Number.isFinite(value)) ? value : NULL_SENTINEL;
+  const writeNullable = (value) => (typeof value === "number" && Number.isFinite(value)) ? value : Number.NaN;
 
   function grow(nextLength) {
     if (nextLength <= capacity) return;
@@ -896,7 +912,7 @@ function planRectSelect() {
 function planThetaDegAt(i) {
   if (i < 0 || i >= planWaypoints.length) return 0;
   const cur = planWaypoints[i];
-  const theta = (typeof cur.theta === 'number') ? cur.theta : 0;
+  const theta = (typeof cur.theta === "number") ? cur.theta : 0;
   return normalizeDeg(theta + offsetsIn.theta);
 }
 
@@ -983,19 +999,19 @@ function updatePlanControls() {
 
 function renderPlanList() {
   if (!planListEl) return;
-  planListEl.innerHTML = '';
+  planListEl.innerHTML = "";
   if (planCountEl) planCountEl.textContent = `${planWaypoints.length}`;
   for (let i = 0; i < planWaypoints.length; i++) {
     const p = planWaypoints[i];
-    const item = document.createElement('div');
-    item.className = 'planItem' + (planSelectedSet.has(i) ? ' selected' : '');
+    const item = document.createElement("div");
+    item.className = "planItem" + (planSelectedSet.has(i) ? " selected" : "");
     item.dataset.idx = String(i);
     const theta = planThetaDegAt(i);
     item.innerHTML = `
       <div class="muted">#${i + 1}</div>
       <div>X: ${fmtNum(p.x, 2)}  Y: ${fmtNum(p.y, 2)}  θ: ${fmtNum(theta, 1)}°</div>
     `;
-    item.addEventListener('click', () => {
+    item.addEventListener("click", () => {
       planSelectSingle(i);
       requestDrawAll();
       renderPlanList();
@@ -1012,14 +1028,14 @@ function applySavedLayout(settings) {
   const leftWidth = parseLayoutNumber(settings.layoutLeftSidebarWidth);
   if (leftWidth !== null) {
     const next = clamp(leftWidth, 0, MAX_PX_LIVEWIN);
-    root.style.setProperty('--leftSidebarW', `${next}px`);
+    root.style.setProperty("--leftSidebarW", `${next}px`);
     layoutChanged = true;
     if (next <= COLLAPSE_PX_LEFTSIDEBAR) {
-      leftEl?.classList?.add('isCollapsed');
-      rowGrid?.classList?.add('leftCollapsed');
+      leftEl?.classList?.add("isCollapsed");
+      rowGrid?.classList?.add("leftCollapsed");
     } else {
-      leftEl?.classList?.remove('isCollapsed');
-      rowGrid?.classList?.remove('leftCollapsed');
+      leftEl?.classList?.remove("isCollapsed");
+      rowGrid?.classList?.remove("leftCollapsed");
       layoutState.lastLeftSidebarW = next;
     }
   }
@@ -1027,12 +1043,12 @@ function applySavedLayout(settings) {
   const rightViewingWidth = parseLayoutNumber(settings.layoutRightSidebarWidthViewing);
   if (rightViewingWidth !== null) {
     const next = clamp(rightViewingWidth, 0, MAX_SIDEBAR_W_PX);
-    root.style.setProperty('--rightSidebarWViewing', `${next}px`);
+    root.style.setProperty("--rightSidebarWViewing", `${next}px`);
     layoutChanged = true;
     if (next <= COLLAPSE_PX_SIDEBAR) {
-      rightViewingEl?.classList?.add('isCollapsed');
+      rightViewingEl?.classList?.add("isCollapsed");
     } else {
-      rightViewingEl?.classList?.remove('isCollapsed');
+      rightViewingEl?.classList?.remove("isCollapsed");
       layoutState.lastRightSidebarW = next;
     }
   }
@@ -1040,12 +1056,12 @@ function applySavedLayout(settings) {
   const rightPlanningWidth = parseLayoutNumber(settings.layoutRightSidebarWidthPlanning);
   if (rightPlanningWidth !== null) {
     const next = clamp(rightPlanningWidth, 0, MAX_SIDEBAR_W_PX);
-    root.style.setProperty('--rightSidebarWPlanning', `${next}px`);
+    root.style.setProperty("--rightSidebarWPlanning", `${next}px`);
     layoutChanged = true;
     if (next <= COLLAPSE_PX_SIDEBAR) {
-      rightPlanningEl?.classList?.add('isCollapsed');
+      rightPlanningEl?.classList?.add("isCollapsed");
     } else {
-      rightPlanningEl?.classList?.remove('isCollapsed');
+      rightPlanningEl?.classList?.remove("isCollapsed");
       layoutState.lastRightSidebarWPlanning = next;
     }
   }
@@ -1053,12 +1069,12 @@ function applySavedLayout(settings) {
   const timelineHeight = parseLayoutNumber(settings.layoutTimelineHeight);
   if (timelineHeight !== null) {
     const next = clamp(timelineHeight, 0, MAX_TIMELINE_H_PX);
-    root.style.setProperty('--timelineH', `${next}px`);
+    root.style.setProperty("--timelineH", `${next}px`);
     layoutChanged = true;
     if (next <= COLLAPSE_PX_TIMELINE) {
-      timelineBar?.classList?.add('isCollapsed');
+      timelineBar?.classList?.add("isCollapsed");
     } else {
-      timelineBar?.classList?.remove('isCollapsed');
+      timelineBar?.classList?.remove("isCollapsed");
       layoutState.lastTimelineH = next;
     }
   }
@@ -1068,12 +1084,12 @@ function applySavedLayout(settings) {
     const rightH = rightPlanningEl?.getBoundingClientRect().height || window.innerHeight;
     const maxPlanH = Math.max(COLLAPSE_WAYPOINTLIST_PX, rightH - 180);
     const next = clamp(planHeight, 0, maxPlanH);
-    root.style.setProperty('--planListH', `${next}px`);
+    root.style.setProperty("--planListH", `${next}px`);
     layoutChanged = true;
     if (next <= COLLAPSE_WAYPOINTLIST_PX) {
-      rightPlanningEl?.classList?.add('planListCollapsed');
+      rightPlanningEl?.classList?.add("planListCollapsed");
     } else {
-      rightPlanningEl?.classList?.remove('planListCollapsed');
+      rightPlanningEl?.classList?.remove("planListCollapsed");
     }
   }
 
@@ -1105,7 +1121,7 @@ function planChanged(opts = {}) {
 
 async function loadSavedPaths() {
   try {
-    const saved = await invoke('read_saved_paths');
+    const saved = await invoke("read_saved_paths");
     if (!saved) return;
     const obj = JSON.parse(saved);
     if (Array.isArray(obj?.["planned-path"])) {
@@ -1129,7 +1145,7 @@ async function loadSavedPaths() {
       updateFieldLayout(true);
     }
   } catch (e) {
-    console.warn('Failed to load saved paths:', e);
+    console.warn("Failed to load saved paths:", e);
   }
 }
 
@@ -1138,9 +1154,9 @@ function scheduleSavedPathsSave() {
   savedPathsSaveTimer = setTimeout(async () => {
     try {
       const payload = buildSavedPathsPayload();
-      await invoke('write_saved_paths', { contents: payload });
+      await invoke("write_saved_paths", { contents: payload });
     } catch (e) {
-      console.warn('Failed to save paths:', e);
+      console.warn("Failed to save paths:", e);
     }
   }, 300);
 }
@@ -1188,9 +1204,9 @@ async function saveSavedPathsNow() {
   }
   try {
     const payload = buildSavedPathsPayload();
-    await invoke('write_saved_paths', { contents: payload });
+    await invoke("write_saved_paths", { contents: payload });
   } catch (e) {
-    console.warn('Failed to save paths:', e);
+    console.warn("Failed to save paths:", e);
   }
 }
 
@@ -1287,7 +1303,7 @@ function updatePlanThetaFromPointer(idx, mx, my) {
 }
 
 function isInField(w) {
-  if (!w || typeof w.x !== 'number' || typeof w.y !== 'number') return false;
+  if (!w || typeof w.x !== "number" || typeof w.y !== "number") return false;
   const sp = worldToScreen(w.x, w.y);
   if (!Number.isFinite(sp.x) || !Number.isFinite(sp.y)) return false;
   const rect = canvas.getBoundingClientRect();
@@ -1295,7 +1311,7 @@ function isInField(w) {
 }
 
 function isPointInFieldBounds(point) {
-  if (!point || typeof point.x !== 'number' || typeof point.x !== 'number') return false;
+  if (!point || typeof point.x !== "number" || typeof point.x !== "number") return false;
   return (
     point.x >= FIELD_BOUNDS_IN.minX &&
     point.x <= FIELD_BOUNDS_IN.maxX &&
@@ -1441,7 +1457,7 @@ function angLerpDeg(a, b, t) {
 }
 
 function formatNumberString(value, decimals = 2, invalidValue = "—") {
-  if (value === null || value === "" || typeof value === 'boolean' || isNaN(value)) {
+  if (value === null || value === "" || typeof value === "boolean" || isNaN(value)) {
     return invalidValue;
   }
 
@@ -1462,7 +1478,7 @@ function formatNumberString(value, decimals = 2, invalidValue = "—") {
 }
 
 function formatFixedNumberString(value, decimals = 2, invalidValue = "—") {
-  if (value === null || value === "" || typeof value === 'boolean' || isNaN(value)) {
+  if (value === null || value === "" || typeof value === "boolean" || isNaN(value)) {
     return invalidValue;
   }
 
@@ -1483,7 +1499,7 @@ function formatFixedNumberString(value, decimals = 2, invalidValue = "—") {
 
 function fmtNum(v, d = 2) { return formatNumberString(v, d); }
 function setStatus(msg, log = true) {
-  const fullText = String(msg ?? '');
+  const fullText = String(msg ?? "");
   statusEl.dataset.fullText = fullText;
   scheduleTopBarStatusLayout();
   if (log) console.log(`Status: ${msg}`);
@@ -1494,8 +1510,8 @@ function escapeHtml(s) {
 }
 
 function toNumMaybe(v) {
-  if (typeof v === 'number' && isFinite(v)) return v;
-  if (typeof v === 'string') {
+  if (typeof v === "number" && isFinite(v)) return v;
+  if (typeof v === "string") {
     const n = Number(v.trim());
     if (isFinite(n)) return n;
   }
@@ -1599,8 +1615,8 @@ function updatePinnedWatchPanel(panel, watchId) {
   if (!panel) return;
   const tMs = getPinnedWatchReferenceTimeMs();
   const latest = findWatchByIdAtOrBeforeTime(watchId, tMs);
-  const nameEl = panel.querySelector('.pinnedWatchName');
-  const valueEl = panel.querySelector('.pinnedWatchValue');
+  const nameEl = panel.querySelector(".pinnedWatchName");
+  const valueEl = panel.querySelector(".pinnedWatchValue");
   const latestOverall = findLatestWatchById(watchId);
   const label = latest?.label || latestOverall?.label || (watchId == null ? "No watch selected" : `Watch ${watchId}`);
   if (nameEl) nameEl.textContent = label;
@@ -1610,7 +1626,7 @@ function updatePinnedWatchPanel(panel, watchId) {
 
 function refreshPinnedWatchPanels() {
   if (!pinnedWatchHost) return;
-  const panels = pinnedWatchHost.querySelectorAll('.pinnedWatchPanel');
+  const panels = pinnedWatchHost.querySelectorAll(".pinnedWatchPanel");
   for (const panel of panels) {
     const watchId = panel.dataset.watchId || null;
     updatePinnedWatchPanel(panel, watchId);
@@ -1633,8 +1649,8 @@ function openFloatingWatch(watchId) {
   const root = pinnedWatchTemplate.content.firstElementChild?.cloneNode(true);
   if (!root) return null;
 
-  const headerEl = root.querySelector('.pinnedWatchHeader');
-  const closeEl = root.querySelector('.pinnedWatchClose');
+  const headerEl = root.querySelector(".pinnedWatchHeader");
+  const closeEl = root.querySelector(".pinnedWatchClose");
 
   root.dataset.watchId = watchId == null ? "" : String(watchId);
   root.style.top = `${128 + pinnedWatchPanelCount * 26}px`;
@@ -1643,7 +1659,7 @@ function openFloatingWatch(watchId) {
 
   updatePinnedWatchPanel(root, watchId);
 
-  headerEl?.addEventListener('mousedown', (ev) => {
+  headerEl?.addEventListener("mousedown", (ev) => {
     if (ev.button !== 0) return;
     pinnedWatchDragTarget = root;
     pinnedWatchDragStart = {
@@ -1652,11 +1668,11 @@ function openFloatingWatch(watchId) {
     };
     root.style.left = `${root.offsetLeft}px`;
     root.style.top = `${root.offsetTop}px`;
-    root.style.right = 'auto';
+    root.style.right = "auto";
     ev.preventDefault();
   });
 
-  closeEl?.addEventListener('click', () => {
+  closeEl?.addEventListener("click", () => {
     closePinnedWatchPanel(root);
   });
 
@@ -1806,14 +1822,14 @@ function poseToInches(p) {
     };
   }
   return {
-    t: (typeof p.t === 'number') ? p.t : null,
+    t: (typeof p.t === "number") ? p.t : null,
     x: (p.x ?? 0) * unitsToInFactor + offsetsIn.x,
     y: (p.y ?? 0) * unitsToInFactor + offsetsIn.y,
     theta: normalizeDeg((p.theta ?? 0) + offsetsIn.theta),
-    l_vel: (typeof p.l_vel === 'number') ? p.l_vel : null,
-    r_vel: (typeof p.r_vel === 'number') ? p.r_vel : null,
-    speed_raw: (typeof p.speed_raw === 'number') ? p.speed_raw : null,
-    speed_norm: (typeof p.speed_norm === 'number') ? p.speed_norm : 0,
+    l_vel: (typeof p.l_vel === "number") ? p.l_vel : null,
+    r_vel: (typeof p.r_vel === "number") ? p.r_vel : null,
+    speed_raw: (typeof p.speed_raw === "number") ? p.speed_raw : null,
+    speed_norm: (typeof p.speed_norm === "number") ? p.speed_norm : 0,
   };
 }
 
@@ -1881,7 +1897,7 @@ async function waitForBackendReady(maxWaitMs = 8000, pollMs = 200) {
 
 function formatLogArgs(args) {
   return args.map((a) => {
-    if (typeof a === 'string') return a;
+    if (typeof a === "string") return a;
     try { return JSON.stringify(a); } catch (e) { return String(a); }
   }).join(" ");
 }
@@ -2081,7 +2097,7 @@ function resizeCanvas() {
 
 function layoutTimelineCanvas() {
   if (!timelineCanvas || !timelineBar) return;
-  if (timelineBar.classList.contains('isCollapsed')) return;
+  if (timelineBar.classList.contains("isCollapsed")) return;
 
   // Ensure we never clip the bottom: compute available height.
   const barH = timelineBar.getBoundingClientRect().height;
@@ -2114,16 +2130,18 @@ function resizePlanningTimeline() {
 // -------- field images --------
 function loadFieldOptions() {
   if (!fieldSelect) {
-    console.warn('fieldSelect element not found');
+    console.warn("fieldSelect element not found");
     return;
   }
+  const previousValue = fieldSelect.value;
   fieldSelect.innerHTML = "";
-  for (const f of FIELD_IMAGES) {
-    const opt = document.createElement('option');
+  for (const f of getVisibleFieldImages()) {
+    const opt = document.createElement("option");
     opt.value = f.key;
     opt.textContent = f.label;
     fieldSelect.appendChild(opt);
   }
+  fieldSelect.value = getValidFieldKey(previousValue);
 }
 
 async function resolveFieldImageSrc(fieldKey) {
@@ -2146,13 +2164,13 @@ async function resolveFieldImageSrc(fieldKey) {
 }
 
 async function loadFieldImage(filename) {
-  const nextField = FIELD_IMAGES.some((field) => field.key === filename) ? filename : DEFAULT_FIELD_KEY;
+  const nextField = getValidFieldKey(filename);
   let imgSrc = nextField;
   if (isTauriRuntime) {
     try {
       const resolvedPath = await resolveFieldImageSrc(nextField);
       if (resolvedPath && resolvedPath !== nextField && !resolvedPath.startsWith("asset:") && !resolvedPath.startsWith("http")) {
-        imgSrc = await invoke('read_image_data', { path: resolvedPath });
+        imgSrc = await invoke("read_image_data", { path: resolvedPath });
       } else {
         imgSrc = resolvedPath;
       }
@@ -2198,23 +2216,21 @@ function loadRobotImage() {
 function drawFirstField() {
   loadFieldOptions();
 
-  // Set the default selection and trigger the load
   if (!fieldSelect) {
-    console.warn('fieldSelect not available for drawFirstField');
+    console.warn("fieldSelect not available for drawFirstField");
     return;
   }
 
-  if (DEFAULT_FIELD_KEY && fieldSelect) {
-    fieldSelect.value = DEFAULT_FIELD_KEY;
-    loadFieldImage(DEFAULT_FIELD_KEY);
-  }
+  const nextField = getValidFieldKey(fieldSelect.value || DEFAULT_FIELD_KEY);
+  fieldSelect.value = nextField;
+  loadFieldImage(nextField);
 }
 
 // -------- time helpers --------
 function timeRange() {
   const t0 = rawPoses[0]?.t;
   const tN = rawPoses[rawPoses.length - 1]?.t;
-  if (typeof t0 !== 'number' || typeof tN !== 'number' || tN <= t0) return null;
+  if (typeof t0 !== "number" || typeof tN !== "number" || tN <= t0) return null;
   return { t0, tN };
 }
 
@@ -2265,7 +2281,7 @@ function nearestIndexWithinTol(tMs, tolMs) {
   let best = null;
   for (const i of cands) {
     const tt = rawPoses[i].t;
-    if (typeof tt !== 'number') continue;
+    if (typeof tt !== "number") continue;
     const dt = Math.abs(tt - tMs);
     if (best === null || dt < best.dt) best = { idx: i, dt };
   }
@@ -2279,7 +2295,7 @@ function normalizeWatches(arr) {
   if (!Array.isArray(arr)) return out;
 
   for (const w of arr) {
-    if (!w || typeof w !== 'object') continue;
+    if (!w || typeof w !== "object") continue;
     const tRaw = (w.t ?? w.timestamp ?? w.time ?? w.ms);
     const t = toNumMaybe(tRaw);
     if (t == null) continue;
@@ -2305,7 +2321,7 @@ function normalizeLogs(arr) {
   if (!Array.isArray(arr)) return out;
 
   for (const entry of arr) {
-    if (!entry || typeof entry !== 'object') continue;
+    if (!entry || typeof entry !== "object") continue;
     const tRaw = entry.t ?? entry.timestamp ?? entry.time ?? entry.ms;
     const t = toNumMaybe(tRaw);
     if (t == null) continue;
@@ -2401,7 +2417,7 @@ function fmtNumToString(value, decimals = 2) {
 }
 
 function fmtSecondsToString(ms) {
-  if (typeof ms !== 'number' || !isFinite(ms)) return null;
+  if (typeof ms !== "number" || !isFinite(ms)) return null;
   return `${fmtNumToString(ms / 1000, 2)}s`;
 }
 
@@ -2440,17 +2456,17 @@ function waypointEventLines(event) {
 function rebuildWaypointState() {
   waypointsById = new Map();
   for (const entry of waypoints) {
-    if (!entry || typeof entry !== 'object') continue;
+    if (!entry || typeof entry !== "object") continue;
     const id = Number(entry.id);
     if (!Number.isInteger(id)) continue;
-    const createdEvent = entry.createdEvent && typeof entry.createdEvent === 'object'
+    const createdEvent = entry.createdEvent && typeof entry.createdEvent === "object"
       ? entry.createdEvent
       : (Array.isArray(entry.events) ? entry.events.find((event) => event?.type === "CREATED") : null);
     if (!createdEvent?.params || createdEvent.params.tarX == null || createdEvent.params.tarY == null) continue;
 
     const events = Array.isArray(entry.events)
       ? entry.events
-        .filter((event) => event && typeof event === 'object' && typeof event.t === 'number')
+        .filter((event) => event && typeof event === "object" && typeof event.t === "number")
         .map((event) => ({
           t: event.t,
           type: normalizeWaypointType(event.type),
@@ -2792,7 +2808,7 @@ function jumpToEventTime(tMs, {
       hideWatchPopup();
     }
 
-    if (typeof noPoseStatus === 'function') noPoseStatus();
+    if (typeof noPoseStatus === "function") noPoseStatus();
 
     highlightPoseInList();
     updatePoseReadout();
@@ -2803,10 +2819,10 @@ function jumpToEventTime(tMs, {
   const near = nearestIndexWithinTol(tMs, WATCH_TOL_MS);
   if (near) {
     selectedIndex = near.idx;
-    if (typeof exactStatus === 'function') exactStatus(near);
+    if (typeof exactStatus === "function") exactStatus(near);
   } else {
     selectedIndex = findFloorIndexByTime(tMs);
-    if (typeof interpolatedStatus === 'function') interpolatedStatus();
+    if (typeof interpolatedStatus === "function") interpolatedStatus();
   }
   lastPoseIndex = selectedIndex;
 
@@ -2826,7 +2842,7 @@ function jumpToEventTime(tMs, {
 }
 
 // --- Watch popup (tiny, click to show, click elsewhere to dismiss) ---
-const watchPopup = document.getElementById('watchPopup');
+const watchPopup = document.getElementById("watchPopup");
 let watchPopupOpen = false;
 let watchGraphPanelOpen = false;
 let watchGraphPanelKey = null;
@@ -2898,7 +2914,7 @@ function watchVisibilityTitle(w) {
 
 function isGraphableWatchValue(value) {
   if (typeof value === "boolean") return true;
-  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value === "number") return Number.isFinite(value);
 
   const text = String(value ?? "").trim().toLowerCase();
   if (!text) return false;
@@ -3067,7 +3083,7 @@ function formatWatchGraphCountStat(value) {
 }
 
 function numericWatchValue(value) {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (typeof value === "boolean") return value ? 1 : 0;
 
   const text = String(value ?? "").trim().toLowerCase();
@@ -3466,7 +3482,7 @@ function showWatchPopup(marker, clickPos) {
 }
 
 // dismiss by clicking anywhere else
-document.addEventListener('mousedown', (e) => {
+document.addEventListener("mousedown", (e) => {
   if (!watchPopupOpen) return;
   if (watchPopup && watchPopup.contains(e.target)) return;
   hideWatchPopup();
@@ -3612,7 +3628,7 @@ function createWatchListItem(m) {
     <div class="bigValue${watchBooleanValueClass(value)}">${escapeHtml(String(value))}</div>
   `;
 
-  div.addEventListener('pointerdown', (ev) => {
+  div.addEventListener("pointerdown", (ev) => {
     if (ev.button !== 0) return;
     ev.preventDefault();
     selectWatchMarker(m, true, { x: ev.clientX, y: ev.clientY });
@@ -3768,7 +3784,7 @@ function renderLogList() {
     const st = levelStyle(entry.level);
     const systemPill = entry.isSystem
       ? '<span class="pill logSystemPill">SYSTEM</span>'
-      : '';
+      : "";
     const div = document.createElement("div");
     div.className = "watchItem";
     div.dataset.t = String(entry.t);
@@ -3782,9 +3798,9 @@ function renderLogList() {
       </div>
       <div class="bigValue selectableText">${escapeHtml(String(entry.message ?? entry.value ?? ""))}</div>
     `;
-    div.addEventListener('pointerdown', (ev) => {
+    div.addEventListener("pointerdown", (ev) => {
       if (ev.button !== 0) return;
-      if (ev.target instanceof Element && ev.target.closest('.selectableText')) return;
+      if (ev.target instanceof Element && ev.target.closest(".selectableText")) return;
       ev.preventDefault();
       selectedLogTime = entry.t ?? null;
       selectedWaypointId = null;
@@ -3856,15 +3872,15 @@ function waypointPoseIndexForSelection(waypoint, eventTime = null) {
   if (!waypoint || !rawPoses.length) return null;
   const startT = waypoint.createdTime;
   const endT = waypoint.terminalEvent?.t ?? Infinity;
-  if (typeof startT !== 'number') return null;
+  if (typeof startT !== "number") return null;
 
   let bestIdx = null;
   let bestDiff = Infinity;
-  const targetTime = (typeof eventTime === 'number') ? eventTime : (waypoint.latestActiveEvent?.t ?? waypoint.createdTime);
+  const targetTime = (typeof eventTime === "number") ? eventTime : (waypoint.latestActiveEvent?.t ?? waypoint.createdTime);
 
   for (let i = 0; i < rawPoses.length; i += 1) {
     const t = rawPoses[i]?.t;
-    if (typeof t !== 'number') continue;
+    if (typeof t !== "number") continue;
     if (t < startT || t > endT) continue;
     const diff = Math.abs(t - targetTime);
     if (diff < bestDiff) {
@@ -3953,7 +3969,7 @@ function renderWaypointList() {
       </div>
       ${detailsHtml}
     `;
-    div.addEventListener('pointerdown', (ev) => {
+    div.addEventListener("pointerdown", (ev) => {
       if (ev.button !== 0) return;
       ev.preventDefault();
       selectWaypointEvent(waypoint, event, true);
@@ -3992,19 +4008,19 @@ function selectWatchMarker(marker, fromUserClick = false, clickPos = null) {
 // -------- pose list --------
 function createPoseListItem(i) {
   const p = rawPoses[i];
-  const t = (typeof p.t === 'number') ? Math.round(p.t) : "—";
+  const t = (typeof p.t === "number") ? Math.round(p.t) : "—";
   const pi = poseToInches(p);
   const poseSummary = `X: ${formatNumberString(pi.x, 1, "0")}in, Y: ${formatNumberString(pi.y, 1, "0")}in, θ: ${formatNumberString(pi.theta, 1, "0")}°`;
-  const div = document.createElement('div');
-  div.className = 'poseItem';
-  if (i === selectedIndex) div.classList.add('selected');
+  const div = document.createElement("div");
+  div.className = "poseItem";
+  if (i === selectedIndex) div.classList.add("selected");
   div.dataset.idx = String(i);
   div.innerHTML = `<div style="display:flex;justify-content:space-between;gap:10px">
     <div style="font-weight:800">#${i + 1}</div>
     <div class="muted">${fmtNum(t / 1000)}s</div>
   </div>
   <div class="sub">${escapeHtml(poseSummary)}</div>`;
-  div.addEventListener('pointerdown', (ev) => {
+  div.addEventListener("pointerdown", (ev) => {
     if (ev.button !== 0) return;
     ev.preventDefault();
 
@@ -4198,12 +4214,12 @@ function drawWaypointDots() {
 }
 
 function normalizeSignedDeg(d) {
-  if (typeof d !== 'number' || !isFinite(d)) return null;
+  if (typeof d !== "number" || !isFinite(d)) return null;
   return ((d + 180) % 360 + 360) % 360 - 180;
 }
 
 function formatUnitsParts(inches, decimals = 1) {
-  if (typeof inches !== 'number' || !isFinite(inches)) return [{ text: "—", kind: "value" }];
+  if (typeof inches !== "number" || !isFinite(inches)) return [{ text: "—", kind: "value" }];
   const value = inches / (unitsToInFactor || 1);
   return [
     { text: fmtNum(value, decimals), kind: "value" },
@@ -4325,7 +4341,7 @@ function drawWaypointOffsetOverlay(pose) {
   const dxIn = Math.abs((pose.x ?? 0) - (waypoint.target.x ?? 0));
   const dyIn = Math.abs((pose.y ?? 0) - (waypoint.target.y ?? 0));
   const distanceIn = Math.hypot(dxIn, dyIn);
-  const thetaDelta = (typeof waypoint.target.theta === 'number' && typeof pose.theta === 'number')
+  const thetaDelta = (typeof waypoint.target.theta === "number" && typeof pose.theta === "number")
     ? normalizeSignedDeg(waypoint.target.theta - pose.theta)
     : null;
 
@@ -4464,7 +4480,7 @@ function drawRobot(pose, alpha = 1.0) {
 async function loadRobotImageFromPath(path) {
   if (!path) return;
   try {
-    const dataUrl = await invoke('read_image_data', { path });
+    const dataUrl = await invoke("read_image_data", { path });
     robotImageDataUrl = dataUrl;
     await new Promise((resolve, reject) => {
       const img = new Image();
@@ -4477,11 +4493,11 @@ async function loadRobotImageFromPath(path) {
         requestDrawAll();
         resolve();
       };
-      img.onerror = () => reject(new Error('failed to load robot image from saved path'));
+      img.onerror = () => reject(new Error("failed to load robot image from saved path"));
       img.src = dataUrl;
     });
   } catch (e) {
-    console.error('Failed to load robot image from path:', e);
+    console.error("Failed to load robot image from path:", e);
     setStatus(`Failed to load robot image from path: ${e.message || e}`);
   }
 }
@@ -4603,7 +4619,7 @@ function timelinePickWatchDot(mx, my) {
 }
 
 function drawTimeline() {
-  if (timelineBar.classList.contains('isCollapsed')) return;
+  if (timelineBar.classList.contains("isCollapsed")) return;
 
   const rect = timelineCanvas.getBoundingClientRect();
   const W = rect.width, H = rect.height;
@@ -4628,7 +4644,7 @@ function drawTimeline() {
   tctx.lineWidth = 2;
   for (let i = 1; i < rawPoses.length; i++) {
     const a = rawPoses[i - 1], b = rawPoses[i];
-    if (typeof a.t !== 'number' || typeof b.t !== 'number') continue;
+    if (typeof a.t !== "number" || typeof b.t !== "number") continue;
 
     const xa = timeToX(a.t);
     const xb = timeToX(b.t);
@@ -4768,11 +4784,11 @@ function updateDeltaReadout() {
 }
 
 // --- Floating Window Logic ---
-const floatWin = document.getElementById('floatingInfo');
-const btnToggleFloat = document.getElementById('btnToggleFloat');
-const btnCloseFloat = document.getElementById('btnCloseFloat');
-const floatHeader = document.getElementById('floatHeader');
-const floatResizer = document.getElementById('floatResizer');
+const floatWin = document.getElementById("floatingInfo");
+const btnToggleFloat = document.getElementById("btnToggleFloat");
+const btnCloseFloat = document.getElementById("btnCloseFloat");
+const floatHeader = document.getElementById("floatHeader");
+const floatResizer = document.getElementById("floatResizer");
 
 // Toggle Visibility
 btnToggleFloat.onclick = (e) => {
@@ -4782,9 +4798,9 @@ btnToggleFloat.onclick = (e) => {
 
 btnCloseFloat.onclick = (e) => {
   e.stopPropagation();
-  floatWin.classList.add('hidden');
-  btnToggleFloat.classList.remove('isOn');
-  floatWin.classList.remove('isOn');
+  floatWin.classList.add("hidden");
+  btnToggleFloat.classList.remove("isOn");
+  floatWin.classList.remove("isOn");
 };
 
 // Dragging Logic
@@ -4801,7 +4817,7 @@ floatResizer.onmousedown = (e) => {
   e.preventDefault();
 };
 
-window.addEventListener('mousemove', (e) => {
+window.addEventListener("mousemove", (e) => {
   if (isDragging) {
     floatWin.style.left = `${e.clientX - dragStart.x}px`;
     floatWin.style.top = `${e.clientY - dragStart.y}px`;
@@ -4853,7 +4869,7 @@ window.addEventListener('mousemove', (e) => {
   }
 });
 
-window.addEventListener('mouseup', () => {
+window.addEventListener("mouseup", () => {
   isDragging = false;
   isResizing = false;
   isWatchGraphDragging = false;
@@ -4880,22 +4896,22 @@ function findTemporallyClosestWatch(targetMs) {
 // Data Update Function
 function updateFloatingInfo(pose, idx) {
   if (floatWin.hidden || !pose) {
-    document.getElementById('fx').textContent = "—";
-    document.getElementById('fy').textContent = "—";
-    document.getElementById('ft').textContent = "—";
-    document.getElementById('ftime').textContent = "—";
-    document.getElementById('favg').textContent = "—";
-    document.getElementById('flv').textContent = "—";
-    document.getElementById('frv').textContent = "—";
-    document.getElementById('fdeltat').textContent = "—";
-    document.getElementById('fcount').textContent = "Point: —/—";
+    document.getElementById("fx").textContent = "—";
+    document.getElementById("fy").textContent = "—";
+    document.getElementById("ft").textContent = "—";
+    document.getElementById("ftime").textContent = "—";
+    document.getElementById("favg").textContent = "—";
+    document.getElementById("flv").textContent = "—";
+    document.getElementById("frv").textContent = "—";
+    document.getElementById("fdeltat").textContent = "—";
+    document.getElementById("fcount").textContent = "Point: —/—";
     return;
   }
 
-  document.getElementById('fx').textContent = fmtNum(pose.x, 2);
-  document.getElementById('fy').textContent = fmtNum(pose.y, 2);
-  document.getElementById('ft').textContent = fmtNum(pose.theta, 2) + "°";
-  document.getElementById('ftime').textContent = fmtNum(pose.t / 1000, 2) + "s";
+  document.getElementById("fx").textContent = fmtNum(pose.x, 2);
+  document.getElementById("fy").textContent = fmtNum(pose.y, 2);
+  document.getElementById("ft").textContent = fmtNum(pose.theta, 2) + "°";
+  document.getElementById("ftime").textContent = fmtNum(pose.t / 1000, 2) + "s";
 
   const l = pose.l_vel || 0;
   const r = pose.r_vel || 0;
@@ -4904,19 +4920,19 @@ function updateFloatingInfo(pose, idx) {
   const lDisp = speedFromNorm(normFromSpeedRaw(l));
   const rDisp = speedFromNorm(normFromSpeedRaw(r));
 
-  document.getElementById('favg').textContent = disp == null ? "—" : fmtNum(disp, 2);
-  document.getElementById('flv').textContent = lDisp == null ? "—" : fmtNum(lDisp, 2);
-  document.getElementById('frv').textContent = rDisp == null ? "—" : fmtNum(rDisp, 2);
+  document.getElementById("favg").textContent = disp == null ? "—" : fmtNum(disp, 2);
+  document.getElementById("flv").textContent = lDisp == null ? "—" : fmtNum(lDisp, 2);
+  document.getElementById("frv").textContent = rDisp == null ? "—" : fmtNum(rDisp, 2);
 
-  document.getElementById('fcount').textContent = `Point: ${idx + 1}/${rawPoses.length}`;
+  document.getElementById("fcount").textContent = `Point: ${idx + 1}/${rawPoses.length}`;
 
   // Waypoint info
   const result = findTemporallyClosestWatch(pose.t);
-  const waypointTime = document.getElementById('fwatchtime');
-  const waypointLabel = document.getElementById('fwatchlabel');
-  const waypointValue = document.getElementById('fwatchvalue');
-  const clickable = document.getElementById('fwatchclickable');
-  const deltaTime = document.getElementById('fdeltat');
+  const waypointTime = document.getElementById("fwatchtime");
+  const waypointLabel = document.getElementById("fwatchlabel");
+  const waypointValue = document.getElementById("fwatchvalue");
+  const clickable = document.getElementById("fwatchclickable");
+  const deltaTime = document.getElementById("fdeltat");
 
   if (result) {
     const { watch, diffMs } = result;
@@ -4956,13 +4972,13 @@ function updateFloatingInfo(pose, idx) {
 }
 
 function toggleFloatingInfo() {
-  floatWin.classList.toggle('hidden');
-  btnToggleFloat.classList.toggle('isOn', !floatWin.classList.contains('hidden'));
-  floatWin.classList.toggle('isOn', !floatWin.classList.contains('hidden'));
+  floatWin.classList.toggle("hidden");
+  btnToggleFloat.classList.toggle("isOn", !floatWin.classList.contains("hidden"));
+  floatWin.classList.toggle("isOn", !floatWin.classList.contains("hidden"));
 
   captureTelemetry("toggle_floating_info", {
     version: APP_VERSION,
-    enabled: !floatWin.classList.contains('hidden'),
+    enabled: !floatWin.classList.contains("hidden"),
   }, { debounceMs: 1000 }).catch(err => console.error(err));
 }
 
@@ -4999,7 +5015,7 @@ function updatePoseReadout() {
       idx = findFloorIndexByTime(ht);
       p = interpolatePoseAtTime(ht);
     } else {
-      // fallback to old behavior if hover time isn't available
+      // fallback to old behavior if hover time isn"t available
       p = trackHover.pose;
       idx = trackHover.idxNearest ?? selectedIndex;
       t = rawPoses[idx]?.t ?? null;
@@ -5039,11 +5055,11 @@ function resetView() {
 }
 
 function updateFieldLayout(preserveBounds = false) {
-  canvas.style.position = '';
-  canvas.style.left = '';
-  canvas.style.top = '';
-  canvas.style.width = '100%';
-  canvas.style.height = '100%';
+  canvas.style.position = "";
+  canvas.style.left = "";
+  canvas.style.top = "";
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
   if (!preserveBounds) {
     bounds = { ...FIELD_BOUNDS_IN };
     bounds.pad = FIELD_BOUNDS_IN.pad;
@@ -5061,14 +5077,14 @@ function resetFieldPosition() {
   <svg width="12" height="12">
     <use href="${svgIconHref("icon-fit")}" xlink:href="${svgIconHref("icon-fit")}"></use>
   </svg>`;
-  btnFit.title = 'Recenter field (square)';
+  btnFit.title = "Recenter field (square)";
 }
 
 function clampZoom(z) {
   return clamp(z, CANVAS_ZOOM_MIN, CANVAS_ZOOM_MAX);
 }
 
-canvas.addEventListener('wheel', (e) => {
+canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
 
   const rect = canvas.getBoundingClientRect();
@@ -5097,7 +5113,7 @@ canvas.addEventListener('wheel', (e) => {
   requestDrawAll();
 }, { passive: false });
 
-canvas.addEventListener('pointerdown', (e) => {
+canvas.addEventListener("pointerdown", (e) => {
   if (appMode === "planning") {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
@@ -5185,7 +5201,7 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
 });
 
-canvas.addEventListener('pointermove', (e) => {
+canvas.addEventListener("pointermove", (e) => {
   if (appMode === "planning") {
     if (planThetaDragging && planPointerId === e.pointerId) {
       const rect = canvas.getBoundingClientRect();
@@ -5235,8 +5251,8 @@ canvas.addEventListener('pointermove', (e) => {
   if (!isPanning) {
     if (Math.abs(dx) + Math.abs(dy) <= 3) return;
     isPanning = true;
-    suppressNextClick = true; // prevent 'click' selection after a drag-pan
-    canvas.style.cursor = 'grabbing';
+    suppressNextClick = true; // prevent "click" selection after a drag-pan
+    canvas.style.cursor = "grabbing";
 
     // If a hover-preview was active, clear it so the view feels stable while panning.
     if (trackHover) {
@@ -5286,14 +5302,14 @@ function endPan(e) {
   if (!panArmed) return;
   panArmed = false;
   isPanning = false;
-  canvas.style.cursor = '';
+  canvas.style.cursor = "";
   try { canvas.releasePointerCapture(panPointerId ?? e.pointerId); } catch { }
   panPointerId = null;
 }
 
-canvas.addEventListener('pointerup', endPan);
-canvas.addEventListener('pointercancel', endPan);
-canvas.addEventListener('contextmenu', (e) => {
+canvas.addEventListener("pointerup", endPan);
+canvas.addEventListener("pointercancel", endPan);
+canvas.addEventListener("contextmenu", (e) => {
   if (appMode === "planning") e.preventDefault();
 });
 
@@ -5440,11 +5456,11 @@ function planPause() {
 
 function play() {
   if (!rawPoses.length) return;
-  if (window.__live && window.__live.streaming) { setStatus('Playback disabled while livestreaming.'); return; }
+  if (window.__live && window.__live.streaming) { setStatus("Playback disabled while livestreaming."); return; }
 
   const tMin = rawPoses[0]?.t ?? 0;
   const tMax = rawPoses[rawPoses.length - 1]?.t ?? tMin;
-  if (selectedIndex >= rawPoses.length - 1 || (typeof playTimeMs === 'number' && playTimeMs >= tMax)) {
+  if (selectedIndex >= rawPoses.length - 1 || (typeof playTimeMs === "number" && playTimeMs >= tMax)) {
     selectedIndex = 0;
     playTimeMs = tMin;
     playPose = null;
@@ -5459,7 +5475,7 @@ function play() {
   setStatus(`Playing from time ${formatNumberString((rawPoses[selectedIndex]?.t ?? 0) / 1000, 1, "0")}s`);
 
   const tStart = rawPoses[selectedIndex]?.t;
-  playTimeMs = (typeof tStart === 'number') ? tStart : (rawPoses[0]?.t ?? 0);
+  playTimeMs = (typeof tStart === "number") ? tStart : (rawPoses[0]?.t ?? 0);
 
   playing = true;
   btnPlay.textContent = "⏸";
@@ -5485,7 +5501,7 @@ function play() {
     playPose = interpolatePoseAtTime(playTimeMs);
     selectedIndex = findFloorIndexByTime(playTimeMs);
 
-    // Highlight the most recent watch hit without overriding the user's
+    // Highlight the most recent watch hit without overriding the user"s
     // collapsed/expanded state for the Watches panel.
     const last = lastWatchAtTime(playTimeMs);
     if (last && (!selectedWatch || selectedWatch.marker?.t !== last.t)) {
@@ -5535,9 +5551,9 @@ function timelineMousePos(e) {
 
 function isInsideTimelineC(cursor) {
   if (!cursor) return false;
-  const x = (typeof cursor.clientX === 'number') ? cursor.clientX : cursor.x;
-  const y = (typeof cursor.clientY === 'number') ? cursor.clientY : cursor.y;
-  if (typeof x !== 'number' || typeof y !== 'number') return false;
+  const x = (typeof cursor.clientX === "number") ? cursor.clientX : cursor.x;
+  const y = (typeof cursor.clientY === "number") ? cursor.clientY : cursor.y;
+  if (typeof x !== "number" || typeof y !== "number") return false;
 
   const isPlanning = appMode === "planning";
   const canvasEl = isPlanning ? planningTimelineCanvas : timelineCanvas;
@@ -5551,9 +5567,9 @@ function isInsideTimelineC(cursor) {
 
 function isInsideFieldC(cursor) {
   if (!cursor) return false;
-  const x = (typeof cursor.clientX === 'number') ? cursor.clientX : cursor.x;
-  const y = (typeof cursor.clientY === 'number') ? cursor.clientY : cursor.y;
-  if (typeof x !== 'number' || typeof y !== 'number') return false;
+  const x = (typeof cursor.clientX === "number") ? cursor.clientX : cursor.x;
+  const y = (typeof cursor.clientY === "number") ? cursor.clientY : cursor.y;
+  if (typeof x !== "number" || typeof y !== "number") return false;
   const rect = canvas.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return false;
   return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
@@ -5656,11 +5672,11 @@ if (planningTimelineCanvas) {
 }
 
 // -------- field interactions --------
-canvas.addEventListener('mousemove', (e) => {
+canvas.addEventListener("mousemove", (e) => {
   updateCursorPillsFromClient(e.clientX, e.clientY);
 });
 
-canvas.addEventListener('mousemove', (e) => {
+canvas.addEventListener("mousemove", (e) => {
   if (appMode === "planning") return;
   if (!data || playing || isPanning) return;
 
@@ -5707,11 +5723,11 @@ canvas.addEventListener('mousemove', (e) => {
   requestDrawAll();
 });
 
-canvas.addEventListener('mouseleave', () => {
+canvas.addEventListener("mouseleave", () => {
   setCursorPills("Cursor: —");
   if (appMode === "planning") return;
   hoverWatch = null;
-  // ensure timeline hover preview can't 'stick'
+  // ensure timeline hover preview can"t "stick"
   hoverTimelineTime = null;
   timelineHoverSaved = null;
   canvas.style.cursor = "";
@@ -5723,7 +5739,7 @@ canvas.addEventListener('mouseleave', () => {
   }
 });
 
-canvas.addEventListener('click', (e) => {
+canvas.addEventListener("click", (e) => {
   if (appMode === "planning") return;
   if (!data) return;
   if (suppressNextClick) { suppressNextClick = false; return; }
@@ -5814,11 +5830,11 @@ canvas.addEventListener('click', (e) => {
 //
 // Output always appends into #liveWin.
 
-const liveWinEl = document.getElementById('liveWin');
-const btnLeftStopEl = document.getElementById('btnLeftStop');
-const btnLeftConnectEl = document.getElementById('btnLeftConnect');
-const btnLeftRefreshEl = document.getElementById('btnLeftRefresh');
-const leftRefreshIntervalEl = document.getElementById('leftRefreshInterval');
+const liveWinEl = document.getElementById("liveWin");
+const btnLeftStopEl = document.getElementById("btnLeftStop");
+const btnLeftConnectEl = document.getElementById("btnLeftConnect");
+const btnLeftRefreshEl = document.getElementById("btnLeftRefresh");
+const leftRefreshIntervalEl = document.getElementById("leftRefreshInterval");
 
 let leftWs = null;
 let leftConnected = false;
@@ -5916,7 +5932,7 @@ let liveAppendQueue = [];
 let liveAppendScheduled = false;
 let liveWinRaw = "";
 
-// Track how much we've already integrated into rawPoses/watches
+// Track how much we"ve already integrated into rawPoses/watches
 let liveLastPoseT = null; // last pose timestamp integrated
 let liveLastPoseCount = 0;
 let liveLastWatchCount = 0;
@@ -5956,8 +5972,8 @@ function parseLiveLineIntoState(line) {
     if (liveLastPoseT != null && t <= liveLastPoseT) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
 
     // Derive a "speed" (raw) from wheel velocities if present
-    const lv = (typeof l_vel === 'number' && isFinite(l_vel)) ? l_vel : 0;
-    const rv = (typeof r_vel === 'number' && isFinite(r_vel)) ? r_vel : 0;
+    const lv = (typeof l_vel === "number" && isFinite(l_vel)) ? l_vel : 0;
+    const rv = (typeof r_vel === "number" && isFinite(r_vel)) ? r_vel : 0;
     const speed_raw = (Math.abs(lv) + Math.abs(rv)) / 2;
 
     rawPoses.push({
@@ -6116,7 +6132,7 @@ function mvEscapeHtml(str) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replace(/"/g, "&#39;");
 }
 
 function ansiToHtml(text) {
@@ -6173,10 +6189,10 @@ function resetLiveWin() {
 
 function stripToTag(line) {
   // Accept library-prefixed lines like: "[28.08] [INFO]: [POSE],..."
-  const iData = line.indexOf('[POSE]');
-  const iWatch = line.indexOf('[WATCH]');
-  const iLog = line.indexOf('[LOG]');
-  const iWaypoint = line.indexOf('[WPOINT]');
+  const iData = line.indexOf("[POSE]");
+  const iWatch = line.indexOf("[WATCH]");
+  const iLog = line.indexOf("[LOG]");
+  const iWaypoint = line.indexOf("[WPOINT]");
   const indices = [iData, iWatch, iLog, iWaypoint].filter((idx) => idx >= 0);
   const i = indices.length ? Math.min(...indices) : -1;
 
@@ -6227,7 +6243,7 @@ function parseWaypointLine(s) {
 
 function setLeftUi() {
   if (btnLeftConnect) {
-    btnLeftConnect.classList.toggle('isOn', leftConnected);
+    btnLeftConnect.classList.toggle("isOn", leftConnected);
     btnLeftConnect.textContent = leftConnected ? "Disconnect" : "Connect";
     btnPlay.disabled = leftConnected;
     btnFile.disabled = leftConnected;
@@ -6243,13 +6259,13 @@ function setLeftUi() {
     if (!leftConnected) {
       btnLeftStop.title = "Starts streaming. Connect to start.";
       btnLeftStop.textContent = "Start";
-      btnLeftStop.classList.remove('isOn');
+      btnLeftStop.classList.remove("isOn");
     } else {
       btnLeftStop.title = leftStreaming
         ? "Stop streaming. Cmd/Ctrl+Click to force kill."
         : "Starts streaming.";
       btnLeftStop.textContent = leftStreaming ? "Stop" : "Start";
-      btnLeftStop.classList.toggle('isOn', leftStreaming);
+      btnLeftStop.classList.toggle("isOn", leftStreaming);
     }
   }
 
@@ -6263,7 +6279,7 @@ function leftSetUI(reason) {
   if (window.__live) { window.__live.connected = !!leftConnected; window.__live.streaming = !!leftStreaming; }
   // Connect button state
   if (btnLeftConnectEl) {
-    btnLeftConnectEl.classList.toggle('isOn', !!leftConnected);
+    btnLeftConnectEl.classList.toggle("isOn", !!leftConnected);
     btnLeftConnectEl.title = leftConnected ? "Disconnect" : "Connect";
     btnLeftConnectEl.disabled = leftActionInFlight || btnLeftConnectEl.disabled;
   }
@@ -6312,7 +6328,7 @@ async function apiPost(path, timeoutMs = 5000) {
     const t = setTimeout(() => controller.abort(), timeoutMs);
     const res = await fetch(url, { method: "POST", signal: controller.signal });
     clearTimeout(t);
-    // Best-effort JSON; don't crash UI if server returns non-JSON or 404
+    // Best-effort JSON; don"t crash UI if server returns non-JSON or 404
     let json = null;
     try { json = await res.json(); } catch (e) { }
     dbgLive(`apiPost#${reqId}: response ${res.status}`);
@@ -6331,8 +6347,8 @@ async function connectLeft() {
   }
 
   if (!prosDirValid) {
-    liveAppendLine('Something went wrong. Try restarting the application or waiting.');
-    setStatus('Cannot connect: set a valid PROS directory in Settings first.');
+    liveAppendLine("Something went wrong. Try restarting the application or waiting.");
+    setStatus("Cannot connect: set a valid PROS directory in Settings first.");
     return;
   }
   if (!(await ensureBridgeOriginReady()) || ORIGIN == null || WS_ORIGIN == null) {
@@ -6358,7 +6374,7 @@ async function connectLeft() {
   });
 
   leftWs.addEventListener("message", (ev) => {
-    const raw = (typeof ev.data === 'string') ? ev.data : "";
+    const raw = (typeof ev.data === "string") ? ev.data : "";
     const trimmed = stripToTag(raw);
     const isStreamData = !!trimmed;
     if (trimmed) {
@@ -6605,7 +6621,7 @@ async function stopStreaming(forceKill = false, doMsg = true) {
   }
   if (!r.ok) {
     liveAppendLine(`[api] stop/kill failed (${r.status})`);
-    // Even if kill endpoint doesn't exist, still fall back to /api/stop
+    // Even if kill endpoint doesn"t exist, still fall back to /api/stop
     if (forceKill && r.status === 404) {
       let r2;
       try {
@@ -6627,7 +6643,7 @@ async function stopStreaming(forceKill = false, doMsg = true) {
 }
 
 // Connect toggle
-btnLeftConnectEl?.addEventListener('click', async () => {
+btnLeftConnectEl?.addEventListener("click", async () => {
   if (!canRunLeftAction()) return;
   setLeftActionInFlight(true);
   setLeftUi();
@@ -6641,7 +6657,7 @@ btnLeftConnectEl?.addEventListener('click', async () => {
 });
 
 // Start/Stop toggle (+ cmd/ctrl click => force kill)
-btnLeftStopEl?.addEventListener('click', async (e) => {
+btnLeftStopEl?.addEventListener("click", async (e) => {
   if (!leftConnected) return;
   if (!canRunLeftAction()) return;
   setLeftActionInFlight(true);
@@ -6664,20 +6680,20 @@ btnLeftStopEl?.addEventListener('click', async (e) => {
 });
 
 // Manual refresh button
-btnLeftRefreshEl?.addEventListener('click', () => {
+btnLeftRefreshEl?.addEventListener("click", () => {
   doLeftRefresh();
 });
 
-leftRefreshIntervalEl?.addEventListener('change', () => {
+leftRefreshIntervalEl?.addEventListener("change", () => {
   leftRefreshMs = parseInt(leftRefreshIntervalEl.value || "0", 10) || 0;
   startLeftRefresh();
   saveSettings();
 });
 
 if (btnFit) {
-  btnFit.addEventListener('click', () => resetFieldPosition());
+  btnFit.addEventListener("click", () => resetFieldPosition());
 } else {
-  console.warn('btnFit not found');
+  console.warn("btnFit not found");
 }
 
 // Initialize UI on load
@@ -6685,7 +6701,7 @@ leftSetUI("");
 
 
 function getTimelineH() {
-  const v = getComputedStyle(root).getPropertyValue('--timelineH').trim();
+  const v = getComputedStyle(root).getPropertyValue("--timelineH").trim();
   const n = parseFloat(v);
   return isFinite(n) ? n : 260;
 };
@@ -6697,57 +6713,57 @@ function getTimelineH() {
   let startW = 0;
   // ensure grid state matches persisted widths on load
   try {
-    if (getLeftSidebarW() <= 1) leftEl.classList.add('isCollapsed'); rowGrid && rowGrid.classList.add('leftCollapsed');
+    if (getLeftSidebarW() <= 1) leftEl.classList.add("isCollapsed"); rowGrid && rowGrid.classList.add("leftCollapsed");
   } catch (e) { }
 
 
   const getRightSidebarWViewing = () => {
-    const v = getComputedStyle(root).getPropertyValue('--rightSidebarWViewing').trim();
+    const v = getComputedStyle(root).getPropertyValue("--rightSidebarWViewing").trim();
     const n = parseFloat(v);
     return isFinite(n) ? n : 360;
   };
   const setRightSidebarWViewing = (px) => {
     px = Math.min(px, MAX_SIDEBAR_W_PX);
-    root.style.setProperty('--rightSidebarWViewing', `${px}px`);
+    root.style.setProperty("--rightSidebarWViewing", `${px}px`);
   };
 
   const getRightSidebarWPlanning = () => {
-    const v = getComputedStyle(root).getPropertyValue('--rightSidebarWPlanning').trim();
+    const v = getComputedStyle(root).getPropertyValue("--rightSidebarWPlanning").trim();
     const n = parseFloat(v);
     return isFinite(n) ? n : 360;
   };
   const setRightSidebarWPlanning = (px) => {
     px = Math.min(px, MAX_SIDEBAR_W_PX);
-    root.style.setProperty('--rightSidebarWPlanning', `${px}px`);
+    root.style.setProperty("--rightSidebarWPlanning", `${px}px`);
   };
 
   const getLeftSidebarW = () => {
-    const v = getComputedStyle(root).getPropertyValue('--leftSidebarW').trim();
+    const v = getComputedStyle(root).getPropertyValue("--leftSidebarW").trim();
     const n = parseFloat(v);
     return isFinite(n) ? n : 360;
   };
   const setLeftSidebarW = (px) => {
     px = Math.min(px, MAX_PX_LIVEWIN);
-    root.style.setProperty('--leftSidebarW', `${px}px`);
+    root.style.setProperty("--leftSidebarW", `${px}px`);
   };
 
   let draggingVL = false;
   let startXL = 0;
   let startWL = 0;
 
-  vSplitL.addEventListener('mousedown', (e) => {
+  vSplitL.addEventListener("mousedown", (e) => {
     draggingVL = true;
     startXL = e.clientX;
     startWL = getLeftSidebarW();
-    document.body.style.cursor = 'col-resize';
+    document.body.style.cursor = "col-resize";
     e.preventDefault();
   });
 
-  vSplit.addEventListener('mousedown', (e) => {
+  vSplit.addEventListener("mousedown", (e) => {
     draggingV = true;
     startX = e.clientX;
     startW = (appMode === "planning") ? getRightSidebarWPlanning() : getRightSidebarWViewing();
-    document.body.style.cursor = 'col-resize';
+    document.body.style.cursor = "col-resize";
     e.preventDefault();
   });
 
@@ -6760,38 +6776,38 @@ function getTimelineH() {
 
   const setTimelineH = (px) => {
     px = Math.min(px, MAX_TIMELINE_H_PX);
-    root.style.setProperty('--timelineH', `${px}px`);
+    root.style.setProperty("--timelineH", `${px}px`);
   }
 
-  hSplit.addEventListener('mousedown', (e) => {
+  hSplit.addEventListener("mousedown", (e) => {
     draggingH = true;
     startY = e.clientY;
     startH = getTimelineH();
-    document.body.style.cursor = 'row-resize';
+    document.body.style.cursor = "row-resize";
     e.preventDefault();
 
   });
   const getPlanListH = () => {
-    const v = getComputedStyle(root).getPropertyValue('--planListH').trim();
+    const v = getComputedStyle(root).getPropertyValue("--planListH").trim();
     const n = parseFloat(v);
     return isFinite(n) ? n : 240;
   };
   const setPlanListH = (px) => {
-    root.style.setProperty('--planListH', `${px}px`);
+    root.style.setProperty("--planListH", `${px}px`);
   };
 
   if (planSplit) {
-    planSplit.addEventListener('mousedown', (e) => {
+    planSplit.addEventListener("mousedown", (e) => {
       if (appMode !== "planning") return;
       draggingPlanList = true;
       startPlanY = e.clientY;
       startPlanH = getPlanListH();
-      document.body.style.cursor = 'row-resize';
+      document.body.style.cursor = "row-resize";
       e.preventDefault();
     });
   }
 
-  window.addEventListener('mousemove', (e) => {
+  window.addEventListener("mousemove", (e) => {
     if (draggingVL) {
       const dx = e.clientX - startXL;
       const w = window.innerWidth;
@@ -6799,11 +6815,11 @@ function getTimelineH() {
 
       if (next <= COLLAPSE_PX_LEFTSIDEBAR) {
         next = 0;
-        leftEl.classList.add('isCollapsed');
-        rowGrid && rowGrid.classList.add('leftCollapsed');
+        leftEl.classList.add("isCollapsed");
+        rowGrid && rowGrid.classList.add("leftCollapsed");
       } else {
-        leftEl.classList.remove('isCollapsed');
-        rowGrid && rowGrid.classList.remove('leftCollapsed');
+        leftEl.classList.remove("isCollapsed");
+        rowGrid && rowGrid.classList.remove("leftCollapsed");
         layoutState.lastLeftSidebarW = next;
       }
       setLeftSidebarW(next);
@@ -6818,14 +6834,14 @@ function getTimelineH() {
 
       if (next <= COLLAPSE_PX_SIDEBAR) {
         next = 0;
-        if (appMode === "planning") rightPlanningEl?.classList?.add('isCollapsed');
-        else rightViewingEl?.classList?.add('isCollapsed');
+        if (appMode === "planning") rightPlanningEl?.classList?.add("isCollapsed");
+        else rightViewingEl?.classList?.add("isCollapsed");
       } else {
         if (appMode === "planning") {
-          rightPlanningEl?.classList?.remove('isCollapsed');
+          rightPlanningEl?.classList?.remove("isCollapsed");
           layoutState.lastRightSidebarWPlanning = next;
         } else {
-          rightViewingEl?.classList?.remove('isCollapsed');
+          rightViewingEl?.classList?.remove("isCollapsed");
           layoutState.lastRightSidebarW = next;
         }
       }
@@ -6842,9 +6858,9 @@ function getTimelineH() {
 
       if (next <= COLLAPSE_PX_TIMELINE) {
         next = 0;
-        timelineBar.classList.add('isCollapsed');
+        timelineBar.classList.add("isCollapsed");
       } else {
-        timelineBar.classList.remove('isCollapsed');
+        timelineBar.classList.remove("isCollapsed");
         layoutState.lastTimelineH = next;
       }
 
@@ -6861,30 +6877,30 @@ function getTimelineH() {
       let next = clamp(startPlanH + dy, 0, maxH);
       if (next <= COLLAPSE_WAYPOINTLIST_PX) {
         next = 0;
-        rightPlanningEl?.classList.add('planListCollapsed');
+        rightPlanningEl?.classList.add("planListCollapsed");
       } else {
         if (next < minH) next = minH;
-        rightPlanningEl?.classList.remove('planListCollapsed');
+        rightPlanningEl?.classList.remove("planListCollapsed");
       }
       setPlanListH(next);
     }
   });
 
-  window.addEventListener('mouseup', () => {
+  window.addEventListener("mouseup", () => {
     const wasDragging = draggingV || draggingH || draggingVL || draggingPlanList;
     if (wasDragging) {
       draggingV = false;
       draggingH = false;
       draggingVL = false;
       draggingPlanList = false;
-      document.body.style.cursor = '';
+      document.body.style.cursor = "";
       // If user re-expands from collapsed by dragging, restore visibility automatically
       if (appMode === "planning") {
-        if (getRightSidebarWPlanning() > COLLAPSE_PX_SIDEBAR) rightPlanningEl?.classList?.remove('isCollapsed');
+        if (getRightSidebarWPlanning() > COLLAPSE_PX_SIDEBAR) rightPlanningEl?.classList?.remove("isCollapsed");
       } else {
-        if (getRightSidebarWViewing() > COLLAPSE_PX_SIDEBAR) rightViewingEl?.classList?.remove('isCollapsed');
+        if (getRightSidebarWViewing() > COLLAPSE_PX_SIDEBAR) rightViewingEl?.classList?.remove("isCollapsed");
       }
-      if (getTimelineH() > COLLAPSE_PX_TIMELINE) timelineBar.classList.remove('isCollapsed');
+      if (getTimelineH() > COLLAPSE_PX_TIMELINE) timelineBar.classList.remove("isCollapsed");
       resizeCanvas();
       resizeTimeline();
       void saveSettings();
@@ -6892,42 +6908,42 @@ function getTimelineH() {
   });
 
   // double-click splitters to toggle collapse/restore
-  vSplitL.addEventListener('dblclick', () => {
+  vSplitL.addEventListener("dblclick", () => {
     const cur = getLeftSidebarW();
     if (cur <= COLLAPSE_PX_LEFTSIDEBAR) {
       setLeftSidebarW(Math.max(1, layoutState.lastLeftSidebarW));
-      leftEl.classList.remove('isCollapsed');
-      rowGrid && rowGrid.classList.remove('leftCollapsed');
+      leftEl.classList.remove("isCollapsed");
+      rowGrid && rowGrid.classList.remove("leftCollapsed");
     } else {
       layoutState.lastLeftSidebarW = cur;
       setLeftSidebarW(0);
-      leftEl.classList.add('isCollapsed');
-      rowGrid && rowGrid.classList.add('leftCollapsed');
+      leftEl.classList.add("isCollapsed");
+      rowGrid && rowGrid.classList.add("leftCollapsed");
     }
     resizeCanvas();
     resizeTimeline();
   });
 
-  vSplit.addEventListener('dblclick', () => {
+  vSplit.addEventListener("dblclick", () => {
     if (appMode === "planning") {
       const cur = getRightSidebarWPlanning();
       if (cur <= COLLAPSE_PX_SIDEBAR) {
         setRightSidebarWPlanning(Math.max(1, layoutState.lastRightSidebarWPlanning || 360));
-        rightPlanningEl?.classList?.remove('isCollapsed');
+        rightPlanningEl?.classList?.remove("isCollapsed");
       } else {
         layoutState.lastRightSidebarWPlanning = cur;
         setRightSidebarWPlanning(0);
-        rightPlanningEl?.classList?.add('isCollapsed');
+        rightPlanningEl?.classList?.add("isCollapsed");
       }
     } else {
       const cur = getRightSidebarWViewing();
       if (cur <= COLLAPSE_PX_SIDEBAR) {
         setRightSidebarWViewing(Math.max(1, layoutState.lastRightSidebarW));
-        rightViewingEl?.classList?.remove('isCollapsed');
+        rightViewingEl?.classList?.remove("isCollapsed");
       } else {
         layoutState.lastRightSidebarW = cur;
         setRightSidebarWViewing(0);
-        rightViewingEl?.classList?.add('isCollapsed');
+        rightViewingEl?.classList?.add("isCollapsed");
       }
     }
     resetFieldPosition();
@@ -6935,15 +6951,15 @@ function getTimelineH() {
     layoutTimelineCanvas();
   });
 
-  hSplit.addEventListener('dblclick', () => {
+  hSplit.addEventListener("dblclick", () => {
     const cur = getTimelineH();
     if (cur <= COLLAPSE_PX_TIMELINE) {
       setTimelineH(Math.max(160, layoutState.lastTimelineH));
-      timelineBar.classList.remove('isCollapsed');
+      timelineBar.classList.remove("isCollapsed");
     } else {
       layoutState.lastTimelineH = cur;
       setTimelineH(0);
-      timelineBar.classList.add('isCollapsed');
+      timelineBar.classList.add("isCollapsed");
     }
     resizeTimeline();
     resetFieldPosition();
@@ -7006,16 +7022,16 @@ function setDataFromStreamText(text) {
 function normalizePoseArray(arr) {
   const store = createPoseStore(Array.isArray(arr) ? arr.length : 16);
   const items = (Array.isArray(arr) ? arr : [])
-    .filter(p => p && typeof p.x === 'number' && typeof p.y === 'number')
+    .filter(p => p && typeof p.x === "number" && typeof p.y === "number")
     .map(p => ({
-      t: (typeof p.t === 'number') ? p.t : (toNumMaybe(p.t) ?? null),
+      t: (typeof p.t === "number") ? p.t : (toNumMaybe(p.t) ?? null),
       x: p.x, y: p.y,
-      theta: (typeof p.theta === 'number') ? p.theta : (toNumMaybe(p.theta) ?? 0),
-      l_vel: (typeof p.l_vel === 'number') ? p.l_vel : (toNumMaybe(p.l_vel) ?? null),
-      r_vel: (typeof p.r_vel === 'number') ? p.r_vel : (toNumMaybe(p.r_vel) ?? null),
-      speed_raw: (typeof p.speed_raw === 'number')
+      theta: (typeof p.theta === "number") ? p.theta : (toNumMaybe(p.theta) ?? 0),
+      l_vel: (typeof p.l_vel === "number") ? p.l_vel : (toNumMaybe(p.l_vel) ?? null),
+      r_vel: (typeof p.r_vel === "number") ? p.r_vel : (toNumMaybe(p.r_vel) ?? null),
+      speed_raw: (typeof p.speed_raw === "number")
         ? p.speed_raw
-        : ((typeof p.speed === 'number') ? p.speed : (toNumMaybe(p.speed) ?? 0)),
+        : ((typeof p.speed === "number") ? p.speed : (toNumMaybe(p.speed) ?? 0)),
       speed_norm: 0,
     }))
     .sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
@@ -7028,7 +7044,7 @@ function hasLoadedData() {
 }
 
 function finalizeLoadedData() {
-  const currentUnits = settingsUnitsSelect?.value || unitsSelect?.value || 'in';
+  const currentUnits = settingsUnitsSelect?.value || unitsSelect?.value || "in";
   setUnitsFactorFromSelect(currentUnits);
   updateOffsetsFromInputs();
 
@@ -7104,18 +7120,18 @@ async function handleFile(file) {
 async function openFile(file, inputEl) {
   if (!file) return;
   // Validate file extension
-  const validExtensions = ['.txt', '.log', '.json'];
+  const validExtensions = [".txt", ".log", ".json"];
   const fileName = file.name.toLowerCase();
   const isValid = validExtensions.some(ext => fileName.endsWith(ext));
   if (!isValid) {
-    alert('Invalid file type. Please select a .txt, .log, or .json file');
-    if (inputEl) inputEl.value = ''; // allow reselect
-    setStatus('Invalid file type.');
+    alert("Invalid file type. Please select a .txt, .log, or .json file");
+    if (inputEl) inputEl.value = ""; // allow reselect
+    setStatus("Invalid file type.");
     return;
   }
   try {
     const loadedType = await handleFile(file);
-    if (inputEl) inputEl.value = ''; // allow re selecting same file
+    if (inputEl) inputEl.value = ""; // allow re selecting same file
     await captureTelemetry("file_loaded", {
       version: APP_VERSION,
       file_name: fileName,
@@ -7123,13 +7139,13 @@ async function openFile(file, inputEl) {
       file_size: file.size,
     });
   } catch (e) {
-    if (inputEl) inputEl.value = '';
+    if (inputEl) inputEl.value = "";
   }
 }
 
 // -------- controls wiring --------
-btnFile.addEventListener('click', () => fileEl.click());
-fileEl.addEventListener('change', (e) => {
+btnFile.addEventListener("click", () => fileEl.click());
+fileEl.addEventListener("change", (e) => {
   const file = e.target.files?.[0];
   openFile(file, e.target);
 });
@@ -7138,66 +7154,66 @@ fileEl.addEventListener('change', (e) => {
 // Help modal
 function openHelp() {
   if (!helpModal) {
-    console.warn('helpModal not found');
+    console.warn("helpModal not found");
     return;
   }
-  helpModal.removeAttribute('hidden');
-  helpModal.style.display = 'flex';
+  helpModal.removeAttribute("hidden");
+  helpModal.style.display = "flex";
 }
 function closeHelp() {
   if (!helpModal) return;
-  helpModal.setAttribute('hidden', '');
-  helpModal.style.display = 'none';
+  helpModal.setAttribute("hidden", "");
+  helpModal.style.display = "none";
 }
 function openKeybinds() {
   if (!keybindsModal) return;
-  keybindsModal.removeAttribute('hidden');
-  keybindsModal.style.display = 'flex';
+  keybindsModal.removeAttribute("hidden");
+  keybindsModal.style.display = "flex";
 }
 function closeKeybinds() {
   if (!keybindsModal) return;
-  keybindsModal.setAttribute('hidden', '');
-  keybindsModal.style.display = 'none';
+  keybindsModal.setAttribute("hidden", "");
+  keybindsModal.style.display = "none";
 }
 if (btnHelp) {
-  btnHelp.addEventListener('click', (e) => {
+  btnHelp.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     openHelp();
   });
-} else console.warn('btnHelp not found');
+} else console.warn("btnHelp not found");
 
 if (btnHelpClose) {
-  btnHelpClose.addEventListener('click', (e) => {
+  btnHelpClose.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     closeHelp();
   });
-} else console.warn('btnHelpClose not found');
+} else console.warn("btnHelpClose not found");
 
 if (btnHelpKeybinds) {
-  btnHelpKeybinds.addEventListener('click', (e) => {
+  btnHelpKeybinds.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     openKeybinds();
   });
 }
 if (btnKeybindsClose) {
-  btnKeybindsClose.addEventListener('click', (e) => {
+  btnKeybindsClose.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     closeKeybinds();
   });
 }
 if (helpModal) {
-  helpModal.addEventListener('click', (e) => {
-    if (e.target && (e.target.classList.contains('modalBackdrop'))) closeHelp();
+  helpModal.addEventListener("click", (e) => {
+    if (e.target && (e.target.classList.contains("modalBackdrop"))) closeHelp();
   });
-} else console.warn('helpModal not found');
+} else console.warn("helpModal not found");
 
 if (keybindsModal) {
-  keybindsModal.addEventListener('click', (e) => {
-    if (e.target && (e.target.classList.contains('modalBackdrop'))) closeKeybinds();
+  keybindsModal.addEventListener("click", (e) => {
+    if (e.target && (e.target.classList.contains("modalBackdrop"))) closeKeybinds();
   });
 }
 
@@ -7206,16 +7222,16 @@ async function loadSettings() {
   try {
     let settings = null;
     if (invoke) {
-      const saved = await invoke('read_settings');
+      const saved = await invoke("read_settings");
       if (saved) settings = JSON.parse(saved);
       else {
         // Create defaults on first run so the app data dir/file exists.
         await saveSettings();
       }
-    } else console.warn('Settings persistence is unavailable (Tauri invoke missing).');
+    } else console.warn("Settings persistence is unavailable (Tauri invoke missing).");
 
     if (settings) {
-      if (settings.appState && typeof settings.appState === 'object' && !Array.isArray(settings.appState)) {
+      if (settings.appState && typeof settings.appState === "object" && !Array.isArray(settings.appState)) {
         persistedAppState = { ...settings.appState };
       }
       if (settings.prosDir && prosDirInput) {
@@ -7282,14 +7298,19 @@ async function loadSettings() {
       } else if (settingsLiveDebug) {
         settingsLiveDebug.checked = false;
       }
+      if (settings.showPreviousYearFields !== undefined) {
+        showPreviousYearFields = !!settings.showPreviousYearFields;
+      }
+      if (settingsShowPreviousYearFields) {
+        settingsShowPreviousYearFields.checked = showPreviousYearFields;
+      }
+      loadFieldOptions();
       if (settings.playbackSpeed !== undefined && speedSelect) {
         speedSelect.value = String(settings.playbackSpeed);
         playRate = Number(speedSelect.value) || 1;
       }
       if (settings.selectedField !== undefined && fieldSelect) {
-        const nextField = FIELD_IMAGES.some((field) => field.key === settings.selectedField)
-          ? settings.selectedField
-          : DEFAULT_FIELD_KEY;
+        const nextField = getValidFieldKey(settings.selectedField);
         fieldSelect.value = nextField;
         loadFieldImage(nextField);
       }
@@ -7333,13 +7354,13 @@ async function loadSettings() {
       }
       if (robotImageDataUrl && invoke && !robotImagePath) {
         try {
-          const savedPath = await invoke('save_robot_image', { dataUrl: robotImageDataUrl });
+          const savedPath = await invoke("save_robot_image", { dataUrl: robotImageDataUrl });
           if (savedPath) {
             robotImagePath = savedPath;
             await saveSettings();
           }
         } catch (e) {
-          console.warn('Failed to persist robot image to app data:', e);
+          console.warn("Failed to persist robot image to app data:", e);
         }
       }
       applySavedLayout(settings);
@@ -7348,7 +7369,7 @@ async function loadSettings() {
       if (robotImageToggle) robotImageToggle.checked = robotImageEnabled;
     }
   } catch (e) {
-    console.error('Failed to load settings:', e);
+    console.error("Failed to load settings:", e);
   }
 }
 
@@ -7356,24 +7377,24 @@ async function loadDemoRouteIfUpgraded() {
   if (!invoke) return false;
 
   try {
-    const upgradeState = await invoke('was_previous_version_old');
+    const upgradeState = await invoke("was_previous_version_old");
     persistedAppState = {
-      ...(persistedAppState && typeof persistedAppState === 'object' ? persistedAppState : {}),
+      ...(persistedAppState && typeof persistedAppState === "object" ? persistedAppState : {}),
       lastSeenAppVersion: APP_VERSION,
     };
     if (!upgradeState?.wasPreviousVersionOlder) return false;
 
-    const response = await fetch(demoRouteUrl, { cache: 'no-store' });
+    const response = await fetch(demoRouteUrl, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
 
     const obj = await response.json();
     setData(obj);
-    setStatus('Loaded getting started demo route after app upgrade.');
+    setStatus("Loaded getting started demo route after app upgrade.");
     return true;
   } catch (e) {
-    console.warn('Failed to load upgrade demo route:', e);
+    console.warn("Failed to load upgrade demo route:", e);
     return false;
   }
 }
@@ -7381,24 +7402,25 @@ async function loadDemoRouteIfUpgraded() {
 async function saveSettings() {
   try {
     const settings = {
-      prosDir: prosDirInput ? prosDirInput.value : '',
+      prosDir: prosDirInput ? prosDirInput.value : "",
       robotImageEnabled,
-      units: settingsUnitsSelect ? settingsUnitsSelect.value : (unitsSelect ? unitsSelect.value : 'in'),
-      robotW: robotWEl ? robotWEl.value : '12',
-      robotH: robotHEl ? robotHEl.value : '12',
-      offX: offXEl ? offXEl.value : '0',
-      offY: offYEl ? offYEl.value : '0',
-      offTheta: offThetaEl ? offThetaEl.value : '0',
-      minSpeed: minSpeedEl ? minSpeedEl.value : '0',
-      maxSpeed: maxSpeedEl ? maxSpeedEl.value : '127',
-      planMoveStep: settingsPlanMoveStep ? settingsPlanMoveStep.value : '0.5',
-      planSnapStep: settingsPlanSnapStep ? settingsPlanSnapStep.value : '0',
-      planThetaSnapStep: settingsPlanThetaSnapStep ? settingsPlanThetaSnapStep.value : '0',
+      units: settingsUnitsSelect ? settingsUnitsSelect.value : (unitsSelect ? unitsSelect.value : "in"),
+      robotW: robotWEl ? robotWEl.value : "12",
+      robotH: robotHEl ? robotHEl.value : "12",
+      offX: offXEl ? offXEl.value : "0",
+      offY: offYEl ? offYEl.value : "0",
+      offTheta: offThetaEl ? offThetaEl.value : "0",
+      minSpeed: minSpeedEl ? minSpeedEl.value : "0",
+      maxSpeed: maxSpeedEl ? maxSpeedEl.value : "127",
+      planMoveStep: settingsPlanMoveStep ? settingsPlanMoveStep.value : "0.5",
+      planSnapStep: settingsPlanSnapStep ? settingsPlanSnapStep.value : "0",
+      planThetaSnapStep: settingsPlanThetaSnapStep ? settingsPlanThetaSnapStep.value : "0",
       planLimitBounds: settingsPlanLimitBounds ? settingsPlanLimitBounds.checked : true,
-      planSpeed: settingsPlanSpeed ? settingsPlanSpeed.value : '50',
-      refreshIntervalMs: leftRefreshIntervalEl ? leftRefreshIntervalEl.value : '0',
+      planSpeed: settingsPlanSpeed ? settingsPlanSpeed.value : "50",
+      refreshIntervalMs: leftRefreshIntervalEl ? leftRefreshIntervalEl.value : "0",
       liveDebug: settingsLiveDebug ? settingsLiveDebug.checked : liveDebugEnabled,
-      playbackSpeed: speedSelect ? speedSelect.value : '1',
+      showPreviousYearFields,
+      playbackSpeed: speedSelect ? speedSelect.value : "1",
       selectedField: fieldSelect ? fieldSelect.value : DEFAULT_FIELD_KEY,
       robotImgScale: robotImgTx.scale,
       robotImgOffX: robotImgTx.offXIn,
@@ -7410,23 +7432,23 @@ async function saveSettings() {
         dataUrl: robotImagePath ? null : (robotImageDataUrl || null),
       },
       fieldRotation: fieldRotationDeg,
-      layoutLeftSidebarWidth: readRootCssNumber('--leftSidebarW', 360),
-      layoutRightSidebarWidthViewing: readRootCssNumber('--rightSidebarWViewing', 370),
-      layoutRightSidebarWidthPlanning: readRootCssNumber('--rightSidebarWPlanning', 370),
-      layoutTimelineHeight: readRootCssNumber('--timelineH', 180),
-      layoutPlanningWaypointHeight: readRootCssNumber('--planListH', 240),
+      layoutLeftSidebarWidth: readRootCssNumber("--leftSidebarW", 360),
+      layoutRightSidebarWidthViewing: readRootCssNumber("--rightSidebarWViewing", 370),
+      layoutRightSidebarWidthPlanning: readRootCssNumber("--rightSidebarWPlanning", 370),
+      layoutTimelineHeight: readRootCssNumber("--timelineH", 180),
+      layoutPlanningWaypointHeight: readRootCssNumber("--planListH", 240),
     };
-    if (persistedAppState && typeof persistedAppState === 'object' && !Array.isArray(persistedAppState)) {
+    if (persistedAppState && typeof persistedAppState === "object" && !Array.isArray(persistedAppState)) {
       settings.appState = { ...persistedAppState };
     }
     const payload = JSON.stringify(settings);
     if (invoke) {
-      await invoke('write_settings', { contents: payload });
+      await invoke("write_settings", { contents: payload });
     } else {
-      console.warn('Settings persistence is unavailable (Tauri invoke missing).');
+      console.warn("Settings persistence is unavailable (Tauri invoke missing).");
     }
   } catch (e) {
-    console.error('Failed to save settings:', e);
+    console.error("Failed to save settings:", e);
   }
 }
 
@@ -7546,17 +7568,20 @@ function syncMainToSettings() {
   if (robotImgAlphaEl && settingsRobotImgAlpha && robotImgAlphaEl.value !== settingsRobotImgAlpha.value) {
     settingsRobotImgAlpha.value = robotImgAlphaEl.value;
   }
+  if (settingsShowPreviousYearFields) {
+    settingsShowPreviousYearFields.checked = showPreviousYearFields;
+  }
 }
 
 function openSettings() {
   if (!settingsModal) {
-    console.error('Settings modal not found');
+    console.error("Settings modal not found");
     return;
   }
   try {
     syncMainToSettings(); // Load current values into settings modal
   } catch (e) {
-    console.error('Error syncing settings:', e);
+    console.error("Error syncing settings:", e);
   }
   if (prosDirInput && prosDirInput.value && prosDirInput.value.trim()) {
     updateProsDir(prosDirInput.value);
@@ -7569,11 +7594,11 @@ function openSettings() {
   if (robotImageToggle) {
     robotImageToggle.checked = robotImageEnabled;
   }
-  settingsModal.removeAttribute('hidden');
-  settingsModal.style.display = 'flex'; // Ensure flex display
+  settingsModal.removeAttribute("hidden");
+  settingsModal.style.display = "flex"; // Ensure flex display
   // Focus the modal card for accessibility
   requestAnimationFrame(() => {
-    const modalCard = settingsModal.querySelector('.modalCard');
+    const modalCard = settingsModal.querySelector(".modalCard");
     if (modalCard) modalCard.focus();
   });
 }
@@ -7583,49 +7608,49 @@ function closeSettings() {
   try {
     void saveSettings();
   } catch (e) {
-    console.error('Error saving settings:', e);
+    console.error("Error saving settings:", e);
   }
 
   try {
     syncSettingsToMain(); // Save settings modal values to main inputs
   } catch (e) {
-    console.error('Error syncing settings:', e);
+    console.error("Error syncing settings:", e);
   }
-  settingsModal.setAttribute('hidden', '');
-  settingsModal.style.display = 'none'; // Force hide
+  settingsModal.setAttribute("hidden", "");
+  settingsModal.style.display = "none"; // Force hide
 }
 
 function sanitizeExportFilename(value) {
-  if (typeof value !== 'string') return '';
+  if (typeof value !== "string") return "";
   return value
-    .replace(/\.json\s*$/i, '')
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '')
-    .replace(/\s+/g, ' ')
+    .replace(/\.json\s*$/i, "")
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "")
+    .replace(/\s+/g, " ")
     .trim()
-    .replace(/[. ]+$/g, '')
-    .replace(/[^A-Za-z0-9 _-]/g, '')
+    .replace(/[. ]+$/g, "")
+    .replace(/[^A-Za-z0-9 _-]/g, "")
     .trim();
 }
 
 function sanitizeExportPathName(value) {
-  if (typeof value !== 'string') return '';
-  return value.replace(/\s+/g, ' ').trim();
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function exportLocationLabel(value) {
-  if (value === 'desktop') return 'Desktop';
-  if (value === 'documents') return 'Documents';
-  if (value === 'custom') return 'Custom Folder';
-  return 'Downloads';
+  if (value === "desktop") return "Desktop";
+  if (value === "documents") return "Documents";
+  if (value === "custom") return "Custom Folder";
+  return "Downloads";
 }
 
 function getExportLocationPath() {
-  const location = exportLocationSelect ? exportLocationSelect.value : 'downloads';
-  const customPath = exportCustomPathInput ? exportCustomPathInput.value.trim() : '';
+  const location = exportLocationSelect ? exportLocationSelect.value : "downloads";
+  const customPath = exportCustomPathInput ? exportCustomPathInput.value.trim() : "";
   return {
     kind: location,
     label: exportLocationLabel(location),
-    customPath: location === 'custom' ? customPath : null,
+    customPath: location === "custom" ? customPath : null,
   };
 }
 
@@ -7646,19 +7671,19 @@ function serializeExportWatch(watch) {
     t: watch.t ?? null,
     id: Number.isInteger(watch.id) ? watch.id : null,
     visible: watch.visible !== false,
-    level: watch.level ?? 'INFO',
-    label: watch.label ?? '',
-    value: watch.value ?? '',
+    level: watch.level ?? "INFO",
+    label: watch.label ?? "",
+    value: watch.value ?? "",
   };
 }
 
 function serializeExportLog(entry) {
-  const rawMessage = entry.message ?? entry.value ?? '';
+  const rawMessage = entry.message ?? entry.value ?? "";
   const value = entry.isSystem ? `[MVLIB] ${rawMessage}` : rawMessage;
   return {
     t: entry.t ?? null,
     level: normalizeLogLevel(entry.level),
-    label: entry.label ?? '',
+    label: entry.label ?? "",
     value,
   };
 }
@@ -7668,7 +7693,7 @@ function serializeExportWaypointEvent(event) {
     t: event?.t ?? null,
     type: normalizeWaypointType(event?.type),
     id: Number.isInteger(event?.id) ? event.id : null,
-    name: event?.name ?? '',
+    name: event?.name ?? "",
     params: event?.params ? { ...event.params } : {},
   };
 }
@@ -7676,7 +7701,7 @@ function serializeExportWaypointEvent(event) {
 function serializeExportWaypoint(waypoint) {
   return {
     id: waypoint.id,
-    name: waypoint.name ?? '',
+    name: waypoint.name ?? "",
     events: Array.isArray(waypoint.events) ? waypoint.events.map(serializeExportWaypointEvent) : [],
   };
 }
@@ -7684,25 +7709,25 @@ function serializeExportWaypoint(waypoint) {
 function buildExportMetadata(PathName) {
   const { minV, maxV } = getMinMaxSpeed();
   const robotDims = robotDimsInches();
-  const Units = settingsUnitsSelect?.value || unitsSelect?.value || currentUnits || 'in';
+  const Units = settingsUnitsSelect?.value || unitsSelect?.value || currentUnits || "in";
   const SelectedField = fieldSelect ? fieldSelect.value : DEFAULT_FIELD_KEY;
   const poseStart = rawPoses[0]?.t ?? null;
   const poseEnd = rawPoses[rawPoses.length - 1]?.t ?? null;
 
-  const formattedDateGB = new Intl.DateTimeFormat('en-GB', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
+  const formattedDateGB = new Intl.DateTimeFormat("en-GB", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   }).format(new Date());
 
   return {
     SchemaVersion: 2,
     CreationDate: formattedDateGB,
     AppVersion: APP_VERSION,
-    Creator: 'MotionView',
+    Creator: "MotionView",
     PathName,
     Stats: {
       PoseCount: rawPoses.length,
@@ -7714,7 +7739,7 @@ function buildExportMetadata(PathName) {
     Times: {
       StartTime: String(fmtNum(poseStart / 1000, 2)) + "s",
       EndTime: String(fmtNum(poseEnd / 1000, 2)) + "s",
-      DurationTimeMs: (typeof poseStart === 'number' && typeof poseEnd === 'number') ? Math.max(0, poseEnd - poseStart) : null,
+      DurationTimeMs: (typeof poseStart === "number" && typeof poseEnd === "number") ? Math.max(0, poseEnd - poseStart) : null,
     },
     ViewingSettings: {
       Units,
@@ -7737,8 +7762,8 @@ function buildExportMetadata(PathName) {
 }
 
 function buildExportPayload() {
-  const rawPathName = exportPathNameInput ? exportPathNameInput.value : '';
-  const pathName = sanitizeExportPathName(rawPathName) || 'Untitled Path';
+  const rawPathName = exportPathNameInput ? exportPathNameInput.value : "";
+  const pathName = sanitizeExportPathName(rawPathName) || "Untitled Path";
 
   return {
     poses: rawPoses.map(serializeExportPose),
@@ -7750,8 +7775,8 @@ function buildExportPayload() {
 }
 
 function buildExportRequest() {
-  const filenameBase = sanitizeExportFilename(exportFilenameInput ? exportFilenameInput.value : '');
-  const pathName = sanitizeExportPathName(exportPathNameInput ? exportPathNameInput.value : '');
+  const filenameBase = sanitizeExportFilename(exportFilenameInput ? exportFilenameInput.value : "");
+  const pathName = sanitizeExportPathName(exportPathNameInput ? exportPathNameInput.value : "");
   const location = getExportLocationPath();
   const payload = buildExportPayload();
   const json = JSON.stringify(payload, null, 2);
@@ -7766,13 +7791,13 @@ function buildExportRequest() {
   };
 }
 
-function flattenMetaEntries(value, prefix = '') {
+function flattenMetaEntries(value, prefix = "") {
   if (value == null) {
-    return prefix ? [{ key: prefix, value: 'null' }] : [];
+    return prefix ? [{ key: prefix, value: "null" }] : [];
   }
 
   if (Array.isArray(value)) {
-    if (!value.length) return prefix ? [{ key: prefix, value: '[]' }] : [];
+    if (!value.length) return prefix ? [{ key: prefix, value: "[]" }] : [];
     const entries = [];
     value.forEach((item, index) => {
       const nextPrefix = prefix ? `${prefix}[${index}]` : `[${index}]`;
@@ -7781,9 +7806,9 @@ function flattenMetaEntries(value, prefix = '') {
     return entries;
   }
 
-  if (typeof value === 'object') {
+  if (typeof value === "object") {
     const keys = Object.keys(value);
-    if (!keys.length) return prefix ? [{ key: prefix, value: '{}' }] : [];
+    if (!keys.length) return prefix ? [{ key: prefix, value: "{}" }] : [];
     const entries = [];
     for (const key of keys) {
       const nextPrefix = prefix ? `${prefix}.${key}` : key;
@@ -7792,7 +7817,7 @@ function flattenMetaEntries(value, prefix = '') {
     return entries;
   }
 
-  const text = typeof value === 'string' ? value : String(value);
+  const text = typeof value === "string" ? value : String(value);
   return prefix ? [{ key: prefix, value: text }] : [];
 }
 
@@ -7810,11 +7835,11 @@ function renderRouteInfoList() {
         <div class="routeInfoValue">${escapeHtml(entry.value)}</div>
       </div>
     `)
-    .join('');
+    .join("");
 }
 
 function setImportedRouteMeta(meta) {
-  importedRouteMeta = (meta && typeof meta === 'object' && !Array.isArray(meta) && Object.keys(meta).length)
+  importedRouteMeta = (meta && typeof meta === "object" && !Array.isArray(meta) && Object.keys(meta).length)
     ? meta
     : null;
   if (btnRouteInfo) {
@@ -7831,8 +7856,8 @@ function setImportedRouteMeta(meta) {
 
 async function applyImportedRunSettings() {
   const viewing = importedRouteMeta?.ViewingSettings;
-  if (!viewing || typeof viewing !== 'object') {
-    setStatus('No run settings were found in this route metadata.');
+  if (!viewing || typeof viewing !== "object") {
+    setStatus("No run settings were found in this route metadata.");
     return;
   }
 
@@ -7844,27 +7869,25 @@ async function applyImportedRunSettings() {
   }
 
   if (viewing.SelectedField !== undefined && fieldSelect) {
-    const nextField = FIELD_IMAGES.some((field) => field.key === viewing.SelectedField)
-      ? viewing.SelectedField
-      : DEFAULT_FIELD_KEY;
+    const nextField = getValidFieldKey(viewing.SelectedField);
     fieldSelect.value = nextField;
     await loadFieldImage(nextField);
   }
 
-  const pathOffsets = (viewing.PathOffsets && typeof viewing.PathOffsets === 'object') ? viewing.PathOffsets : null;
+  const pathOffsets = (viewing.PathOffsets && typeof viewing.PathOffsets === "object") ? viewing.PathOffsets : null;
   if (pathOffsets) {
     if (offXEl) offXEl.value = String(toNumMaybe(pathOffsets.X) ?? 0);
     if (offYEl) offYEl.value = String(toNumMaybe(pathOffsets.Y) ?? 0);
     if (offThetaEl) offThetaEl.value = String(toNumMaybe(pathOffsets.Theta) ?? 0);
   }
 
-  const robotDimensions = (viewing.RobotDimensions && typeof viewing.RobotDimensions === 'object') ? viewing.RobotDimensions : null;
+  const robotDimensions = (viewing.RobotDimensions && typeof viewing.RobotDimensions === "object") ? viewing.RobotDimensions : null;
   if (robotDimensions) {
     if (robotWEl) robotWEl.value = String(toNumMaybe(robotDimensions.Width) ?? robotWEl.value ?? 12);
     if (robotHEl) robotHEl.value = String(toNumMaybe(robotDimensions.Height) ?? robotHEl.value ?? 12);
   }
 
-  const speedNorm = (viewing.SpeedNorm && typeof viewing.SpeedNorm === 'object') ? viewing.SpeedNorm : null;
+  const speedNorm = (viewing.SpeedNorm && typeof viewing.SpeedNorm === "object") ? viewing.SpeedNorm : null;
   if (speedNorm) {
     if (minSpeedEl) minSpeedEl.value = String(toNumMaybe(speedNorm.Minimum) ?? 0);
     if (maxSpeedEl) maxSpeedEl.value = String(toNumMaybe(speedNorm.Maximum) ?? 127);
@@ -7883,62 +7906,62 @@ async function applyImportedRunSettings() {
   updatePoseReadout();
   requestDrawAll();
   await saveSettings();
-  setStatus('Applied run settings from imported metadata.');
+  setStatus("Applied run settings from imported metadata.");
 }
 
 function openRouteInfoModal() {
   if (!routeInfoModal || !importedRouteMeta) return;
   renderRouteInfoList();
-  routeInfoModal.removeAttribute('hidden');
-  routeInfoModal.style.display = 'flex';
+  routeInfoModal.removeAttribute("hidden");
+  routeInfoModal.style.display = "flex";
   requestAnimationFrame(() => {
-    const modalCard = routeInfoModal.querySelector('.modalCard');
+    const modalCard = routeInfoModal.querySelector(".modalCard");
     if (modalCard) modalCard.focus();
   });
 }
 
 function closeRouteInfoModal() {
   if (!routeInfoModal) return;
-  routeInfoModal.setAttribute('hidden', '');
-  routeInfoModal.style.display = 'none';
+  routeInfoModal.setAttribute("hidden", "");
+  routeInfoModal.style.display = "none";
 }
 
 function updateExportUiState() {
-  const exportLocation = exportLocationSelect ? exportLocationSelect.value : 'downloads';
-  const isCustomLocation = exportLocation === 'custom';
+  const exportLocation = exportLocationSelect ? exportLocationSelect.value : "downloads";
+  const isCustomLocation = exportLocation === "custom";
   if (exportCustomPathWrap) {
     exportCustomPathWrap.hidden = !isCustomLocation;
   }
 
-  const pathName = sanitizeExportPathName(exportPathNameInput ? exportPathNameInput.value : '');
-  const rawFilename = exportFilenameInput ? exportFilenameInput.value : '';
+  const pathName = sanitizeExportPathName(exportPathNameInput ? exportPathNameInput.value : "");
+  const rawFilename = exportFilenameInput ? exportFilenameInput.value : "";
   const sanitizedFilename = sanitizeExportFilename(rawFilename);
   const pathNameValid = pathName.length > 0;
   const filenameValid = sanitizedFilename.length > 0;
-  const customPath = exportCustomPathInput ? exportCustomPathInput.value.trim() : '';
+  const customPath = exportCustomPathInput ? exportCustomPathInput.value.trim() : "";
   const customPathValid = !isCustomLocation || customPath.length > 0;
 
   if (exportFilenameHint) {
     exportFilenameHint.textContent = sanitizedFilename && rawFilename !== sanitizedFilename
       ? `Sanitized filename: ${sanitizedFilename}.json`
-      : 'Only letters, numbers, spaces, dashes, and underscores are kept.';
+      : "Only letters, numbers, spaces, dashes, and underscores are kept.";
   }
 
   if (exportCustomPathHint) {
     exportCustomPathHint.textContent = isCustomLocation
-      ? 'Enter a folder path. Folder existence will be checked when export logic is added.'
-      : 'Folder validation will be enforced when export logic is added.';
+      ? "Enter a folder path. Folder existence will be checked when export logic is added."
+      : "Folder validation will be enforced when export logic is added.";
   }
 
   if (exportValidationMessage) {
     if (!pathNameValid) {
-      exportValidationMessage.textContent = 'Enter a path name to continue.';
+      exportValidationMessage.textContent = "Enter a path name to continue.";
     } else if (!filenameValid) {
-      exportValidationMessage.textContent = 'Enter a filename to continue.';
+      exportValidationMessage.textContent = "Enter a filename to continue.";
     } else if (!customPathValid) {
-      exportValidationMessage.textContent = 'Enter a custom folder path to continue.';
+      exportValidationMessage.textContent = "Enter a custom folder path to continue.";
     } else {
-      exportValidationMessage.textContent = '';
+      exportValidationMessage.textContent = "";
     }
   }
 
@@ -7949,26 +7972,26 @@ function updateExportUiState() {
 
 function openExportModal() {
   if (!exportModal) {
-    console.warn('Export modal not found');
+    console.warn("Export modal not found");
     return;
   }
   if (exportSuccessMessage) {
-    exportSuccessMessage.textContent = '';
+    exportSuccessMessage.textContent = "";
     exportSuccessMessage.hidden = true;
   }
   if (exportPathNameInput && !exportPathNameInput.value.trim()) {
-    exportPathNameInput.value = 'Untitled Path';
+    exportPathNameInput.value = "Untitled Path";
   }
   if (exportFilenameInput && !exportFilenameInput.value.trim()) {
-    exportFilenameInput.value = 'motionview-path';
+    exportFilenameInput.value = "motionview-path";
   }
   updateExportUiState();
-  exportModal.removeAttribute('hidden');
-  exportModal.style.display = 'flex';
+  exportModal.removeAttribute("hidden");
+  exportModal.style.display = "flex";
   requestAnimationFrame(() => {
     if (exportPathNameInput) exportPathNameInput.focus();
     else {
-      const modalCard = exportModal.querySelector('.modalCard');
+      const modalCard = exportModal.querySelector(".modalCard");
       if (modalCard) modalCard.focus();
     }
   });
@@ -7976,73 +7999,73 @@ function openExportModal() {
 
 function closeExportModal() {
   if (!exportModal) return;
-  exportModal.setAttribute('hidden', '');
-  exportModal.style.display = 'none';
+  exportModal.setAttribute("hidden", "");
+  exportModal.style.display = "none";
 }
 
-// Settings modal event handlers - ensure they're set up
+// Settings modal event handlers - ensure they"re set up
 if (btnSettings) {
-  btnSettings.addEventListener('click', (e) => {
+  btnSettings.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     openSettings();
   });
 } else {
-  console.warn('btnSettings element not found');
+  console.warn("btnSettings element not found");
 }
 
 if (btnExport) {
-  btnExport.addEventListener('click', (e) => {
+  btnExport.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     openExportModal();
   });
 } else {
-  console.warn('btnExport element not found');
+  console.warn("btnExport element not found");
 }
 
 if (btnRouteInfo) {
-  btnRouteInfo.addEventListener('click', (e) => {
+  btnRouteInfo.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     openRouteInfoModal();
   });
 } else {
-  console.warn('btnRouteInfo element not found');
+  console.warn("btnRouteInfo element not found");
 }
 
 if (btnSettingsClose) {
-  btnSettingsClose.addEventListener('click', (e) => {
+  btnSettingsClose.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     closeSettings();
   });
 } else {
-  console.warn('btnSettingsClose element not found');
+  console.warn("btnSettingsClose element not found");
 }
 
 if (btnExportClose) {
-  btnExportClose.addEventListener('click', (e) => {
+  btnExportClose.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     closeExportModal();
   });
 } else {
-  console.warn('btnExportClose element not found');
+  console.warn("btnExportClose element not found");
 }
 
 if (btnRouteInfoClose) {
-  btnRouteInfoClose.addEventListener('click', (e) => {
+  btnRouteInfoClose.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     closeRouteInfoModal();
   });
 } else {
-  console.warn('btnRouteInfoClose element not found');
+  console.warn("btnRouteInfoClose element not found");
 }
 
 if (btnApplyRunSettings) {
-  btnApplyRunSettings.addEventListener('click', (e) => {
+  btnApplyRunSettings.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     void applyImportedRunSettings();
@@ -8050,48 +8073,48 @@ if (btnApplyRunSettings) {
 }
 
 if (btnExportCancel) {
-  btnExportCancel.addEventListener('click', (e) => {
+  btnExportCancel.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     closeExportModal();
   });
 } else {
-  console.warn('btnExportCancel element not found');
+  console.warn("btnExportCancel element not found");
 }
 
 if (btnExportConfirm) {
-  btnExportConfirm.addEventListener('click', async (e) => {
+  btnExportConfirm.addEventListener("click", async (e) => {
     e.preventDefault();
     e.stopPropagation();
     updateExportUiState();
     if (btnExportConfirm.disabled) return;
     try {
       if (exportSuccessMessage) {
-        exportSuccessMessage.textContent = '';
+        exportSuccessMessage.textContent = "";
         exportSuccessMessage.hidden = true;
       }
       pendingExportRequest = buildExportRequest();
       window.__motionViewPendingExport = pendingExportRequest;
       window.__motionViewPendingExportJson = pendingExportRequest.json;
-      const result = await invoke('export_motionview_json', {
+      const result = await invoke("export_motionview_json", {
         filenameBase: pendingExportRequest.filenameBase,
         location: pendingExportRequest.destination.kind,
         customPath: pendingExportRequest.destination.customPath,
         jsonContents: pendingExportRequest.json,
       });
       if (exportSuccessMessage) {
-        exportSuccessMessage.textContent = `Successfully exported ${pendingExportRequest.pathName} to '${result?.path || pendingExportRequest.filename}'`;
+        exportSuccessMessage.textContent = `Successfully exported ${pendingExportRequest.pathName} to "${result?.path || pendingExportRequest.filename}"`;
         exportSuccessMessage.hidden = false;
       }
       setStatus(`Exported ${pendingExportRequest.filename}.`);
-      console.log('MotionView export payload written:', {
+      console.log("MotionView export payload written:", {
         request: pendingExportRequest,
         result,
       });
     } catch (err) {
-      console.error('Failed to export MotionView JSON:', err);
+      console.error("Failed to export MotionView JSON:", err);
       if (exportSuccessMessage) {
-        exportSuccessMessage.textContent = '';
+        exportSuccessMessage.textContent = "";
         exportSuccessMessage.hidden = true;
       }
       if (exportValidationMessage) {
@@ -8100,11 +8123,11 @@ if (btnExportConfirm) {
     }
   });
 } else {
-  console.warn('btnExportConfirm element not found');
+  console.warn("btnExportConfirm element not found");
 }
 
 if (exportPathNameInput) {
-  exportPathNameInput.addEventListener('input', () => {
+  exportPathNameInput.addEventListener("input", () => {
     const sanitizedValue = sanitizeExportPathName(exportPathNameInput.value);
     if (exportPathNameInput.value !== sanitizedValue) {
       const cursor = sanitizedValue.length;
@@ -8113,14 +8136,14 @@ if (exportPathNameInput) {
     }
     updateExportUiState();
   });
-  exportPathNameInput.addEventListener('blur', () => {
+  exportPathNameInput.addEventListener("blur", () => {
     exportPathNameInput.value = sanitizeExportPathName(exportPathNameInput.value);
     updateExportUiState();
   });
 }
 
 if (exportFilenameInput) {
-  exportFilenameInput.addEventListener('input', () => {
+  exportFilenameInput.addEventListener("input", () => {
     const sanitizedValue = sanitizeExportFilename(exportFilenameInput.value);
     if (exportFilenameInput.value !== sanitizedValue) {
       const cursor = sanitizedValue.length;
@@ -8129,56 +8152,56 @@ if (exportFilenameInput) {
     }
     updateExportUiState();
   });
-  exportFilenameInput.addEventListener('blur', () => {
+  exportFilenameInput.addEventListener("blur", () => {
     exportFilenameInput.value = sanitizeExportFilename(exportFilenameInput.value);
     updateExportUiState();
   });
 }
 
 if (exportLocationSelect) {
-  exportLocationSelect.addEventListener('change', () => {
+  exportLocationSelect.addEventListener("change", () => {
     updateExportUiState();
-    if (exportLocationSelect.value === 'custom' && exportCustomPathInput) {
+    if (exportLocationSelect.value === "custom" && exportCustomPathInput) {
       requestAnimationFrame(() => exportCustomPathInput.focus());
     }
   });
 }
 
 if (exportCustomPathInput) {
-  exportCustomPathInput.addEventListener('input', () => {
+  exportCustomPathInput.addEventListener("input", () => {
     updateExportUiState();
   });
 }
 
 if (settingsModal) {
-  settingsModal.addEventListener('click', (e) => {
-    if (e.target && (e.target.classList.contains('modalBackdrop'))) closeSettings();
+  settingsModal.addEventListener("click", (e) => {
+    if (e.target && (e.target.classList.contains("modalBackdrop"))) closeSettings();
   });
-} else console.warn('settingsModal element not found');
+} else console.warn("settingsModal element not found");
 
 if (exportModal) {
-  exportModal.addEventListener('click', (e) => {
-    if (e.target && e.target.classList.contains('modalBackdrop')) closeExportModal();
+  exportModal.addEventListener("click", (e) => {
+    if (e.target && e.target.classList.contains("modalBackdrop")) closeExportModal();
   });
-} else console.warn('exportModal element not found');
+} else console.warn("exportModal element not found");
 
 if (routeInfoModal) {
-  routeInfoModal.addEventListener('click', (e) => {
-    if (e.target && e.target.classList.contains('modalBackdrop')) closeRouteInfoModal();
+  routeInfoModal.addEventListener("click", (e) => {
+    if (e.target && e.target.classList.contains("modalBackdrop")) closeRouteInfoModal();
   });
-} else console.warn('routeInfoModal element not found');
+} else console.warn("routeInfoModal element not found");
 
-if (modeViewingBtn) modeViewingBtn.addEventListener('click', () => setMode('viewing'));
+if (modeViewingBtn) modeViewingBtn.addEventListener("click", () => setMode("viewing"));
 
-if (modePlanningBtn) modePlanningBtn.addEventListener('click', () => setMode('planning'));
+if (modePlanningBtn) modePlanningBtn.addEventListener("click", () => setMode("planning"));
 
 // Global Escape handler: close modals and prevent window-level behavior
-window.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  const helpOpen = helpModal && helpModal.style.display !== 'none' && !helpModal.hasAttribute('hidden');
-  const settingsOpen = settingsModal && settingsModal.style.display !== 'none' && !settingsModal.hasAttribute('hidden');
-  const exportOpen = exportModal && exportModal.style.display !== 'none' && !exportModal.hasAttribute('hidden');
-  const routeInfoOpen = routeInfoModal && routeInfoModal.style.display !== 'none' && !routeInfoModal.hasAttribute('hidden');
+window.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  const helpOpen = helpModal && helpModal.style.display !== "none" && !helpModal.hasAttribute("hidden");
+  const settingsOpen = settingsModal && settingsModal.style.display !== "none" && !settingsModal.hasAttribute("hidden");
+  const exportOpen = exportModal && exportModal.style.display !== "none" && !exportModal.hasAttribute("hidden");
+  const routeInfoOpen = routeInfoModal && routeInfoModal.style.display !== "none" && !routeInfoModal.hasAttribute("hidden");
   if (helpOpen) closeHelp();
   else if (settingsOpen) closeSettings();
   else if (exportOpen) closeExportModal();
@@ -8193,120 +8216,131 @@ window.addEventListener('keydown', (e) => {
 
 // Settings inputs event handlers
 if (settingsUnitsSelect) {
-  settingsUnitsSelect.addEventListener('change', () => {
+  settingsUnitsSelect.addEventListener("change", () => {
     syncSettingsToMain();
   });
 }
 if (settingsFieldRotation) {
-  settingsFieldRotation.addEventListener('change', () => {
+  settingsFieldRotation.addEventListener("change", () => {
     setFieldRotationDeg(Number(settingsFieldRotation.value) || 0);
     saveSettings();
   });
 }
+if (settingsShowPreviousYearFields) {
+  settingsShowPreviousYearFields.addEventListener("change", async () => {
+    showPreviousYearFields = !!settingsShowPreviousYearFields.checked;
+    const previousField = fieldSelect ? fieldSelect.value : DEFAULT_FIELD_KEY;
+    loadFieldOptions();
+    const nextField = getValidFieldKey(previousField);
+    if (fieldSelect) fieldSelect.value = nextField;
+    await loadFieldImage(nextField);
+    saveSettings();
+  });
+}
 if (settingsRobotW) {
-  settingsRobotW.addEventListener('input', () => {
+  settingsRobotW.addEventListener("input", () => {
     syncSettingsToMain();
   });
 }
 if (settingsRobotH) {
-  settingsRobotH.addEventListener('input', () => {
+  settingsRobotH.addEventListener("input", () => {
     syncSettingsToMain();
   });
 }
 if (settingsOffX) {
-  settingsOffX.addEventListener('input', () => {
+  settingsOffX.addEventListener("input", () => {
     syncSettingsToMain();
   });
 }
 if (settingsOffY) {
-  settingsOffY.addEventListener('input', () => {
+  settingsOffY.addEventListener("input", () => {
     syncSettingsToMain();
   });
 }
 if (settingsOffTheta) {
-  settingsOffTheta.addEventListener('input', () => {
+  settingsOffTheta.addEventListener("input", () => {
     syncSettingsToMain();
   });
 }
 if (settingsMinSpeed) {
-  settingsMinSpeed.addEventListener('input', () => {
+  settingsMinSpeed.addEventListener("input", () => {
     syncSettingsToMain();
   });
 }
 if (settingsMaxSpeed) {
-  settingsMaxSpeed.addEventListener('input', () => {
+  settingsMaxSpeed.addEventListener("input", () => {
     syncSettingsToMain();
   });
 }
 if (settingsLiveDebug) {
-  settingsLiveDebug.addEventListener('change', () => {
+  settingsLiveDebug.addEventListener("change", () => {
     liveDebugEnabled = settingsLiveDebug.checked;
     saveSettings();
   });
 }
 if (settingsPlanMoveStep) {
-  settingsPlanMoveStep.addEventListener('input', () => {
+  settingsPlanMoveStep.addEventListener("input", () => {
     syncSettingsToMain();
   });
 }
 if (settingsPlanSnapStep) {
-  settingsPlanSnapStep.addEventListener('change', () => {
+  settingsPlanSnapStep.addEventListener("change", () => {
     syncSettingsToMain();
   });
 }
 if (settingsPlanThetaSnapStep) {
-  settingsPlanThetaSnapStep.addEventListener('change', () => {
+  settingsPlanThetaSnapStep.addEventListener("change", () => {
     syncSettingsToMain();
   });
 }
 if (settingsPlanLimitBounds) {
-  settingsPlanLimitBounds.addEventListener('change', () => {
+  settingsPlanLimitBounds.addEventListener("change", () => {
     saveSettings();
   });
 }
 if (settingsPlanSpeed) {
-  settingsPlanSpeed.addEventListener('input', () => {
+  settingsPlanSpeed.addEventListener("input", () => {
     syncSettingsToMain();
   });
 }
 if (settingsRobotImgScale) {
-  settingsRobotImgScale.addEventListener('input', () => {
+  settingsRobotImgScale.addEventListener("input", () => {
     syncSettingsToMain();
   });
 }
 if (settingsRobotImgOffX) {
-  settingsRobotImgOffX.addEventListener('input', () => {
+  settingsRobotImgOffX.addEventListener("input", () => {
     syncSettingsToMain();
   });
 }
 if (settingsRobotImgOffY) {
-  settingsRobotImgOffY.addEventListener('input', () => {
+  settingsRobotImgOffY.addEventListener("input", () => {
     syncSettingsToMain();
   });
 }
 if (settingsRobotImgRot) {
-  settingsRobotImgRot.addEventListener('input', () => {
+  settingsRobotImgRot.addEventListener("input", () => {
     syncSettingsToMain();
   });
 }
 
-function setProsDirStatus(message, kind = 'info') {
+function setProsDirStatus(message, kind = "info") {
   if (!prosDirStatusEl) return;
   prosDirStatusEl.textContent = message;
-  if (kind === 'error') prosDirStatusEl.style.color = '#ff9b9b';
-  else if (kind === 'ok') prosDirStatusEl.style.color = '#9fddb0';
-  else prosDirStatusEl.style.color = 'var(--muted)';
+  if (kind === "error") prosDirStatusEl.style.color = "#ff9b9b";
+  else if (kind === "ok") prosDirStatusEl.style.color = "#9fddb0";
+  else prosDirStatusEl.style.color = "var(--muted)";
 }
 
-function setAutoStatus(message, kind = 'info') {
+function setAutoStatus(message, kind = "info") {
   if (!prosDirAutoStatusEl) return;
   prosDirAutoStatusEl.textContent = message;
-  if (kind === 'error') {
-    prosDirAutoStatusEl.style.color = '#ff9b9b';
-  } else if (kind === 'ok') {
-    prosDirAutoStatusEl.style.color = '#9fddb0';
+  if (kind === "error") {
+    prosDirAutoStatusEl.style.color = "#ff9b9b";
+  } else if (kind === "ok") {
+    prosDirAutoStatusEl.style.color = "#9fddb0";
   } else {
-    prosDirAutoStatusEl.style.color = 'var(--muted)';
+    prosDirAutoStatusEl.style.color = "var(--muted)";
   }
 }
 
@@ -8315,38 +8349,38 @@ function renderAutoResults(candidates) {
     prosDirAutoResultsEl.hidden = true;
     return;
   }
-  prosDirAutoResultsEl.innerHTML = '';
+  prosDirAutoResultsEl.innerHTML = "";
   prosDirAutoResultsEl.hidden = false;
   if (!candidates || !candidates.length) {
-    prosDirAutoResultsEl.textContent = '';
-    prosDirAutoResultsEl.style.color = 'var(--muted)';
+    prosDirAutoResultsEl.textContent = "";
+    prosDirAutoResultsEl.style.color = "var(--muted)";
     return;
   }
   for (const dir of candidates) {
-    const row = document.createElement('div');
-    row.style.display = 'flex';
-    row.style.gap = '8px';
-    row.style.alignItems = 'center';
-    row.style.marginBottom = '6px';
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.gap = "8px";
+    row.style.alignItems = "center";
+    row.style.marginBottom = "6px";
 
-    const pathEl = document.createElement('div');
+    const pathEl = document.createElement("div");
     pathEl.textContent = dir;
-    pathEl.style.flex = '1';
-    pathEl.style.fontFamily = 'monospace';
-    pathEl.style.fontSize = '12px';
+    pathEl.style.flex = "1";
+    pathEl.style.fontFamily = "monospace";
+    pathEl.style.fontSize = "12px";
 
-    const useBtn = document.createElement('button');
-    useBtn.className = 'iconBtn';
-    useBtn.style.fontSize = '11px';
-    useBtn.textContent = 'Use';
-    useBtn.addEventListener('click', () => {
+    const useBtn = document.createElement("button");
+    useBtn.className = "iconBtn";
+    useBtn.style.fontSize = "11px";
+    useBtn.textContent = "Use";
+    useBtn.addEventListener("click", () => {
       if (!prosDirInput) return;
       prosDirInput.value = dir;
       prosDirFromSettings = true;
       updateProsDir(dir);
       saveSettings();
       renderAutoResults([]);
-      setAutoStatus('Applied.', 'ok');
+      setAutoStatus("Applied.", "ok");
       prosDirAutoResultsEl.hidden = true;
     });
 
@@ -8362,7 +8396,7 @@ function refreshWS() {
   updateConnectButtonState();
 
   if (prosDirInput && prosDirInput.value && prosDirInput.value.trim()) updateProsDir(prosDirInput.value);
-  else setProsDirStatus('PROS directory not set. Live viewing disabled.', 'error');
+  else setProsDirStatus("PROS directory not set. Live viewing disabled.", "error");
 
   // Best-effort refresh from backend
   loadProsDirFromAPI();
@@ -8372,7 +8406,7 @@ function refreshWS() {
 async function updateProsDir(dir) {
   if (!dir) {
     prosDirValid = false;
-    setProsDirStatus('PROS directory not set. Live viewing disabled.', 'error');
+    setProsDirStatus("PROS directory not set. Live viewing disabled.", "error");
     saveSettings();
     updateConnectButtonState();
     return;
@@ -8383,48 +8417,48 @@ async function updateProsDir(dir) {
     const origin = refreshBridgeOrigin();
     if (!origin || !(await ensureBackendReady())) {
       prosDirValid = false;
-      setProsDirStatus('Bridge not ready yet. Retrying...', 'error');
+      setProsDirStatus("Bridge not ready yet. Retrying...", "error");
       updateConnectButtonState();
       if (prosDirRetryTimer) clearTimeout(prosDirRetryTimer);
       if (prosDirRetryAttempts < 5) {
         prosDirRetryAttempts += 1;
         prosDirRetryTimer = setTimeout(() => updateProsDir(dir), 500);
       } else {
-        setProsDirStatus('Bridge not ready yet. Try again in a moment.', 'error');
+        setProsDirStatus("Bridge not ready yet. Try again in a moment.", "error");
       }
       return;
     }
     prosDirRetryAttempts = 0;
     const response = await fetch(`${origin}/api/pros-dir`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ dir: dir })
     });
     const result = await response.json();
     if (result.ok) {
       prosDirValid = true;
       setStatus(`PROS directory set to: ${result.dir}`);
-      setProsDirStatus(`Using PROS project: ${result.dir}`, 'ok');
+      setProsDirStatus(`Using PROS project: ${result.dir}`, "ok");
       saveSettings();
       updateConnectButtonState();
     } else {
       prosDirValid = false;
       setStatus(`Failed to set PROS directory: ${result.status}`);
-      setProsDirStatus(`Invalid PROS directory: ${result.status}`, 'error');
+      setProsDirStatus(`Invalid PROS directory: ${result.status}`, "error");
       updateConnectButtonState();
     }
   } catch (e) {
     prosDirValid = false;
-    console.error('Error updating PROS directory:', e);
+    console.error("Error updating PROS directory:", e);
     setStatus(`Error updating PROS directory: ${e.message || e}`);
-    setProsDirStatus(`Error validating PROS directory: ${e.message || e}`, 'error');
+    setProsDirStatus(`Error validating PROS directory: ${e.message || e}`, "error");
     updateConnectButtonState();
   }
 }
 
 if (prosDirInput) {
   let prosDirTimeout = null;
-  prosDirInput.addEventListener('input', () => {
+  prosDirInput.addEventListener("input", () => {
     // Debounce API calls
     if (prosDirTimeout) clearTimeout(prosDirTimeout);
     prosDirTimeout = setTimeout(() => {
@@ -8436,25 +8470,25 @@ if (prosDirInput) {
 
 // PROS directory browse button (placeholder - could use Tauri dialog API)
 if (btnProsDirAuto) {
-  btnProsDirAuto.addEventListener('click', async () => {
+  btnProsDirAuto.addEventListener("click", async () => {
     if (!refreshBridgeOrigin() || !(await ensureBackendReady())) {
-      setAutoStatus('Backend not ready.', 'error');
+      setAutoStatus("Backend not ready.", "error");
       return;
     }
-    setAutoStatus('Scanning…');
+    setAutoStatus("Scanning…");
     try {
       const response = await fetch(`${ORIGIN}/api/pros-dir/auto`);
       const result = await response.json();
       if (!result.ok) {
-        setAutoStatus(result.status || 'Auto-detect failed.', 'error');
+        setAutoStatus(result.status || "Auto-detect failed.", "error");
         renderAutoResults([]);
         return;
       }
       renderAutoResults(result.candidates || []);
-      setAutoStatus(`Found ${result.candidates?.length || 0} project(s).`, 'ok');
+      setAutoStatus(`Found ${result.candidates?.length || 0} project(s).`, "ok");
     } catch (e) {
-      console.error('Auto-detect failed:', e);
-      setAutoStatus('Auto-detect failed.', 'error');
+      console.error("Auto-detect failed:", e);
+      setAutoStatus("Auto-detect failed.", "error");
       renderAutoResults([]);
     }
     refreshWS();
@@ -8472,7 +8506,7 @@ async function loadProsDirFromAPI() {
       if (hasUserDir) return;
       prosDirInput.value = result.dir;
       prosDirValid = true;
-      setProsDirStatus(`Using PROS project: ${result.dir}`, 'ok');
+      setProsDirStatus(`Using PROS project: ${result.dir}`, "ok");
       saveSettings();
       if (btnLeftConnect) btnLeftConnect.disabled = false;
     } else {
@@ -8480,7 +8514,7 @@ async function loadProsDirFromAPI() {
     }
   } catch (e) {
     prosDirValid = false;
-    console.error('Error loading PROS directory from API:', e);
+    console.error("Error loading PROS directory from API:", e);
   }
 }
 
@@ -8488,30 +8522,30 @@ async function loadProsDirFromAPI() {
 function updateConnectButtonState() {
   if (!btnLeftConnect) return;
   const hasProsDir = prosDirInput && prosDirInput.value && prosDirInput.value.trim();
-  // Connect button should be enabled if PROS dir is set OR if we're already connected
+  // Connect button should be enabled if PROS dir is set OR if we"re already connected
   btnLeftConnect.disabled = (!hasProsDir && !leftConnected) || leftActionInFlight;
 }
 
 // Robot image upload
 if (btnUploadRobotImage) {
-  btnUploadRobotImage.addEventListener('click', () => {
+  btnUploadRobotImage.addEventListener("click", () => {
     robotImageFile.click();
   });
 }
 
 if (robotImageFile) {
-  robotImageFile.addEventListener('change', async (e) => {
+  robotImageFile.addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate it's an image
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
-      e.target.value = ''; // Clear the input
+    // Validate it"s an image
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file");
+      e.target.value = ""; // Clear the input
       return;
     }
 
-    robotImagePath = typeof file.path === 'string' && file.path ? file.path : null;
+    robotImagePath = typeof file.path === "string" && file.path ? file.path : null;
 
     try {
       const reader = new FileReader();
@@ -8534,11 +8568,11 @@ if (robotImageFile) {
         img.src = event.target.result;
         try {
           if (invoke && event.target?.result) {
-            const savedPath = await invoke('save_robot_image', { dataUrl: event.target.result });
+            const savedPath = await invoke("save_robot_image", { dataUrl: event.target.result });
             if (savedPath) robotImagePath = savedPath;
           }
         } catch (saveErr) {
-          console.warn('Failed to persist robot image to app data:', saveErr);
+          console.warn("Failed to persist robot image to app data:", saveErr);
         }
         saveSettings();
       };
@@ -8547,7 +8581,7 @@ if (robotImageFile) {
       };
       reader.readAsDataURL(file);
     } catch (err) {
-      console.error('Error loading robot image:', err);
+      console.error("Error loading robot image:", err);
       setStatus("Error loading robot image.");
     }
   });
@@ -8555,7 +8589,7 @@ if (robotImageFile) {
 
 // Robot image toggle
 if (robotImageToggle) {
-  robotImageToggle.addEventListener('change', (e) => {
+  robotImageToggle.addEventListener("change", (e) => {
     robotImageEnabled = e.target.checked;
     if (settingsRobotImgControls) {
       settingsRobotImgControls.hidden = !(robotImageEnabled && robotImgOk);
@@ -8569,9 +8603,9 @@ if (robotImageToggle) {
   });
 }
 
-document.addEventListener('dragover', (e) => { e.preventDefault(); });
+document.addEventListener("dragover", (e) => { e.preventDefault(); });
 
-btnPlay.addEventListener('click', () => {
+btnPlay.addEventListener("click", () => {
   if (appMode === "planning") {
     if (planPlaying) planPause();
     else planPlay();
@@ -8584,19 +8618,19 @@ btnPlay.addEventListener('click', () => {
 });
 
 if (btnTogglePlanOverlay) {
-  btnTogglePlanOverlay.addEventListener('click', () => {
+  btnTogglePlanOverlay.addEventListener("click", () => {
     planOverlayVisible = !planOverlayVisible;
-    btnTogglePlanOverlay.classList.toggle('isOn', planOverlayVisible);
+    btnTogglePlanOverlay.classList.toggle("isOn", planOverlayVisible);
     requestDrawAll();
     captureTelemetry("toggle_plan_overlay", {
       version: APP_VERSION,
       enabled: planOverlayVisible,
     }, { debounceMs: 1000 }).catch(err => console.error(err));
   });
-  btnTogglePlanOverlay.classList.toggle('isOn', planOverlayVisible);
+  btnTogglePlanOverlay.classList.toggle("isOn", planOverlayVisible);
 }
 
-speedSelect.addEventListener('change', () => {
+speedSelect.addEventListener("change", () => {
   playRate = Number(speedSelect.value) || 1;
   saveSettings();
 });
@@ -8604,14 +8638,14 @@ speedSelect.addEventListener('change', () => {
 
 
 if (fieldSelect) {
-  fieldSelect.addEventListener('change', (e) => {
+  fieldSelect.addEventListener("change", (e) => {
     loadFieldImage(e.target.value);
     saveSettings();
   });
 }
 
 if (unitsSelect) {
-  unitsSelect.addEventListener('change', (e) => {
+  unitsSelect.addEventListener("change", (e) => {
     if (e.target.value !== currentUnits) {
       setUnitsFactorFromSelect(e.target.value);
       updateOffsetsFromInputs();
@@ -8621,13 +8655,13 @@ if (unitsSelect) {
   });
 }
 
-robotWEl.addEventListener('input', () => {
+robotWEl.addEventListener("input", () => {
   requestDrawAll();
   syncMainToSettings();
   saveSettings();
 });
 
-robotHEl.addEventListener('input', () => {
+robotHEl.addEventListener("input", () => {
   requestDrawAll();
   syncMainToSettings();
   saveSettings();
@@ -8654,19 +8688,19 @@ const onRobotImgInput = () => {
   saveSettings();
 };
 
-if (robotImgScaleEl) robotImgScaleEl.addEventListener('input', onRobotImgInput);
-if (robotImgOffXEl) robotImgOffXEl.addEventListener('input', onRobotImgInput);
-if (robotImgOffYEl) robotImgOffYEl.addEventListener('input', onRobotImgInput);
-if (robotImgRotEl) robotImgRotEl.addEventListener('input', onRobotImgInput);
-if (robotImgAlphaEl) robotImgAlphaEl.addEventListener('input', onRobotImgInput);
-if (settingsRobotImgScale) settingsRobotImgScale.addEventListener('input', onRobotImgInput);
-if (settingsRobotImgOffX) settingsRobotImgOffX.addEventListener('input', onRobotImgInput);
-if (settingsRobotImgOffY) settingsRobotImgOffY.addEventListener('input', onRobotImgInput);
-if (settingsRobotImgRot) settingsRobotImgRot.addEventListener('input', onRobotImgInput);
-if (settingsRobotImgAlpha) settingsRobotImgAlpha.addEventListener('input', onRobotImgInput);
+if (robotImgScaleEl) robotImgScaleEl.addEventListener("input", onRobotImgInput);
+if (robotImgOffXEl) robotImgOffXEl.addEventListener("input", onRobotImgInput);
+if (robotImgOffYEl) robotImgOffYEl.addEventListener("input", onRobotImgInput);
+if (robotImgRotEl) robotImgRotEl.addEventListener("input", onRobotImgInput);
+if (robotImgAlphaEl) robotImgAlphaEl.addEventListener("input", onRobotImgInput);
+if (settingsRobotImgScale) settingsRobotImgScale.addEventListener("input", onRobotImgInput);
+if (settingsRobotImgOffX) settingsRobotImgOffX.addEventListener("input", onRobotImgInput);
+if (settingsRobotImgOffY) settingsRobotImgOffY.addEventListener("input", onRobotImgInput);
+if (settingsRobotImgRot) settingsRobotImgRot.addEventListener("input", onRobotImgInput);
+if (settingsRobotImgAlpha) settingsRobotImgAlpha.addEventListener("input", onRobotImgInput);
 
 
-settingsMinSpeed.addEventListener('input', () => {
+settingsMinSpeed.addEventListener("input", () => {
   computeSpeedNormRange();
   recomputeWatchMarkers();
   rebuildWatchMarkersByTime();
@@ -8676,7 +8710,7 @@ settingsMinSpeed.addEventListener('input', () => {
   saveSettings();
 });
 
-settingsMaxSpeed.addEventListener('input', () => {
+settingsMaxSpeed.addEventListener("input", () => {
   computeSpeedNormRange();
   recomputeWatchMarkers();
   rebuildWatchMarkersByTime();
@@ -8687,34 +8721,34 @@ settingsMaxSpeed.addEventListener('input', () => {
 });
 
 if (settingsPlanMoveStep) {
-  settingsPlanMoveStep.addEventListener('input', () => {
+  settingsPlanMoveStep.addEventListener("input", () => {
     saveSettings();
   });
 }
 if (settingsPlanSnapStep) {
-  settingsPlanSnapStep.addEventListener('change', () => {
+  settingsPlanSnapStep.addEventListener("change", () => {
     saveSettings();
   });
 }
 if (settingsPlanThetaSnapStep) {
-  settingsPlanThetaSnapStep.addEventListener('change', () => {
+  settingsPlanThetaSnapStep.addEventListener("change", () => {
     saveSettings();
   });
 }
 if (settingsPlanLimitBounds) {
-  settingsPlanLimitBounds.addEventListener('change', () => {
+  settingsPlanLimitBounds.addEventListener("change", () => {
     saveSettings();
   });
 }
 if (settingsPlanSpeed) {
-  settingsPlanSpeed.addEventListener('input', () => {
+  settingsPlanSpeed.addEventListener("input", () => {
     saveSettings();
   });
 }
 
 function bindPlanField(el, getter, setter) {
   if (!el) return;
-  el.addEventListener('focus', () => {
+  el.addEventListener("focus", () => {
     // capture last known good value before edits
     el.dataset.lastValid = el.dataset.lastValid ?? String(getter());
     if (appMode === "planning" && planSelected >= 0 && planSelected < planWaypoints.length && !el.dataset.undoSession) {
@@ -8722,7 +8756,7 @@ function bindPlanField(el, getter, setter) {
       el.dataset.undoSession = "1";
     }
   });
-  el.addEventListener('input', () => {
+  el.addEventListener("input", () => {
     if (planSelected < 0 || planSelected >= planWaypoints.length) return;
     if (el.value.trim() === "") return; // allow clearing while typing
     const v = Number(el.value);
@@ -8731,7 +8765,7 @@ function bindPlanField(el, getter, setter) {
     planChanged({ skipSelectionPanel: true });
     requestDrawAll();
   });
-  el.addEventListener('blur', () => {
+  el.addEventListener("blur", () => {
     if (planSelected < 0 || planSelected >= planWaypoints.length) return;
     const v = Number(el.value);
     if (!isFinite(v) || el.value.trim() === "") {
@@ -8773,14 +8807,14 @@ bindPlanField(
 );
 
 if (planSelXEl) {
-  planSelXEl.addEventListener('input', () => clampDigits(planSelXEl, 2));
+  planSelXEl.addEventListener("input", () => clampDigits(planSelXEl, 2));
 }
 if (planSelYEl) {
-  planSelYEl.addEventListener('input', () => clampDigits(planSelYEl, 2));
+  planSelYEl.addEventListener("input", () => clampDigits(planSelYEl, 2));
 }
 if (planSelThetaEl) {
-  planSelThetaEl.addEventListener('input', () => clampDigits(planSelThetaEl, 3));
-  planSelThetaEl.addEventListener('blur', () => {
+  planSelThetaEl.addEventListener("input", () => clampDigits(planSelThetaEl, 3));
+  planSelThetaEl.addEventListener("blur", () => {
     if (planSelected < 0 || planSelected >= planWaypoints.length) return;
     const v = Number(planSelThetaEl.value);
     if (isFinite(v)) {
@@ -8791,34 +8825,34 @@ if (planSelThetaEl) {
   });
 }
 
-offXEl.addEventListener('input', () => {
+offXEl.addEventListener("input", () => {
   updateOffsetsFromInputs();
   syncMainToSettings();
   saveSettings();
 });
-offYEl.addEventListener('input', () => {
+offYEl.addEventListener("input", () => {
   updateOffsetsFromInputs();
   syncMainToSettings();
   saveSettings();
 });
-offThetaEl.addEventListener('input', () => {
+offThetaEl.addEventListener("input", () => {
   updateOffsetsFromInputs();
   syncMainToSettings();
   saveSettings();
 });
 
-if (watchSort) watchSort.addEventListener('change', () => { renderWatchList(); requestDrawAll(); });
-if (watchFilter) watchFilter.addEventListener('change', () => {
+if (watchSort) watchSort.addEventListener("change", () => { renderWatchList(); requestDrawAll(); });
+if (watchFilter) watchFilter.addEventListener("change", () => {
   renderWatchList();
   requestDrawAll();
 });
-if (logSort) logSort.addEventListener('change', () => { renderLogList(); });
-if (waypointFilter) waypointFilter.addEventListener('change', () => {
+if (logSort) logSort.addEventListener("change", () => { renderLogList(); });
+if (waypointFilter) waypointFilter.addEventListener("change", () => {
   renderWaypointList();
   requestDrawAll();
 });
 
-const btnClearField = document.getElementById('btnClearField');
+const btnClearField = document.getElementById("btnClearField");
 
 function clearAllPosesAndWatches() {
   // Stop playback/hover/locks so UI doesn’t reference stale indices
@@ -8846,7 +8880,7 @@ function clearAllPosesAndWatches() {
   try { livePendingLines = []; livePendingConsumed = 0; } catch { }
   setImportedRouteMeta(null);
 
-  if (typeof data === 'object' && data) {
+  if (typeof data === "object" && data) {
     data.poses = [];
     data.watches = [];
     data.logs = [];
@@ -8864,7 +8898,7 @@ function clearAllPosesAndWatches() {
   try { requestDrawAll?.(); } catch { } 2
 }
 
-btnClearField?.addEventListener('click', (event) => {
+btnClearField?.addEventListener("click", (event) => {
   if (event.metaKey || event.ctrlKey) {
     // Clear everything across modes
     clearAllPosesAndWatches();
@@ -8897,46 +8931,46 @@ btnClearField?.addEventListener('click', (event) => {
 });
 
 
-document.addEventListener('keydown', (e) => {
+document.addEventListener("keydown", (e) => {
   const mouseTag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
   const isTypingTarget = (mouseTag === "input" || mouseTag === "textarea" || (e.target && e.target.isContentEditable));
   if (isTypingTarget && e.target !== liveWinEl) return;
 
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
-    if (e.key === '1') {
+    if (e.key === "1") {
       e.preventDefault();
-      setMode('viewing');
+      setMode("viewing");
       return;
     }
 
-    if (e.key === '2') {
+    if (e.key === "2") {
       e.preventDefault();
-      setMode('planning');
+      setMode("planning");
       return;
     }
 
-    if (e.key === 'o' || e.key === 'O') {
+    if (e.key === "o" || e.key === "O") {
       if (appMode !== "viewing") return;
       e.preventDefault();
       fileEl.click();
       return;
     }
 
-    if (e.key === 'r' || e.key === 'R') {
+    if (e.key === "r" || e.key === "R") {
       if (appMode !== "viewing") return;
       e.preventDefault();
       btnLeftRefresh?.click();
       return;
     }
 
-    if (e.key === 'c' || e.key === 'C') {
+    if (e.key === "c" || e.key === "C") {
       e.preventDefault();
       if (appMode !== "viewing") return;
       if (leftConnected) void disconnectLeft();
       else void connectLeft();
       return;
     }
-    if (e.key === 's' || e.key === 'S') {
+    if (e.key === "s" || e.key === "S") {
       e.preventDefault();
       if (appMode !== "viewing") return;
 
@@ -8947,7 +8981,7 @@ document.addEventListener('keydown', (e) => {
       return;
     }
 
-    if (e.key === 'k' || e.key === 'K') {
+    if (e.key === "k" || e.key === "K") {
       e.preventDefault();
       if (appMode === "planning") {
         pushPlanUndo();
@@ -8967,7 +9001,7 @@ document.addEventListener('keydown', (e) => {
     }
   }
 
-  if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && (e.key === 'k' || e.key === 'K')) {
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && (e.key === "k" || e.key === "K")) {
     e.preventDefault();
     // Clear everything across modes
     clearAllPosesAndWatches();
@@ -8984,18 +9018,18 @@ document.addEventListener('keydown', (e) => {
   }
 
   if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-    if (e.key === 'p' || e.key === 'P') {
+    if (e.key === "p" || e.key === "P") {
       e.preventDefault();
       if (appMode === "viewing" && btnTogglePlanOverlay) btnTogglePlanOverlay.click();
       return;
     }
 
-    if (e.key === 't' || e.key === 'T') {
+    if (e.key === "t" || e.key === "T") {
       toggleFloatingInfo();
       return;
     }
 
-    if (e.key === 'g' || e.key === 'G') {
+    if (e.key === "g" || e.key === "G") {
       e.preventDefault();
       if (appMode !== "viewing") return;
       toggleCurrentWatchGraphPanel();
@@ -9003,13 +9037,13 @@ document.addEventListener('keydown', (e) => {
     }
   }
 
-  if (!e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
+  if (!e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && (e.key === "N" || e.key === "n")) {
     e.preventDefault();
     openFloatingWatch(null);
     return;
   }
 
-  if (e.key === 'f' || e.key === 'F') {
+  if (e.key === "f" || e.key === "F") {
     e.preventDefault();
     resetFieldPosition();
     return;
@@ -9017,12 +9051,12 @@ document.addEventListener('keydown', (e) => {
 
   if (appMode === "planning") {
     if ((e.metaKey || e.ctrlKey) && !e.altKey) {
-      if (!e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+      if (!e.shiftKey && (e.key === "z" || e.key === "Z")) {
         e.preventDefault();
         planUndo();
         return;
       }
-      if (e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+      if (e.shiftKey && (e.key === "z" || e.key === "Z")) {
         e.preventDefault();
         planRedo();
         return;
@@ -9149,10 +9183,10 @@ async function appExit() {
   try {
     if (robotImageDataUrl && invoke && !robotImagePath) {
       try {
-        const savedPath = await invoke('save_robot_image', { dataUrl: robotImageDataUrl });
+        const savedPath = await invoke("save_robot_image", { dataUrl: robotImageDataUrl });
         if (savedPath) robotImagePath = savedPath;
       } catch (e) {
-        console.warn('Failed to persist robot image during exit:', e);
+        console.warn("Failed to persist robot image during exit:", e);
       }
     }
     await saveSavedPathsNow();
@@ -9202,7 +9236,7 @@ const setupExitHandler = async () => {
     }
   };
 
-  // Listen for the user clicking the 'X'
+  // Listen for the user clicking the "X"
   await appWindow.listen("tauri://close-requested", async () => {
     await beginAppQuit();
   });
@@ -9221,16 +9255,16 @@ const setupExitHandler = async () => {
 
 // Ensure modals start hidden
 if (helpModal) {
-  helpModal.setAttribute('hidden', '');
-  helpModal.style.display = 'none';
+  helpModal.setAttribute("hidden", "");
+  helpModal.style.display = "none";
 }
 if (keybindsModal) {
-  keybindsModal.setAttribute('hidden', '');
-  keybindsModal.style.display = 'none';
+  keybindsModal.setAttribute("hidden", "");
+  keybindsModal.style.display = "none";
 }
 if (settingsModal) {
-  settingsModal.setAttribute('hidden', '');
-  settingsModal.style.display = 'none';
+  settingsModal.setAttribute("hidden", "");
+  settingsModal.style.display = "none";
 }
 // Load PROS dir from backend after a short delay to ensure ORIGIN is set
 setTimeout(() => {
@@ -9238,7 +9272,7 @@ setTimeout(() => {
     loadProsDirFromAPI();
     updateConnectButtonState();
   } catch (e) {
-    console.error('Error loading PROS dir:', e);
+    console.error("Error loading PROS dir:", e);
   }
 }, 500);
 
@@ -9255,7 +9289,7 @@ const bridgeReadyPoll = setInterval(() => {
     bridgeReadyInitInFlight = false;
   });
 }, 250);
-window.addEventListener('resize', () => {
+window.addEventListener("resize", () => {
   updateFieldLayout(true); // keep bounds, recompute square sizing
   resizeTimeline();
   resizePlanningTimeline();
@@ -9263,7 +9297,7 @@ window.addEventListener('resize', () => {
   scheduleTopBarStatusLayout();
 });
 
-if (typeof ResizeObserver === 'function') {
+if (typeof ResizeObserver === "function") {
   const topBarResizeObserver = new ResizeObserver(() => {
     scheduleTopBarStatusLayout();
   });
@@ -9275,7 +9309,7 @@ if (typeof ResizeObserver === 'function') {
 }
 
 if (topBarEl) {
-  topBarEl.addEventListener('scroll', () => {
+  topBarEl.addEventListener("scroll", () => {
     topBarSavedScrollLeft = topBarEl.scrollLeft || 0;
   }, { passive: true });
 }
