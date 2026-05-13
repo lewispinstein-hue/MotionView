@@ -384,6 +384,13 @@ const routeInfoModal = document.getElementById("routeInfoModal");
 const btnRouteInfoClose = document.getElementById("btnRouteInfoClose");
 const routeInfoList = document.getElementById("routeInfoList");
 const btnApplyRunSettings = document.getElementById("btnApplyRunSettings");
+const btnPlanCopyCode = document.getElementById("btnPlanCopyCode");
+const btnPlanEditTemplate = document.getElementById("btnPlanEditTemplate");
+const planTemplateModal = document.getElementById("planTemplateModal");
+const btnPlanTemplateClose = document.getElementById("btnPlanTemplateClose");
+const btnPlanTemplateCancel = document.getElementById("btnPlanTemplateCancel");
+const btnPlanTemplateConfirm = document.getElementById("btnPlanTemplateConfirm");
+const planTemplateInput = document.getElementById("planTemplateInput");
 const watchGraphPanel = document.getElementById("watchGraphPanel");
 const btnCloseWatchGraph = document.getElementById("btnCloseWatchGraph");
 const watchGraphHeader = document.getElementById("watchGraphHeader");
@@ -446,6 +453,7 @@ const planSelIndexEl = document.getElementById("planSelIndex");
 const planSelXEl = document.getElementById("planSelX");
 const planSelYEl = document.getElementById("planSelY");
 const planSelThetaEl = document.getElementById("planSelTheta");
+const planSelSpeedEl = document.getElementById("planSelSpeed");
 document.getElementById("versionDisplay").innerHTML = APP_VERSION;
 
 const prosDirStatusEl = document.getElementById("prosDirStatus");
@@ -462,6 +470,7 @@ let backendReadyLastCheckAt = 0;
 
 // --- FIELD IMAGES ---
 const CURRENT_GAME_YEAR = "2026-2027";
+const DEFAULT_PLAN_EXPORT_TEMPLATE = "chassis.moveToPoint(${x}, ${y}, ${theta}, {.maxSpeed = someMathFunctionToGetSpeed(${distance});";
 const FIELD_IMAGES = [
   { key: "./assets/fields/v5_match_field_2026-2027_override.png", label: "Match Field (V5 Override)" },
   { key: "./assets/fields/v5_skills_field_2026-2027_override.png", label: "Skills Field (V5 Override)" },
@@ -515,6 +524,7 @@ const WATCH_GRAPH_MIN_H = 170;
 const WATCH_GRAPH_MARGIN = 16;
 let data = null;
 let showPreviousYearFields = false;
+let planExportTemplate = DEFAULT_PLAN_EXPORT_TEMPLATE;
 
 function isFieldCurrentYear(field) {
   return String(field?.key || "").includes(CURRENT_GAME_YEAR);
@@ -798,6 +808,10 @@ function applyPlanThetaSnapDeg(v) {
   return Math.round(v / step) * step;
 }
 
+function clampPlanSpeed(v) {
+  return clamp(v, -127, 127);
+}
+
 function clampPlanCoordX(v) {
   const next = applyPlanSnap(v);
   if (!planLimitBoundsEnabled() || fieldImg == "None" || !fieldImg) return next;
@@ -816,7 +830,7 @@ let planUndoApplying = false;
 
 function clonePlanState() {
   return {
-    waypoints: planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0 })),
+    waypoints: planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: clampPlanSpeed(Number(p.speed) || 0) })),
     selected: Array.from(planSelectedSet),
     selectedIndex: planSelected,
     playDist: planPlayDist,
@@ -836,7 +850,7 @@ function planStatesEqual(a, b) {
     const ap = a.waypoints[i];
     const bp = b.waypoints[i];
     if (!bp) return false;
-    if (ap.x !== bp.x || ap.y !== bp.y || (ap.theta ?? 0) !== (bp.theta ?? 0)) return false;
+    if (ap.x !== bp.x || ap.y !== bp.y || (ap.theta ?? 0) !== (bp.theta ?? 0) || clampPlanSpeed(Number(ap.speed) || 0) !== clampPlanSpeed(Number(bp.speed) || 0)) return false;
   }
   return true;
 }
@@ -854,7 +868,7 @@ function pushPlanUndo() {
 function applyPlanState(state) {
   if (!state) return;
   planUndoApplying = true;
-  planWaypoints = state.waypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0 }));
+  planWaypoints = state.waypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: clampPlanSpeed(Number(p.speed) || 0) }));
   planSetSelection(state.selected || []);
   planPlayDist = clamp(state.playDist ?? 0, 0, planTotalLength());
   planPause();
@@ -991,10 +1005,81 @@ function setPlanDist(d) {
 }
 
 function updatePlanControls() {
-  if (!btnPlay) return;
+  if (btnPlay) {
+    if (appMode === "planning") btnPlay.disabled = planWaypoints.length < 2;
+    else btnPlay.disabled = rawPoses.length < 2;
+  }
+  if (btnPlanCopyCode) btnPlanCopyCode.disabled = planWaypoints.length === 0;
+}
 
-  if (appMode === "planning") btnPlay.disabled = planWaypoints.length < 2;
-  else btnPlay.disabled = rawPoses.length < 2;
+function buildPlanExportCode(template = planExportTemplate) {
+  const rawTemplate = String(template ?? "");
+  if (!rawTemplate.trim()) return "";
+  return planWaypoints.map((point, index) => {
+    const prev = planWaypoints[index - 1];
+    const distance = prev ? Math.hypot(point.x - prev.x, point.y - prev.y) : 0;
+    const replacements = {
+      x: formatTemplateNumber(point.x),
+      y: formatTemplateNumber(point.y),
+      theta: formatTemplateNumber(planThetaDegAt(index)),
+      distance: formatTemplateNumber(distance),
+      iteration: String(index),
+      speed: formatTemplateNumber(clampPlanSpeed(Number(point.speed) || 0), 0),
+    };
+    return rawTemplate.replace(/\$\{(x|y|theta|distance|iteration|speed)\}/g, (_, token) => replacements[token] ?? "");
+  }).join("\n");
+}
+
+async function copyTextToClipboard(text) {
+  const value = String(text ?? "");
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const fallback = document.createElement("textarea");
+  fallback.value = value;
+  fallback.setAttribute("readonly", "");
+  fallback.style.position = "fixed";
+  fallback.style.opacity = "0";
+  document.body.appendChild(fallback);
+  fallback.focus();
+  fallback.select();
+  const succeeded = document.execCommand("copy");
+  document.body.removeChild(fallback);
+  if (!succeeded) throw new Error("Clipboard API unavailable");
+}
+
+function openPlanTemplateModal() {
+  if (!planTemplateModal) return;
+  if (planTemplateInput) planTemplateInput.value = planExportTemplate;
+  planTemplateModal.removeAttribute("hidden");
+  planTemplateModal.style.display = "flex";
+  requestAnimationFrame(() => {
+    if (planTemplateInput) {
+      planTemplateInput.focus();
+      planTemplateInput.setSelectionRange(planTemplateInput.value.length, planTemplateInput.value.length);
+    } else {
+      const modalCard = planTemplateModal.querySelector(".modalCard");
+      if (modalCard) modalCard.focus();
+    }
+  });
+}
+
+function closePlanTemplateModal() {
+  if (!planTemplateModal) return;
+  planTemplateModal.setAttribute("hidden", "");
+  planTemplateModal.style.display = "none";
+  if (planTemplateInput) planTemplateInput.value = planExportTemplate;
+}
+
+function confirmPlanTemplateModal() {
+  if (planTemplateInput) {
+    const nextTemplate = planTemplateInput.value;
+    planExportTemplate = nextTemplate.trim() ? nextTemplate : DEFAULT_PLAN_EXPORT_TEMPLATE;
+    saveSettings();
+  }
+  closePlanTemplateModal();
 }
 
 function renderPlanList() {
@@ -1009,7 +1094,7 @@ function renderPlanList() {
     const theta = planThetaDegAt(i);
     item.innerHTML = `
       <div class="muted">#${i + 1}</div>
-      <div>X: ${fmtNum(p.x, 2)}  Y: ${fmtNum(p.y, 2)}  θ: ${fmtNum(theta, 1)}°</div>
+      <div>X: ${fmtNum(p.x, 2)}  Y: ${fmtNum(p.y, 2)}  θ: ${fmtNum(theta, 1)}°  S: ${fmtNum(clampPlanSpeed(Number(p.speed) || 0), 0)}</div>
     `;
     item.addEventListener("click", () => {
       planSelectSingle(i);
@@ -1129,6 +1214,7 @@ async function loadSavedPaths() {
         x: Number(p.x) || 0,
         y: Number(p.y) || 0,
         theta: Number(p.theta) || 0,
+        speed: clampPlanSpeed(Number(p.speed) || 0),
       }));
       planSetSelection([]);
       planPlayDist = 0;
@@ -1163,7 +1249,7 @@ function scheduleSavedPathsSave() {
 
 function buildSavedPathsPayload() {
   return JSON.stringify({
-    "planned-path": planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0 })),
+    "planned-path": planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: clampPlanSpeed(Number(p.speed) || 0) })),
     "robot-path": rawPoses.map((p) => ({
       t: p.t ?? null,
       x: p.x, y: p.y,
@@ -1211,16 +1297,18 @@ async function saveSavedPathsNow() {
 }
 
 function updatePlanSelectionPanel() {
-  if (!planSelXEl || !planSelYEl || !planSelThetaEl || !planSelIndexEl) return;
+  if (!planSelXEl || !planSelYEl || !planSelThetaEl || !planSelSpeedEl || !planSelIndexEl) return;
   const active = document.activeElement;
   if (planSelected < 0 || planSelected >= planWaypoints.length) {
     planSelIndexEl.textContent = "—";
     planSelXEl.value = "";
     planSelYEl.value = "";
     planSelThetaEl.value = "";
+    planSelSpeedEl.value = "";
     planSelXEl.disabled = true;
     planSelYEl.disabled = true;
     planSelThetaEl.disabled = true;
+    planSelSpeedEl.disabled = true;
     return;
   }
   const p = planWaypoints[planSelected];
@@ -1228,18 +1316,22 @@ function updatePlanSelectionPanel() {
   planSelXEl.disabled = false;
   planSelYEl.disabled = false;
   planSelThetaEl.disabled = false;
-  if (active === planSelXEl || active === planSelYEl || active === planSelThetaEl) {
+  planSelSpeedEl.disabled = false;
+  if (active === planSelXEl || active === planSelYEl || active === planSelThetaEl || active === planSelSpeedEl) {
     return;
   }
   const xVal = String(fmtNum(p.x, 2));
   const yVal = String(fmtNum(p.y, 2));
   const tVal = String(fmtNum(planThetaDegAt(planSelected) ?? 0, 1));
+  const sVal = String(fmtNum(clampPlanSpeed(Number(p.speed) || 0), 0));
   planSelXEl.value = xVal;
   planSelYEl.value = yVal;
   planSelThetaEl.value = tVal;
+  planSelSpeedEl.value = sVal;
   planSelXEl.dataset.lastValid = xVal;
   planSelYEl.dataset.lastValid = yVal;
   planSelThetaEl.dataset.lastValid = tVal;
+  planSelSpeedEl.dataset.lastValid = sVal;
 }
 
 function planHitTest(mx, my) {
@@ -1496,8 +1588,15 @@ function formatFixedNumberString(value, decimals = 2, invalidValue = "—") {
   return rounded.toFixed(places);
 }
 
-
 function fmtNum(v, d = 2) { return formatNumberString(v, d); }
+function formatTemplateNumber(value, decimals = 3) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "0";
+  const rounded = Number(formatNumberString(num, decimals));
+  if (Object.is(rounded, -0)) return "0";
+  return String(rounded);
+}
+
 function setStatus(msg, log = true) {
   const fullText = String(msg ?? "");
   statusEl.dataset.fullText = fullText;
@@ -2850,6 +2949,7 @@ let watchGraphCompareKey = "";
 let watchGraphChart = null;
 let watchGraphMarkersForKey = [];
 let watchGraphCompareMarkersForKey = [];
+let watchGraphZoomRange = null;
 let isWatchGraphDragging = false;
 let isWatchGraphResizing = false;
 let watchGraphDragStart = { x: 0, y: 0 };
@@ -3186,6 +3286,57 @@ function buildWatchGraphDatasets(key, compareKey = "") {
   };
 }
 
+function watchGraphTimeRange(primaryPoints, comparePoints) {
+  const allPoints = primaryPoints.concat(comparePoints);
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = 0; i < allPoints.length; i += 1) {
+    const x = Number(allPoints[i]?.x);
+    if (!Number.isFinite(x)) continue;
+    min = Math.min(min, x);
+    max = Math.max(max, x);
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  if (min === max) return { min, max: min + 1 };
+  return { min, max };
+}
+
+function normalizeWatchGraphZoomRange(range, fullRange) {
+  if (!range || !fullRange) return null;
+  const fullMin = Number(fullRange.min);
+  const fullMax = Number(fullRange.max);
+  if (!Number.isFinite(fullMin) || !Number.isFinite(fullMax) || fullMax <= fullMin) return null;
+
+  let min = clamp(Number(range.min), fullMin, fullMax);
+  let max = clamp(Number(range.max), fullMin, fullMax);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return null;
+
+  const minSpan = Math.min(0.1, fullMax - fullMin);
+  if ((max - min) < minSpan) {
+    const center = (min + max) / 2;
+    min = center - minSpan / 2;
+    max = center + minSpan / 2;
+  }
+
+  if (min < fullMin) {
+    max += fullMin - min;
+    min = fullMin;
+  }
+  if (max > fullMax) {
+    min -= max - fullMax;
+    max = fullMax;
+  }
+
+  min = clamp(min, fullMin, fullMax);
+  max = clamp(max, fullMin, fullMax);
+  if ((max - min) >= (fullMax - fullMin) - 1e-6) return null;
+  return { min, max };
+}
+
+function setWatchGraphZoomRange(nextRange, fullRange) {
+  watchGraphZoomRange = normalizeWatchGraphZoomRange(nextRange, fullRange);
+}
+
 function renderWatchGraphForKey(key) {
   if (!watchGraphCanvas) return;
 
@@ -3194,6 +3345,9 @@ function renderWatchGraphForKey(key) {
   watchGraphCompareMarkersForKey = compareSeries.markers;
   const hasPrimaryPoints = primaryPoints.length > 0;
   const hasComparePoints = comparePoints.length > 0;
+  const fullTimeRange = watchGraphTimeRange(primaryPoints, comparePoints);
+  const zoomRange = normalizeWatchGraphZoomRange(watchGraphZoomRange, fullTimeRange);
+  watchGraphZoomRange = zoomRange;
 
   if (watchGraphEmpty) watchGraphEmpty.hidden = hasPrimaryPoints || hasComparePoints;
 
@@ -3245,6 +3399,8 @@ function renderWatchGraphForKey(key) {
         scales: {
           x: {
             type: "linear",
+            min: zoomRange?.min,
+            max: zoomRange?.max,
             title: { display: true, text: "Time (s)", color: "rgba(255,255,255,0.75)" },
             ticks: { color: "rgba(255,255,255,0.72)" },
             grid: { color: "rgba(255,255,255,0.1)" },
@@ -3267,6 +3423,10 @@ function renderWatchGraphForKey(key) {
   }
 
   watchGraphChart.data.datasets = datasets;
+  if (watchGraphChart.options?.scales?.x) {
+    watchGraphChart.options.scales.x.min = zoomRange?.min;
+    watchGraphChart.options.scales.x.max = zoomRange?.max;
+  }
   if (watchGraphChart.options?.scales?.y) {
     watchGraphChart.options.scales.y.min = yMin;
     watchGraphChart.options.scales.y.max = yMax;
@@ -3358,6 +3518,7 @@ function showWatchGraphPanelForKey(key) {
   const { latest, count } = watchGraphStatsByKey(key);
   if (!latest || count <= 0) return false;
   if (!watchGraphPanel) return false;
+  if (watchGraphPanelKey !== key) watchGraphZoomRange = null;
   watchGraphPanel.classList.remove("hidden");
   watchGraphPanel.classList.add("isOn");
   watchGraphPanelOpen = true;
@@ -3375,6 +3536,7 @@ function hideWatchGraphPanel({ preserveKey = false } = {}) {
   if (!preserveKey) {
     watchGraphPanelKey = null;
     watchGraphCompareKey = "";
+    watchGraphZoomRange = null;
   }
   watchGraphMarkersForKey = [];
   watchGraphCompareMarkersForKey = [];
@@ -3565,6 +3727,42 @@ if (watchGraphCanvas) {
     clearWatchGraphHoverPreview({ restore: false });
     selectWatchMarker(marker, false, null);
   });
+
+  watchGraphCanvas.addEventListener("wheel", (e) => {
+    if (!watchGraphPanelOpen || !watchGraphChart) return;
+    const chartArea = watchGraphChart.chartArea;
+    const xScale = watchGraphChart.scales?.x;
+    if (!chartArea || !xScale) return;
+
+    const rect = watchGraphCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (x < chartArea.left || x > chartArea.right || y < chartArea.top || y > chartArea.bottom) return;
+
+    const datasets = watchGraphChart.data?.datasets ?? [];
+    const fullRange = watchGraphTimeRange(datasets[0]?.data ?? [], datasets[1]?.data ?? []);
+    if (!fullRange) return;
+
+    e.preventDefault();
+
+    const currentMin = Number.isFinite(xScale.min) ? xScale.min : fullRange.min;
+    const currentMax = Number.isFinite(xScale.max) ? xScale.max : fullRange.max;
+    const currentSpan = currentMax - currentMin;
+    if (!Number.isFinite(currentSpan) || currentSpan <= 0) return;
+
+    const anchor = xScale.getValueForPixel(x);
+    if (!Number.isFinite(anchor)) return;
+
+    const zoomFactor = Math.exp((e.deltaY || 0) * 0.0012);
+    let nextSpan = currentSpan * zoomFactor;
+    nextSpan = clamp(nextSpan, Math.min(0.1, fullRange.max - fullRange.min), fullRange.max - fullRange.min);
+
+    const ratio = (anchor - currentMin) / currentSpan;
+    const nextMin = anchor - nextSpan * ratio;
+    const nextMax = nextMin + nextSpan;
+    setWatchGraphZoomRange({ min: nextMin, max: nextMax }, fullRange);
+    renderWatchGraphForKey(watchGraphPanelKey);
+  }, { passive: false });
 }
 
 
@@ -5169,7 +5367,13 @@ canvas.addEventListener("pointerdown", (e) => {
         return;
       }
       pushPlanUndo();
-      planWaypoints.push({ x: clampPlanCoordX(w.x), y: clampPlanCoordY(w.y), theta: 0 });
+      const previous = planWaypoints[planWaypoints.length - 1];
+      planWaypoints.push({
+        x: clampPlanCoordX(w.x),
+        y: clampPlanCoordY(w.y),
+        theta: 0,
+        speed: previous ? clampPlanSpeed(Number(previous.speed) || 0) : 0,
+      });
       planSelectSingle(planWaypoints.length - 1);
       planChanged();
     }
@@ -7287,6 +7491,10 @@ async function loadSettings() {
       if (settings.planSpeed !== undefined && settingsPlanSpeed) {
         settingsPlanSpeed.value = settings.planSpeed;
       }
+      if (settings.planExportTemplate !== undefined) {
+        const savedTemplate = String(settings.planExportTemplate || "");
+        planExportTemplate = savedTemplate.trim() ? savedTemplate : DEFAULT_PLAN_EXPORT_TEMPLATE;
+      }
       if (settings.refreshIntervalMs !== undefined && leftRefreshIntervalEl) {
         leftRefreshIntervalEl.value = String(settings.refreshIntervalMs);
         leftRefreshMs = parseInt(leftRefreshIntervalEl.value || "0", 10) || 0;
@@ -7417,6 +7625,7 @@ async function saveSettings() {
       planThetaSnapStep: settingsPlanThetaSnapStep ? settingsPlanThetaSnapStep.value : "0",
       planLimitBounds: settingsPlanLimitBounds ? settingsPlanLimitBounds.checked : true,
       planSpeed: settingsPlanSpeed ? settingsPlanSpeed.value : "50",
+      planExportTemplate,
       refreshIntervalMs: leftRefreshIntervalEl ? leftRefreshIntervalEl.value : "0",
       liveDebug: settingsLiveDebug ? settingsLiveDebug.checked : liveDebugEnabled,
       showPreviousYearFields,
@@ -8191,9 +8400,56 @@ if (routeInfoModal) {
   });
 } else console.warn("routeInfoModal element not found");
 
+if (planTemplateModal) {
+  planTemplateModal.addEventListener("click", (e) => {
+    if (e.target && e.target.classList.contains("modalBackdrop")) closePlanTemplateModal();
+  });
+}
+
 if (modeViewingBtn) modeViewingBtn.addEventListener("click", () => setMode("viewing"));
 
 if (modePlanningBtn) modePlanningBtn.addEventListener("click", () => setMode("planning"));
+
+if (btnPlanEditTemplate) {
+  btnPlanEditTemplate.addEventListener("click", () => {
+    openPlanTemplateModal();
+  });
+}
+
+if (btnPlanCopyCode) {
+  btnPlanCopyCode.addEventListener("click", async () => {
+    const code = buildPlanExportCode();
+    if (!code) {
+      setStatus("Add at least one waypoint and a template before copying code.");
+      return;
+    }
+    try {
+      await copyTextToClipboard(code);
+      setStatus(`Copied generated code for ${planWaypoints.length} waypoint${planWaypoints.length === 1 ? "" : "s"}.`);
+    } catch (err) {
+      console.error("Failed to copy planning export code:", err);
+      setStatus(`Failed to copy code: ${err?.message || err}`);
+    }
+  });
+}
+
+if (btnPlanTemplateClose) {
+  btnPlanTemplateClose.addEventListener("click", () => {
+    closePlanTemplateModal();
+  });
+}
+
+if (btnPlanTemplateCancel) {
+  btnPlanTemplateCancel.addEventListener("click", () => {
+    closePlanTemplateModal();
+  });
+}
+
+if (btnPlanTemplateConfirm) {
+  btnPlanTemplateConfirm.addEventListener("click", () => {
+    confirmPlanTemplateModal();
+  });
+}
 
 // Global Escape handler: close modals and prevent window-level behavior
 window.addEventListener("keydown", (e) => {
@@ -8202,10 +8458,12 @@ window.addEventListener("keydown", (e) => {
   const settingsOpen = settingsModal && settingsModal.style.display !== "none" && !settingsModal.hasAttribute("hidden");
   const exportOpen = exportModal && exportModal.style.display !== "none" && !exportModal.hasAttribute("hidden");
   const routeInfoOpen = routeInfoModal && routeInfoModal.style.display !== "none" && !routeInfoModal.hasAttribute("hidden");
+  const planTemplateOpen = planTemplateModal && planTemplateModal.style.display !== "none" && !planTemplateModal.hasAttribute("hidden");
   if (helpOpen) closeHelp();
   else if (settingsOpen) closeSettings();
   else if (exportOpen) closeExportModal();
   else if (routeInfoOpen) closeRouteInfoModal();
+  else if (planTemplateOpen) closePlanTemplateModal();
   else if (selectedWaypointId != null) {
     clearWaypointSelection();
     requestDrawAll();
@@ -8805,6 +9063,11 @@ bindPlanField(
   () => fmtNum(planThetaDegAt(planSelected), 1),
   (v) => { planWaypoints[planSelected].theta = planThetaDisplayToRaw(v); }
 );
+bindPlanField(
+  planSelSpeedEl,
+  () => fmtNum(clampPlanSpeed(Number(planWaypoints[planSelected]?.speed) || 0), 0),
+  (v) => { planWaypoints[planSelected].speed = clampPlanSpeed(v); }
+);
 
 if (planSelXEl) {
   planSelXEl.addEventListener("input", () => clampDigits(planSelXEl, 2));
@@ -8819,6 +9082,18 @@ if (planSelThetaEl) {
     const v = Number(planSelThetaEl.value);
     if (isFinite(v)) {
       planWaypoints[planSelected].theta = planThetaDisplayToRaw(v);
+      updatePlanSelectionPanel();
+      requestDrawAll();
+    }
+  });
+}
+if (planSelSpeedEl) {
+  planSelSpeedEl.addEventListener("input", () => clampDigits(planSelSpeedEl, 3));
+  planSelSpeedEl.addEventListener("blur", () => {
+    if (planSelected < 0 || planSelected >= planWaypoints.length) return;
+    const v = Number(planSelSpeedEl.value);
+    if (isFinite(v)) {
+      planWaypoints[planSelected].speed = clampPlanSpeed(v);
       updatePlanSelectionPanel();
       requestDrawAll();
     }
@@ -9265,6 +9540,10 @@ if (keybindsModal) {
 if (settingsModal) {
   settingsModal.setAttribute("hidden", "");
   settingsModal.style.display = "none";
+}
+if (planTemplateModal) {
+  planTemplateModal.setAttribute("hidden", "");
+  planTemplateModal.style.display = "none";
 }
 // Load PROS dir from backend after a short delay to ensure ORIGIN is set
 setTimeout(() => {

@@ -105,7 +105,8 @@
           Tip: Drag the thin handles to resize/collapse the sidebar (left) and
           timeline (bottom).
           <p>
-            Field images courtesy of <a href="https://field-rendering.jerryio.com/" target="_blank" rel="noopener noreferrer">Field Renderer by JerryIO</a>
+            Field images courtesy of <a href="https://field-rendering.jerryio.com/" target="_blank"
+              rel="noopener noreferrer">Field Renderer by JerryIO</a>
           </p>
         </div>
         <div style="margin-top:14px;display:flex;gap:8px;align-self:center;position:absolute;bottom:10px;right:10px">
@@ -702,7 +703,7 @@
               <div class="statsTitle">Selected Waypoint</div>
               <div class="statsHint" id="planSelIndex">—</div>
             </div>
-            <div class="grid3" style="margin-top:10px">
+            <div class="grid4" style="margin-top:10px">
               <div>
                 <label>X</label>
                 <input id="planSelX" type="text" inputmode="decimal" />
@@ -715,6 +716,22 @@
                 <label>θ°</label>
                 <input id="planSelTheta" type="text" inputmode="decimal" />
               </div>
+              <div>
+                <label>Speed</label>
+                <input id="planSelSpeed" type="text" inputmode="numeric" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="section planningOnly">
+          <div class="statsPanel planningExportPanel">
+            <div class="statsHeader">
+              <div class="statsTitle" style="margin-bottom: 4px;">Export</div>
+              <div class="statsHint">Template</div>
+            </div>
+            <div class="planningExportActions">
+              <button id="btnPlanCopyCode" class="iconBtn secondaryBtn" type="button">Copy Code</button>
+              <button id="btnPlanEditTemplate" class="iconBtn secondaryBtn" type="button">Edit Template</button>
             </div>
           </div>
         </div>
@@ -859,6 +876,39 @@
                   Settings</button>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="planTemplateModal" class="modal" hidden>
+      <div class="modalBackdrop"></div>
+      <div class="modalCard settingsCard templateModalCard" role="dialog" aria-modal="true"
+        aria-labelledby="planTemplateTitle" tabindex="-1">
+        <div class="modalHeader">
+          <div class="modalHeaderContent">
+            <div id="planTemplateTitle" class="settingsMainTitle">Edit Template</div>
+            <div class="settingsSubtitle">One template block is generated for each waypoint.</div>
+          </div>
+          <button id="btnPlanTemplateClose" class="iconBtn closeBtn" title="Close">✕</button>
+        </div>
+        <div class="modalBody settingsBody">
+          <div class="settingsSection settingsGroup">
+            <div class="settingsGroupHeader">
+              <div class="settingsGroupIcon">&lt;/&gt;</div>
+              <div class="settingsGroupTitle" style="font-size: 20px;">Planning Export Template</div>
+            </div>
+            <div class="settingsGroupBody">
+              <label class="settingsDescription" for="planTemplateInput">Available placeholders: <code>${x}</code>,
+                <code>${y}</code>,
+                <code>${theta}</code>, <code>${distance}</code>, <code>${iteration}</code>, and <code>${speed}</code>.</label>
+              <textarea id="planTemplateInput" class="settingsInput planTemplateInput" spellcheck="false"
+                placeholder="moveToPoint(${x}, ${y}, ${theta});"></textarea>
+            </div>
+          </div>
+          <div class="exportFooter">
+            <button id="btnPlanTemplateCancel" class="iconBtn secondaryBtn" type="button">Cancel</button>
+            <button id="btnPlanTemplateConfirm" class="iconBtn secondaryBtn" type="button">Confirm</button>
           </div>
         </div>
       </div>

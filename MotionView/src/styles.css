@@ -301,6 +301,12 @@ details>summary::-webkit-details-marker {
   gap: 10px;
 }
 
+.grid4 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 10px;
+}
+
 label {
   font-size: 12px;
   color: var(--muted);
@@ -2074,6 +2080,22 @@ body:not(.mode-planning) #rightPlanning {
   margin-top: auto;
 }
 
+.planningExportPanel {
+  gap: 10px;
+}
+
+.planningExportActions {
+  display: flex;
+  gap: 8px;
+}
+
+.planningExportActions .iconBtn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 32px;
+  font-size: 13px;
+}
+
 #rightPlanning.planListCollapsed .planList {
   display: none;
 }
@@ -2198,6 +2220,19 @@ body:not(.mode-planning) #rightPlanning {
   outline: none;
   border-color: #1e4a90;
   background: rgba(0, 0, 0, 0.5);
+}
+
+.planTemplateInput {
+  min-height: 50px;
+  max-height: 150px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.templateModalCard {
+  max-width: 760px !important;
 }
 
 /* Remove ugly native select styling */
