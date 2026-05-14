@@ -446,7 +446,6 @@ const settingsPlanSnapStep = document.getElementById("settingsPlanSnapStep");
 const settingsPlanThetaSnapStep = document.getElementById("settingsPlanThetaSnapStep");
 const settingsPlanLimitBounds = document.getElementById("settingsPlanLimitBounds");
 const planSplit = document.getElementById("planSplit");
-const settingsPlanSpeed = document.getElementById("settingsPlanSpeed");
 const planListEl = document.getElementById("planList");
 const planCountEl = document.getElementById("planCount");
 const planSelIndexEl = document.getElementById("planSelIndex");
@@ -525,6 +524,11 @@ const WATCH_GRAPH_MARGIN = 16;
 let data = null;
 let showPreviousYearFields = false;
 let planExportTemplate = DEFAULT_PLAN_EXPORT_TEMPLATE;
+
+function readPlanSpeed(value, fallback = 127) {
+  const num = Number(value);
+  return Number.isFinite(num) ? clampPlanSpeed(num) : fallback;
+}
 
 function isFieldCurrentYear(field) {
   return String(field?.key || "").includes(CURRENT_GAME_YEAR);
@@ -786,12 +790,6 @@ function getPlanThetaSnapStepDeg() {
   return (isFinite(v) && v > 0) ? v : 0;
 }
 
-function getPlanSpeedUnitsPerSec() {
-  const pct = clamp(Number(settingsPlanSpeed?.value || 0), 0, 100);
-  const { maxV } = getMinMaxSpeed();
-  return (maxV || 0) * (pct / 100);
-}
-
 function planLimitBoundsEnabled() {
   return settingsPlanLimitBounds ? settingsPlanLimitBounds.checked : true;
 }
@@ -809,7 +807,27 @@ function applyPlanThetaSnapDeg(v) {
 }
 
 function clampPlanSpeed(v) {
-  return clamp(v, -127, 127);
+  return clamp(v, 1, 127);
+}
+
+function getPlanSegmentIndexAtDist(d) {
+  if (planWaypoints.length < 2) return -1;
+  let rem = clamp(d, 0, planTotalLength());
+  for (let i = 0; i < planWaypoints.length - 1; i += 1) {
+    const a = planWaypoints[i];
+    const b = planWaypoints[i + 1];
+    const seg = Math.hypot(b.x - a.x, b.y - a.y);
+    if (seg <= 0.0001) continue;
+    if (rem <= seg) return i;
+    rem -= seg;
+  }
+  return Math.max(0, planWaypoints.length - 2);
+}
+
+function getPlanSpeedUnitsPerSecAtDist(d) {
+  const segIdx = getPlanSegmentIndexAtDist(d);
+  if (segIdx < 0) return Math.abs(readPlanSpeed(planWaypoints[0]?.speed, 127));
+  return Math.abs(readPlanSpeed(planWaypoints[segIdx]?.speed, 127));
 }
 
 function clampPlanCoordX(v) {
@@ -830,7 +848,7 @@ let planUndoApplying = false;
 
 function clonePlanState() {
   return {
-    waypoints: planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: clampPlanSpeed(Number(p.speed) || 0) })),
+    waypoints: planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: readPlanSpeed(p.speed, 127) })),
     selected: Array.from(planSelectedSet),
     selectedIndex: planSelected,
     playDist: planPlayDist,
@@ -850,7 +868,7 @@ function planStatesEqual(a, b) {
     const ap = a.waypoints[i];
     const bp = b.waypoints[i];
     if (!bp) return false;
-    if (ap.x !== bp.x || ap.y !== bp.y || (ap.theta ?? 0) !== (bp.theta ?? 0) || clampPlanSpeed(Number(ap.speed) || 0) !== clampPlanSpeed(Number(bp.speed) || 0)) return false;
+    if (ap.x !== bp.x || ap.y !== bp.y || (ap.theta ?? 0) !== (bp.theta ?? 0) || readPlanSpeed(ap.speed, 127) !== readPlanSpeed(bp.speed, 127)) return false;
   }
   return true;
 }
@@ -868,7 +886,7 @@ function pushPlanUndo() {
 function applyPlanState(state) {
   if (!state) return;
   planUndoApplying = true;
-  planWaypoints = state.waypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: clampPlanSpeed(Number(p.speed) || 0) }));
+  planWaypoints = state.waypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: readPlanSpeed(p.speed, 127) }));
   planSetSelection(state.selected || []);
   planPlayDist = clamp(state.playDist ?? 0, 0, planTotalLength());
   planPause();
@@ -1024,7 +1042,7 @@ function buildPlanExportCode(template = planExportTemplate) {
       theta: formatTemplateNumber(planThetaDegAt(index)),
       distance: formatTemplateNumber(distance),
       iteration: String(index),
-      speed: formatTemplateNumber(clampPlanSpeed(Number(point.speed) || 0), 0),
+      speed: formatTemplateNumber(readPlanSpeed(point.speed, 127), 0),
     };
     return rawTemplate.replace(/\$\{(x|y|theta|distance|iteration|speed)\}/g, (_, token) => replacements[token] ?? "");
   }).join("\n");
@@ -1094,7 +1112,7 @@ function renderPlanList() {
     const theta = planThetaDegAt(i);
     item.innerHTML = `
       <div class="muted">#${i + 1}</div>
-      <div>X: ${fmtNum(p.x, 2)}  Y: ${fmtNum(p.y, 2)}  θ: ${fmtNum(theta, 1)}°  S: ${fmtNum(clampPlanSpeed(Number(p.speed) || 0), 0)}</div>
+      <div>X: ${fmtNum(p.x, 2)}  Y: ${fmtNum(p.y, 2)}  θ: ${fmtNum(theta, 1)}°  S: ${fmtNum(readPlanSpeed(p.speed, 127), 0)}</div>
     `;
     item.addEventListener("click", () => {
       planSelectSingle(i);
@@ -1214,7 +1232,7 @@ async function loadSavedPaths() {
         x: Number(p.x) || 0,
         y: Number(p.y) || 0,
         theta: Number(p.theta) || 0,
-        speed: clampPlanSpeed(Number(p.speed) || 0),
+        speed: readPlanSpeed(p.speed, 127),
       }));
       planSetSelection([]);
       planPlayDist = 0;
@@ -1249,7 +1267,7 @@ function scheduleSavedPathsSave() {
 
 function buildSavedPathsPayload() {
   return JSON.stringify({
-    "planned-path": planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: clampPlanSpeed(Number(p.speed) || 0) })),
+    "planned-path": planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: readPlanSpeed(p.speed, 127) })),
     "robot-path": rawPoses.map((p) => ({
       t: p.t ?? null,
       x: p.x, y: p.y,
@@ -1323,7 +1341,7 @@ function updatePlanSelectionPanel() {
   const xVal = String(fmtNum(p.x, 2));
   const yVal = String(fmtNum(p.y, 2));
   const tVal = String(fmtNum(planThetaDegAt(planSelected) ?? 0, 1));
-  const sVal = String(fmtNum(clampPlanSpeed(Number(p.speed) || 0), 0));
+  const sVal = String(fmtNum(readPlanSpeed(p.speed, 127), 0));
   planSelXEl.value = xVal;
   planSelYEl.value = yVal;
   planSelThetaEl.value = tVal;
@@ -5372,7 +5390,7 @@ canvas.addEventListener("pointerdown", (e) => {
         x: clampPlanCoordX(w.x),
         y: clampPlanCoordY(w.y),
         theta: 0,
-        speed: previous ? clampPlanSpeed(Number(previous.speed) || 0) : 0,
+        speed: previous ? readPlanSpeed(previous.speed, 127) : 127,
       });
       planSelectSingle(planWaypoints.length - 1);
       planChanged();
@@ -5736,8 +5754,8 @@ function planPlay() {
     const dtWall = (now - planLastWall) / 1000;
     planLastWall = now;
     const total = planTotalLength();
-    const planSpeed = getPlanSpeedUnitsPerSec();
-    planPlayDist += dtWall * planSpeed * playRate;
+    const planSpeed = getPlanSpeedUnitsPerSecAtDist(planPlayDist);
+    planPlayDist += dtWall * planSpeed * (playRate / 2);
     if (planPlayDist >= total) {
       planPlayDist = total;
       planPause();
@@ -7488,9 +7506,6 @@ async function loadSettings() {
       if (settings.planLimitBounds !== undefined && settingsPlanLimitBounds) {
         settingsPlanLimitBounds.checked = !!settings.planLimitBounds;
       }
-      if (settings.planSpeed !== undefined && settingsPlanSpeed) {
-        settingsPlanSpeed.value = settings.planSpeed;
-      }
       if (settings.planExportTemplate !== undefined) {
         const savedTemplate = String(settings.planExportTemplate || "");
         planExportTemplate = savedTemplate.trim() ? savedTemplate : DEFAULT_PLAN_EXPORT_TEMPLATE;
@@ -7624,7 +7639,6 @@ async function saveSettings() {
       planSnapStep: settingsPlanSnapStep ? settingsPlanSnapStep.value : "0",
       planThetaSnapStep: settingsPlanThetaSnapStep ? settingsPlanThetaSnapStep.value : "0",
       planLimitBounds: settingsPlanLimitBounds ? settingsPlanLimitBounds.checked : true,
-      planSpeed: settingsPlanSpeed ? settingsPlanSpeed.value : "50",
       planExportTemplate,
       refreshIntervalMs: leftRefreshIntervalEl ? leftRefreshIntervalEl.value : "0",
       liveDebug: settingsLiveDebug ? settingsLiveDebug.checked : liveDebugEnabled,
@@ -8556,11 +8570,6 @@ if (settingsPlanLimitBounds) {
     saveSettings();
   });
 }
-if (settingsPlanSpeed) {
-  settingsPlanSpeed.addEventListener("input", () => {
-    syncSettingsToMain();
-  });
-}
 if (settingsRobotImgScale) {
   settingsRobotImgScale.addEventListener("input", () => {
     syncSettingsToMain();
@@ -8998,12 +9007,6 @@ if (settingsPlanLimitBounds) {
     saveSettings();
   });
 }
-if (settingsPlanSpeed) {
-  settingsPlanSpeed.addEventListener("input", () => {
-    saveSettings();
-  });
-}
-
 function bindPlanField(el, getter, setter) {
   if (!el) return;
   el.addEventListener("focus", () => {
@@ -9065,7 +9068,7 @@ bindPlanField(
 );
 bindPlanField(
   planSelSpeedEl,
-  () => fmtNum(clampPlanSpeed(Number(planWaypoints[planSelected]?.speed) || 0), 0),
+  () => fmtNum(readPlanSpeed(planWaypoints[planSelected]?.speed, 127), 0),
   (v) => { planWaypoints[planSelected].speed = clampPlanSpeed(v); }
 );
 
