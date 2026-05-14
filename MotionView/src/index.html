@@ -681,42 +681,40 @@
       </div>
 
       <div id="rightPlanning" class="rightSidebar">
-        <div class="section planningOnly planSelSection">
-          <div class="statsPanel">
+        <div class="section planningOnly planWaypointSection">
+          <div class="statsPanel planWaypointPanel">
             <div class="statsHeader">
               <div class="statsTitle">Waypoints</div>
               <div class="statsHint" id="planCount">0</div>
             </div>
             <div id="planList" class="planList"></div>
+            <div class="planSelectedPanel">
+              <div class="statsHeader">
+                <div class="statsTitle">Selected Waypoint</div>
+                <div class="statsHint" id="planSelIndex">—</div>
+              </div>
+              <div class="grid4" style="margin-top:10px">
+                <div>
+                  <label>X</label>
+                  <input id="planSelX" type="text" inputmode="decimal" />
+                </div>
+                <div>
+                  <label>Y</label>
+                  <input id="planSelY" type="text" inputmode="decimal" />
+                </div>
+                <div>
+                  <label>θ°</label>
+                  <input id="planSelTheta" type="text" inputmode="decimal" />
+                </div>
+                <div>
+                  <label>Speed</label>
+                  <input id="planSelSpeed" type="text" inputmode="numeric" />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div id="planSplit" class="splitterH planningOnly" title="Drag to resize waypoint list"></div>
-        <div class="section planningOnly">
-          <div class="statsPanel">
-            <div class="statsHeader">
-              <div class="statsTitle">Selected Waypoint</div>
-              <div class="statsHint" id="planSelIndex">—</div>
-            </div>
-            <div class="grid4" style="margin-top:10px">
-              <div>
-                <label>X</label>
-                <input id="planSelX" type="text" inputmode="decimal" />
-              </div>
-              <div>
-                <label>Y</label>
-                <input id="planSelY" type="text" inputmode="decimal" />
-              </div>
-              <div>
-                <label>θ°</label>
-                <input id="planSelTheta" type="text" inputmode="decimal" />
-              </div>
-              <div>
-                <label>Speed</label>
-                <input id="planSelSpeed" type="text" inputmode="numeric" />
-              </div>
-            </div>
-          </div>
-        </div>
         <div class="section planningOnly">
           <div class="statsPanel planningExportPanel">
             <div class="statsHeader">
@@ -727,6 +725,19 @@
               <button id="btnPlanCopyCode" class="iconBtn secondaryBtn" type="button">Copy Code</button>
               <button id="btnPlanEditTemplate" class="iconBtn secondaryBtn" type="button">Edit Template</button>
             </div>
+          </div>
+        </div>
+        <div class="section planningOnly">
+          <div class="statsPanel planEventsPanel">
+            <div class="statsHeader">
+              <div class="statsTitle" style="margin-bottom: 4px; align-items: center;">Custom Events</div>
+              <button id="btnPlanAddObject" class="iconBtn secondaryBtn planEventAddBtn" type="button" title="Add Object" aria-label="Add Object">
+                <svg width="20" height="20">
+                  <use href="./assets/svg/icons.svg#icon-addPlanningObject"></use>
+                </svg>
+              </button>
+            </div>
+            <div id="planObjectList" class="planObjectList"></div>
           </div>
         </div>
       </div>
@@ -752,6 +763,8 @@
       </div>
       <canvas id="timelineCanvas"></canvas>
     </div>
+
+    <div id="planningTimelineSplit" class="splitterH planningOnly" title="Drag to resize planning timeline"></div>
 
     <div id="planningTimelineBar">
       <div id="planningTimelineTop">
@@ -882,7 +895,7 @@
         <div class="modalHeader">
           <div class="modalHeaderContent">
             <div id="planTemplateTitle" class="settingsMainTitle">Edit Template</div>
-            <div class="settingsSubtitle">One template block is generated for each waypoint.</div>
+            <div id="planTemplateSubtitle" class="settingsSubtitle">One template block is generated for each waypoint.</div>
           </div>
           <button id="btnPlanTemplateClose" class="iconBtn closeBtn" title="Close">✕</button>
         </div>
@@ -890,19 +903,43 @@
           <div class="settingsSection settingsGroup">
             <div class="settingsGroupHeader">
               <div class="settingsGroupIcon">&lt;/&gt;</div>
-              <div class="settingsGroupTitle" style="font-size: 20px;">Planning Export Template</div>
+              <div id="planTemplateGroupTitle" class="settingsGroupTitle" style="font-size: 20px;">Planning Export Template</div>
             </div>
             <div class="settingsGroupBody">
-              <label class="settingsDescription" for="planTemplateInput">Available placeholders: <code>${x}</code>,
+              <div id="planTemplateNameField" hidden>
+                <label class="fieldLabel" for="planTemplateNameInput">Name</label>
+                <label id="planTemplateNameDescription" class="settingsDescription" for="planTemplateNameInput">Method name</label>
+                <input id="planTemplateNameInput" type="text" class="settingsInput" maxlength="25" autocomplete="off" spellcheck="false" />
+              </div>
+              <label id="planTemplateDescription" class="settingsDescription" for="planTemplateInput">Available placeholders: <code>${x}</code>,
                 <code>${y}</code>,
                 <code>${theta}</code>, <code>${distance}</code>, <code>${iteration}</code>, and <code>${speed}</code>.</label>
               <textarea id="planTemplateInput" class="settingsInput planTemplateInput" spellcheck="false"
                 placeholder="moveToPoint(${x}, ${y}, ${theta});"></textarea>
+              <div id="planTemplateValidation" class="templateModalValidation" hidden></div>
             </div>
           </div>
           <div class="exportFooter">
             <button id="btnPlanTemplateCancel" class="iconBtn secondaryBtn" type="button">Cancel</button>
             <button id="btnPlanTemplateConfirm" class="iconBtn secondaryBtn" type="button">Confirm</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="planObjectDeleteModal" class="modal" hidden>
+      <div class="modalBackdrop"></div>
+      <div class="modalCard planConfirmModalCard" role="dialog" aria-modal="true" aria-labelledby="planObjectDeleteTitle" tabindex="-1">
+        <div class="modalHeader">
+          <div class="modalHeaderContent">
+            <div id="planObjectDeleteTitle" class="settingsMainTitle">Remove Object</div>
+          </div>
+          <button id="btnPlanObjectDeleteClose" class="iconBtn closeBtn" title="Close">✕</button>
+        </div>
+        <div class="modalBody settingsBody">
+          <div id="planObjectDeleteMessage" class="planConfirmMessage">Are you sure you want to remove this object?</div>
+          <div class="exportFooter">
+            <button id="btnPlanObjectDeleteCancel" class="iconBtn secondaryBtn" type="button">Cancel</button>
+            <button id="btnPlanObjectDeleteConfirm" class="iconBtn secondaryBtn" type="button">Confirm</button>
           </div>
         </div>
       </div>

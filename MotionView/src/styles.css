@@ -493,7 +493,7 @@ label {
   background: rgba(8, 12, 18, 0.95);
   display: flex;
   flex-direction: column;
-  padding: 10px 12px;
+  padding: 10px 12px 5px;
   gap: 8px;
 }
 
@@ -521,6 +521,7 @@ label {
   border-radius: 12px;
   background: rgba(16, 23, 32, 0.55);
   display: block;
+  margin-bottom: 5px;
 }
 
 #planningTimelineHint {
@@ -711,12 +712,13 @@ header.topBar.isOverflowing .topBarRight {
 body.mode-planning .app {
   height: calc(100vh - var(--topbarH));
   display: grid;
-  grid-template-rows: 1fr var(--planningTimelineH);
+  grid-template-rows: 1fr 8px var(--planningTimelineH);
 }
 
 body.mode-planning #left,
 body.mode-planning #timelineBar,
 body.mode-planning #hSplit,
+body.mode-planning #planningTimelineSplit,
 body.mode-planning #vSplit,
 body.mode-planning #vSplitL,
 body.mode-planning #floatWin,
@@ -754,8 +756,16 @@ body.mode-planning #timelineBar {
   display: none;
 }
 
+#planningTimelineSplit {
+  display: none;
+}
+
 body.mode-planning #planningTimelineBar {
   display: flex;
+}
+
+body.mode-planning #planningTimelineSplit {
+  display: block;
 }
 
 body.mode-planning .settingsViewing {
@@ -2076,12 +2086,247 @@ body:not(.mode-planning) #rightPlanning {
   box-shadow: 0 0 0 1px rgba(120, 220, 160, 0.15) inset;
 }
 
-.planSelSection {
+.planWaypointSection {
   margin-top: auto;
+}
+
+.planWaypointPanel {
+  gap: 10px;
+}
+
+.planSelectedPanel {
+  margin-top: 10px;
+  padding: 10px 12px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .planningExportPanel {
   gap: 10px;
+}
+
+.planEventsPanel {
+  gap: 12px;
+}
+
+.planEventAddBtn {
+  height: 34px;
+  min-width: 34px;
+  width: 34px;
+  padding: 0;
+  margin-left: auto;
+  border-radius: 10px;
+  color: var(--text);
+}
+
+.planObjectList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.planObjectCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.planObjectHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.planObjectMeta {
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: calc(100% - 10px);
+}
+
+.planObjectName {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  min-height: 20px;
+  cursor: text;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planObjectSubtle {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.planObjectNameEditor {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 6px 9px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.planObjectLatest {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(110, 168, 255, 0.1);
+  border: 1px solid rgba(110, 168, 255, 0.14);
+  margin-left: auto;
+  text-align: left;
+}
+
+.planObjectRemoveActionBtn svg,
+.planMethodRemoveBtn svg,
+.planEventAddBtn svg {
+  display: block;
+  color: currentColor;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  overflow: visible;
+}
+
+.planObjectLatestLabel {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.planObjectLatestValue {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.planMethodList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.planMethodEmpty {
+  padding: 10px 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.planMethodCard {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(7, 11, 17, 0.5);
+  cursor: grab;
+  transform-origin: center;
+  transition: transform 150ms ease, opacity 150ms ease, box-shadow 150ms ease;
+}
+
+.planMethodCard:active {
+  cursor: grabbing;
+}
+
+.planMethodCard.isDragging {
+  transform: scale(0.72);
+  opacity: 0.78;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+}
+
+.planMethodDragGhost {
+  position: fixed;
+  top: -10000px;
+  left: -10000px;
+  z-index: -1;
+  pointer-events: none;
+  transform: scale(0.72);
+  transform-origin: top left;
+  opacity: 0.92;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+}
+
+.planMethodGrip {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: -1px;
+}
+
+.planMethodContent {
+  min-width: 0;
+}
+
+.planMethodName {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.planMethodCode {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planMethodRemoveBtn {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 10px;
+  color: #fff;
+}
+
+.planMethodAddBtn {
+  align-self: flex-start;
+  height: 30px;
+  min-width: 92px;
+  font-size: 12px;
+}
+
+.planMethodAddBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.planObjectActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.planObjectRemoveActionBtn {
+  align-self: flex-end;
+  width: 38px;
+  min-width: 38px;
+  height: 30px;
+  padding: 0;
+  margin-left: auto;
+  color: #fff;
 }
 
 .planningExportActions {
@@ -2098,6 +2343,15 @@ body:not(.mode-planning) #rightPlanning {
 
 #rightPlanning.planListCollapsed .planList {
   display: none;
+}
+
+#rightPlanning.planListCollapsed .planSelectedPanel {
+  display: none;
+}
+
+#rightPlanning.planListCollapsed .planWaypointPanel {
+  gap: 0;
+  padding-bottom: 10px;
 }
 
 /* ===== NEW SETTINGS MODAL STYLING ===== */
@@ -2231,8 +2485,24 @@ body:not(.mode-planning) #rightPlanning {
   white-space: pre;
 }
 
+.templateModalValidation {
+  min-height: 16px;
+  color: #f2cb6b;
+  font-size: 12px;
+}
+
 .templateModalCard {
   max-width: 760px !important;
+}
+
+.planConfirmModalCard {
+  max-width: 360px !important;
+}
+
+.planConfirmMessage {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 /* Remove ugly native select styling */

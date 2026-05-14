@@ -1,0 +1,8 @@
+<!-- Icon source code from https://www.iconpacks.net -->
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 90" style="display: none;">
+  <!-- Add planning object -->
+  <g fill="currentColor">
+    <path d="M 86.5 41.5 h -38 v -38 C 48.5 1.567 46.933 0 45 0 c -1.933 0 -3.5 1.567 -3.5 3.5 v 38 h -38 C 1.567 41.5 0 43.067 0 45 s 1.567 3.5 3.5 3.5 h 38 v 38 c 0 1.933 1.567 3.5 3.5 3.5 c 1.933 0 3.5 -1.567 3.5 -3.5 v -38 h 38 c 1.933 0 3.5 -1.567 3.5 -3.5 S 88.433 41.5 86.5 41.5 z"/>
+  </g>
+</svg>

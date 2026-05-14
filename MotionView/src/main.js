@@ -205,6 +205,7 @@ const watchFilter = document.getElementById("watchFilter");
 const watchSort = document.getElementById("watchSort");
 const vSplit = document.getElementById("vSplit");
 const hSplit = document.getElementById("hSplit");
+const planningTimelineSplit = document.getElementById("planningTimelineSplit");
 const timePill = document.getElementById("timePill");
 const deltaPill = document.getElementById("deltaPill");
 const pointPill = document.getElementById("pointPill");
@@ -220,11 +221,13 @@ const rowGrid = document.querySelector(".row");
 
 const timelineBar = document.getElementById("timelineBar");
 const timelineTop = document.getElementById("timelineTop");
+const planningTimelineBar = document.getElementById("planningTimelineBar");
 
 const layoutState = {
   lastLeftSidebarW: 360,
   lastRightSidebarW: 360,
   lastTimelineH: 260,
+  lastPlanningTimelineH: 90,
 };
 
 const TOP_BAR_CENTER_STATUS_GAP_PX = 16;  // Gap between status text and center control
@@ -387,10 +390,26 @@ const btnApplyRunSettings = document.getElementById("btnApplyRunSettings");
 const btnPlanCopyCode = document.getElementById("btnPlanCopyCode");
 const btnPlanEditTemplate = document.getElementById("btnPlanEditTemplate");
 const planTemplateModal = document.getElementById("planTemplateModal");
+const planTemplateTitleEl = document.getElementById("planTemplateTitle");
+const planTemplateSubtitleEl = document.getElementById("planTemplateSubtitle");
+const planTemplateGroupTitleEl = document.getElementById("planTemplateGroupTitle");
+const planTemplateDescriptionEl = document.getElementById("planTemplateDescription");
+const planTemplateNameFieldEl = document.getElementById("planTemplateNameField");
+const planTemplateNameDescriptionEl = document.getElementById("planTemplateNameDescription");
+const planTemplateNameInput = document.getElementById("planTemplateNameInput");
+const planTemplateValidationEl = document.getElementById("planTemplateValidation");
 const btnPlanTemplateClose = document.getElementById("btnPlanTemplateClose");
 const btnPlanTemplateCancel = document.getElementById("btnPlanTemplateCancel");
 const btnPlanTemplateConfirm = document.getElementById("btnPlanTemplateConfirm");
 const planTemplateInput = document.getElementById("planTemplateInput");
+const btnPlanAddObject = document.getElementById("btnPlanAddObject");
+const planObjectListEl = document.getElementById("planObjectList");
+const planEventsHintEl = document.querySelector(".planEventsHint");
+const planObjectDeleteModal = document.getElementById("planObjectDeleteModal");
+const planObjectDeleteMessageEl = document.getElementById("planObjectDeleteMessage");
+const btnPlanObjectDeleteClose = document.getElementById("btnPlanObjectDeleteClose");
+const btnPlanObjectDeleteCancel = document.getElementById("btnPlanObjectDeleteCancel");
+const btnPlanObjectDeleteConfirm = document.getElementById("btnPlanObjectDeleteConfirm");
 const watchGraphPanel = document.getElementById("watchGraphPanel");
 const btnCloseWatchGraph = document.getElementById("btnCloseWatchGraph");
 const watchGraphHeader = document.getElementById("watchGraphHeader");
@@ -774,6 +793,41 @@ let PLAN_MARKER_MAX_IN_VIEWING = 1; // Max size of waypoint marker in viewing mo
 let planScrubbing = false;
 let planOverlayVisible = false;
 let savedPathsSaveTimer = null;
+let planObjects = [];
+let planEditingObjectId = null;
+let planEditingObjectOriginalName = "";
+let planObjectEditSelectAll = false;
+let planTemplateModalState = null;
+let pendingPlanObjectRemovalId = null;
+
+function createPlanObjectId() {
+  return `plan-object-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createPlanMethodId() {
+  return `plan-method-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getDefaultPlanObjectName(index = planObjects.length) {
+  return `Object ${index + 1}`;
+}
+
+function normalizePlanObjects(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map((obj, index) => {
+    const rawMethods = Array.isArray(obj?.methods) ? obj.methods : [];
+    return {
+      id: (typeof obj?.id === "string" && obj.id.trim()) ? obj.id.trim() : createPlanObjectId(),
+      name: typeof obj?.name === "string" ? obj.name : "",
+      latestMethod: typeof obj?.latestMethod === "string" ? obj.latestMethod : "",
+      methods: rawMethods.map((method, methodIndex) => ({
+        id: (typeof method?.id === "string" && method.id.trim()) ? method.id.trim() : `plan-method-${index + 1}-${methodIndex + 1}`,
+        name: typeof method?.name === "string" ? method.name : "",
+        code: typeof method?.code === "string" ? method.code : "",
+      })),
+    };
+  });
+}
 
 function getPlanMoveStepIn() {
   const v = Number(settingsPlanMoveStep?.value || 0.5);
@@ -1069,12 +1123,92 @@ async function copyTextToClipboard(text) {
 }
 
 function openPlanTemplateModal() {
+  openSharedPlanTemplateModal({
+    title: "Edit Template",
+    subtitle: "One template block is generated for each waypoint.",
+    groupTitle: "Planning Export Template",
+    description: "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, and ${speed}.",
+    placeholder: "moveToPoint(${x}, ${y}, ${theta});",
+    codeValue: planExportTemplate,
+    showName: false,
+    confirmLabel: "Confirm",
+    onConfirm: ({ codeValue }) => {
+      planExportTemplate = codeValue.trim() ? codeValue : DEFAULT_PLAN_EXPORT_TEMPLATE;
+      saveSettings();
+    },
+  });
+}
+
+function closePlanTemplateModal() {
   if (!planTemplateModal) return;
+  planTemplateModal.setAttribute("hidden", "");
+  planTemplateModal.style.display = "none";
   if (planTemplateInput) planTemplateInput.value = planExportTemplate;
+  if (planTemplateNameInput) planTemplateNameInput.value = "";
+  if (planTemplateValidationEl) {
+    planTemplateValidationEl.hidden = true;
+    planTemplateValidationEl.textContent = "";
+  }
+  planTemplateModalState = null;
+}
+
+function confirmPlanTemplateModal() {
+  if (!planTemplateModalState) return;
+  const nameValue = String(planTemplateNameInput?.value || "").trim().slice(0, 25);
+  const codeValue = String(planTemplateInput?.value || "");
+  if (planTemplateModalState.showName && !nameValue) {
+    if (planTemplateValidationEl) {
+      planTemplateValidationEl.textContent = "Enter a name to continue.";
+      planTemplateValidationEl.hidden = false;
+    }
+    planTemplateNameInput?.focus();
+    return;
+  }
+  planTemplateModalState.onConfirm?.({ nameValue, codeValue });
+  closePlanTemplateModal();
+}
+
+function openSharedPlanTemplateModal({
+  title = "Edit Template",
+  subtitle = "",
+  groupTitle = "Editor",
+  description = "",
+  placeholder = "",
+  codeValue = "",
+  showName = false,
+  nameValue = "",
+  nameDescription = "Name",
+  confirmLabel = "Confirm",
+  onConfirm = null,
+} = {}) {
+  if (!planTemplateModal) return;
+  planTemplateModalState = {
+    showName,
+    onConfirm,
+  };
+  if (planTemplateTitleEl) planTemplateTitleEl.textContent = title;
+  if (planTemplateSubtitleEl) planTemplateSubtitleEl.textContent = subtitle;
+  if (planTemplateGroupTitleEl) planTemplateGroupTitleEl.textContent = groupTitle;
+  if (planTemplateDescriptionEl) planTemplateDescriptionEl.textContent = description;
+  if (planTemplateInput) {
+    planTemplateInput.value = codeValue;
+    planTemplateInput.placeholder = placeholder;
+  }
+  if (planTemplateNameFieldEl) planTemplateNameFieldEl.hidden = !showName;
+  if (planTemplateNameInput) planTemplateNameInput.value = nameValue;
+  if (planTemplateNameDescriptionEl) planTemplateNameDescriptionEl.textContent = nameDescription;
+  if (btnPlanTemplateConfirm) btnPlanTemplateConfirm.textContent = confirmLabel;
+  if (planTemplateValidationEl) {
+    planTemplateValidationEl.hidden = true;
+    planTemplateValidationEl.textContent = "";
+  }
   planTemplateModal.removeAttribute("hidden");
   planTemplateModal.style.display = "flex";
   requestAnimationFrame(() => {
-    if (planTemplateInput) {
+    if (showName && planTemplateNameInput) {
+      planTemplateNameInput.focus();
+      planTemplateNameInput.select();
+    } else if (planTemplateInput) {
       planTemplateInput.focus();
       planTemplateInput.setSelectionRange(planTemplateInput.value.length, planTemplateInput.value.length);
     } else {
@@ -1084,20 +1218,333 @@ function openPlanTemplateModal() {
   });
 }
 
-function closePlanTemplateModal() {
-  if (!planTemplateModal) return;
-  planTemplateModal.setAttribute("hidden", "");
-  planTemplateModal.style.display = "none";
-  if (planTemplateInput) planTemplateInput.value = planExportTemplate;
+function openPlanMethodCreateModal(objectId) {
+  const object = planObjects.find((entry) => entry.id === objectId);
+  if (!object) return;
+  cancelPlanObjectNameEdit();
+  openSharedPlanTemplateModal({
+    title: "Add Method",
+    subtitle: `Create a new method for ${object.name || "this object"}.`,
+    groupTitle: "Method",
+    description: "Enter a method name and optional code. The name is required.",
+    placeholder: "",
+    codeValue: "",
+    showName: true,
+    nameValue: "",
+    nameDescription: "Method name",
+    confirmLabel: "Confirm",
+    onConfirm: ({ nameValue, codeValue }) => {
+      const target = planObjects.find((entry) => entry.id === objectId);
+      if (!target) return;
+      target.methods.unshift({
+        id: createPlanMethodId(),
+        name: nameValue.slice(0, 25),
+        code: codeValue,
+      });
+      savePlanObjectsUi();
+    },
+  });
 }
 
-function confirmPlanTemplateModal() {
-  if (planTemplateInput) {
-    const nextTemplate = planTemplateInput.value;
-    planExportTemplate = nextTemplate.trim() ? nextTemplate : DEFAULT_PLAN_EXPORT_TEMPLATE;
-    saveSettings();
+function openPlanMethodEditModal(objectId, methodId) {
+  const object = planObjects.find((entry) => entry.id === objectId);
+  const method = object?.methods?.find((entry) => entry.id === methodId);
+  if (!object || !method) return;
+  cancelPlanObjectNameEdit();
+  openSharedPlanTemplateModal({
+    title: "Edit Method",
+    subtitle: `Update ${method.name || "method"} in ${object.name || "this object"}.`,
+    groupTitle: "Method",
+    description: "Update the method name and code. The name is required.",
+    placeholder: "",
+    codeValue: method.code || "",
+    showName: true,
+    nameValue: method.name || "",
+    nameDescription: "Method name",
+    confirmLabel: "Confirm",
+    onConfirm: ({ nameValue, codeValue }) => {
+      const targetObject = planObjects.find((entry) => entry.id === objectId);
+      const targetMethod = targetObject?.methods?.find((entry) => entry.id === methodId);
+      if (!targetMethod) return;
+      targetMethod.name = nameValue.slice(0, 25);
+      targetMethod.code = codeValue;
+      savePlanObjectsUi();
+    },
+  });
+}
+
+function renderPlanObjects() {
+  if (!planObjectListEl) return;
+  planObjectListEl.innerHTML = "";
+
+  if (planEventsHintEl) {
+    planEventsHintEl.textContent = planObjects.length
+      ? "Double-click an object name to rename it."
+      : "Add an object to define reusable method groups for this route.";
   }
-  closePlanTemplateModal();
+
+  for (let i = 0; i < planObjects.length; i += 1) {
+    const obj = planObjects[i];
+    const card = document.createElement("article");
+    card.className = "planObjectCard";
+    card.dataset.objectId = obj.id;
+
+    const header = document.createElement("div");
+    header.className = "planObjectHeader";
+
+    const meta = document.createElement("div");
+    meta.className = "planObjectMeta";
+
+    if (planEditingObjectId === obj.id) {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "planObjectNameEditor";
+      input.value = obj.name;
+      input.placeholder = "Object name";
+      input.autocomplete = "off";
+      input.spellcheck = false;
+      input.dataset.objectId = obj.id;
+
+      input.addEventListener("blur", () => {
+        commitPlanObjectNameEdit(obj.id, input.value);
+      });
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commitPlanObjectNameEdit(obj.id, input.value);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          cancelPlanObjectNameEdit();
+        }
+      });
+      meta.appendChild(input);
+    } else {
+      const name = document.createElement("div");
+      name.className = "planObjectName";
+      name.textContent = obj.name || getDefaultPlanObjectName(i);
+      name.addEventListener("dblclick", () => {
+        startPlanObjectNameEdit(obj.id, true);
+      });
+      meta.appendChild(name);
+    }
+
+    const subtle = document.createElement("div");
+    subtle.className = "planObjectSubtle";
+    subtle.textContent = `${obj.methods.length} method${obj.methods.length === 1 ? "" : "s"}`;
+    meta.appendChild(subtle);
+    header.appendChild(meta);
+
+    const latest = document.createElement("div");
+    latest.className = "planObjectLatest";
+    latest.innerHTML = `
+      <span class="planObjectLatestLabel">Latest</span>
+      <span class="planObjectLatestValue">${escapeHtml(getPlanObjectLatestValue(obj))}</span>
+    `;
+    header.appendChild(latest);
+    card.appendChild(header);
+
+    const methodList = document.createElement("div");
+    methodList.className = "planMethodList";
+    if (!obj.methods.length) {
+      const empty = document.createElement("div");
+      empty.className = "planMethodEmpty";
+      empty.textContent = "No methods yet.";
+      methodList.appendChild(empty);
+    } else {
+      for (const method of obj.methods) {
+        const methodCard = document.createElement("div");
+        methodCard.className = "planMethodCard";
+        methodCard.draggable = true;
+        methodCard.dataset.objectId = obj.id;
+        methodCard.dataset.methodId = method.id;
+        methodCard.innerHTML = `
+          <div class="planMethodGrip" aria-hidden="true">⋮⋮</div>
+          <div class="planMethodContent">
+            <div class="planMethodName">${escapeHtml(method.name || "")}</div>
+            <div class="planMethodCode">${escapeHtml(method.code || "")}</div>
+          </div>
+          <button class="iconBtn planMethodRemoveBtn" type="button" title="Remove Method" aria-label="Remove Method" data-object-id="${escapeHtml(obj.id)}" data-method-id="${escapeHtml(method.id)}">
+            <svg width="30" height="30" aria-hidden="true">
+              <use href="./assets/svg/icons.svg#icon-removePlanningObject"></use>
+            </svg>
+          </button>
+        `;
+        attachPlanMethodCardDragHandlers(methodCard);
+        methodCard.addEventListener("dblclick", (e) => {
+          const removeBtn = e.target instanceof Element ? e.target.closest(".planMethodRemoveBtn") : null;
+          if (removeBtn) return;
+          openPlanMethodEditModal(obj.id, method.id);
+        });
+        methodList.appendChild(methodCard);
+      }
+    }
+    card.appendChild(methodList);
+
+    const actions = document.createElement("div");
+    actions.className = "planObjectActions";
+    actions.innerHTML = `
+      <button class="iconBtn secondaryBtn planMethodAddBtn" type="button" title="Add Method" aria-label="Add Method" data-object-id="${escapeHtml(obj.id)}">Add Method</button>
+      <button class="iconBtn secondaryBtn planObjectRemoveActionBtn" type="button" title="Remove Object" aria-label="Remove Object" data-object-id="${escapeHtml(obj.id)}">
+        <svg width="30" height="30" aria-hidden="true">
+          <use href="./assets/svg/icons.svg#icon-removePlanningObject"></use>
+        </svg>
+      </button>
+    `;
+    card.appendChild(actions);
+    planObjectListEl.appendChild(card);
+
+    if (planEditingObjectId === obj.id) {
+      const input = card.querySelector(".planObjectNameEditor");
+      if (input) {
+        requestAnimationFrame(() => {
+          input.focus();
+          if (planObjectEditSelectAll) input.select();
+          else input.setSelectionRange(input.value.length, input.value.length);
+        });
+      }
+    }
+  }
+}
+
+function startPlanObjectNameEdit(objectId, selectAll = false) {
+  const object = planObjects.find((entry) => entry.id === objectId);
+  if (!object) return;
+  planEditingObjectId = objectId;
+  planEditingObjectOriginalName = object.name || "";
+  planObjectEditSelectAll = !!selectAll;
+  renderPlanObjects();
+}
+
+function clearPlanObjectEditState() {
+  planEditingObjectId = null;
+  planEditingObjectOriginalName = "";
+  planObjectEditSelectAll = false;
+}
+
+function savePlanObjectsUi() {
+  renderPlanObjects();
+  scheduleSavedPathsSave();
+}
+
+function cancelPlanObjectNameEdit() {
+  clearPlanObjectEditState();
+  renderPlanObjects();
+}
+
+function commitActivePlanObjectEdit() {
+  if (!planEditingObjectId) return;
+  const activeInput = planObjectListEl?.querySelector?.(".planObjectNameEditor");
+  const nextValue = activeInput ? activeInput.value : planEditingObjectOriginalName;
+  commitPlanObjectNameEdit(planEditingObjectId, nextValue);
+}
+
+function commitPlanObjectNameEdit(objectId, nextNameRaw) {
+  const object = planObjects.find((entry) => entry.id === objectId);
+  if (!object) {
+    cancelPlanObjectNameEdit();
+    return;
+  }
+  const nextName = String(nextNameRaw || "").trim();
+  const objectIndex = planObjects.findIndex((entry) => entry.id === objectId);
+  object.name = nextName || planEditingObjectOriginalName || getDefaultPlanObjectName(objectIndex);
+  clearPlanObjectEditState();
+  savePlanObjectsUi();
+}
+
+function getPlanObjectLatestValue(object) {
+  if (!object || planWaypoints.length <= 0) return "\u2014";
+  return object.latestMethod || "\u2014";
+}
+
+function addPlanObject() {
+  const next = {
+    id: createPlanObjectId(),
+    name: "",
+    latestMethod: "",
+    methods: [],
+  };
+  planObjects.push(next);
+  planEditingObjectId = next.id;
+  planEditingObjectOriginalName = "";
+  planObjectEditSelectAll = false;
+  savePlanObjectsUi();
+}
+
+function removePlanObject(objectId) {
+  const idx = planObjects.findIndex((entry) => entry.id === objectId);
+  if (idx < 0) return;
+  planObjects.splice(idx, 1);
+  if (planEditingObjectId === objectId) clearPlanObjectEditState();
+  savePlanObjectsUi();
+}
+
+function requestPlanObjectRemoval(objectId) {
+  const object = planObjects.find((entry) => entry.id === objectId);
+  if (!object) return;
+  cancelPlanObjectNameEdit();
+  if (!object.methods.length) {
+    removePlanObject(objectId);
+    return;
+  }
+  pendingPlanObjectRemovalId = objectId;
+  if (planObjectDeleteMessageEl) {
+    planObjectDeleteMessageEl.textContent = `Are you sure you want to remove Object ${object.name}?`;
+  }
+  if (planObjectDeleteModal) {
+    planObjectDeleteModal.removeAttribute("hidden");
+    planObjectDeleteModal.style.display = "flex";
+    requestAnimationFrame(() => {
+      const modalCard = planObjectDeleteModal.querySelector(".modalCard");
+      if (modalCard) modalCard.focus();
+    });
+  }
+}
+
+function closePlanObjectDeleteModal() {
+  pendingPlanObjectRemovalId = null;
+  if (!planObjectDeleteModal) return;
+  planObjectDeleteModal.setAttribute("hidden", "");
+  planObjectDeleteModal.style.display = "none";
+}
+
+function confirmPlanObjectRemoval() {
+  if (pendingPlanObjectRemovalId) removePlanObject(pendingPlanObjectRemovalId);
+  closePlanObjectDeleteModal();
+}
+
+function removePlanMethod(objectId, methodId) {
+  const object = planObjects.find((entry) => entry.id === objectId);
+  if (!object) return;
+  const idx = object.methods.findIndex((entry) => entry.id === methodId);
+  if (idx < 0) return;
+  object.methods.splice(idx, 1);
+  savePlanObjectsUi();
+}
+
+function attachPlanMethodCardDragHandlers(card) {
+  if (!card || card.dataset.dragBound === "1") return;
+  card.dataset.dragBound = "1";
+  card.addEventListener("dragstart", (e) => {
+    card.classList.add("isDragging");
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    const ghost = card.cloneNode(true);
+    ghost.classList.remove("isDragging");
+    ghost.classList.add("planMethodDragGhost");
+    document.body.appendChild(ghost);
+    const rect = card.getBoundingClientRect();
+    const scale = 0.72;
+    dt.setDragImage(ghost, Math.round(rect.width * scale * 0.5), Math.round(rect.height * scale * 0.5));
+    card._planMethodDragGhost = ghost;
+  });
+  card.addEventListener("dragend", () => {
+    card.classList.remove("isDragging");
+    const ghost = card._planMethodDragGhost;
+    if (ghost) {
+      ghost.remove();
+      card._planMethodDragGhost = null;
+    }
+  });
 }
 
 function renderPlanList() {
@@ -1196,6 +1643,14 @@ function applySavedLayout(settings) {
     }
   }
 
+  const planningTimelineHeight = parseLayoutNumber(settings.layoutPlanningTimelineHeight);
+  if (planningTimelineHeight !== null) {
+    const next = clamp(planningTimelineHeight, 70, MAX_TIMELINE_H_PX);
+    root.style.setProperty("--planningTimelineH", `${next}px`);
+    layoutChanged = true;
+    layoutState.lastPlanningTimelineH = next;
+  }
+
   if (layoutChanged) {
     updateFieldLayout(true);
     resizeTimeline();
@@ -1234,10 +1689,14 @@ async function loadSavedPaths() {
         theta: Number(p.theta) || 0,
         speed: readPlanSpeed(p.speed, 127),
       }));
-      planSetSelection([]);
-      planPlayDist = 0;
-      planChanged();
+    } else {
+      planWaypoints = [];
     }
+    planSetSelection([]);
+    planPlayDist = 0;
+    planChanged();
+    planObjects = normalizePlanObjects(obj?.["planned-objects"] || []);
+    renderPlanObjects();
     rawPoses = normalizePoseArray(obj?.["robot-path"] || []);
     watches = normalizeWatches(obj?.["watches"] || []);
     logs = normalizeLogs(obj?.["logs"] || []);
@@ -1268,6 +1727,16 @@ function scheduleSavedPathsSave() {
 function buildSavedPathsPayload() {
   return JSON.stringify({
     "planned-path": planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: readPlanSpeed(p.speed, 127) })),
+    "planned-objects": planObjects.map((obj) => ({
+      id: obj.id,
+      name: obj.name,
+      latestMethod: obj.latestMethod || "",
+      methods: obj.methods.map((method) => ({
+        id: method.id,
+        name: method.name,
+        code: method.code,
+      })),
+    })),
     "robot-path": rawPoses.map((p) => ({
       t: p.t ?? null,
       x: p.x, y: p.y,
@@ -3782,7 +4251,6 @@ if (watchGraphCanvas) {
     renderWatchGraphForKey(watchGraphPanelKey);
   }, { passive: false });
 }
-
 
 function watchBooleanValueClass(value) {
   const text = String(value ?? "").trim().toLowerCase();
@@ -6920,12 +7388,19 @@ if (btnFit) {
 
 // Initialize UI on load
 leftSetUI("");
+renderPlanObjects();
 
 
 function getTimelineH() {
   const v = getComputedStyle(root).getPropertyValue("--timelineH").trim();
   const n = parseFloat(v);
   return isFinite(n) ? n : 260;
+};
+
+function getPlanningTimelineH() {
+  const v = getComputedStyle(root).getPropertyValue("--planningTimelineH").trim();
+  const n = parseFloat(v);
+  return isFinite(n) ? n : 90;
 };
 
 // -------- splitters with collapse --------
@@ -6992,6 +7467,9 @@ function getTimelineH() {
   let draggingH = false;
   let startY = 0;
   let startH = 0;
+  let draggingPlanningTimeline = false;
+  let startPlanningTimelineY = 0;
+  let startPlanningTimelineH = 0;
   let draggingPlanList = false;
   let startPlanY = 0;
   let startPlanH = 0;
@@ -7001,6 +7479,11 @@ function getTimelineH() {
     root.style.setProperty("--timelineH", `${px}px`);
   }
 
+  const setPlanningTimelineH = (px) => {
+    px = clamp(px, 70, MAX_TIMELINE_H_PX);
+    root.style.setProperty("--planningTimelineH", `${px}px`);
+  };
+
   hSplit.addEventListener("mousedown", (e) => {
     draggingH = true;
     startY = e.clientY;
@@ -7009,6 +7492,17 @@ function getTimelineH() {
     e.preventDefault();
 
   });
+
+  if (planningTimelineSplit) {
+    planningTimelineSplit.addEventListener("mousedown", (e) => {
+      if (appMode !== "planning") return;
+      draggingPlanningTimeline = true;
+      startPlanningTimelineY = e.clientY;
+      startPlanningTimelineH = getPlanningTimelineH();
+      document.body.style.cursor = "row-resize";
+      e.preventDefault();
+    });
+  }
   const getPlanListH = () => {
     const v = getComputedStyle(root).getPropertyValue("--planListH").trim();
     const n = parseFloat(v);
@@ -7091,6 +7585,16 @@ function getTimelineH() {
       resizeCanvas();
     }
 
+    if (draggingPlanningTimeline) {
+      const dy = e.clientY - startPlanningTimelineY;
+      const h = window.innerHeight;
+      const next = clamp(startPlanningTimelineH - dy, 70, Math.max(70, Math.floor(h * 0.55)));
+      layoutState.lastPlanningTimelineH = next;
+      setPlanningTimelineH(next);
+      resizePlanningTimeline();
+      resizeCanvas();
+    }
+
     if (draggingPlanList) {
       const dy = e.clientY - startPlanY;
       const rightH = rightPlanningEl?.getBoundingClientRect().height || window.innerHeight;
@@ -7109,12 +7613,13 @@ function getTimelineH() {
   });
 
   window.addEventListener("mouseup", () => {
-    const wasDragging = draggingV || draggingH || draggingVL || draggingPlanList;
+    const wasDragging = draggingV || draggingH || draggingVL || draggingPlanList || draggingPlanningTimeline;
     if (wasDragging) {
       draggingV = false;
       draggingH = false;
       draggingVL = false;
       draggingPlanList = false;
+      draggingPlanningTimeline = false;
       document.body.style.cursor = "";
       // If user re-expands from collapsed by dragging, restore visibility automatically
       if (appMode === "planning") {
@@ -7188,6 +7693,17 @@ function getTimelineH() {
     resizeCanvas();
     layoutTimelineCanvas();
   });
+
+  if (planningTimelineSplit) {
+    planningTimelineSplit.addEventListener("dblclick", () => {
+      const cur = getPlanningTimelineH();
+      const next = Math.abs(cur - 90) < 4 ? 160 : 90;
+      layoutState.lastPlanningTimelineH = next;
+      setPlanningTimelineH(next);
+      resizePlanningTimeline();
+      resizeCanvas();
+    });
+  }
 })();
 
 // -------- data load --------
@@ -7197,6 +7713,21 @@ function setData(obj) {
     setStatus("Invalid JSON: missing data object");
     return;
   }
+
+  if (Array.isArray(obj["planned-path"])) {
+    planWaypoints = obj["planned-path"].map((p) => ({
+      x: Number(p.x) || 0,
+      y: Number(p.y) || 0,
+      theta: Number(p.theta) || 0,
+      speed: readPlanSpeed(p.speed, 127),
+    }));
+  } else {
+    planWaypoints = [];
+  }
+  planSetSelection([]);
+  planPlayDist = 0;
+  planObjects = normalizePlanObjects(obj["planned-objects"] || []);
+  renderPlanObjects();
 
   rawPoses = normalizePoseArray(obj.poses || obj["robot-path"] || []);
 
@@ -7215,6 +7746,11 @@ function setData(obj) {
 }
 
 function setDataFromStreamText(text) {
+  planWaypoints = [];
+  planObjects = [];
+  renderPlanObjects();
+  planSetSelection([]);
+  planPlayDist = 0;
   rawPoses = createPoseStore();
   watches = [];
   logs = [];
@@ -7262,7 +7798,7 @@ function normalizePoseArray(arr) {
 }
 
 function hasLoadedData() {
-  return rawPoses.length > 0 || watches.length > 0 || logs.length > 0 || waypoints.length > 0;
+  return rawPoses.length > 0 || watches.length > 0 || logs.length > 0 || waypoints.length > 0 || planWaypoints.length > 0 || planObjects.length > 0;
 }
 
 function finalizeLoadedData() {
@@ -7660,6 +8196,7 @@ async function saveSettings() {
       layoutRightSidebarWidthPlanning: readRootCssNumber("--rightSidebarWPlanning", 370),
       layoutTimelineHeight: readRootCssNumber("--timelineH", 180),
       layoutPlanningWaypointHeight: readRootCssNumber("--planListH", 240),
+      layoutPlanningTimelineHeight: readRootCssNumber("--planningTimelineH", 90),
     };
     if (persistedAppState && typeof persistedAppState === "object" && !Array.isArray(persistedAppState)) {
       settings.appState = { ...persistedAppState };
@@ -8420,6 +8957,12 @@ if (planTemplateModal) {
   });
 }
 
+if (planObjectDeleteModal) {
+  planObjectDeleteModal.addEventListener("click", (e) => {
+    if (e.target && e.target.classList.contains("modalBackdrop")) closePlanObjectDeleteModal();
+  });
+}
+
 if (modeViewingBtn) modeViewingBtn.addEventListener("click", () => setMode("viewing"));
 
 if (modePlanningBtn) modePlanningBtn.addEventListener("click", () => setMode("planning"));
@@ -8428,6 +8971,59 @@ if (btnPlanEditTemplate) {
   btnPlanEditTemplate.addEventListener("click", () => {
     openPlanTemplateModal();
   });
+}
+
+if (btnPlanAddObject) {
+  btnPlanAddObject.onmousedown = (e) => {
+    e.preventDefault();
+  };
+  btnPlanAddObject.onclick = () => {
+    commitActivePlanObjectEdit();
+    addPlanObject();
+  };
+}
+
+if (planObjectListEl) {
+  planObjectListEl.onmousedown = (e) => {
+    if (!(e.target instanceof Element)) return;
+    const actionBtn = e.target.closest(".planObjectRemoveActionBtn, .planMethodRemoveBtn, .planMethodAddBtn");
+    if (actionBtn) e.preventDefault();
+  };
+  planObjectListEl.onclick = (e) => {
+    if (!(e.target instanceof Element)) return;
+    const methodAddBtn = e.target.closest(".planMethodAddBtn");
+    if (methodAddBtn) {
+      cancelPlanObjectNameEdit();
+      const objectId = methodAddBtn.getAttribute("data-object-id") || "";
+      if (objectId) openPlanMethodCreateModal(objectId);
+      return;
+    }
+    const methodRemoveBtn = e.target.closest(".planMethodRemoveBtn");
+    if (methodRemoveBtn) {
+      cancelPlanObjectNameEdit();
+      const objectId = methodRemoveBtn.getAttribute("data-object-id") || "";
+      const methodId = methodRemoveBtn.getAttribute("data-method-id") || "";
+      if (objectId && methodId) removePlanMethod(objectId, methodId);
+      return;
+    }
+    const removeBtn = e.target.closest(".planObjectRemoveActionBtn");
+    if (!removeBtn) return;
+    const objectId = removeBtn.getAttribute("data-object-id") || "";
+    if (!objectId) return;
+    requestPlanObjectRemoval(objectId);
+  };
+}
+
+if (btnPlanObjectDeleteClose) {
+  btnPlanObjectDeleteClose.onclick = () => closePlanObjectDeleteModal();
+}
+
+if (btnPlanObjectDeleteCancel) {
+  btnPlanObjectDeleteCancel.onclick = () => closePlanObjectDeleteModal();
+}
+
+if (btnPlanObjectDeleteConfirm) {
+  btnPlanObjectDeleteConfirm.onclick = () => confirmPlanObjectRemoval();
 }
 
 if (btnPlanCopyCode) {
@@ -8473,11 +9069,13 @@ window.addEventListener("keydown", (e) => {
   const exportOpen = exportModal && exportModal.style.display !== "none" && !exportModal.hasAttribute("hidden");
   const routeInfoOpen = routeInfoModal && routeInfoModal.style.display !== "none" && !routeInfoModal.hasAttribute("hidden");
   const planTemplateOpen = planTemplateModal && planTemplateModal.style.display !== "none" && !planTemplateModal.hasAttribute("hidden");
+  const planObjectDeleteOpen = planObjectDeleteModal && planObjectDeleteModal.style.display !== "none" && !planObjectDeleteModal.hasAttribute("hidden");
   if (helpOpen) closeHelp();
   else if (settingsOpen) closeSettings();
   else if (exportOpen) closeExportModal();
   else if (routeInfoOpen) closeRouteInfoModal();
   else if (planTemplateOpen) closePlanTemplateModal();
+  else if (planObjectDeleteOpen) closePlanObjectDeleteModal();
   else if (selectedWaypointId != null) {
     clearWaypointSelection();
     requestDrawAll();
