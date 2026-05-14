@@ -46,7 +46,7 @@ void Logger::getTimestampedFile(char *buffer, size_t len) {
   const uint32_t randInt = getrandInt(0, 99999);
 
   // Replace the PROS FatFs '\' prefix with POSIX-compliant '/'
-  std::replace(m_loggingFolder, m_loggingFolder + sizeof(m_loggingFolder), '\\', '/');
+  std::replace(m_loggingFolder, m_loggingFolder + strlen(m_loggingFolder), '\\', '/');
 
   // Prepend /usd 
   char pathPrefix[64];
@@ -55,7 +55,7 @@ void Logger::getTimestampedFile(char *buffer, size_t len) {
   if (tstruct->tm_year < 100) {
     _MVLIB_FORWARD_INFO("VEX RTC Inaccurate. Falling back to program duration.");
 
-    snprintf(buffer, len, "%s/MVLIB_%s_%u-%u_%d.log",
+    snprintf(buffer, len, "%s/MVLIB_%s_%u-%u_%05d.log",
              pathPrefix, m_date, pros::millis() / 1000, pros::millis() / 100, randInt);
   } else {
     _MVLIB_FORWARD_INFO("VEX RTC Plausible. Creating file name with date.");
@@ -65,7 +65,7 @@ void Logger::getTimestampedFile(char *buffer, size_t len) {
     strftime(timeBuf, sizeof(timeBuf), "MVLIB_%Y-%m-%d_%H-%M", tstruct); 
 
     // Combine pathPrefix, formatted time, and random ID
-    snprintf(buffer, len, "%s/%s_%d.log", pathPrefix, timeBuf, randInt); 
+    snprintf(buffer, len, "%s/%s_%05d.log", pathPrefix, timeBuf, randInt); 
   }
 }
 
@@ -117,15 +117,15 @@ bool Logger::setLoggingFolder(const char *folder, bool disableOnFail) {
   }
 
   std::string filenames{};
-  filenames.resize(4096); // Dozens of log files should not cause memory overflow
+  filenames.resize(8192); // Dozens of log files should not cause memory overflow
 
   int err = pros::usd::list_files(folder, filenames.data(), filenames.size() - 1);
   if (err != 1) {
     if (errno == ENOENT /* Cannot find path specified */) {
-      _MVLIB_FORWARD_ERROR("setLoggingFolder could not find the path specified. "
+      _MVLIB_FORWARD_ERROR("setLoggingFolder() could not find the path specified. "
         "Path: %s", folder);
     } else {
-      _MVLIB_FORWARD_ERROR("setLoggingFolder failed setting errno: %d", errno);
+      _MVLIB_FORWARD_ERROR("setLoggingFolder() failed setting errno: %d", errno);
     }
     m_sdLocked = disableOnFail;
     return false;
@@ -136,7 +136,7 @@ bool Logger::setLoggingFolder(const char *folder, bool disableOnFail) {
   return true;
 }
 
-void Logger::logToSD(const LogLevel& level, const char *fmt, ...) {
+void Logger::logToSD(const LogLevel level, const char *fmt, ...) {
   if (!m_sdFile || m_sdLocked) return;
 
   detail::uniqueLock m(m_sdMutex);

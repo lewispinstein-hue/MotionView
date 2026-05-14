@@ -15,7 +15,7 @@ struct WatchInfo {
 };
 } // namespace
 
-bool Logger::setDefaultWatches(const DefaultWatches& watches) {
+bool Logger::setDefaultWatches(const DefaultWatches watches) {
   DefaultWatches w = watches;
   bool retval = true;
   if (!m_configSet || !configValid()) {

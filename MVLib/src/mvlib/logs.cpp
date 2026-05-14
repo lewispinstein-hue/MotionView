@@ -3,7 +3,7 @@
 #include <cstdarg>
 
 namespace mvlib {
-void Logger::logMessage(const LogLevel& level, const char *fmt, va_list args) {
+void Logger::logMessage(const LogLevel level, const char *fmt, va_list args) {
   // Check global filter first
   if (!detail::Telemetry::getInstance().shouldLog(level)) return;
 

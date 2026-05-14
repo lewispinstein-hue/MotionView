@@ -6,6 +6,8 @@
 # What is this?
 `MVLib` is a simple logging and telemetry library for PROS V5 teams that want **clear, replayable data** in MotionView. It gives you structured logs, live “watches,” and pose data so MotionView can draw your robot path, list watches, and show details when you hover or click the field.
 
+Odometry and a tank-style drivetrain are not required. With a single line of setup, MVLib immediately replaces scattered `printf`s with structured logs and live watches that appear in an organized dashboard.
+
 ## What Can MVLib Do?
 - **See your robot path** in MotionView, on a real field, with real numbers.
 - **Track important values** like battery, motor temps, flywheel RPM, or auton events.

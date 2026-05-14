@@ -20,11 +20,11 @@ inline constexpr size_t kTelemetryMaxTextBytes = 511;
  * @brief Identifies the binary packet type for the MotionView decoder.
  */
 enum class MsgType : uint8_t {
-    POSE   = 0x01, // High-speed drivetrain/position
-    WPOINT = 0x02, // Waypoint state changes/offsets
-    WATCH  = 0x03, // Variable watches (numeric)
-    ROSTER = 0x04, // ID-to-Name mapping (The "Late Joiner" fix)
-    LOG    = 0x05  // Standard text-based logs
+  POSE   = 0x01, // High-speed drivetrain/position
+  WPOINT = 0x02, // Waypoint state changes/offsets
+  WATCH  = 0x03, // Variable watches (numeric)
+  ROSTER = 0x04, // ID-to-Name mapping (The "Late Joiner" fix)
+  LOG    = 0x05  // Standard text-based logs
 };
 
 /**

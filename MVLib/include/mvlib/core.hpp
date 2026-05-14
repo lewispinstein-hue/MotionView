@@ -362,7 +362,7 @@ public:
   /**
    * @brief Register the built-in default watchdog watches.
    */
-  bool setDefaultWatches(const DefaultWatches& watches);
+  bool setDefaultWatches(const DefaultWatches watches);
 
   /**
    * @brief Re-send roster entries for all watches. Use this to fix issues 
@@ -411,7 +411,6 @@ public:
    * @endcode
    */
   template <class Getter, size_t len>
-
   WatchHandle watch(const char (&label)[len], LogLevel baseLevel, WatchMode type, 
                     uint32_t intervalMs, Getter&& getter, std::string fmt = {},
                     LevelOverride<std::decay_t<std::invoke_result_t<
@@ -638,13 +637,13 @@ private:
    * @brief Emit a formatted log message. Automatically handles 
    *        terminal/SD logging.
    */
-  void logMessage(const LogLevel& level, const char *fmt, va_list args);
+  void logMessage(const LogLevel level, const char *fmt, va_list args);
 
   /**
    * @brief Write a formatted log line to the SD log file.
    */
   _MVLIB_FORMAT_CHECK(3, 4)
-  void logToSD(const LogLevel& level, const char *fmt, ...);
+  void logToSD(const LogLevel level, const char *fmt, ...);
   
   // ------------------------------------------------------------------------
   // Internal state
