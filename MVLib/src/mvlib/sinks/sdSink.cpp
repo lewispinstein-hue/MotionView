@@ -53,12 +53,12 @@ void Logger::getTimestampedFile(char *buffer, size_t len) {
   snprintf(pathPrefix, sizeof(pathPrefix), "/usd%s", m_loggingFolder);
 
   if (tstruct->tm_year < 100) {
-    _MVLIB_FORWARD_INFO("VEX RTC Inaccurate. Falling back to program duration.");
+    _MVLIB_FORWARD_INFO("initSdCard() VEX RTC Inaccurate. Falling back to program duration.");
 
     snprintf(buffer, len, "%s/MVLIB_%s_%u-%u_%05d.log",
              pathPrefix, m_date, pros::millis() / 1000, pros::millis() / 100, randInt);
   } else {
-    _MVLIB_FORWARD_INFO("VEX RTC Plausible. Creating file name with date.");
+    _MVLIB_FORWARD_INFO("initSdCard() VEX RTC Plausible. Creating file name with date.");
 
     char timeBuf[128];
     // Format the date/time string
@@ -73,21 +73,21 @@ bool Logger::initSDLogger() {
   if (m_sdLocked) return false;
 
   if (pros::usd::is_installed()) {
-    _MVLIB_FORWARD_DEBUG("SD Card installed (On first attempt)");
+    _MVLIB_FORWARD_DEBUG("initSdCard() SD Card installed (On first attempt)");
   } else {
-    _MVLIB_FORWARD_DEBUG("SD Card not installed, rechecking...");
+    _MVLIB_FORWARD_DEBUG("initSdCard() SD Card not installed, rechecking...");
     for (int i = 0; i < 10; i++) {
       if (pros::usd::is_installed()) {
-        _MVLIB_FORWARD_DEBUG("SD Card installed! Attempt: %d/10", i);
+        _MVLIB_FORWARD_DEBUG("initSdCard() SD Card installed! Attempt: %d/10", i);
         break;
       }
-      _MVLIB_FORWARD_DEBUG("Rechecking SD card installment... Attempts: %d/10", i);
+      _MVLIB_FORWARD_DEBUG("initSdCard() Rechecking SD card installment... Attempts: %d/10", i);
       pros::delay(50);
     }
   }
 
   if (!pros::usd::is_installed()) {
-    _MVLIB_FORWARD_FATAL("SD Card not installed after 10 attemps. Aborting SD card.");
+    _MVLIB_FORWARD_FATAL("initSdCard() SD Card not installed after 10 attemps. Aborting SD card.");
     return false;
   }
 
@@ -96,11 +96,11 @@ bool Logger::initSDLogger() {
 
   m_sdFile = fopen(m_currentFilename, "w");
   if (!m_sdFile) {
-    _MVLIB_FORWARD_FATAL("File: %s could not be opened. Aborting.", m_currentFilename);
+    _MVLIB_FORWARD_FATAL("initSdCard() File: %s could not be opened. Aborting.", m_currentFilename);
     return false;
   }
 
-  _MVLIB_FORWARD_DEBUG("File successfully opened.");
+  _MVLIB_FORWARD_DEBUG("initSdCard() File successfully opened.");
   fprintf(m_sdFile, "|———| Logger initialized at %.2fs |———|\n", pros::millis() / 1000.0);
   fflush(m_sdFile);
   return true;
