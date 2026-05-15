@@ -42,6 +42,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -488,7 +489,10 @@ private:
     std::optional<std::string> lastValue = std::nullopt;
 
     /// @brief Computes (level, rendered eval string, label, predicate) for the current sample.
-    std::function<std::tuple<LogLevel, std::string, std::string, bool>()> eval;  
+    std::shared_ptr<std::function<std::tuple<LogLevel, std::string, std::string, bool>()>> eval;
+
+    /// @brief Serializes execution of the watch evaluator without holding m_mutex.
+    std::shared_ptr<pros::Mutex> evalMutex;
 
     /// @brief If true, watch will be evaluated and printed if necessary.
     bool active = true;
@@ -554,8 +558,9 @@ private:
     const std::string labelCopy = w.label;
 
     // When w.eval is called, it returns final log level, getter eval, final label
-    w.eval = [baseLevel, labelCopy, fmtCopy, eval = std::move(eval), 
-              ov = std::move(ov)]() mutable -> 
+    w.eval = std::make_shared<std::function<std::tuple<LogLevel, std::string, std::string, bool>()>>(
+              [baseLevel, labelCopy, fmtCopy, eval = std::move(eval),
+              ov = std::move(ov)]() mutable ->
               std::tuple<LogLevel, std::string, std::string, bool> {
 
       EvalType evalValue = static_cast<EvalType>(eval());
@@ -567,11 +572,12 @@ private:
 
       std::string rawOut = renderValue(evalValue, fmtCopy); // Raw eval of getter
 
-      // Get label based on predicate 
+      // Get label based on predicate
       const std::string& displayOut = (tripped && !ov.label.empty()) ? ov.label : labelCopy;
 
       return std::make_tuple(lvl, std::move(rawOut), std::move(displayOut), tripped);
-    };
+    });
+    w.evalMutex = std::make_shared<pros::Mutex>();
 
     m_watches.push_back(std::move(w));
     return w.id;
@@ -675,7 +681,8 @@ private:
   std::unique_ptr<pros::Task> m_task;
 
   // Position getters
-  std::function<std::optional<Pose>()> m_getPose = nullptr;
+  std::shared_ptr<std::function<std::optional<Pose>()>> m_getPose = nullptr;
+  std::shared_ptr<pros::Mutex> m_poseGetterMutex = nullptr;
   
   uint32_t m_lastRosterFlush{0};
   uint32_t m_lastTerminalFlush{0};

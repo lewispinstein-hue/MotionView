@@ -6,12 +6,27 @@
 namespace mvlib {
 
 void Logger::printWaypoints() {
+  uint32_t nowMs = pros::millis();
+  std::shared_ptr<std::function<std::optional<Pose>()>> poseGetter;
+  std::shared_ptr<pros::Mutex> poseGetterMutex;
+
+  {
+    detail::uniqueLock lock(m_mutex);
+    if (!lock.isLocked()) return;
+    poseGetter = m_getPose;
+    poseGetterMutex = m_poseGetterMutex;
+  }
+
+  std::optional<Pose> pose = std::nullopt;
+  if (poseGetter && poseGetterMutex) {
+    detail::uniqueLock callbackLock(*poseGetterMutex, TIMEOUT_MAX);
+    if (callbackLock.isLocked()) {
+      pose = (*poseGetter)();
+    }
+  }
+
   detail::uniqueLock lock(m_mutex);
   if (!lock.isLocked()) return;
-
-  uint32_t nowMs = pros::millis();
-
-  auto pose = m_getPose ? m_getPose() : std::nullopt;
 
   for (auto& wp : m_waypoints) {
     if (!wp.active) continue;

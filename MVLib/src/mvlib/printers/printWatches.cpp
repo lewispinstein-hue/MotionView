@@ -7,36 +7,60 @@
 
 namespace mvlib {
 void Logger::printWatches() {
-  detail::uniqueLock lock(m_mutex);
-  if (!lock.isLocked()) return;
+  size_t index = 0;
 
-  uint32_t nowMs = pros::millis();
+  while (true) {
+    // Copies of all variables
+    WatchId watchId{};
+    std::shared_ptr<std::function<std::tuple<LogLevel, std::string, std::string, bool>()>> eval;
+    std::shared_ptr<pros::Mutex> evalMutex;
 
-  for (auto& watch : m_watches) {
-    if (!watch.active || !watch.eval) continue;
-    if (!watch.onChange && watch.lastPrintMs != 0 &&
-        (nowMs - watch.lastPrintMs) < watch.intervalMs) continue;
+    {
+      // Lock mutex only while copying variables
+      detail::uniqueLock lock(m_mutex);
+      if (!lock.isLocked()) return;
+      if (index >= m_watches.size()) break;
 
-    auto [lvl, valueStr, label, tripped] = watch.eval();
+      auto& watch = m_watches[index++];
+      const uint32_t nowMs = pros::millis();
 
-    if (watch.onChange) {
-      if (watch.lastValue.has_value() && watch.lastValue.value() == valueStr) {
-        // No change
-        continue;
-      } else if (watch.lastPrintMs != 0 && (nowMs - watch.lastPrintMs) < watch.intervalMs) {
-        // Debounce
-        continue;
+      if (!watch.active || !watch.eval || !watch.evalMutex) continue;
+      if (!watch.onChange && watch.lastPrintMs != 0 &&
+          (nowMs - watch.lastPrintMs) < watch.intervalMs) continue;
+
+      watchId = watch.id;
+      eval = watch.eval;
+      evalMutex = watch.evalMutex;
+    }
+
+    detail::uniqueLock callbackLock(*evalMutex, TIMEOUT_MAX);
+    if (!callbackLock.isLocked()) continue;
+
+    auto [lvl, valueStr, label, tripped] = (*eval)();
+    const uint32_t nowMs = pros::millis();
+
+    {
+      detail::uniqueLock lock(m_mutex);
+      if (!lock.isLocked()) return;
+
+      InternalWatch* watch = m_findWatchUnlocked(watchId);
+      if (!watch || !watch->active) continue;
+
+      if (watch->onChange) {
+        if (watch->lastValue.has_value() && watch->lastValue.value() == valueStr) {
+          continue;
+        } else if (watch->lastPrintMs != 0 && (nowMs - watch->lastPrintMs) < watch->intervalMs) {
+          continue;
+        } else {
+          watch->lastValue = valueStr;
+          watch->lastPrintMs = nowMs;
+        }
       } else {
-        // Update
-        watch.lastValue = valueStr;
-        watch.lastPrintMs = nowMs;
-      }
-    } else {
-      if (watch.lastPrintMs != 0 && (nowMs - watch.lastPrintMs) < watch.intervalMs) {
-        // Non onChange debounce
-        continue;
-      } else {
-        watch.lastPrintMs = nowMs;
+        if (watch->lastPrintMs != 0 && (nowMs - watch->lastPrintMs) < watch->intervalMs) {
+          continue;
+        } else {
+          watch->lastPrintMs = nowMs;
+        }
       }
     }
 
@@ -50,14 +74,14 @@ void Logger::printWatches() {
         const float numericVal = std::strtof(valueStr.c_str(), &end);
         if (end != valueStr.c_str() && end != nullptr && *end == '\0' &&
             errno != ERANGE && std::isfinite(numericVal)) {
-          detail::Telemetry::getInstance().sendWatch(watch.id, lvl, numericVal, tripped);
+          detail::Telemetry::getInstance().sendWatch(watchId, lvl, numericVal, tripped);
           sentAsBinary = true;
         }
       }
 
       // Non-numeric watches still use the structured binary watch channel.
       if (!sentAsBinary) {
-        detail::Telemetry::getInstance().sendWatchText(watch.id, lvl, valueStr, tripped);
+        detail::Telemetry::getInstance().sendWatchText(watchId, lvl, valueStr, tripped);
       }
     }
 
@@ -68,7 +92,7 @@ void Logger::printWatches() {
       if (valueStr == "t") valueStr = "true";
 
       logToSD(lvl, "[WATCH],%u,%s,%u,%s,%s", nowMs, 
-              levelToString(lvl), watch.id, label.c_str(), valueStr.c_str());
+              levelToString(lvl), watchId, label.c_str(), valueStr.c_str());
     }
   }
 }

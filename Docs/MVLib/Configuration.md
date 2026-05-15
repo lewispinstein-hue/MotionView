@@ -55,7 +55,7 @@ Turn it off when:
 
 Important:
 
-- In `v2.0.0`, terminal output is not the old plain-text MotionView stream. MVLib now uses a binary telemetry protocol for live MotionView data.
+- In `v2.0.0`, terminal output stopped using the old plain-text MotionView stream. MVLib now uses a binary telemetry protocol for live MotionView data.
 - If this is off, MotionView will not receive live telemetry from MVLib.
 
 ### `setLogToSD(bool)`
@@ -99,7 +99,7 @@ If disabled:
 
 Controls whether MVLib emits waypoint events.
 
-In `v2.0.0`, that means:
+In current MVLib, that means:
 
 - `CREATED`
 - `REACHED`
@@ -120,14 +120,14 @@ Turn it off if you want MotionView to stay focused on your own logs and telemetr
 
 ## `LoggerTimings`
 
-`LoggerTimings` is the runtime timing struct in `v2.0.0`:
+`LoggerTimings` is the runtime timing struct:
 
 ```cpp
 struct LoggerTimings {
   uint32_t sdBufferFlushInterval = 1000;
   uint32_t stdoutBufferFlushInterval = 400;
   uint32_t sdPollingRate = 80;
-  uint32_t terminalPollingRate = 120;
+  uint32_t terminalPollingRate = 100;
   uint32_t rosterSyncAllInterval = 8000;
 };
 ```
@@ -139,7 +139,7 @@ logger.setTimings({
   .sdBufferFlushInterval = 1000,
   .stdoutBufferFlushInterval = 400,
   .sdPollingRate = 80,
-  .terminalPollingRate = 120,
+  .terminalPollingRate = 100,
   .rosterSyncAllInterval = 8000
 });
 ```
@@ -228,7 +228,7 @@ Higher values:
 
 ## `setLoggingFolder(...)`
 
-MVLib `v2.0.0` also adds SD log folder routing:
+MVLib also supports SD log folder routing:
 
 ```cpp
 bool setLoggingFolder(const char *folder, bool disableOnFail = false);

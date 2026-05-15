@@ -1,11 +1,11 @@
-#include "pros/rtos.hpp"
-#include "mvlib/core.hpp"
 #define _MVLIB_PREVENT_MACRO_CLEANUP
 #include "mvlib/private/forwardLogMacros.h"
 #include "mvlib/private/telemetry.hpp"
+#include "mvlib/core.hpp"
 #include "pros/apix.h"
-#include <cmath>
+#include "pros/rtos.hpp"
 #include <algorithm>
+#include <cmath>
 
 namespace mvlib {
 namespace {
@@ -34,10 +34,9 @@ bool Logger::setRobot(Drivetrain drivetrain, bool useSpeedEstimation) {
   }
   m_forceSpeedEstimation = useSpeedEstimation;
 
-  bool retval = true;
   if (!drivetrain.leftDrivetrain || !drivetrain.rightDrivetrain) {
     _MVLIB_FORWARD_FATAL("setRobot(Drivetrain) called with nullptr drivetrain arguments!");
-    retval = false;
+    return false;
   }
 
   m_pLeftDrivetrain = drivetrain.leftDrivetrain;
@@ -47,7 +46,7 @@ bool Logger::setRobot(Drivetrain drivetrain, bool useSpeedEstimation) {
 
   checkRobotConfig();
   m_configSet = true;
-  return retval;
+  return true;
 }
 
 bool Logger::checkRobotConfig() {
@@ -146,10 +145,22 @@ void Logger::Update() {
   }
 
   std::optional<Pose> pose = std::nullopt;
+  std::shared_ptr<std::function<std::optional<Pose>()>> poseGetter;
+  std::shared_ptr<pros::Mutex> poseGetterMutex;
 
-  detail::uniqueLock lock(m_mutex);
-  if (m_getPose && lock.isLocked()) {
-    pose = m_getPose();
+  {
+    detail::uniqueLock lock(m_mutex);
+    if (lock.isLocked()) {
+      poseGetter = m_getPose;
+      poseGetterMutex = m_poseGetterMutex;
+    }
+  }
+
+  if (poseGetter && poseGetterMutex) {
+    detail::uniqueLock callbackLock(*poseGetterMutex, TIMEOUT_MAX);
+    if (callbackLock.isLocked()) {
+      pose = (*poseGetter)();
+    }
   }
 
   const bool useSpeedEstimation =

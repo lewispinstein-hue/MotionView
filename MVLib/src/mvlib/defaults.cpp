@@ -63,7 +63,6 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
         .predicate = PREDICATE(v >= TEMP_THRESHOLD),
         .label = "Left Drivetrain Overheating"
       });
-    _MVLIB_FORWARD_INFO("Created default Left Drivetrain watch.");
   }
 
   if (w.rightDrivetrainWatchdog) {
@@ -98,7 +97,6 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
         .predicate = PREDICATE(v >= TEMP_THRESHOLD),
         .label = "Right Drivetrain Overheating"
       });
-    _MVLIB_FORWARD_INFO("Created default Right Drivetrain watch.");
   }
 
   if (w.batteryWatchdog) {
@@ -135,7 +133,6 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
         .predicate = PREDICATE(v >= BAT_TEMP_THRESHOLD),
         .label = "Battery Temp High"
       });
-    _MVLIB_FORWARD_INFO("Created default Battery Temperature Watch");
 
     // Battery Voltage Watch (thresholds in millivolts)
     constexpr uint MIN_BAT_VOLT = 12000;
@@ -173,9 +170,13 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
       }),
         .label = "Battery Voltage Warning"
       });
-
-    _MVLIB_FORWARD_INFO("Created default Battery Voltage Watch");
   }
+
+  _MVLIB_FORWARD_INFO("Created default watches: %s%s%s%s",
+    (w.leftDrivetrainWatchdog || w.rightDrivetrainWatchdog) ? "Drivetrain Watchdog: " : "",
+    w.leftDrivetrainWatchdog ? "Left, " : "",
+    w.rightDrivetrainWatchdog ? "Right, " : "",
+    w.batteryWatchdog ? "Battery Watchdog, " : "");
 
   return retval;
 }

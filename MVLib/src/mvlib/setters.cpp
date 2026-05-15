@@ -63,6 +63,7 @@ void Logger::setPoseGetter(std::function<std::optional<Pose>()> getter) {
     return;
   }
   _MVLIB_FORWARD_DEBUG("SetPoseGetter set callback.");
-  m_getPose = std::move(getter);
+  m_getPose = std::make_shared<std::function<std::optional<Pose>()>>(std::move(getter));
+  m_poseGetterMutex = std::make_shared<pros::Mutex>();
 }
 } // namespace mvlib

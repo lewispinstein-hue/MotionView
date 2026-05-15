@@ -63,6 +63,8 @@ std::string Logger::evaluateWatch(WatchId id, bool emit) {
   std::string label{};
   bool tripped = false;
   uint32_t nowMs = 0;
+  std::shared_ptr<std::function<std::tuple<LogLevel, std::string, std::string, bool>()>> eval;
+  std::shared_ptr<pros::Mutex> evalMutex;
 
   {
     // Manual watch evaluation intentionally invokes the stored evaluator directly
@@ -72,12 +74,25 @@ std::string Logger::evaluateWatch(WatchId id, bool emit) {
     if (m_watches.empty()) return {};
 
     InternalWatch* watch = m_findWatchUnlocked(id);
-    if (!watch || !watch->eval) return {};
+    if (!watch || !watch->eval || !watch->evalMutex) return {};
+    eval = watch->eval;
+    evalMutex = watch->evalMutex;
+  }
 
-    std::tie(lvl, valueStr, label, tripped) = watch->eval();
-    if (!emit) return valueStr;
+  detail::uniqueLock callbackLock(*evalMutex, TIMEOUT_MAX);
+  if (!callbackLock.isLocked()) return {};
 
-    nowMs = pros::millis();
+  std::tie(lvl, valueStr, label, tripped) = (*eval)();
+  if (!emit) return valueStr;
+
+  nowMs = pros::millis();
+
+  {
+    detail::uniqueLock lock(m_mutex);
+    if (!lock.isLocked()) return {};
+
+    InternalWatch* watch = m_findWatchUnlocked(id);
+    if (!watch) return {};
     watch->lastValue = valueStr;
     watch->lastPrintMs = nowMs;
   }

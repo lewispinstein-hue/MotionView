@@ -12,11 +12,11 @@ At a high level:
 6. Call `logger.start()`
 ## 1. Install MVLib
 
-Use the `v2.0.1` package:
+Use the `v3.0.0` package:
 
 ```bash
-pros c fetch libmvlib@2.0.1.zip
-pros c apply libmvlib@2.0.1
+pros c fetch libmvlib@3.0.0.zip
+pros c apply libmvlib@3.0.0
 pros make all
 ```
 
@@ -59,7 +59,7 @@ mvlib::WatchMode::onChange
 mvlib::literals::operator"" _mvS(...)
 ```
 
-## 3. Important `v2.0.1` Terminal Note
+## 3. Important Terminal Note
 
 As soon as you create the logger instance:
 
@@ -85,7 +85,10 @@ Without odometry, you still get:
 - standard logs
 - watches
 - waypoint registration
-- drivetrain-based speed telemetry if you call `setRobot(...)`
+
+Without odometry, you do not get live pose telemetry, path drawing, or waypoint reach math.
+
+Calling `setRobot(...)` without a pose source still registers the drivetrain for velocity reporting, but MVLib's live telemetry stream remains pose-gated in the current implementation.
 
 With odometry, MotionView can also draw:
 
