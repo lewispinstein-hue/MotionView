@@ -1781,7 +1781,7 @@ function createPlanMethodDragGhostCard({ objectId, methodId }) {
     </div>
     <button class="iconBtn planMethodRemoveBtn" type="button" aria-hidden="true" tabindex="-1">
       <svg width="30" height="30" aria-hidden="true">
-        <use href="./assets/svg/icons.svg#icon-removePlanningObject"></use>
+        <use href="${iconsSpriteUrl}#icon-removePlanningObject"></use>
       </svg>
     </button>
   `;
@@ -2071,7 +2071,7 @@ function renderPlanObjects() {
           </div>
           <button class="iconBtn planMethodRemoveBtn" type="button" title="Remove Method" aria-label="Remove Method" data-object-id="${escapeHtml(obj.id)}" data-method-id="${escapeHtml(method.id)}">
             <svg width="30" height="30" aria-hidden="true">
-              <use href="./assets/svg/icons.svg#icon-removePlanningObject"></use>
+              <use href="${iconsSpriteUrl}#icon-removePlanningObject"></use>
             </svg>
           </button>
         `;
@@ -2094,7 +2094,7 @@ function renderPlanObjects() {
         <div class="planObjectColorWrap">
           <button class="iconBtn secondaryBtn planObjectColorBtn" type="button" title="Change Object Color" aria-label="Change Object Color" data-object-id="${escapeHtml(obj.id)}" style="color:${escapeHtml(obj.color || getDefaultPlanObjectColor(i))}">
             <svg width="30" height="30" aria-hidden="true">
-              <use href="./assets/svg/icons.svg#icon-planningChangeObjectColor"></use>
+              <use href="${iconsSpriteUrl}#icon-planningChangeObjectColor"></use>
             </svg>
           </button>
           <div class="planObjectColorPopover"${planOpenColorPickerObjectId === obj.id ? "" : " hidden"}>
@@ -2104,7 +2104,7 @@ function renderPlanObjects() {
       </div>
       <button class="iconBtn secondaryBtn planObjectRemoveActionBtn" type="button" title="Remove Object" aria-label="Remove Object" data-object-id="${escapeHtml(obj.id)}">
         <svg width="30" height="30" aria-hidden="true">
-          <use href="./assets/svg/icons.svg#icon-removePlanningObject"></use>
+          <use href="${iconsSpriteUrl}#icon-removePlanningObject"></use>
         </svg>
       </button>
     `;
