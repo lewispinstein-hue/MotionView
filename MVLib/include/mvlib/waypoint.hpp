@@ -13,7 +13,7 @@ namespace mvlib {
 using WPId = uint16_t;
 
 /**
- * @struct Waypoint
+ * @struct WaypointParams
  * @brief Holds a location and tolerances for a point.
  *
  * \b Example

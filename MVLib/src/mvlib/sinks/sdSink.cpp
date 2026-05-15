@@ -1,10 +1,10 @@
 #include "mvlib/private/telemetry.hpp"
+#include "mvlib/private/raii.hpp"
+#define _MVLIB_PREVENT_MACRO_CLEANUP
+#include "mvlib/private/forwardLogMacros.h"
 #include "pros/misc.hpp"
 #include "pros/rtos.hpp"
 #include "mvlib/core.hpp"
-#define _MVLIB_PREVENT_MACRO_CLEANUP
-#include "mvlib/private/forwardLogMacros.h"
-#include "mvlib/private/raii.hpp"
 #include <cstdarg>
 #include <cstdint>
 #include <cstring>

@@ -6,9 +6,18 @@ Used for visually generating autonomous routines for the robot to follow. Comple
 
 ## Purpose
 
-Planning export templates generate one output line per planned waypoint.
+Planning export templates generate one output block per planned waypoint.
 
 MotionView processes waypoints sequentially from first to last. For each waypoint, MotionView evaluates the template once and replaces all supported template variables with the values for that waypoint.
+
+If custom event nodes exist on the Planning timeline, MotionView inserts their method code into the export in timeline order:
+
+- nodes before the first waypoint are exported first
+- then the first waypoint template block is exported
+- then nodes between waypoint 1 and waypoint 2 are exported
+- then the second waypoint template block is exported
+- this continues through the full route
+- nodes after the final waypoint are exported last
 
 The generated result is the full exported code block.
 
@@ -17,16 +26,18 @@ The generated result is the full exported code block.
 For a planned path with `N` waypoints:
 
 - MotionView loops through all `N` waypoints in order
-- MotionView generates one line of output for each waypoint
+- MotionView generates one output block for each waypoint
 - The template text is reused for every waypoint
 - Variable replacement is performed independently for each waypoint
-- The final export is the generated lines joined in order
+- Any placed custom event methods are inserted between waypoint blocks according to their planning-timeline order
+- The final export is the generated blocks joined in order
 
 
 **Notes:**
 
 - The template may contain arbitrary text, including newlines.
 - The template is evaluated once per waypoint and the resulting blocks are concatenated in order.
+- Method code from custom event nodes is exported exactly as stored on the method.
 
 ## Supported Template Variables
 
@@ -90,9 +101,10 @@ The waypoint speed value.
 
 ## Output Rules
 
-- One template pass produces one output line
-- One waypoint produces one output line
+- One template pass produces one output block
+- One waypoint produces one output block
 - Waypoints are exported in planning order
+- Custom event methods are exported in planning-timeline order relative to the waypoint blocks
 - Variable replacement is text substitution
 - Unsupported text is left unchanged
 

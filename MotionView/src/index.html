@@ -745,6 +745,8 @@
 
     <div id="hSplit" class="splitterH" title="Drag to resize timeline"></div>
 
+    <div id="planningTimelineSplit" class="splitterH planningOnly" title="Drag to resize planning timeline"></div>
+
     <!-- Bottom timeline bar -->
     <div id="timelineBar">
       <div id="timelineTop">
@@ -762,20 +764,30 @@
         <span class="pill cursorPill" id="cursorPill">Cursor: —</span>
       </div>
       <canvas id="timelineCanvas"></canvas>
-    </div>
-
-    <div id="planningTimelineSplit" class="splitterH planningOnly" title="Drag to resize planning timeline"></div>
-
-    <div id="planningTimelineBar">
-      <div id="planningTimelineTop">
-        <div id="planningTimelineLeft">
-          <span class="pill" id="planTimePill">Plan: —</span>
-          <span class="pill" id="planPointPill">Points: 0</span>
+      <div id="planningTimelineBar">
+        <div id="planningTimelineTop">
+          <div id="planningTimelineLeft">
+            <span class="pill" id="planTimePill">Plan: —</span>
+            <span class="pill" id="planPointPill">Points: 0</span>
+          </div>
+          <span class="pill cursorPill" id="planCursorPill">Cursor: —</span>
         </div>
-        <span class="pill cursorPill" id="planCursorPill">Cursor: —</span>
+        <div id="planningTimelineViewport">
+          <div id="planningTimelineContent">
+            <div id="planningEventTimeline" aria-label="Planning event timeline">
+              <div id="planningEventTimelineInner">
+                <div id="planningEventTimelineHint">Add at least 2 waypoints to place events.</div>
+                <div id="planningTimelineDropLine" hidden></div>
+                <div id="planningTimelineWaypointLayer"></div>
+                <div id="planningTimelineNodeLayer"></div>
+              </div>
+            </div>
+            <canvas id="planningTimelineCanvas"></canvas>
+          </div>
+        </div>
       </div>
-      <canvas id="planningTimelineCanvas"></canvas>
     </div>
+    <div id="planNodeTooltip" class="planNodeTooltip" hidden role="tooltip" aria-hidden="true"></div>
     <div id="exportModal" class="modal" hidden>
       <div class="modalBackdrop"></div>
       <div class="modalCard settingsCard" role="dialog" aria-modal="true" aria-labelledby="exportTitle" tabindex="-1">

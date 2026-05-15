@@ -6,11 +6,11 @@
   --planListH: 240px;
   --toolbarH: 54px;
   --topbarH: 50px;
-  --planningTimelineH: 90px;
+  --planningTimelineH: 144px;
   --bg: #0b0f14;
   --panel: #101720;
   --text: #e7eef7;
-  --muted: #93a4b8;
+  --muted: #93a4b8; 
   --line: #233244;
   overscroll-behavior: none;
   -webkit-user-select: none;
@@ -488,13 +488,12 @@ label {
 }
 
 #planningTimelineBar {
-  flex: 0 0 var(--planningTimelineH);
-  border-top: 1px solid var(--line);
-  background: rgba(8, 12, 18, 0.95);
-  display: flex;
+  display: none;
   flex-direction: column;
-  padding: 10px 12px 5px;
   gap: 8px;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
 }
 
 #planningTimelineTop {
@@ -514,19 +513,221 @@ label {
   margin-left: auto;
 }
 
-#planningTimelineCanvas {
+#planningTimelineViewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
   width: 100%;
-  height: 48px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+#planningTimelineBar *,
+#planningTimelineViewport *,
+#planningEventTimeline *,
+#planningTimelineCanvas,
+.planningTimelineNode,
+.planMethodDragGhost,
+.planMethodDragGhost * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#planningTimelineViewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+#planningTimelineContent {
+  flex: 0 0 auto;
+  min-width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: rgba(16, 23, 32, 0.55);
+  overflow: hidden;
+}
+
+#planningEventTimeline {
+  position: relative;
+  flex: 0 0 28px;
+  height: 28px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  z-index: 2;
+}
+
+#planningEventTimeline.isDropActive {
+  box-shadow: inset 0 0 0 1px rgba(111, 217, 143, 0.16);
+  background: rgba(20, 30, 24, 0.42);
+}
+
+#planningEventTimelineInner {
+  position: relative;
+  height: 100%;
+}
+
+#planningEventTimelineHint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+#planningEventTimelineHint[hidden],
+#planningTimelineDropLine[hidden] {
+  display: none;
+}
+
+#planningTimelineWaypointLayer,
+#planningTimelineNodeLayer {
+  position: absolute;
+  inset: 0;
+}
+
+#planningTimelineDropLine {
+  position: absolute;
+  top: 26px;
+  bottom: -10px;
+  width: 2px;
+  border-radius: 999px;
+  background: #6fd98f;
+  box-shadow: 0 0 0 1px rgba(12, 18, 24, 0.6);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.planningTimelineWaypointConnector {
+  position: absolute;
+  top: 100%;
+  width: 2px;
+  height: 26px;
+  margin-left: -1px;
+  margin-top: 0;
+  border-radius: 999px;
+  background: rgba(180, 220, 255, 0.45);
+  box-shadow: 0 0 0 1px rgba(12, 18, 24, 0.28);
+  pointer-events: none;
+}
+
+.planningTimelineWaypointConnector::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  border-radius: 999px;
+  border: 1.5px solid rgba(150, 198, 235, 0.82);
+  background: rgba(16, 23, 32, 0.92);
+  box-shadow: 0 0 0 1px rgba(12, 18, 24, 0.22);
+}
+
+.planningTimelineNode {
+  position: absolute;
+  top: 100%;
+  width: 18px;
+  height: 24px;
+  margin-top: -12px;
+  margin-left: -9px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(245, 249, 255, 0.95);
+  cursor: grab;
+  user-select: none;
+  outline: none;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.18);
+  transition: box-shadow 140ms ease, transform 140ms ease, border-color 140ms ease;
+}
+
+.planningTimelineNode:hover {
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
+}
+
+.planningTimelineNode:active {
+  cursor: grabbing;
+}
+
+.planningTimelineNode.isSelected {
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18), 0 8px 18px rgba(0, 0, 0, 0.28);
+}
+
+.planningTimelineNode.isDragging {
+  opacity: 0.68;
+}
+
+#planningTimelineCanvas {
+  flex: 0 0 48px;
+  width: 100%;
+  height: 48px;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0;
+  background: transparent;
   display: block;
-  margin-bottom: 5px;
+  position: relative;
+  z-index: 1;
 }
 
 #planningTimelineHint {
   color: var(--muted);
   font-size: 12px;
+}
+
+.planNodeTooltip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 140;
+  max-width: 220px;
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(8, 14, 22, 0.96);
+  color: #e6eef8;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 90ms ease, transform 90ms ease;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34);
+}
+
+.planNodeTooltip.isVisible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.planNodeTooltip[hidden] {
+  display: block;
+  opacity: 0;
 }
 
 header.toolbar {
@@ -716,9 +917,7 @@ body.mode-planning .app {
 }
 
 body.mode-planning #left,
-body.mode-planning #timelineBar,
 body.mode-planning #hSplit,
-body.mode-planning #planningTimelineSplit,
 body.mode-planning #vSplit,
 body.mode-planning #vSplitL,
 body.mode-planning #floatWin,
@@ -731,7 +930,6 @@ body.mode-planning #watchGraphPanel {
 }
 
 body.mode-planning #left,
-body.mode-planning #timelineBar,
 body.mode-planning #hSplit,
 body.mode-planning #vSplit,
 body.mode-planning #vSplitL {
@@ -746,17 +944,26 @@ body.mode-planning #left {
   border: none !important;
 }
 
-body.mode-planning #timelineBar {
-  height: 0 !important;
-  padding: 0 !important;
-  border: none !important;
-}
-
-#planningTimelineBar {
+#planningTimelineSplit {
   display: none;
 }
 
-#planningTimelineSplit {
+body.mode-planning #timelineBar {
+  display: flex;
+  flex: 0 0 var(--planningTimelineH);
+  height: var(--planningTimelineH);
+  min-height: 0;
+  max-height: none;
+  padding: 8px 12px 2px;
+  gap: 8px;
+}
+
+body.mode-planning #timelineBar.isCollapsed {
+  display: flex !important;
+}
+
+body.mode-planning #timelineTop,
+body.mode-planning #timelineCanvas {
   display: none;
 }
 
@@ -766,6 +973,12 @@ body.mode-planning #planningTimelineBar {
 
 body.mode-planning #planningTimelineSplit {
   display: block;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+body:not(.mode-planning) #planningTimelineBar {
+  display: none !important;
 }
 
 body.mode-planning .settingsViewing {
@@ -2191,6 +2404,7 @@ body:not(.mode-planning) #rightPlanning {
 }
 
 .planObjectRemoveActionBtn svg,
+.planObjectColorBtn svg,
 .planMethodRemoveBtn svg,
 .planEventAddBtn svg {
   display: block;
@@ -2230,7 +2444,7 @@ body:not(.mode-planning) #rightPlanning {
 
 .planMethodCard {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto auto 1fr auto;
   align-items: center;
   gap: 10px;
   padding: 9px 10px;
@@ -2275,6 +2489,15 @@ body:not(.mode-planning) #rightPlanning {
   min-width: 0;
 }
 
+.planMethodIndex {
+  align-self: flex-start;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding-top: 2px;
+}
+
 .planMethodName {
   color: var(--text);
   font-size: 12px;
@@ -2300,6 +2523,12 @@ body:not(.mode-planning) #rightPlanning {
   color: #fff;
 }
 
+.planMethodCard.isHighlighted {
+  border-color: rgba(255, 255, 255, 0.42);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18), 0 10px 20px rgba(0, 0, 0, 0.18);
+  background: rgba(24, 32, 44, 0.78);
+}
+
 .planMethodAddBtn {
   align-self: flex-start;
   height: 30px;
@@ -2315,8 +2544,62 @@ body:not(.mode-planning) #rightPlanning {
 .planObjectActions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
+}
+
+.planObjectActionTools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.planObjectColorWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.planObjectColorBtn {
+  width: 38px;
+  min-width: 38px;
+  height: 30px;
+  padding: 0;
+}
+
+.planObjectColorPopover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(16, 23, 32, 0.98);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  z-index: 6;
+}
+
+.planObjectColorInput {
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.planObjectColorInput::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.planObjectColorInput::-webkit-color-swatch {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+
+.planObjectColorInput::-moz-color-swatch {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
 }
 
 .planObjectRemoveActionBtn {
@@ -2325,8 +2608,13 @@ body:not(.mode-planning) #rightPlanning {
   min-width: 38px;
   height: 30px;
   padding: 0;
-  margin-left: auto;
   color: #fff;
+}
+
+.planObjectCard.isHighlighted {
+  border-color: rgba(255, 255, 255, 0.34);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.14), 0 14px 26px rgba(0, 0, 0, 0.16);
+  background: rgba(255, 255, 255, 0.055);
 }
 
 .planningExportActions {

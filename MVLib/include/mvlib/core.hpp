@@ -661,7 +661,6 @@ private:
   const char* m_date = detail::getBuildDate(); 
   char m_loggingFolder[24] = "";
 
-
   volatile bool m_sdLocked = false;    // Has sd card failed?
   bool m_started = false;     // Has start() been called?
   bool m_configSet = false;   // Has setRobot() been called?

@@ -174,8 +174,17 @@ const ctx = canvas.getContext("2d");
 const timelineCanvas = document.getElementById("timelineCanvas");
 const tctx = timelineCanvas.getContext("2d");
 const planningTimelineCanvas = document.getElementById("planningTimelineCanvas");
+const planningTimelineViewport = document.getElementById("planningTimelineViewport");
+const planningTimelineContent = document.getElementById("planningTimelineContent");
+const planningEventTimelineEl = document.getElementById("planningEventTimeline");
+const planningEventTimelineInnerEl = document.getElementById("planningEventTimelineInner");
+const planningEventTimelineHintEl = document.getElementById("planningEventTimelineHint");
+const planningTimelineWaypointLayerEl = document.getElementById("planningTimelineWaypointLayer");
+const planningTimelineNodeLayerEl = document.getElementById("planningTimelineNodeLayer");
+const planningTimelineDropLineEl = document.getElementById("planningTimelineDropLine");
 const planTimePill = document.getElementById("planTimePill");
 const planPointPill = document.getElementById("planPointPill");
+const planNodeTooltipEl = document.getElementById("planNodeTooltip");
 const pctx = planningTimelineCanvas ? planningTimelineCanvas.getContext("2d") : null;
 
 const topBarEl = document.getElementById("topBar");
@@ -221,13 +230,12 @@ const rowGrid = document.querySelector(".row");
 
 const timelineBar = document.getElementById("timelineBar");
 const timelineTop = document.getElementById("timelineTop");
-const planningTimelineBar = document.getElementById("planningTimelineBar");
 
 const layoutState = {
   lastLeftSidebarW: 360,
   lastRightSidebarW: 360,
   lastTimelineH: 260,
-  lastPlanningTimelineH: 90,
+  lastPlanningTimelineH: 144,
 };
 
 const TOP_BAR_CENTER_STATUS_GAP_PX = 16;  // Gap between status text and center control
@@ -794,11 +802,43 @@ let planScrubbing = false;
 let planOverlayVisible = false;
 let savedPathsSaveTimer = null;
 let planObjects = [];
+let planNodes = [];
+let planSelectedNodeId = null;
 let planEditingObjectId = null;
 let planEditingObjectOriginalName = "";
 let planObjectEditSelectAll = false;
 let planTemplateModalState = null;
 let pendingPlanObjectRemovalId = null;
+let planOpenColorPickerObjectId = null;
+let planTimelineLayout = null;
+let planTimelineDropTarget = null;
+let planPointerDragState = null;
+let planNodeTooltipTimer = null;
+let planNodeTooltipVisible = false;
+let planNodeTooltipPointer = null;
+
+const PLAN_NODE_TOOLTIP_DELAY_MS = 90;
+
+const DEFAULT_PLAN_OBJECT_COLORS = [
+  "#6d8fb3",
+  "#8b7ab8",
+  "#739d87",
+  "#b38a6d",
+  "#a06f87",
+];
+const PLAN_TIMELINE_PAD_X = 6;
+const PLAN_TIMELINE_NODE_W = 18;
+const PLAN_TIMELINE_NODE_H = 24;
+const PLAN_TIMELINE_NODE_GAP = 8;
+const PLAN_TIMELINE_NODE_SLOT = PLAN_TIMELINE_NODE_W + PLAN_TIMELINE_NODE_GAP;
+const PLAN_TIMELINE_INSERT_HALF = (PLAN_TIMELINE_NODE_W * 0.5) + (PLAN_TIMELINE_NODE_GAP * 0.5);
+const PLAN_TIMELINE_EDGE_INSET = 14;
+const PLAN_TIMELINE_NODE_START_OFFSET = 18;
+const PLAN_TIMELINE_NODE_END_OFFSET = 18;
+const MIN_PLANNING_TIMELINE_H_PX = 144;
+const DEFAULT_PLANNING_TIMELINE_H_PX = 144;
+const LEGACY_PLANNING_TIMELINE_H_PX = 156;
+const PLAN_POINTER_DRAG_THRESHOLD_PX = 4;
 
 function createPlanObjectId() {
   return `plan-object-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -808,8 +848,25 @@ function createPlanMethodId() {
   return `plan-method-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function createPlanNodeId() {
+  return `plan-node-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getDefaultPlanObjectColor(index = planObjects.length) {
+  return DEFAULT_PLAN_OBJECT_COLORS[index % DEFAULT_PLAN_OBJECT_COLORS.length];
+}
+
 function getDefaultPlanObjectName(index = planObjects.length) {
   return `Object ${index + 1}`;
+}
+
+function getContrastTextColor(hexcolor) {
+  const normalized = String(hexcolor || "").replace("#", "");
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5 ? "#000000" : "#FFFFFF";
 }
 
 function normalizePlanObjects(arr) {
@@ -819,6 +876,7 @@ function normalizePlanObjects(arr) {
     return {
       id: (typeof obj?.id === "string" && obj.id.trim()) ? obj.id.trim() : createPlanObjectId(),
       name: typeof obj?.name === "string" ? obj.name : "",
+      color: (typeof obj?.color === "string" && obj.color.trim()) ? obj.color.trim() : getDefaultPlanObjectColor(index),
       latestMethod: typeof obj?.latestMethod === "string" ? obj.latestMethod : "",
       methods: rawMethods.map((method, methodIndex) => ({
         id: (typeof method?.id === "string" && method.id.trim()) ? method.id.trim() : `plan-method-${index + 1}-${methodIndex + 1}`,
@@ -827,6 +885,109 @@ function normalizePlanObjects(arr) {
       })),
     };
   });
+}
+
+function normalizePlanNodes(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map((node) => ({
+    id: (typeof node?.id === "string" && node.id.trim()) ? node.id.trim() : createPlanNodeId(),
+    objectId: typeof node?.objectId === "string" ? node.objectId : "",
+    methodId: typeof node?.methodId === "string" ? node.methodId : "",
+    beforeWaypoint: Math.max(0, Number(node?.beforeWaypoint) || 0),
+    index: Math.max(0, Number(node?.index) || 0),
+  }));
+}
+
+function getPlanObjectById(objectId) {
+  return planObjects.find((entry) => entry.id === objectId) || null;
+}
+
+function getPlanMethodById(objectId, methodId) {
+  return getPlanObjectById(objectId)?.methods?.find((entry) => entry.id === methodId) || null;
+}
+
+function getPlanMethodNumber(objectId, methodId) {
+  const methods = getPlanObjectById(objectId)?.methods || [];
+  const index = methods.findIndex((entry) => entry.id === methodId);
+  return index >= 0 ? index + 1 : null;
+}
+
+function getPlanMethodTooltipName(name) {
+  const value = String(name || "").trim();
+  if (!value) return "Method";
+  return value.length > 10 ? `${value.slice(0, 10)}…` : value;
+}
+
+function getPlanNodeById(nodeId) {
+  return planNodes.find((entry) => entry.id === nodeId) || null;
+}
+
+function clearPlanNodeSelection() {
+  planSelectedNodeId = null;
+}
+
+function getSortedPlanNodes() {
+  return [...planNodes].sort((a, b) => {
+    if (a.beforeWaypoint !== b.beforeWaypoint) return a.beforeWaypoint - b.beforeWaypoint;
+    if (a.index !== b.index) return a.index - b.index;
+    return String(a.id).localeCompare(String(b.id));
+  });
+}
+
+function normalizePlanNodeOrdering() {
+  const maxBucket = Math.max(0, planWaypoints.length);
+  const buckets = Array.from({ length: maxBucket + 1 }, () => []);
+  for (const node of planNodes) {
+    node.beforeWaypoint = clamp(Math.round(Number(node.beforeWaypoint) || 0), 0, maxBucket);
+    node.index = Math.max(0, Math.round(Number(node.index) || 0));
+    buckets[node.beforeWaypoint].push(node);
+  }
+  for (const bucket of buckets) {
+    bucket.sort((a, b) => a.index - b.index || String(a.id).localeCompare(String(b.id)));
+    bucket.forEach((node, index) => {
+      node.index = index;
+    });
+  }
+}
+
+function pruneInvalidPlanNodes() {
+  if (planWaypoints.length === 0) {
+    const hadNodes = planNodes.length > 0;
+    planNodes = [];
+    if (planSelectedNodeId) {
+      clearPlanNodeSelection();
+      return true;
+    }
+    return hadNodes;
+  }
+  const objectIds = new Set(planObjects.map((entry) => entry.id));
+  const methodsByObject = new Map(planObjects.map((entry) => [entry.id, new Set(entry.methods.map((method) => method.id))]));
+  const maxBucket = Math.max(0, planWaypoints.length);
+  let changed = false;
+  planNodes = planNodes.filter((node) => {
+    if (!objectIds.has(node.objectId)) {
+      changed = true;
+      return false;
+    }
+    if (!methodsByObject.get(node.objectId)?.has(node.methodId)) {
+      changed = true;
+      return false;
+    }
+    const nextBucket = clamp(Math.round(Number(node.beforeWaypoint) || 0), 0, maxBucket);
+    const nextIndex = Math.max(0, Math.round(Number(node.index) || 0));
+    if (node.beforeWaypoint !== nextBucket || node.index !== nextIndex) {
+      node.beforeWaypoint = nextBucket;
+      node.index = nextIndex;
+      changed = true;
+    }
+    return true;
+  });
+  normalizePlanNodeOrdering();
+  if (planSelectedNodeId && !getPlanNodeById(planSelectedNodeId)) {
+    clearPlanNodeSelection();
+    changed = true;
+  }
+  return changed;
 }
 
 function getPlanMoveStepIn() {
@@ -978,6 +1139,16 @@ function planSelectSingle(idx) {
   planSetSelection([idx]);
 }
 
+function planToggleSelection(idx) {
+  if (idx < 0) return;
+  const next = new Set(planSelectedSet);
+  if (next.has(idx)) next.delete(idx);
+  else next.add(idx);
+  const indices = Array.from(next).sort((a, b) => a - b);
+  planSetSelection(indices);
+  planSelected = next.has(idx) ? idx : (indices.length ? indices[0] : -1);
+}
+
 function planRectSelect() {
   if (!planSelectRect) return;
   const x0 = Math.min(planSelectRect.x0, planSelectRect.x1);
@@ -1029,8 +1200,27 @@ function planDistFromX(x) {
   if (!planningTimelineCanvas) return 0;
   const rect = planningTimelineCanvas.getBoundingClientRect();
   const W = rect.width || 1;
+  const layout = getCurrentPlanTimelineLayout();
+  const track = getPlanningTimelineTrackMetrics(W);
   const total = planTotalLength();
-  const t = clamp((x - 6) / (W - 12), 0, 1);
+  if (layout?.waypointX?.length >= 2) {
+    const clampedX = clamp(x, layout.waypointX[0], layout.waypointX[layout.waypointX.length - 1]);
+    const distances = getPlanTimelineWaypointDistances();
+    if (clampedX <= layout.waypointX[0]) return 0;
+    if (clampedX >= layout.waypointX[layout.waypointX.length - 1]) return total;
+    for (let i = 1; i < layout.waypointX.length; i += 1) {
+      const endX = layout.waypointX[i];
+      if (clampedX > endX) continue;
+      const startX = layout.waypointX[i - 1];
+      const span = Math.max(0, endX - startX);
+      const startDist = distances[i - 1] ?? 0;
+      const endDist = distances[i] ?? startDist;
+      if (span <= 0.0001) return endDist;
+      const t = clamp((clampedX - startX) / span, 0, 1);
+      return startDist + (endDist - startDist) * t;
+    }
+  }
+  const t = clamp((x - track.startX) / track.innerWidth, 0, 1);
   return total * t;
 }
 
@@ -1073,6 +1263,7 @@ function setPlanDist(d) {
     planPointPill.textContent = `Points: ${planWaypoints.length}`;
   }
   drawPlanningTimeline();
+  syncPlanObjectLatestValues();
   requestDrawAll();
 }
 
@@ -1087,7 +1278,7 @@ function updatePlanControls() {
 function buildPlanExportCode(template = planExportTemplate) {
   const rawTemplate = String(template ?? "");
   if (!rawTemplate.trim()) return "";
-  return planWaypoints.map((point, index) => {
+  const renderWaypointBlock = (point, index) => {
     const prev = planWaypoints[index - 1];
     const distance = prev ? Math.hypot(point.x - prev.x, point.y - prev.y) : 0;
     const replacements = {
@@ -1099,7 +1290,32 @@ function buildPlanExportCode(template = planExportTemplate) {
       speed: formatTemplateNumber(readPlanSpeed(point.speed, 127), 0),
     };
     return rawTemplate.replace(/\$\{(x|y|theta|distance|iteration|speed)\}/g, (_, token) => replacements[token] ?? "");
-  }).join("\n");
+  };
+
+  const nodesByBucket = new Map();
+  for (const node of getSortedPlanNodes()) {
+    const arr = nodesByBucket.get(node.beforeWaypoint) || [];
+    arr.push(node);
+    nodesByBucket.set(node.beforeWaypoint, arr);
+  }
+
+  const blocks = [];
+  const appendBucketMethods = (beforeWaypoint) => {
+    const bucketNodes = nodesByBucket.get(beforeWaypoint) || [];
+    for (const node of bucketNodes) {
+      const method = getPlanMethodById(node.objectId, node.methodId);
+      if (!method) continue;
+      blocks.push(String(method.code || ""));
+    }
+  };
+
+  appendBucketMethods(0);
+  for (let i = 0; i < planWaypoints.length; i += 1) {
+    blocks.push(renderWaypointBlock(planWaypoints[i], i));
+    appendBucketMethods(i + 1);
+  }
+
+  return blocks.join("\n");
 }
 
 async function copyTextToClipboard(text) {
@@ -1273,9 +1489,493 @@ function openPlanMethodEditModal(objectId, methodId) {
   });
 }
 
+function getPlanTimelineWaypointDistances() {
+  const distances = [];
+  let acc = 0;
+  for (let i = 0; i < planWaypoints.length; i += 1) {
+    if (i > 0) {
+      const prev = planWaypoints[i - 1];
+      const cur = planWaypoints[i];
+      acc += Math.hypot(cur.x - prev.x, cur.y - prev.y);
+    }
+    distances.push(acc);
+  }
+  return distances;
+}
+
+function getPlanningTimelineTrackMetrics(width) {
+  const safeWidth = Math.max(1, width || 0);
+  const startX = PLAN_TIMELINE_PAD_X + PLAN_TIMELINE_EDGE_INSET;
+  const endX = Math.max(startX, safeWidth - PLAN_TIMELINE_PAD_X - PLAN_TIMELINE_EDGE_INSET);
+  return {
+    startX,
+    endX,
+    innerWidth: Math.max(1, endX - startX),
+  };
+}
+
+function getCurrentPlanTimelineLayout() {
+  return planTimelineLayout || buildPlanTimelineLayout();
+}
+
+function getPlanTimelineXFromDistance(distance) {
+  const layout = getCurrentPlanTimelineLayout();
+  if (!layout || !layout.waypointX.length) return PLAN_TIMELINE_PAD_X + PLAN_TIMELINE_EDGE_INSET;
+  if (layout.waypointX.length === 1) return layout.waypointX[0];
+
+  const total = planTotalLength();
+  const clampedDistance = clamp(distance, 0, total);
+  const distances = getPlanTimelineWaypointDistances();
+  if (clampedDistance <= 0) return layout.waypointX[0];
+  if (clampedDistance >= total) return layout.waypointX[layout.waypointX.length - 1];
+
+  for (let i = 1; i < distances.length; i += 1) {
+    const endDist = distances[i];
+    if (clampedDistance > endDist) continue;
+    const startDist = distances[i - 1] ?? 0;
+    const segLen = Math.max(0, endDist - startDist);
+    if (segLen <= 0.0001) return layout.waypointX[i];
+    const t = clamp((clampedDistance - startDist) / segLen, 0, 1);
+    return layout.waypointX[i - 1] + (layout.waypointX[i] - layout.waypointX[i - 1]) * t;
+  }
+
+  return layout.waypointX[layout.waypointX.length - 1];
+}
+
+function buildPlanTimelineLayout() {
+  if (!planningTimelineViewport || !planningEventTimelineInnerEl) return null;
+  const waypointCount = planWaypoints.length;
+  const viewportWidth = Math.max(1, planningTimelineViewport.clientWidth || planningTimelineViewport.getBoundingClientRect().width || 1);
+  const totalLength = planTotalLength();
+  const baseContentWidth = Math.max(viewportWidth, PLAN_TIMELINE_PAD_X * 2 + 120);
+  const buckets = Array.from({ length: waypointCount + 1 }, (_, beforeWaypoint) => ({
+    beforeWaypoint,
+    nodes: [],
+  }));
+  for (const node of getSortedPlanNodes()) {
+    if (buckets[node.beforeWaypoint]) buckets[node.beforeWaypoint].nodes.push(node);
+  }
+
+  const baseWaypointX = [];
+  if (waypointCount > 0) {
+    if (waypointCount === 1) {
+      baseWaypointX.push(PLAN_TIMELINE_PAD_X + PLAN_TIMELINE_EDGE_INSET);
+    } else if (totalLength <= 0) {
+      for (let i = 0; i < waypointCount; i += 1) {
+        const ratio = i / Math.max(1, waypointCount - 1);
+        baseWaypointX.push(
+          PLAN_TIMELINE_PAD_X + PLAN_TIMELINE_EDGE_INSET
+          + (baseContentWidth - PLAN_TIMELINE_PAD_X * 2 - PLAN_TIMELINE_EDGE_INSET * 2) * ratio
+        );
+      }
+    } else {
+      const distances = getPlanTimelineWaypointDistances();
+      for (let i = 0; i < waypointCount; i += 1) {
+        const ratio = distances[i] / totalLength;
+        baseWaypointX.push(
+          PLAN_TIMELINE_PAD_X + PLAN_TIMELINE_EDGE_INSET
+          + (baseContentWidth - PLAN_TIMELINE_PAD_X * 2 - PLAN_TIMELINE_EDGE_INSET * 2) * ratio
+        );
+      }
+    }
+  }
+
+  const baseBucketWidths = [];
+  if (waypointCount > 0) {
+    baseBucketWidths.push(Math.max(0, baseWaypointX[0] - PLAN_TIMELINE_PAD_X));
+    for (let i = 1; i < waypointCount; i += 1) {
+      baseBucketWidths.push(Math.max(0, baseWaypointX[i] - baseWaypointX[i - 1]));
+    }
+    baseBucketWidths.push(Math.max(0, baseContentWidth - PLAN_TIMELINE_PAD_X - baseWaypointX[waypointCount - 1]));
+  } else {
+    baseBucketWidths.push(baseContentWidth - PLAN_TIMELINE_PAD_X * 2);
+  }
+
+  const bucketWidths = baseBucketWidths.map((width, beforeWaypoint) => {
+    const count = buckets[beforeWaypoint]?.nodes?.length || 0;
+    if (!waypointCount) return width;
+    if (beforeWaypoint === 0 || beforeWaypoint === waypointCount) {
+      const needed = count > 0 ? PLAN_TIMELINE_NODE_START_OFFSET + PLAN_TIMELINE_NODE_W + (count - 1) * PLAN_TIMELINE_NODE_SLOT : width;
+      return Math.max(width, needed);
+    }
+    const needed = count > 0
+      ? PLAN_TIMELINE_NODE_START_OFFSET + PLAN_TIMELINE_NODE_W + (count - 1) * PLAN_TIMELINE_NODE_SLOT + PLAN_TIMELINE_NODE_END_OFFSET
+      : width;
+    return Math.max(width, needed);
+  });
+
+  const waypointX = [];
+  let cursor = PLAN_TIMELINE_PAD_X;
+  if (waypointCount > 0) {
+    for (let i = 0; i < waypointCount; i += 1) {
+      cursor += bucketWidths[i];
+      waypointX.push(cursor);
+    }
+    cursor += bucketWidths[waypointCount];
+  } else {
+    cursor = PLAN_TIMELINE_PAD_X + bucketWidths[0];
+  }
+
+  const contentWidth = Math.max(viewportWidth, cursor + PLAN_TIMELINE_PAD_X);
+  const bucketLayouts = buckets.map((bucket, beforeWaypoint) => {
+    const start = beforeWaypoint === 0 ? PLAN_TIMELINE_PAD_X : waypointX[beforeWaypoint - 1];
+    const width = bucketWidths[beforeWaypoint] ?? 0;
+    const end = start + width;
+    const nodeStart = beforeWaypoint === 0 ? start + 10 : start + PLAN_TIMELINE_NODE_START_OFFSET;
+    return {
+      beforeWaypoint,
+      start,
+      end,
+      width,
+      nodeStart,
+      nodes: bucket.nodes,
+    };
+  });
+
+  return {
+    waypointCount,
+    contentWidth,
+    waypointX,
+    buckets: bucketLayouts,
+  };
+}
+
+function getPlanTimelinePointerContentX(clientX) {
+  if (!planningEventTimelineInnerEl) return 0;
+  const rect = planningEventTimelineInnerEl.getBoundingClientRect();
+  return clientX - rect.left;
+}
+
+function getPlanTimelineDropTargetFromClientX(clientX) {
+  const layout = planTimelineLayout || buildPlanTimelineLayout();
+  if (!layout || planWaypoints.length < 2) return null;
+  const x = clamp(getPlanTimelinePointerContentX(clientX), PLAN_TIMELINE_PAD_X, layout.contentWidth - PLAN_TIMELINE_PAD_X);
+  let bucket = null;
+  if (layout.waypointCount > 0 && x < layout.waypointX[0]) {
+    bucket = layout.buckets[0] || null;
+  } else if (layout.waypointCount > 0 && x > layout.waypointX[layout.waypointX.length - 1]) {
+    bucket = layout.buckets[layout.buckets.length - 1] || null;
+  } else {
+    for (let i = 1; i < layout.buckets.length - 1; i += 1) {
+      const candidate = layout.buckets[i];
+      if (x <= candidate.end) {
+        bucket = candidate;
+        break;
+      }
+    }
+  }
+  if (!bucket) bucket = layout.buckets[Math.min(1, layout.buckets.length - 1)] || layout.buckets[0] || null;
+  if (!bucket) return null;
+  const local = x - bucket.nodeStart;
+  const count = bucket.nodes.length;
+  const rawIndex = count <= 0 ? 0 : Math.floor((local + PLAN_TIMELINE_NODE_SLOT * 0.5) / PLAN_TIMELINE_NODE_SLOT);
+  const index = clamp(rawIndex, 0, count);
+  const lineX = count <= 0
+    ? clamp(x, bucket.start + 8, bucket.end - 8)
+    : clamp(
+      bucket.nodeStart + index * PLAN_TIMELINE_NODE_SLOT - PLAN_TIMELINE_INSERT_HALF,
+      PLAN_TIMELINE_PAD_X + 2,
+      layout.contentWidth - PLAN_TIMELINE_PAD_X - 2,
+    );
+  return {
+    beforeWaypoint: bucket.beforeWaypoint,
+    index,
+    lineX,
+  };
+}
+
+function getPlanNodeThresholdDistance(node, bucketNodes) {
+  const bucketIndex = clamp(node.beforeWaypoint, 0, planWaypoints.length);
+  if (bucketIndex <= 0) return 0;
+  if (bucketIndex >= planWaypoints.length) return planTotalLength();
+  const distances = getPlanTimelineWaypointDistances();
+  const start = distances[bucketIndex - 1] ?? 0;
+  const end = distances[bucketIndex] ?? start;
+  const segLen = Math.max(0, end - start);
+  const count = Math.max(1, bucketNodes.length);
+  return start + segLen * (node.index / count);
+}
+
+function getLatestPlanMethodNameForObject(objectId) {
+  if (planWaypoints.length < 2) return "\u2014";
+  const nodes = getSortedPlanNodes().filter((node) => node.objectId === objectId);
+  if (!nodes.length) return "\u2014";
+  const buckets = new Map();
+  for (const node of getSortedPlanNodes()) {
+    const key = String(node.beforeWaypoint);
+    const arr = buckets.get(key) || [];
+    arr.push(node);
+    buckets.set(key, arr);
+  }
+  let latest = null;
+  for (const node of nodes) {
+    const bucketNodes = buckets.get(String(node.beforeWaypoint)) || [];
+    const threshold = getPlanNodeThresholdDistance(node, bucketNodes);
+    if (threshold <= planPlayDist + 0.0001) latest = node;
+  }
+  if (!latest) return "\u2014";
+  return getPlanMethodById(latest.objectId, latest.methodId)?.name || "\u2014";
+}
+
+function syncPlanObjectLatestValues() {
+  if (!planObjectListEl) return;
+  for (const card of planObjectListEl.querySelectorAll(".planObjectCard")) {
+    const objectId = card.getAttribute("data-object-id") || "";
+    const valueEl = card.querySelector(".planObjectLatestValue");
+    if (!valueEl) continue;
+    valueEl.textContent = getLatestPlanMethodNameForObject(objectId);
+  }
+}
+
+function savePlanTimelineUi() {
+  pruneInvalidPlanNodes();
+  renderPlanningEventTimeline();
+  syncPlanObjectLatestValues();
+  scheduleSavedPathsSave();
+}
+
+function normalizePlanningTimelineHeightForContent() {
+  if (planNodes.length > 0) return;
+  const current = getPlanningTimelineH();
+  if (current > DEFAULT_PLANNING_TIMELINE_H_PX) {
+    root.style.setProperty("--planningTimelineH", `${DEFAULT_PLANNING_TIMELINE_H_PX}px`);
+    layoutState.lastPlanningTimelineH = DEFAULT_PLANNING_TIMELINE_H_PX;
+    resizePlanningTimeline();
+    void saveSettings();
+  }
+}
+
+function scrollPlanMethodIntoView(objectId, methodId) {
+  const esc = (value) => (globalThis.CSS?.escape ? globalThis.CSS.escape(value) : String(value).replace(/["\\]/g, "\\$&"));
+  const methodEl = planObjectListEl?.querySelector(`.planMethodCard[data-object-id="${esc(objectId)}"][data-method-id="${esc(methodId)}"]`);
+  const objectEl = planObjectListEl?.querySelector(`.planObjectCard[data-object-id="${esc(objectId)}"]`);
+  objectEl?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  methodEl?.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+function selectPlanNode(nodeId, { scrollSidebar = false } = {}) {
+  planSelectedNodeId = nodeId || null;
+  renderPlanningEventTimeline();
+  renderPlanObjects();
+  syncPlanObjectLatestValues();
+  if (scrollSidebar && nodeId) {
+    const node = getPlanNodeById(nodeId);
+    if (node) scrollPlanMethodIntoView(node.objectId, node.methodId);
+  }
+}
+
+function createPlanMethodDragGhostCard({ objectId, methodId }) {
+  const object = getPlanObjectById(objectId);
+  const method = getPlanMethodById(objectId, methodId);
+  const ghost = document.createElement("div");
+  ghost.className = "planMethodCard planMethodDragGhost";
+  ghost.innerHTML = `
+    <div class="planMethodGrip" aria-hidden="true">⋮⋮</div>
+    <div class="planMethodIndex">${escapeHtml(String(getPlanMethodNumber(objectId, methodId) || ""))}</div>
+    <div class="planMethodContent">
+      <div class="planMethodName">${escapeHtml(method?.name || "")}</div>
+      <div class="planMethodCode">${escapeHtml(method?.code || "")}</div>
+    </div>
+    <button class="iconBtn planMethodRemoveBtn" type="button" aria-hidden="true" tabindex="-1">
+      <svg width="30" height="30" aria-hidden="true">
+        <use href="./assets/svg/icons.svg#icon-removePlanningObject"></use>
+      </svg>
+    </button>
+  `;
+  if (object?.color) {
+    ghost.style.setProperty("--plan-drag-color", object.color);
+  }
+  document.body.appendChild(ghost);
+  return ghost;
+}
+
+function clearPlanTimelineDropTarget() {
+  planTimelineDropTarget = null;
+  planningEventTimelineEl?.classList?.remove("isDropActive");
+  if (planningTimelineDropLineEl) planningTimelineDropLineEl.hidden = true;
+}
+
+function updatePlanTimelineDropTarget(clientX) {
+  const next = getPlanTimelineDropTargetFromClientX(clientX);
+  planTimelineDropTarget = next;
+  if (planningEventTimelineEl) planningEventTimelineEl.classList.toggle("isDropActive", !!next);
+  if (!planningTimelineDropLineEl || !next) {
+    if (planningTimelineDropLineEl) planningTimelineDropLineEl.hidden = true;
+    return;
+  }
+  planningTimelineDropLineEl.hidden = false;
+  planningTimelineDropLineEl.style.left = `${next.lineX}px`;
+}
+
+function clearPlanNodeTooltipTimer() {
+  if (planNodeTooltipTimer) {
+    clearTimeout(planNodeTooltipTimer);
+    planNodeTooltipTimer = null;
+  }
+}
+
+function positionPlanNodeTooltip(clientX, clientY) {
+  if (!planNodeTooltipEl) return;
+  const offsetX = 12;
+  const offsetY = 14;
+  const maxX = window.innerWidth - planNodeTooltipEl.offsetWidth - 8;
+  const maxY = window.innerHeight - planNodeTooltipEl.offsetHeight - 8;
+  const left = clamp(clientX + offsetX, 8, Math.max(8, maxX));
+  const top = clamp(clientY + offsetY, 8, Math.max(8, maxY));
+  planNodeTooltipEl.style.left = `${left}px`;
+  planNodeTooltipEl.style.top = `${top}px`;
+}
+
+function hidePlanNodeTooltip({ immediate = false } = {}) {
+  clearPlanNodeTooltipTimer();
+  planNodeTooltipPointer = null;
+  if (!planNodeTooltipEl) return;
+  planNodeTooltipVisible = false;
+  planNodeTooltipEl.classList.remove("isVisible");
+  planNodeTooltipEl.setAttribute("aria-hidden", "true");
+  if (immediate) {
+    planNodeTooltipEl.hidden = true;
+    return;
+  }
+  window.setTimeout(() => {
+    if (!planNodeTooltipVisible && planNodeTooltipEl) planNodeTooltipEl.hidden = true;
+  }, 100);
+}
+
+function showPlanNodeTooltip(text, clientX, clientY) {
+  if (!planNodeTooltipEl || !text) return;
+  clearPlanNodeTooltipTimer();
+  planNodeTooltipPointer = { clientX, clientY };
+  planNodeTooltipTimer = window.setTimeout(() => {
+    if (!planNodeTooltipEl || !planNodeTooltipPointer) return;
+    planNodeTooltipEl.textContent = text;
+    planNodeTooltipEl.hidden = false;
+    positionPlanNodeTooltip(planNodeTooltipPointer.clientX, planNodeTooltipPointer.clientY);
+    planNodeTooltipVisible = true;
+    planNodeTooltipEl.setAttribute("aria-hidden", "false");
+    requestAnimationFrame(() => {
+      if (planNodeTooltipVisible) planNodeTooltipEl.classList.add("isVisible");
+    });
+  }, PLAN_NODE_TOOLTIP_DELAY_MS);
+}
+
+function updatePlanNodeTooltip(text, clientX, clientY) {
+  planNodeTooltipPointer = { clientX, clientY };
+  if (!planNodeTooltipVisible) {
+    showPlanNodeTooltip(text, clientX, clientY);
+    return;
+  }
+  if (!planNodeTooltipEl) return;
+  if (planNodeTooltipEl.textContent !== text) planNodeTooltipEl.textContent = text;
+  positionPlanNodeTooltip(clientX, clientY);
+}
+
+function renderPlanningEventTimeline() {
+  if (!planningEventTimelineInnerEl || !planningTimelineWaypointLayerEl || !planningTimelineNodeLayerEl || !planningTimelineContent) return;
+  hidePlanNodeTooltip({ immediate: true });
+  pruneInvalidPlanNodes();
+  planTimelineLayout = buildPlanTimelineLayout();
+  const layout = planTimelineLayout;
+  if (!layout) return;
+
+  planningTimelineContent.style.width = `${Math.ceil(layout.contentWidth)}px`;
+  planningEventTimelineInnerEl.style.width = `${Math.ceil(layout.contentWidth)}px`;
+
+  const canPlace = planWaypoints.length >= 2;
+  if (planningEventTimelineHintEl) {
+    planningEventTimelineHintEl.hidden = canPlace;
+  }
+
+  planningTimelineWaypointLayerEl.innerHTML = "";
+  planningTimelineNodeLayerEl.innerHTML = "";
+  if (!canPlace) {
+    syncPlanningTimelineCanvasSize();
+    clearPlanTimelineDropTarget();
+    drawPlanningTimeline();
+    return;
+  }
+
+  for (const x of layout.waypointX) {
+    const connector = document.createElement("div");
+    connector.className = "planningTimelineWaypointConnector";
+    connector.style.left = `${x}px`;
+    planningTimelineWaypointLayerEl.appendChild(connector);
+  }
+
+  for (const node of getSortedPlanNodes()) {
+    const object = getPlanObjectById(node.objectId);
+    const methodNumber = getPlanMethodNumber(node.objectId, node.methodId);
+    const bucket = layout.buckets[node.beforeWaypoint];
+    if (!object || !methodNumber || !bucket) continue;
+    const nodeEl = document.createElement("button");
+    nodeEl.type = "button";
+    nodeEl.className = "planningTimelineNode";
+    if (planSelectedNodeId === node.id) nodeEl.classList.add("isSelected");
+    nodeEl.draggable = false;
+    nodeEl.dataset.nodeId = node.id;
+    nodeEl.dataset.objectId = node.objectId;
+    nodeEl.dataset.methodId = node.methodId;
+    nodeEl.style.left = `${bucket.nodeStart + node.index * PLAN_TIMELINE_NODE_SLOT}px`;
+    nodeEl.style.background = object.color || getDefaultPlanObjectColor();
+    nodeEl.style.color = getContrastTextColor(object.color || getDefaultPlanObjectColor());
+    const tooltipText = `${object.name || "Object"} · ${getPlanMethodTooltipName(getPlanMethodById(node.objectId, node.methodId)?.name)}`;
+    nodeEl.setAttribute("aria-label", tooltipText);
+    nodeEl.textContent = String(methodNumber);
+    nodeEl.addEventListener("click", (e) => {
+      e.preventDefault();
+      selectPlanNode(node.id, { scrollSidebar: true });
+    });
+    nodeEl.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      openPlanMethodEditModal(node.objectId, node.methodId);
+    });
+    nodeEl.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      hidePlanNodeTooltip({ immediate: true });
+      beginPlanPointerDrag({
+        source: "node",
+        objectId: node.objectId,
+        methodId: node.methodId,
+        nodeId: node.id,
+        sourceEl: nodeEl,
+        startX: e.clientX,
+        startY: e.clientY,
+      });
+    });
+    nodeEl.addEventListener("pointerenter", (e) => {
+      updatePlanNodeTooltip(tooltipText, e.clientX, e.clientY);
+    });
+    nodeEl.addEventListener("pointermove", (e) => {
+      updatePlanNodeTooltip(tooltipText, e.clientX, e.clientY);
+    });
+    nodeEl.addEventListener("pointerleave", () => {
+      hidePlanNodeTooltip();
+    });
+    nodeEl.addEventListener("focus", () => {
+      const rect = nodeEl.getBoundingClientRect();
+      updatePlanNodeTooltip(tooltipText, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    });
+    nodeEl.addEventListener("blur", () => {
+      hidePlanNodeTooltip({ immediate: true });
+    });
+    planningTimelineNodeLayerEl.appendChild(nodeEl);
+  }
+
+  if (planTimelineDropTarget) {
+    updatePlanTimelineDropTarget((planningEventTimelineInnerEl.getBoundingClientRect().left || 0) + planTimelineDropTarget.lineX);
+  } else {
+    clearPlanTimelineDropTarget();
+  }
+  syncPlanningTimelineCanvasSize();
+  drawPlanningTimeline();
+}
+
 function renderPlanObjects() {
   if (!planObjectListEl) return;
   planObjectListEl.innerHTML = "";
+  const selectedNode = getPlanNodeById(planSelectedNodeId);
+  const highlightedObjectId = selectedNode?.objectId || "";
+  const highlightedMethodId = selectedNode?.methodId || "";
 
   if (planEventsHintEl) {
     planEventsHintEl.textContent = planObjects.length
@@ -1288,6 +1988,7 @@ function renderPlanObjects() {
     const card = document.createElement("article");
     card.className = "planObjectCard";
     card.dataset.objectId = obj.id;
+    if (obj.id === highlightedObjectId) card.classList.add("isHighlighted");
 
     const header = document.createElement("div");
     header.className = "planObjectHeader";
@@ -1351,14 +2052,16 @@ function renderPlanObjects() {
       empty.textContent = "No methods yet.";
       methodList.appendChild(empty);
     } else {
-      for (const method of obj.methods) {
+      for (const [methodIndex, method] of obj.methods.entries()) {
         const methodCard = document.createElement("div");
         methodCard.className = "planMethodCard";
-        methodCard.draggable = true;
+        if (obj.id === highlightedObjectId && method.id === highlightedMethodId) methodCard.classList.add("isHighlighted");
+        methodCard.draggable = false;
         methodCard.dataset.objectId = obj.id;
         methodCard.dataset.methodId = method.id;
         methodCard.innerHTML = `
           <div class="planMethodGrip" aria-hidden="true">⋮⋮</div>
+          <div class="planMethodIndex">${methodIndex + 1}</div>
           <div class="planMethodContent">
             <div class="planMethodName">${escapeHtml(method.name || "")}</div>
             <div class="planMethodCode">${escapeHtml(method.code || "")}</div>
@@ -1384,6 +2087,18 @@ function renderPlanObjects() {
     actions.className = "planObjectActions";
     actions.innerHTML = `
       <button class="iconBtn secondaryBtn planMethodAddBtn" type="button" title="Add Method" aria-label="Add Method" data-object-id="${escapeHtml(obj.id)}">Add Method</button>
+      <div class="planObjectActionTools">
+        <div class="planObjectColorWrap">
+          <button class="iconBtn secondaryBtn planObjectColorBtn" type="button" title="Change Object Color" aria-label="Change Object Color" data-object-id="${escapeHtml(obj.id)}" style="color:${escapeHtml(obj.color || getDefaultPlanObjectColor(i))}">
+            <svg width="30" height="30" aria-hidden="true">
+              <use href="./assets/svg/icons.svg#icon-planningChangeObjectColor"></use>
+            </svg>
+          </button>
+          <div class="planObjectColorPopover"${planOpenColorPickerObjectId === obj.id ? "" : " hidden"}>
+            <input class="planObjectColorInput" type="color" value="${escapeHtml(obj.color || getDefaultPlanObjectColor(i))}" aria-label="Object color" data-object-id="${escapeHtml(obj.id)}" />
+          </div>
+        </div>
+      </div>
       <button class="iconBtn secondaryBtn planObjectRemoveActionBtn" type="button" title="Remove Object" aria-label="Remove Object" data-object-id="${escapeHtml(obj.id)}">
         <svg width="30" height="30" aria-hidden="true">
           <use href="./assets/svg/icons.svg#icon-removePlanningObject"></use>
@@ -1423,6 +2138,8 @@ function clearPlanObjectEditState() {
 
 function savePlanObjectsUi() {
   renderPlanObjects();
+  renderPlanningEventTimeline();
+  syncPlanObjectLatestValues();
   scheduleSavedPathsSave();
 }
 
@@ -1452,14 +2169,24 @@ function commitPlanObjectNameEdit(objectId, nextNameRaw) {
 }
 
 function getPlanObjectLatestValue(object) {
-  if (!object || planWaypoints.length <= 0) return "\u2014";
-  return object.latestMethod || "\u2014";
+  if (!object) return "\u2014";
+  return getLatestPlanMethodNameForObject(object.id);
+}
+
+function setPlanObjectColor(objectId, color) {
+  const object = planObjects.find((entry) => entry.id === objectId);
+  if (!object) return;
+  const nextColor = String(color || "").trim();
+  if (!/^#[0-9a-fA-F]{6}$/.test(nextColor)) return;
+  object.color = nextColor;
+  savePlanObjectsUi();
 }
 
 function addPlanObject() {
   const next = {
     id: createPlanObjectId(),
     name: "",
+    color: getDefaultPlanObjectColor(planObjects.length),
     latestMethod: "",
     methods: [],
   };
@@ -1474,6 +2201,8 @@ function removePlanObject(objectId) {
   const idx = planObjects.findIndex((entry) => entry.id === objectId);
   if (idx < 0) return;
   planObjects.splice(idx, 1);
+  planNodes = planNodes.filter((entry) => entry.objectId !== objectId);
+  if (planSelectedNodeId && !getPlanNodeById(planSelectedNodeId)) clearPlanNodeSelection();
   if (planEditingObjectId === objectId) clearPlanObjectEditState();
   savePlanObjectsUi();
 }
@@ -1518,32 +2247,83 @@ function removePlanMethod(objectId, methodId) {
   const idx = object.methods.findIndex((entry) => entry.id === methodId);
   if (idx < 0) return;
   object.methods.splice(idx, 1);
+  planNodes = planNodes.filter((entry) => !(entry.objectId === objectId && entry.methodId === methodId));
+  if (planSelectedNodeId && !getPlanNodeById(planSelectedNodeId)) clearPlanNodeSelection();
   savePlanObjectsUi();
+}
+
+function insertPlanNode(objectId, methodId, beforeWaypoint, index) {
+  const object = getPlanObjectById(objectId);
+  const method = getPlanMethodById(objectId, methodId);
+  if (!object || !method || planWaypoints.length < 2) return null;
+  const node = {
+    id: createPlanNodeId(),
+    objectId,
+    methodId,
+    beforeWaypoint: clamp(Math.round(beforeWaypoint || 0), 0, planWaypoints.length),
+    index: Math.max(0, Math.round(index || 0)),
+  };
+  const bucketNodes = planNodes
+    .filter((entry) => entry.beforeWaypoint === node.beforeWaypoint)
+    .sort((a, b) => a.index - b.index);
+  for (const entry of bucketNodes) {
+    if (entry.index >= node.index) entry.index += 1;
+  }
+  planNodes.push(node);
+  normalizePlanNodeOrdering();
+  return node;
+}
+
+function movePlanNode(nodeId, beforeWaypoint, index) {
+  const node = getPlanNodeById(nodeId);
+  if (!node) return null;
+  const originalBucket = node.beforeWaypoint;
+  const originalIndex = node.index;
+  const targetBucket = clamp(Math.round(beforeWaypoint || 0), 0, planWaypoints.length);
+  let targetIndex = Math.max(0, Math.round(index || 0));
+
+  if (originalBucket === targetBucket && targetIndex > originalIndex) targetIndex -= 1;
+  planNodes = planNodes.filter((entry) => entry.id !== nodeId);
+  normalizePlanNodeOrdering();
+  node.beforeWaypoint = targetBucket;
+  node.index = targetIndex;
+  const bucketNodes = planNodes
+    .filter((entry) => entry.beforeWaypoint === targetBucket)
+    .sort((a, b) => a.index - b.index);
+  for (const entry of bucketNodes) {
+    if (entry.index >= targetIndex) entry.index += 1;
+  }
+  planNodes.push(node);
+  normalizePlanNodeOrdering();
+  return node;
+}
+
+function removePlanNode(nodeId) {
+  const idx = planNodes.findIndex((entry) => entry.id === nodeId);
+  if (idx < 0) return;
+  planNodes.splice(idx, 1);
+  normalizePlanNodeOrdering();
+  if (planSelectedNodeId === nodeId) clearPlanNodeSelection();
+  savePlanTimelineUi();
+  normalizePlanningTimelineHeightForContent();
+  renderPlanObjects();
 }
 
 function attachPlanMethodCardDragHandlers(card) {
   if (!card || card.dataset.dragBound === "1") return;
   card.dataset.dragBound = "1";
-  card.addEventListener("dragstart", (e) => {
-    card.classList.add("isDragging");
-    const dt = e.dataTransfer;
-    if (!dt) return;
-    const ghost = card.cloneNode(true);
-    ghost.classList.remove("isDragging");
-    ghost.classList.add("planMethodDragGhost");
-    document.body.appendChild(ghost);
-    const rect = card.getBoundingClientRect();
-    const scale = 0.72;
-    dt.setDragImage(ghost, Math.round(rect.width * scale * 0.5), Math.round(rect.height * scale * 0.5));
-    card._planMethodDragGhost = ghost;
-  });
-  card.addEventListener("dragend", () => {
-    card.classList.remove("isDragging");
-    const ghost = card._planMethodDragGhost;
-    if (ghost) {
-      ghost.remove();
-      card._planMethodDragGhost = null;
-    }
+  card.draggable = false;
+  card.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    if (e.target instanceof Element && e.target.closest(".planMethodRemoveBtn")) return;
+    beginPlanPointerDrag({
+      source: "sidebar",
+      objectId: card.dataset.objectId || "",
+      methodId: card.dataset.methodId || "",
+      sourceEl: card,
+      startX: e.clientX,
+      startY: e.clientY,
+    });
   });
 }
 
@@ -1561,8 +2341,9 @@ function renderPlanList() {
       <div class="muted">#${i + 1}</div>
       <div>X: ${fmtNum(p.x, 2)}  Y: ${fmtNum(p.y, 2)}  θ: ${fmtNum(theta, 1)}°  S: ${fmtNum(readPlanSpeed(p.speed, 127), 0)}</div>
     `;
-    item.addEventListener("click", () => {
-      planSelectSingle(i);
+    item.addEventListener("click", (e) => {
+      if (e.shiftKey) planToggleSelection(i);
+      else planSelectSingle(i);
       requestDrawAll();
       renderPlanList();
       updatePlanSelectionPanel();
@@ -1645,7 +2426,11 @@ function applySavedLayout(settings) {
 
   const planningTimelineHeight = parseLayoutNumber(settings.layoutPlanningTimelineHeight);
   if (planningTimelineHeight !== null) {
-    const next = clamp(planningTimelineHeight, 70, MAX_TIMELINE_H_PX);
+    const migratedPlanningTimelineHeight =
+      Math.abs(planningTimelineHeight - LEGACY_PLANNING_TIMELINE_H_PX) < 2
+        ? DEFAULT_PLANNING_TIMELINE_H_PX
+        : planningTimelineHeight;
+    const next = clamp(migratedPlanningTimelineHeight, MIN_PLANNING_TIMELINE_H_PX, MAX_TIMELINE_H_PX);
     root.style.setProperty("--planningTimelineH", `${next}px`);
     layoutChanged = true;
     layoutState.lastPlanningTimelineH = next;
@@ -1670,9 +2455,12 @@ function centerOnWorld(x, y) {
 }
 
 function planChanged(opts = {}) {
+  pruneInvalidPlanNodes();
   renderPlanList();
   updatePlanControls();
   setPlanDist(planPlayDist);
+  renderPlanningEventTimeline();
+  syncPlanObjectLatestValues();
   if (!opts.skipSelectionPanel) updatePlanSelectionPanel();
   scheduleSavedPathsSave();
 }
@@ -1696,7 +2484,12 @@ async function loadSavedPaths() {
     planPlayDist = 0;
     planChanged();
     planObjects = normalizePlanObjects(obj?.["planned-objects"] || []);
+    planNodes = normalizePlanNodes(obj?.["planned-nodes"] || []);
+    pruneInvalidPlanNodes();
+    clearPlanNodeSelection();
     renderPlanObjects();
+    renderPlanningEventTimeline();
+    normalizePlanningTimelineHeightForContent();
     rawPoses = normalizePoseArray(obj?.["robot-path"] || []);
     watches = normalizeWatches(obj?.["watches"] || []);
     logs = normalizeLogs(obj?.["logs"] || []);
@@ -1725,17 +2518,26 @@ function scheduleSavedPathsSave() {
 }
 
 function buildSavedPathsPayload() {
+  pruneInvalidPlanNodes();
   return JSON.stringify({
     "planned-path": planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: readPlanSpeed(p.speed, 127) })),
     "planned-objects": planObjects.map((obj) => ({
       id: obj.id,
       name: obj.name,
+      color: obj.color || null,
       latestMethod: obj.latestMethod || "",
       methods: obj.methods.map((method) => ({
         id: method.id,
         name: method.name,
         code: method.code,
       })),
+    })),
+    "planned-nodes": planNodes.map((node) => ({
+      id: node.id,
+      objectId: node.objectId,
+      methodId: node.methodId,
+      beforeWaypoint: node.beforeWaypoint,
+      index: node.index,
     })),
     "robot-path": rawPoses.map((p) => ({
       t: p.t ?? null,
@@ -2703,13 +3505,23 @@ function resizeTimeline() {
   drawTimeline();
 }
 
-function resizePlanningTimeline() {
+function syncPlanningTimelineCanvasSize() {
   if (!planningTimelineCanvas || !pctx) return;
   const dpr = window.devicePixelRatio || 1;
   const rect = planningTimelineCanvas.getBoundingClientRect();
-  planningTimelineCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
-  planningTimelineCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
-  pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const nextWidth = Math.max(1, Math.floor(rect.width * dpr));
+  const nextHeight = Math.max(1, Math.floor(rect.height * dpr));
+  if (planningTimelineCanvas.width !== nextWidth || planningTimelineCanvas.height !== nextHeight) {
+    planningTimelineCanvas.width = nextWidth;
+    planningTimelineCanvas.height = nextHeight;
+    pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+}
+
+function resizePlanningTimeline() {
+  if (!planningTimelineCanvas || !pctx) return;
+  renderPlanningEventTimeline();
+  syncPlanningTimelineCanvasSize();
   drawPlanningTimeline();
 }
 
@@ -5408,9 +6220,8 @@ function drawPlanningTimeline() {
   if (appMode !== "planning") return;
   const rect = planningTimelineCanvas.getBoundingClientRect();
   const W = rect.width, H = rect.height;
+  const layout = getCurrentPlanTimelineLayout();
   pctx.clearRect(0, 0, W, H);
-  pctx.fillStyle = "rgba(16,23,32,0.55)";
-  pctx.fillRect(0, 0, W, H);
 
   const total = planTotalLength();
   if (total <= 0) return;
@@ -5419,14 +6230,14 @@ function drawPlanningTimeline() {
   pctx.strokeStyle = "rgba(255,255,255,0.12)";
   pctx.lineWidth = 2;
   pctx.beginPath();
-  pctx.moveTo(6, y);
-  pctx.lineTo(W - 6, y);
+  pctx.moveTo(PLAN_TIMELINE_PAD_X, y);
+  pctx.lineTo(W - PLAN_TIMELINE_PAD_X, y);
   pctx.stroke();
 
-  const progX = 6 + (W - 12) * clamp(planPlayDist / total, 0, 1);
+  const progX = getPlanTimelineXFromDistance(planPlayDist);
   pctx.strokeStyle = "rgba(120,180,255,0.9)";
   pctx.beginPath();
-  pctx.moveTo(6, y);
+  pctx.moveTo(PLAN_TIMELINE_PAD_X, y);
   pctx.lineTo(progX, y);
   pctx.stroke();
 
@@ -5440,14 +6251,9 @@ function drawPlanningTimeline() {
   pctx.stroke();
 
   // markers at waypoints
-  let acc = 0;
   pctx.fillStyle = "rgba(180,220,255,0.9)";
-  for (let i = 0; i < planWaypoints.length; i++) {
-    if (i > 0) {
-      const a = planWaypoints[i - 1], b = planWaypoints[i];
-      acc += Math.hypot(b.x - a.x, b.y - a.y);
-    }
-    const x = 6 + (W - 12) * (total ? acc / total : 0);
+  const waypointX = layout?.waypointX?.length ? layout.waypointX : [];
+  for (const x of waypointX) {
     pctx.beginPath();
     pctx.arc(x, y, 3.5, 0, Math.PI * 2);
     pctx.fill();
@@ -5840,10 +6646,18 @@ canvas.addEventListener("pointerdown", (e) => {
       return;
     }
     if (hit >= 0) {
-      pushPlanUndo();
-      if (!planSelectedSet.has(hit)) {
+      if (e.shiftKey) {
+        planToggleSelection(hit);
+        renderPlanList();
+        updatePlanSelectionPanel();
+        requestDrawAll();
+        return;
+      }
+      if (!planSelectedSet.has(hit) || planSelectedSet.size > 1) {
         planSelectSingle(hit);
-        planChanged();
+        renderPlanList();
+        updatePlanSelectionPanel();
+        requestDrawAll();
       }
     } else {
       if (planSelectedSet.size > 1) {
@@ -5923,6 +6737,7 @@ canvas.addEventListener("pointermove", (e) => {
         planWaypoints[p.i].y = clampPlanCoordY(ny);
       }
       renderPlanList();
+      renderPlanningEventTimeline();
       updatePlanSelectionPanel();
       requestDrawAll();
       return;
@@ -7389,6 +8204,7 @@ if (btnFit) {
 // Initialize UI on load
 leftSetUI("");
 renderPlanObjects();
+renderPlanningEventTimeline();
 
 
 function getTimelineH() {
@@ -7400,7 +8216,7 @@ function getTimelineH() {
 function getPlanningTimelineH() {
   const v = getComputedStyle(root).getPropertyValue("--planningTimelineH").trim();
   const n = parseFloat(v);
-  return isFinite(n) ? n : 90;
+  return isFinite(n) ? n : DEFAULT_PLANNING_TIMELINE_H_PX;
 };
 
 // -------- splitters with collapse --------
@@ -7480,7 +8296,7 @@ function getPlanningTimelineH() {
   }
 
   const setPlanningTimelineH = (px) => {
-    px = clamp(px, 70, MAX_TIMELINE_H_PX);
+    px = clamp(px, MIN_PLANNING_TIMELINE_H_PX, MAX_TIMELINE_H_PX);
     root.style.setProperty("--planningTimelineH", `${px}px`);
   };
 
@@ -7588,7 +8404,7 @@ function getPlanningTimelineH() {
     if (draggingPlanningTimeline) {
       const dy = e.clientY - startPlanningTimelineY;
       const h = window.innerHeight;
-      const next = clamp(startPlanningTimelineH - dy, 70, Math.max(70, Math.floor(h * 0.55)));
+      const next = clamp(startPlanningTimelineH - dy, MIN_PLANNING_TIMELINE_H_PX, Math.max(MIN_PLANNING_TIMELINE_H_PX, Math.floor(h * 0.55)));
       layoutState.lastPlanningTimelineH = next;
       setPlanningTimelineH(next);
       resizePlanningTimeline();
@@ -7697,7 +8513,7 @@ function getPlanningTimelineH() {
   if (planningTimelineSplit) {
     planningTimelineSplit.addEventListener("dblclick", () => {
       const cur = getPlanningTimelineH();
-      const next = Math.abs(cur - 90) < 4 ? 160 : 90;
+      const next = Math.abs(cur - MIN_PLANNING_TIMELINE_H_PX) < 4 ? 180 : MIN_PLANNING_TIMELINE_H_PX;
       layoutState.lastPlanningTimelineH = next;
       setPlanningTimelineH(next);
       resizePlanningTimeline();
@@ -7727,7 +8543,12 @@ function setData(obj) {
   planSetSelection([]);
   planPlayDist = 0;
   planObjects = normalizePlanObjects(obj["planned-objects"] || []);
+  planNodes = normalizePlanNodes(obj["planned-nodes"] || []);
+  pruneInvalidPlanNodes();
+  clearPlanNodeSelection();
   renderPlanObjects();
+  renderPlanningEventTimeline();
+  normalizePlanningTimelineHeightForContent();
 
   rawPoses = normalizePoseArray(obj.poses || obj["robot-path"] || []);
 
@@ -7748,7 +8569,11 @@ function setData(obj) {
 function setDataFromStreamText(text) {
   planWaypoints = [];
   planObjects = [];
+  planNodes = [];
+  clearPlanNodeSelection();
   renderPlanObjects();
+  renderPlanningEventTimeline();
+  normalizePlanningTimelineHeightForContent();
   planSetSelection([]);
   planPlayDist = 0;
   rawPoses = createPoseStore();
@@ -8196,7 +9021,7 @@ async function saveSettings() {
       layoutRightSidebarWidthPlanning: readRootCssNumber("--rightSidebarWPlanning", 370),
       layoutTimelineHeight: readRootCssNumber("--timelineH", 180),
       layoutPlanningWaypointHeight: readRootCssNumber("--planListH", 240),
-      layoutPlanningTimelineHeight: readRootCssNumber("--planningTimelineH", 90),
+      layoutPlanningTimelineHeight: readRootCssNumber("--planningTimelineH", 144),
     };
     if (persistedAppState && typeof persistedAppState === "object" && !Array.isArray(persistedAppState)) {
       settings.appState = { ...persistedAppState };
@@ -8986,11 +9811,20 @@ if (btnPlanAddObject) {
 if (planObjectListEl) {
   planObjectListEl.onmousedown = (e) => {
     if (!(e.target instanceof Element)) return;
-    const actionBtn = e.target.closest(".planObjectRemoveActionBtn, .planMethodRemoveBtn, .planMethodAddBtn");
+    const actionBtn = e.target.closest(".planObjectRemoveActionBtn, .planMethodRemoveBtn, .planMethodAddBtn, .planObjectColorBtn");
     if (actionBtn) e.preventDefault();
   };
   planObjectListEl.onclick = (e) => {
     if (!(e.target instanceof Element)) return;
+    const colorBtn = e.target.closest(".planObjectColorBtn");
+    if (colorBtn) {
+      cancelPlanObjectNameEdit();
+      const objectId = colorBtn.getAttribute("data-object-id") || "";
+      if (!objectId) return;
+      planOpenColorPickerObjectId = planOpenColorPickerObjectId === objectId ? null : objectId;
+      renderPlanObjects();
+      return;
+    }
     const methodAddBtn = e.target.closest(".planMethodAddBtn");
     if (methodAddBtn) {
       cancelPlanObjectNameEdit();
@@ -9012,7 +9846,159 @@ if (planObjectListEl) {
     if (!objectId) return;
     requestPlanObjectRemoval(objectId);
   };
+  planObjectListEl.oninput = (e) => {
+    if (!(e.target instanceof HTMLInputElement)) return;
+    if (!e.target.classList.contains("planObjectColorInput")) return;
+    const objectId = e.target.getAttribute("data-object-id") || "";
+    if (!objectId) return;
+    setPlanObjectColor(objectId, e.target.value);
+    planOpenColorPickerObjectId = objectId;
+  };
 }
+
+function isClientInsidePlanningTimelineViewport(clientX, clientY) {
+  if (!planningTimelineViewport) return false;
+  const rect = planningTimelineViewport.getBoundingClientRect();
+  return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+}
+
+function isClientInsidePlanningSidebar(clientX, clientY) {
+  if (!rightPlanningEl) return false;
+  const rect = rightPlanningEl.getBoundingClientRect();
+  return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+}
+
+function hasValidPlanTimelineDropTarget() {
+  return !!planTimelineDropTarget && appMode === "planning" && planWaypoints.length >= 2;
+}
+
+function commitPlanTimelineDragTarget(context, target) {
+  if (!context || !target) return null;
+  let node = null;
+  if (context.source === "sidebar") {
+    node = insertPlanNode(context.objectId, context.methodId, target.beforeWaypoint, target.index);
+  } else if (context.source === "node") {
+    node = movePlanNode(context.nodeId, target.beforeWaypoint, target.index);
+  }
+  if (!node) return null;
+  savePlanTimelineUi();
+  selectPlanNode(node.id, { scrollSidebar: true });
+  return node;
+}
+
+function positionPlanMethodDragGhost(ghost, clientX, clientY) {
+  if (!ghost) return;
+  ghost.style.left = `${clientX + 12}px`;
+  ghost.style.top = `${clientY + 12}px`;
+  ghost.style.zIndex = "1000";
+}
+
+function beginPlanPointerDrag({
+  source,
+  objectId,
+  methodId,
+  nodeId = null,
+  sourceEl,
+  startX,
+  startY,
+}) {
+  hidePlanNodeTooltip({ immediate: true });
+  planPointerDragState = {
+    mode: "pending",
+    source,
+    objectId,
+    methodId,
+    nodeId,
+    sourceEl,
+    startX,
+    startY,
+    ghost: null,
+  };
+}
+
+function ensurePlanPointerDragStarted(clientX, clientY) {
+  const state = planPointerDragState;
+  if (!state || state.mode === "dragging") return state;
+  if (Math.hypot(clientX - state.startX, clientY - state.startY) < PLAN_POINTER_DRAG_THRESHOLD_PX) return state;
+  state.mode = "dragging";
+  state.sourceEl?.classList?.add("isDragging");
+  state.ghost = createPlanMethodDragGhostCard({ objectId: state.objectId, methodId: state.methodId });
+  positionPlanMethodDragGhost(state.ghost, clientX, clientY);
+  document.body.style.cursor = "grabbing";
+  document.body.style.userSelect = "none";
+  return state;
+}
+
+function updatePlanPointerDrag(clientX, clientY) {
+  const state = planPointerDragState;
+  if (!state) return;
+  ensurePlanPointerDragStarted(clientX, clientY);
+  if (state.mode !== "dragging") return;
+  positionPlanMethodDragGhost(state.ghost, clientX, clientY);
+  if (planWaypoints.length >= 2 && isClientInsidePlanningTimelineViewport(clientX, clientY)) {
+    if (planningTimelineViewport) {
+      const rect = planningTimelineViewport.getBoundingClientRect();
+      if (clientX < rect.left + 40) planningTimelineViewport.scrollLeft -= 10;
+      else if (clientX > rect.right - 40) planningTimelineViewport.scrollLeft += 10;
+    }
+    updatePlanTimelineDropTarget(clientX);
+  } else {
+    clearPlanTimelineDropTarget();
+  }
+}
+
+function finishPlanPointerDrag(clientX, clientY) {
+  const state = planPointerDragState;
+  if (!state) return;
+  hidePlanNodeTooltip({ immediate: true });
+  if (state.mode === "dragging") {
+    if (planWaypoints.length >= 2 && hasValidPlanTimelineDropTarget()) {
+      commitPlanTimelineDragTarget({
+        source: state.source,
+        objectId: state.objectId,
+        methodId: state.methodId,
+        nodeId: state.nodeId,
+      }, planTimelineDropTarget);
+    } else if (state.source === "node" && isClientInsidePlanningSidebar(clientX, clientY) && state.nodeId) {
+      removePlanNode(state.nodeId);
+    }
+  }
+  if (state.ghost) state.ghost.remove();
+  state.sourceEl?.classList?.remove("isDragging");
+  document.body.style.cursor = "";
+  document.body.style.userSelect = "";
+  planPointerDragState = null;
+  clearPlanTimelineDropTarget();
+}
+
+if (planningEventTimelineEl) {
+  planningEventTimelineEl.addEventListener("click", (e) => {
+    if (e.target instanceof Element && e.target.closest(".planningTimelineNode")) return;
+    clearPlanNodeSelection();
+    renderPlanningEventTimeline();
+    renderPlanObjects();
+    syncPlanObjectLatestValues();
+  });
+}
+
+planningTimelineViewport?.addEventListener("scroll", () => {
+  hidePlanNodeTooltip({ immediate: true });
+});
+
+window.addEventListener("blur", () => {
+  hidePlanNodeTooltip({ immediate: true });
+});
+
+if (window.__motionViewPlanColorMousedownHandler) {
+  document.removeEventListener("mousedown", window.__motionViewPlanColorMousedownHandler, true);
+}
+window.__motionViewPlanColorMousedownHandler = (e) => {
+  if (!planOpenColorPickerObjectId) return;
+  if (e.target instanceof Element && e.target.closest(".planObjectColorWrap")) return;
+  planOpenColorPickerObjectId = null;
+  renderPlanObjects();
+};
+document.addEventListener("mousedown", window.__motionViewPlanColorMousedownHandler, true);
 
 if (btnPlanObjectDeleteClose) {
   btnPlanObjectDeleteClose.onclick = () => closePlanObjectDeleteModal();
@@ -9468,7 +10454,17 @@ if (robotImageToggle) {
   });
 }
 
-document.addEventListener("dragover", (e) => { e.preventDefault(); });
+document.addEventListener("pointermove", (e) => {
+  updatePlanPointerDrag(e.clientX, e.clientY);
+});
+
+document.addEventListener("pointerup", (e) => {
+  finishPlanPointerDrag(e.clientX, e.clientY);
+});
+
+document.addEventListener("pointercancel", () => {
+  finishPlanPointerDrag(-1, -1);
+});
 
 btnPlay.addEventListener("click", () => {
   if (appMode === "planning") {
@@ -9811,6 +10807,16 @@ document.addEventListener("keydown", (e) => {
   const mouseTag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
   const isTypingTarget = (mouseTag === "input" || mouseTag === "textarea" || (e.target && e.target.isContentEditable));
   if (isTypingTarget && e.target !== liveWinEl) return;
+
+  if (appMode === "planning" && planSelectedNodeId && (e.key === "Backspace" || e.key === "Delete")) {
+    const planTemplateOpen = planTemplateModal && planTemplateModal.style.display !== "none" && !planTemplateModal.hasAttribute("hidden");
+    const planObjectDeleteOpen = planObjectDeleteModal && planObjectDeleteModal.style.display !== "none" && !planObjectDeleteModal.hasAttribute("hidden");
+    if (!planTemplateOpen && !planObjectDeleteOpen) {
+      e.preventDefault();
+      removePlanNode(planSelectedNodeId);
+      return;
+    }
+  }
 
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
     if (e.key === "1") {
