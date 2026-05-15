@@ -602,8 +602,6 @@ fn main() {
             settings::save_robot_image,
             settings::read_saved_paths,
             settings::write_saved_paths,
-            settings::read_aux_window_state,
-            settings::write_aux_window_state,
             export::export_motionview_json,
             set_windows_fullscreen,
             get_window_fullscreen_state,
