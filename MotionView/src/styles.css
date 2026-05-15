@@ -601,7 +601,7 @@ label {
 
 #planningTimelineDropLine {
   position: absolute;
-  top: 26px;
+  top: 10px;
   bottom: -10px;
   width: 2px;
   border-radius: 999px;

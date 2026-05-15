@@ -398,6 +398,7 @@ const routeInfoList = document.getElementById("routeInfoList");
 const btnApplyRunSettings = document.getElementById("btnApplyRunSettings");
 const btnPlanCopyCode = document.getElementById("btnPlanCopyCode");
 const btnPlanEditTemplate = document.getElementById("btnPlanEditTemplate");
+const btnPlanExport = document.getElementById("btnPlanExport");
 const planTemplateModal = document.getElementById("planTemplateModal");
 const planTemplateTitleEl = document.getElementById("planTemplateTitle");
 const planTemplateSubtitleEl = document.getElementById("planTemplateSubtitle");
@@ -9660,7 +9661,7 @@ function updateExportUiState() {
   }
 }
 
-function openExportModal() {
+function openExportModal(defaultExportType = null) {
   if (!exportModal) {
     console.warn("Export modal not found");
     return;
@@ -9674,6 +9675,9 @@ function openExportModal() {
   }
   if (exportFilenameInput && !exportFilenameInput.value.trim()) {
     exportFilenameInput.value = "motionview-path";
+  }
+  if (defaultExportType && exportTypesSelect) {
+    exportTypesSelect.value = defaultExportType;
   }
   updateExportUiState();
   exportModal.removeAttribute("hidden");
@@ -9712,6 +9716,16 @@ if (btnExport) {
   });
 } else {
   console.warn("btnExport element not found");
+}
+
+if (btnPlanExport) {
+  btnPlanExport.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openExportModal("planning");
+  });
+} else {
+  console.warn("btnPlanExport element not found");
 }
 
 if (btnRouteInfo) {
@@ -10949,7 +10963,6 @@ document.addEventListener("keydown", (e) => {
     }
 
     if (e.key === "o" || e.key === "O") {
-      if (appMode !== "viewing") return;
       e.preventDefault();
       fileEl.click();
       return;
