@@ -2629,6 +2629,24 @@ body:not(.mode-planning) #rightPlanning {
   font-size: 13px;
 }
 
+.planExportIconBtn {
+  flex: 0 0 34px !important;
+  width: 34px;
+  min-width: 34px !important;
+  height: 34px !important;
+  padding: 0;
+  color: var(--text);
+}
+
+.planExportIconBtn svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  color: currentColor;
+  flex: 0 0 18px;
+  overflow: visible;
+}
+
 #rightPlanning.planListCollapsed .planList {
   display: none;
 }

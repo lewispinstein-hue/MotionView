@@ -724,6 +724,11 @@
             <div class="planningExportActions">
               <button id="btnPlanCopyCode" class="iconBtn secondaryBtn" type="button">Copy Code</button>
               <button id="btnPlanEditTemplate" class="iconBtn secondaryBtn" type="button">Edit Template</button>
+              <button id="btnPlanExport" class="iconBtn secondaryBtn planExportIconBtn" type="button" aria-label="Export Route">
+                <svg width="18" height="18">
+                  <use href="./assets/svg/icons.svg#icon-exportPath"></use>
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -839,6 +844,14 @@
                   <option value="desktop">Desktop</option>
                   <option value="documents">Documents</option>
                   <option value="custom">Custom Folder</option>
+                </select>
+              </div>
+              <div>
+                <label class="fieldLabel" for="exportLocation">Choose Exports</label>
+                <select id="exportTypes" class="settingsSelect">
+                  <option value="viewing" selected>Viewing Mode</option>
+                  <option value="planning">Planning Mode</option>
+                  <option value="both">Viewing & Planning Mode</option>
                 </select>
               </div>
               <div id="exportCustomPathWrap" hidden>

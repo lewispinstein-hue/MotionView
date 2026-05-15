@@ -384,6 +384,7 @@ const exportPathNameInput = document.getElementById("exportPathName");
 const exportFilenameInput = document.getElementById("exportFilename");
 const exportFilenameHint = document.getElementById("exportFilenameHint");
 const exportLocationSelect = document.getElementById("exportLocation");
+const exportTypesSelect = document.getElementById("exportTypes");
 const exportCustomPathWrap = document.getElementById("exportCustomPathWrap");
 const exportCustomPathInput = document.getElementById("exportCustomPath");
 const exportCustomPathHint = document.getElementById("exportCustomPathHint");
@@ -809,6 +810,7 @@ let planEditingObjectOriginalName = "";
 let planObjectEditSelectAll = false;
 let planTemplateModalState = null;
 let pendingPlanObjectRemovalId = null;
+let pendingPlanObjectDeleteAction = null;
 let planOpenColorPickerObjectId = null;
 let planTimelineLayout = null;
 let planTimelineDropTarget = null;
@@ -2207,17 +2209,30 @@ function removePlanObject(objectId) {
   savePlanObjectsUi();
 }
 
-function requestPlanObjectRemoval(objectId) {
-  const object = planObjects.find((entry) => entry.id === objectId);
-  if (!object) return;
+function hasAnyPlanMethods() {
+  return planObjects.some((entry) => Array.isArray(entry.methods) && entry.methods.length > 0);
+}
+
+function clearPlanningModeData() {
+  planWaypoints = [];
+  planObjects = [];
+  planNodes = [];
+  planSetSelection([]);
+  clearPlanNodeSelection();
+  planPlayDist = 0;
+  planPause();
+  planChanged();
+  renderPlanObjects();
+  renderPlanningEventTimeline();
+  normalizePlanningTimelineHeightForContent();
+}
+
+function openPlanDangerConfirmModal(message, action) {
   cancelPlanObjectNameEdit();
-  if (!object.methods.length) {
-    removePlanObject(objectId);
-    return;
-  }
-  pendingPlanObjectRemovalId = objectId;
+  pendingPlanObjectRemovalId = null;
+  pendingPlanObjectDeleteAction = typeof action === "function" ? action : null;
   if (planObjectDeleteMessageEl) {
-    planObjectDeleteMessageEl.textContent = `Are you sure you want to remove Object ${object.name}?`;
+    planObjectDeleteMessageEl.textContent = message;
   }
   if (planObjectDeleteModal) {
     planObjectDeleteModal.removeAttribute("hidden");
@@ -2229,15 +2244,29 @@ function requestPlanObjectRemoval(objectId) {
   }
 }
 
+function requestPlanObjectRemoval(objectId) {
+  const object = planObjects.find((entry) => entry.id === objectId);
+  if (!object) return;
+  cancelPlanObjectNameEdit();
+  if (!object.methods.length) {
+    removePlanObject(objectId);
+    return;
+  }
+  pendingPlanObjectRemovalId = objectId;
+  openPlanDangerConfirmModal(`Are you sure you want to remove Object ${object.name}?`, () => removePlanObject(objectId));
+}
+
 function closePlanObjectDeleteModal() {
   pendingPlanObjectRemovalId = null;
+  pendingPlanObjectDeleteAction = null;
   if (!planObjectDeleteModal) return;
   planObjectDeleteModal.setAttribute("hidden", "");
   planObjectDeleteModal.style.display = "none";
 }
 
 function confirmPlanObjectRemoval() {
-  if (pendingPlanObjectRemovalId) removePlanObject(pendingPlanObjectRemovalId);
+  if (pendingPlanObjectDeleteAction) pendingPlanObjectDeleteAction();
+  else if (pendingPlanObjectRemovalId) removePlanObject(pendingPlanObjectRemovalId);
   closePlanObjectDeleteModal();
 }
 
@@ -2480,6 +2509,10 @@ async function loadSavedPaths() {
     } else {
       planWaypoints = [];
     }
+    if (obj?.["planned-export-template"] !== undefined) {
+      const savedTemplate = String(obj["planned-export-template"] || "");
+      planExportTemplate = savedTemplate.trim() ? savedTemplate : DEFAULT_PLAN_EXPORT_TEMPLATE;
+    }
     planSetSelection([]);
     planPlayDist = 0;
     planChanged();
@@ -2521,6 +2554,7 @@ function buildSavedPathsPayload() {
   pruneInvalidPlanNodes();
   return JSON.stringify({
     "planned-path": planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: readPlanSpeed(p.speed, 127) })),
+    "planned-export-template": planExportTemplate,
     "planned-objects": planObjects.map((obj) => ({
       id: obj.id,
       name: obj.name,
@@ -8540,6 +8574,10 @@ function setData(obj) {
   } else {
     planWaypoints = [];
   }
+  if (obj["planned-export-template"] !== undefined) {
+    const savedTemplate = String(obj["planned-export-template"] || "");
+    planExportTemplate = savedTemplate.trim() ? savedTemplate : DEFAULT_PLAN_EXPORT_TEMPLATE;
+  }
   planSetSelection([]);
   planPlayDist = 0;
   planObjects = normalizePlanObjects(obj["planned-objects"] || []);
@@ -8559,7 +8597,7 @@ function setData(obj) {
   setImportedRouteMeta(obj.meta);
 
   if (!hasLoadedData()) {
-    setStatus("Invalid JSON: no poses, watches, logs, or waypoints found");
+    setStatus("Invalid JSON: no viewing or planning route data found");
     return;
   }
 
@@ -8595,7 +8633,7 @@ function setDataFromStreamText(text) {
   setImportedRouteMeta(null);
 
   if (!hasLoadedData()) {
-    setStatus("No poses, watches, logs, or waypoints found in log/text file.");
+    setStatus("No poses, watches, logs, waypoints, or planning data found in file.");
     return;
   }
 
@@ -9309,7 +9347,7 @@ function buildExportMetadata(PathName) {
   }).format(new Date());
 
   return {
-    SchemaVersion: 2,
+    SchemaVersion: 3,
     CreationDate: formattedDateGB,
     AppVersion: APP_VERSION,
     Creator: "MotionView",
@@ -9320,6 +9358,9 @@ function buildExportMetadata(PathName) {
       LogCount: logs.length,
       WaypointCount: waypoints.length,
       WaypointEvents: waypointEventCount(waypoints),
+      PlannedWaypointCount: planWaypoints.length,
+      PlannedObjectCount: planObjects.length,
+      PlannedNodeCount: planNodes.length,
     },
     Times: {
       StartTime: String(fmtNum(poseStart / 1000, 2)) + "s",
@@ -9346,17 +9387,68 @@ function buildExportMetadata(PathName) {
   };
 }
 
+function getSelectedExportType() {
+  const value = String(exportTypesSelect?.value || "viewing");
+  return (value === "planning" || value === "both") ? value : "viewing";
+}
+
+function hasViewingExportData() {
+  return rawPoses.length > 0 || watches.length > 0 || logs.length > 0 || waypoints.length > 0;
+}
+
+function hasPlanningExportData() {
+  return planWaypoints.length > 0 || planObjects.length > 0 || planNodes.length > 0;
+}
+
 function buildExportPayload() {
   const rawPathName = exportPathNameInput ? exportPathNameInput.value : "";
   const pathName = sanitizeExportPathName(rawPathName) || "Untitled Path";
+  const exportType = getSelectedExportType();
 
-  return {
-    poses: rawPoses.map(serializeExportPose),
-    watches: watches.map(serializeExportWatch),
-    logs: logs.map(serializeExportLog),
-    waypoints: waypoints.map(serializeExportWaypoint),
+  const includeViewing = exportType === "viewing" || exportType === "both";
+  const includePlanning = exportType === "planning" || exportType === "both";
+  if (includePlanning) pruneInvalidPlanNodes();
+
+  const payload = {
     meta: buildExportMetadata(pathName),
   };
+
+  if (includePlanning) {
+    payload["planned-path"] = planWaypoints.map((p) => ({
+      x: p.x,
+      y: p.y,
+      theta: p.theta ?? 0,
+      speed: readPlanSpeed(p.speed, 127),
+    }));
+    payload["planned-export-template"] = planExportTemplate;
+    payload["planned-objects"] = planObjects.map((obj) => ({
+      id: obj.id,
+      name: obj.name,
+      color: obj.color || null,
+      latestMethod: obj.latestMethod || "",
+      methods: obj.methods.map((method) => ({
+        id: method.id,
+        name: method.name,
+        code: method.code,
+      })),
+    }));
+    payload["planned-nodes"] = planNodes.map((node) => ({
+      id: node.id,
+      objectId: node.objectId,
+      methodId: node.methodId,
+      beforeWaypoint: node.beforeWaypoint,
+      index: node.index,
+    }));
+  }
+
+  if (includeViewing) {
+    payload.poses = rawPoses.map(serializeExportPose);
+    payload.watches = watches.map(serializeExportWatch);
+    payload.logs = logs.map(serializeExportLog);
+    payload.waypoints = waypoints.map(serializeExportWaypoint);
+  }
+
+  return payload;
 }
 
 function buildExportRequest() {
@@ -9364,12 +9456,14 @@ function buildExportRequest() {
   const pathName = sanitizeExportPathName(exportPathNameInput ? exportPathNameInput.value : "");
   const location = getExportLocationPath();
   const payload = buildExportPayload();
+  const exportType = getSelectedExportType();
   const json = JSON.stringify(payload, null, 2);
 
   return {
+    exportType,
     filenameBase,
     filename: `${filenameBase}.json`,
-    pathName: pathName || payload.metadata.pathName,
+    pathName: pathName || payload.meta?.PathName || "Untitled Path",
     destination: location,
     payload,
     json,
@@ -9513,6 +9607,7 @@ function closeRouteInfoModal() {
 
 function updateExportUiState() {
   const exportLocation = exportLocationSelect ? exportLocationSelect.value : "downloads";
+  const exportType = getSelectedExportType();
   const isCustomLocation = exportLocation === "custom";
   if (exportCustomPathWrap) {
     exportCustomPathWrap.hidden = !isCustomLocation;
@@ -9525,6 +9620,10 @@ function updateExportUiState() {
   const filenameValid = sanitizedFilename.length > 0;
   const customPath = exportCustomPathInput ? exportCustomPathInput.value.trim() : "";
   const customPathValid = !isCustomLocation || customPath.length > 0;
+  const viewingDataValid = exportType !== "viewing" || hasViewingExportData();
+  const planningDataValid = exportType !== "planning" || hasPlanningExportData();
+  const combinedDataValid = exportType !== "both" || (hasViewingExportData() || hasPlanningExportData());
+  const exportDataValid = viewingDataValid && planningDataValid && combinedDataValid;
 
   if (exportFilenameHint) {
     exportFilenameHint.textContent = sanitizedFilename && rawFilename !== sanitizedFilename
@@ -9545,13 +9644,19 @@ function updateExportUiState() {
       exportValidationMessage.textContent = "Enter a filename to continue.";
     } else if (!customPathValid) {
       exportValidationMessage.textContent = "Enter a custom folder path to continue.";
+    } else if (!viewingDataValid) {
+      exportValidationMessage.textContent = "There is no Viewing mode data to export.";
+    } else if (!planningDataValid) {
+      exportValidationMessage.textContent = "There is no Planning mode data to export.";
+    } else if (!combinedDataValid) {
+      exportValidationMessage.textContent = "There is no Viewing or Planning mode data to export.";
     } else {
       exportValidationMessage.textContent = "";
     }
   }
 
   if (btnExportConfirm) {
-    btnExportConfirm.disabled = !(pathNameValid && filenameValid && customPathValid);
+    btnExportConfirm.disabled = !(pathNameValid && filenameValid && customPathValid && exportDataValid);
   }
 }
 
@@ -9749,6 +9854,12 @@ if (exportLocationSelect) {
     if (exportLocationSelect.value === "custom" && exportCustomPathInput) {
       requestAnimationFrame(() => exportCustomPathInput.focus());
     }
+  });
+}
+
+if (exportTypesSelect) {
+  exportTypesSelect.addEventListener("change", () => {
+    updateExportUiState();
   });
 }
 
@@ -10773,28 +10884,34 @@ function clearAllPosesAndWatches() {
 btnClearField?.addEventListener("click", (event) => {
   if (event.metaKey || event.ctrlKey) {
     // Clear everything across modes
-    clearAllPosesAndWatches();
-    resetLiveWin();
-    if (appMode === "planning") pushPlanUndo();
-    planWaypoints = [];
-    planSetSelection([]);
-    planPlayDist = 0;
-    planPause();
-    planChanged();
-    requestDrawAll();
-    setStatus("Cleared Field and Planned Path");
+    const clearAll = () => {
+      clearAllPosesAndWatches();
+      resetLiveWin();
+      if (appMode === "planning") pushPlanUndo();
+      clearPlanningModeData();
+      requestDrawAll();
+      setStatus("Cleared Field and Planned Path");
+    };
+    if (appMode === "planning" && hasAnyPlanMethods()) {
+      openPlanDangerConfirmModal("Are you sure you want to clear the field and Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearAll);
+      return;
+    }
+    clearAll();
     return;
   }
 
   if (appMode === "planning") {
-    pushPlanUndo();
-    planWaypoints = [];
-    planSetSelection([]);
-    planPlayDist = 0;
-    planPause();
-    planChanged();
-    requestDrawAll();
-    setStatus("Cleared Planned Path");
+    const clearPlanOnly = () => {
+      pushPlanUndo();
+      clearPlanningModeData();
+      requestDrawAll();
+      setStatus("Cleared Planned Path");
+    };
+    if (hasAnyPlanMethods()) {
+      openPlanDangerConfirmModal("Are you sure you want to clear Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearPlanOnly);
+      return;
+    }
+    clearPlanOnly();
   } else {
     clearAllPosesAndWatches();
     resetLiveWin();
@@ -10866,14 +10983,17 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "k" || e.key === "K") {
       e.preventDefault();
       if (appMode === "planning") {
-        pushPlanUndo();
-        planWaypoints = [];
-        planSetSelection([]);
-        planPlayDist = 0;
-        planPause();
-        planChanged();
-        requestDrawAll();
-        setStatus("Cleared Planned Path");
+        const clearPlanOnly = () => {
+          pushPlanUndo();
+          clearPlanningModeData();
+          requestDrawAll();
+          setStatus("Cleared Planned Path");
+        };
+        if (hasAnyPlanMethods()) {
+          openPlanDangerConfirmModal("Are you sure you want to clear Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearPlanOnly);
+          return;
+        }
+        clearPlanOnly();
       } else {
         clearAllPosesAndWatches();
         resetLiveWin();
@@ -10886,16 +11006,19 @@ document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && (e.key === "k" || e.key === "K")) {
     e.preventDefault();
     // Clear everything across modes
-    clearAllPosesAndWatches();
-    resetLiveWin();
-    if (appMode === "planning") pushPlanUndo();
-    planWaypoints = [];
-    planSetSelection([]);
-    planPlayDist = 0;
-    planPause();
-    planChanged();
-    requestDrawAll();
-    setStatus("Cleared Field and Planned Path");
+    const clearAll = () => {
+      clearAllPosesAndWatches();
+      resetLiveWin();
+      if (appMode === "planning") pushPlanUndo();
+      clearPlanningModeData();
+      requestDrawAll();
+      setStatus("Cleared Field and Planned Path");
+    };
+    if (hasAnyPlanMethods()) {
+      openPlanDangerConfirmModal("Are you sure you want to clear the field and Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearAll);
+      return;
+    }
+    clearAll();
     return;
   }
 
