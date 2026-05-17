@@ -416,6 +416,7 @@ const btnPlanAddObject = document.getElementById("btnPlanAddObject");
 const planObjectListEl = document.getElementById("planObjectList");
 const planEventsHintEl = document.querySelector(".planEventsHint");
 const planObjectDeleteModal = document.getElementById("planObjectDeleteModal");
+const planObjectDeleteTitleEl = document.getElementById("planObjectDeleteTitle");
 const planObjectDeleteMessageEl = document.getElementById("planObjectDeleteMessage");
 const btnPlanObjectDeleteClose = document.getElementById("btnPlanObjectDeleteClose");
 const btnPlanObjectDeleteCancel = document.getElementById("btnPlanObjectDeleteCancel");
@@ -522,6 +523,7 @@ const WATCH_TOL_MS = 60; // Controls the ± time that determines which pose a wa
 const COLLAPSE_PX_TIMELINE = 130; // When the timeline collapses away
 const COLLAPSE_PX_SIDEBAR = 282;  // When the right sidebar collapses away
 const COLLAPSE_WAYPOINTLIST_PX = 5;
+const COLLAPSE_PX_PLANNING_TIMELINE = 24;
 
 const COLLAPSE_PX_LEFTSIDEBAR = 210; // When the left sidebar collapses away
 const MAX_PX_LIVEWIN = 800; // Max width for left live window panel
@@ -812,6 +814,7 @@ let planObjectEditSelectAll = false;
 let planTemplateModalState = null;
 let pendingPlanObjectRemovalId = null;
 let pendingPlanObjectDeleteAction = null;
+let pendingPlanObjectDeleteCancelAction = null;
 let planOpenColorPickerObjectId = null;
 let planTimelineLayout = null;
 let planTimelineDropTarget = null;
@@ -2229,12 +2232,29 @@ function clearPlanningModeData() {
 }
 
 function openPlanDangerConfirmModal(message, action) {
+  return openPlanDangerConfirmModalWithOptions({ message, onConfirm: action });
+}
+
+function openPlanDangerConfirmModalWithOptions({
+  title = "Confirm",
+  message = "Are you sure?",
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  onConfirm = null,
+  onCancel = null,
+} = {}) {
   cancelPlanObjectNameEdit();
   pendingPlanObjectRemovalId = null;
-  pendingPlanObjectDeleteAction = typeof action === "function" ? action : null;
+  pendingPlanObjectDeleteAction = typeof onConfirm === "function" ? onConfirm : null;
+  pendingPlanObjectDeleteCancelAction = typeof onCancel === "function" ? onCancel : null;
+  if (planObjectDeleteTitleEl) {
+    planObjectDeleteTitleEl.textContent = title;
+  }
   if (planObjectDeleteMessageEl) {
     planObjectDeleteMessageEl.textContent = message;
   }
+  if (btnPlanObjectDeleteConfirm) btnPlanObjectDeleteConfirm.textContent = confirmLabel;
+  if (btnPlanObjectDeleteCancel) btnPlanObjectDeleteCancel.textContent = cancelLabel;
   if (planObjectDeleteModal) {
     planObjectDeleteModal.removeAttribute("hidden");
     planObjectDeleteModal.style.display = "flex";
@@ -2260,15 +2280,80 @@ function requestPlanObjectRemoval(objectId) {
 function closePlanObjectDeleteModal() {
   pendingPlanObjectRemovalId = null;
   pendingPlanObjectDeleteAction = null;
+  pendingPlanObjectDeleteCancelAction = null;
   if (!planObjectDeleteModal) return;
   planObjectDeleteModal.setAttribute("hidden", "");
   planObjectDeleteModal.style.display = "none";
+}
+
+function cancelPlanObjectDeleteModal() {
+  const cancelAction = pendingPlanObjectDeleteCancelAction;
+  closePlanObjectDeleteModal();
+  if (cancelAction) cancelAction();
 }
 
 function confirmPlanObjectRemoval() {
   if (pendingPlanObjectDeleteAction) pendingPlanObjectDeleteAction();
   else if (pendingPlanObjectRemovalId) removePlanObject(pendingPlanObjectRemovalId);
   closePlanObjectDeleteModal();
+}
+
+function hasImportedPlanningWaypoints(obj) {
+  return Array.isArray(obj?.["planned-path"]) && obj["planned-path"].length > 0;
+}
+
+function hasImportedViewingData(obj) {
+  return normalizePoseArray(obj?.poses || obj?.["robot-path"] || []).length > 0
+    || normalizeWatches(obj?.watches || obj?.watch || []).length > 0
+    || normalizeLogs(obj?.logs || obj?.log || []).length > 0
+    || normalizeWaypoints(obj?.waypoints || []).length > 0;
+}
+
+function applyImportedPlanningData(obj) {
+  if (Array.isArray(obj["planned-path"])) {
+    planWaypoints = obj["planned-path"].map((p) => ({
+      x: Number(p.x) || 0,
+      y: Number(p.y) || 0,
+      theta: Number(p.theta) || 0,
+      speed: readPlanSpeed(p.speed, 127),
+    }));
+  } else {
+    planWaypoints = [];
+  }
+  if (obj["planned-export-template"] !== undefined) {
+    const savedTemplate = String(obj["planned-export-template"] || "");
+    planExportTemplate = savedTemplate.trim() ? savedTemplate : DEFAULT_PLAN_EXPORT_TEMPLATE;
+  }
+  planSetSelection([]);
+  planPlayDist = 0;
+  planObjects = normalizePlanObjects(obj["planned-objects"] || []);
+  planNodes = normalizePlanNodes(obj["planned-nodes"] || []);
+  pruneInvalidPlanNodes();
+  clearPlanNodeSelection();
+  renderPlanObjects();
+  renderPlanningEventTimeline();
+  normalizePlanningTimelineHeightForContent();
+}
+
+function applyImportedViewingData(obj) {
+  rawPoses = normalizePoseArray(obj.poses || obj["robot-path"] || []);
+  watches = normalizeWatches(obj.watches || obj.watch || []);
+  logs = normalizeLogs(obj.logs || obj.log || []);
+  waypoints = normalizeWaypoints(obj.waypoints || []);
+  setImportedRouteMeta(obj.meta);
+}
+
+function confirmPlanningImportOverride() {
+  return new Promise((resolve) => {
+    openPlanDangerConfirmModalWithOptions({
+      title: "Replace Planning Route",
+      message: "This import contains planning points and will replace the current planning route. Continue?",
+      confirmLabel: "Replace",
+      cancelLabel: "Cancel",
+      onConfirm: () => resolve(true),
+      onCancel: () => resolve(false),
+    });
+  });
 }
 
 function removePlanMethod(objectId, methodId) {
@@ -2460,10 +2545,17 @@ function applySavedLayout(settings) {
       Math.abs(planningTimelineHeight - LEGACY_PLANNING_TIMELINE_H_PX) < 2
         ? DEFAULT_PLANNING_TIMELINE_H_PX
         : planningTimelineHeight;
-    const next = clamp(migratedPlanningTimelineHeight, MIN_PLANNING_TIMELINE_H_PX, MAX_TIMELINE_H_PX);
+    const next = migratedPlanningTimelineHeight <= COLLAPSE_PX_PLANNING_TIMELINE
+      ? 0
+      : DEFAULT_PLANNING_TIMELINE_H_PX;
     root.style.setProperty("--planningTimelineH", `${next}px`);
     layoutChanged = true;
-    layoutState.lastPlanningTimelineH = next;
+    if (next > COLLAPSE_PX_PLANNING_TIMELINE) {
+      layoutState.lastPlanningTimelineH = DEFAULT_PLANNING_TIMELINE_H_PX;
+      timelineBar?.classList?.remove("isCollapsed");
+    } else {
+      timelineBar?.classList?.add("isCollapsed");
+    }
   }
 
   if (layoutChanged) {
@@ -8254,6 +8346,10 @@ function getPlanningTimelineH() {
   return isFinite(n) ? n : DEFAULT_PLANNING_TIMELINE_H_PX;
 };
 
+function isPlanningTimelineCollapsed() {
+  return getPlanningTimelineH() <= COLLAPSE_PX_PLANNING_TIMELINE;
+}
+
 // -------- splitters with collapse --------
 (function setupSplitters() {
   let draggingV = false;
@@ -8331,8 +8427,19 @@ function getPlanningTimelineH() {
   }
 
   const setPlanningTimelineH = (px) => {
-    px = clamp(px, MIN_PLANNING_TIMELINE_H_PX, MAX_TIMELINE_H_PX);
+    px = px <= COLLAPSE_PX_PLANNING_TIMELINE ? 0 : DEFAULT_PLANNING_TIMELINE_H_PX;
     root.style.setProperty("--planningTimelineH", `${px}px`);
+  };
+
+  const setPlanningTimelineCollapsed = (collapsed) => {
+    if (collapsed) {
+      setPlanningTimelineH(0);
+      timelineBar?.classList?.add("isCollapsed");
+    } else {
+      layoutState.lastPlanningTimelineH = DEFAULT_PLANNING_TIMELINE_H_PX;
+      setPlanningTimelineH(DEFAULT_PLANNING_TIMELINE_H_PX);
+      timelineBar?.classList?.remove("isCollapsed");
+    }
   };
 
   hSplit.addEventListener("mousedown", (e) => {
@@ -8437,11 +8544,9 @@ function getPlanningTimelineH() {
     }
 
     if (draggingPlanningTimeline) {
-      const dy = e.clientY - startPlanningTimelineY;
-      const h = window.innerHeight;
-      const next = clamp(startPlanningTimelineH - dy, MIN_PLANNING_TIMELINE_H_PX, Math.max(MIN_PLANNING_TIMELINE_H_PX, Math.floor(h * 0.55)));
-      layoutState.lastPlanningTimelineH = next;
-      setPlanningTimelineH(next);
+      const nearBottom = e.clientY >= window.innerHeight - COLLAPSE_PX_PLANNING_TIMELINE;
+      const draggedDownPastHeight = e.clientY - startPlanningTimelineY >= Math.max(startPlanningTimelineH, DEFAULT_PLANNING_TIMELINE_H_PX) * 0.5;
+      setPlanningTimelineCollapsed(nearBottom || draggedDownPastHeight);
       resizePlanningTimeline();
       resizeCanvas();
     }
@@ -8479,6 +8584,7 @@ function getPlanningTimelineH() {
         if (getRightSidebarWViewing() > COLLAPSE_PX_SIDEBAR) rightViewingEl?.classList?.remove("isCollapsed");
       }
       if (getTimelineH() > COLLAPSE_PX_TIMELINE) timelineBar.classList.remove("isCollapsed");
+      if (appMode === "planning" && !isPlanningTimelineCollapsed()) timelineBar?.classList?.remove("isCollapsed");
       resizeCanvas();
       resizeTimeline();
       void saveSettings();
@@ -8547,55 +8653,30 @@ function getPlanningTimelineH() {
 
   if (planningTimelineSplit) {
     planningTimelineSplit.addEventListener("dblclick", () => {
-      const cur = getPlanningTimelineH();
-      const next = Math.abs(cur - MIN_PLANNING_TIMELINE_H_PX) < 4 ? 180 : MIN_PLANNING_TIMELINE_H_PX;
-      layoutState.lastPlanningTimelineH = next;
-      setPlanningTimelineH(next);
+      setPlanningTimelineCollapsed(!isPlanningTimelineCollapsed());
       resizePlanningTimeline();
       resizeCanvas();
+      void saveSettings();
     });
   }
 })();
 
 // -------- data load --------
-function setData(obj) {
+function setData(obj, options = {}) {
+  const { replacePlanning = true, replaceViewing = true } = options;
   data = obj;
   if (!obj) {
     setStatus("Invalid JSON: missing data object");
     return;
   }
 
-  if (Array.isArray(obj["planned-path"])) {
-    planWaypoints = obj["planned-path"].map((p) => ({
-      x: Number(p.x) || 0,
-      y: Number(p.y) || 0,
-      theta: Number(p.theta) || 0,
-      speed: readPlanSpeed(p.speed, 127),
-    }));
-  } else {
-    planWaypoints = [];
+  if (replacePlanning) {
+    applyImportedPlanningData(obj);
   }
-  if (obj["planned-export-template"] !== undefined) {
-    const savedTemplate = String(obj["planned-export-template"] || "");
-    planExportTemplate = savedTemplate.trim() ? savedTemplate : DEFAULT_PLAN_EXPORT_TEMPLATE;
+
+  if (replaceViewing) {
+    applyImportedViewingData(obj);
   }
-  planSetSelection([]);
-  planPlayDist = 0;
-  planObjects = normalizePlanObjects(obj["planned-objects"] || []);
-  planNodes = normalizePlanNodes(obj["planned-nodes"] || []);
-  pruneInvalidPlanNodes();
-  clearPlanNodeSelection();
-  renderPlanObjects();
-  renderPlanningEventTimeline();
-  normalizePlanningTimelineHeightForContent();
-
-  rawPoses = normalizePoseArray(obj.poses || obj["robot-path"] || []);
-
-  // watches: accept alternate key just in case
-  watches = normalizeWatches(obj.watches || obj.watch || []);
-  logs = normalizeLogs(obj.logs || obj.log || []);
-  waypoints = normalizeWaypoints(obj.waypoints || []);
-  setImportedRouteMeta(obj.meta);
 
   if (!hasLoadedData()) {
     setStatus("Invalid JSON: no viewing or planning route data found");
@@ -8720,7 +8801,20 @@ async function handleFile(file) {
     setStatus(`Loaded ${file.name}`);
     if (fileName.endsWith(".json")) {
       const obj = JSON.parse(text);
-      setData(obj);
+      const incomingHasPlanning = hasImportedPlanningWaypoints(obj);
+      const incomingHasViewing = hasImportedViewingData(obj);
+      const currentHasPlanning = hasPlanningExportData();
+      if (incomingHasPlanning && currentHasPlanning) {
+        const confirmed = await confirmPlanningImportOverride();
+        if (!confirmed) {
+          setStatus("Import cancelled.");
+          return "json-cancelled";
+        }
+      }
+      setData(obj, {
+        replacePlanning: incomingHasPlanning,
+        replaceViewing: incomingHasViewing,
+      });
       return "json";
     }
     if (fileName.endsWith(".txt") || fileName.endsWith(".log")) {
@@ -9909,7 +10003,7 @@ if (planTemplateModal) {
 
 if (planObjectDeleteModal) {
   planObjectDeleteModal.addEventListener("click", (e) => {
-    if (e.target && e.target.classList.contains("modalBackdrop")) closePlanObjectDeleteModal();
+    if (e.target && e.target.classList.contains("modalBackdrop")) cancelPlanObjectDeleteModal();
   });
 }
 
@@ -10126,11 +10220,11 @@ window.__motionViewPlanColorMousedownHandler = (e) => {
 document.addEventListener("mousedown", window.__motionViewPlanColorMousedownHandler, true);
 
 if (btnPlanObjectDeleteClose) {
-  btnPlanObjectDeleteClose.onclick = () => closePlanObjectDeleteModal();
+  btnPlanObjectDeleteClose.onclick = () => cancelPlanObjectDeleteModal();
 }
 
 if (btnPlanObjectDeleteCancel) {
-  btnPlanObjectDeleteCancel.onclick = () => closePlanObjectDeleteModal();
+  btnPlanObjectDeleteCancel.onclick = () => cancelPlanObjectDeleteModal();
 }
 
 if (btnPlanObjectDeleteConfirm) {

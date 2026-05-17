@@ -960,6 +960,12 @@ body.mode-planning #timelineBar {
 
 body.mode-planning #timelineBar.isCollapsed {
   display: flex !important;
+  flex-basis: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  overflow: hidden !important;
 }
 
 body.mode-planning #timelineTop,
