@@ -125,11 +125,11 @@ public:
   uint32_t intervalMs() const;
 
   /**
-   * @brief Check whether the watch only emits on rendered-value changes.
+   * @brief Get the watch emission behavior.
    *
-   * \return True if the watch is on-change, false otherwise.
+   * \return The current watch type.
    */
-  bool onChange() const;
+  WatchMode type() const;
 
   /**
    * @brief Set the watch interval in milliseconds.
@@ -140,11 +140,11 @@ public:
   void setIntervalMs(uint32_t intervalMs);
 
   /**
-   * @brief Enable or disable on-change emission for the watch.
+   * @brief Set the watch emission behavior.
    *
-   * @param v True to make the watch emit only on change, false otherwise.
+   * @param type The new watch type.
    */
-  void setOnChange(bool v);
+  void setType(WatchMode type);
 
   /**
    * @brief Evaluate the watch immediately.

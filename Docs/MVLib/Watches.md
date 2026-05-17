@@ -86,9 +86,9 @@ public:
   bool active() const;
   void setActive(bool v);
   uint32_t intervalMs() const;
-  bool onChange() const;
+  WatchMode type() const;
   void setIntervalMs(uint32_t intervalMs);
-  void setOnChange(bool v);
+  void setType(WatchMode v);
   std::string evaluate(bool emit = false);
   bool resyncRoster() const;
 };
@@ -139,28 +139,28 @@ Behavior:
 - on-change watches use the new value as their future debounce window
 - `0` means no waiting window; MVLib can emit on the next eligible sample
 
-### `onChange()`
+### `type()`
 
 Returns whether this watch currently uses on-change emission.
 
 Behavior:
 
-- `true` means normal watch printing only emits when the rendered value changes
-- `false` means normal watch printing uses interval-based emission instead
+- `WatchMode::onChange` means normal watch printing only emits when the rendered value changes
+- `WatchMode::onInterval` means normal watch printing uses interval-based emission instead
 - this reports the watch's current mode, including changes made after creation
 
-### `setOnChange(bool v)`
+### `setType(WatchMode v)`
 
-Changes whether the watch uses on-change emission or interval-based emission.
+Updates the watch's current mode.
 
 Parameter:
 
-- `v`: `true` enables on-change behavior. `false` restores interval-based behavior.
+- `v`: new mode
 
 Behavior:
 
-- when enabled, the watch compares rendered values and uses `intervalMs()` as its debounce window
-- when disabled, the watch ignores change detection and uses `intervalMs()` as its regular emit interval
+- when set to `WatchMode::onChange`, the watch compares rendered values and uses `intervalMs()` as its debounce window
+- when set to `WatchMode::onInterval`, the watch ignores change detection and uses `intervalMs()` as its regular emit interval
 - this does not remove or recreate the watch; it only changes how normal watch printing schedules it
 
 ### `evaluate(bool emit = false)`

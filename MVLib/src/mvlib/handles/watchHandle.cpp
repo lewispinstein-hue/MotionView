@@ -37,14 +37,16 @@ uint32_t WatchHandle::intervalMs() const {
   return watch ? watch->intervalMs : static_cast<uint32_t>(-1);
 }
 
-bool WatchHandle::onChange() const {
-  if (!this->valid()) return false;
+WatchMode WatchHandle::type() const {
+  if (!this->valid()) return WatchMode::onInterval;
   Logger& logger = Logger::getInstance();
   detail::uniqueLock lock(logger.m_mutex);
-  if (!lock.isLocked() || logger.m_watches.empty()) return false;
+  if (!lock.isLocked() || logger.m_watches.empty()) return WatchMode::onInterval;
 
   const Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);
-  return watch ? watch->onChange : false;
+  if (!watch) return WatchMode::onInterval;
+  
+  return watch->onChange ? WatchMode::onChange : WatchMode::onInterval;
 }
 
 void WatchHandle::setIntervalMs(uint32_t intervalMs) {
@@ -58,7 +60,7 @@ void WatchHandle::setIntervalMs(uint32_t intervalMs) {
   watch->intervalMs = intervalMs;
 }
 
-void WatchHandle::setOnChange(bool v) {
+void WatchHandle::setType(WatchMode type) {
   if (!this->valid()) return;
   Logger& logger = Logger::getInstance();
   detail::uniqueLock lock(logger.m_mutex);
@@ -66,7 +68,8 @@ void WatchHandle::setOnChange(bool v) {
 
   Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);
   if (!watch) return;
-  watch->onChange = v;
+
+  watch->onChange = type == WatchMode::onChange;
 }
 
 std::string WatchHandle::evaluate(bool emit) {
