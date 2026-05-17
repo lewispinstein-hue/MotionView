@@ -436,8 +436,13 @@ async def broadcast(line: str):
     # Take useless lines and remove them
     if "resolve_v5_port - No v5 ports were found" in line:
         line = "No v5 devices were found."
-    elif "PROS-CLI Version: " in line:
-        return
+    elif "You must be in a PROS project directory" in line:
+        line = "The PROS Path selected is not inside of a PROS Project."
+    elif "Couldn't find the response header in the device response after" in line:
+        line = "Connected device disconnected."
+    elif "The PROS Path selected is not inside of a PROS Project" in line:
+        line = "The PROS Path selected is not inside of a PROS Project."
+        
     elif "Usage: pros terminal [OPTIONS] [PORT]" in line:
         return
     elif "Try 'pros terminal --help' for help" in line:
@@ -446,18 +451,26 @@ async def broadcast(line: str):
         or "Sentry is attempting to send" in line
         or "Waiting up to" in line):
         return
+    elif "Connection to" in line and "broken" in line and "Device not configured" in line:
+        return
+    elif "Stopping terminal" in line:
+        return
     elif "warnings.warn(" in line:
         return
-    elif "You must be in a PROS project directory" in line:
-        line = "The PROS Path selected is not inside of a PROS Project."
-    elif "Couldn't find the response header in the device response after" in line:
-        line = "Connected device disconnected."
-    elif "The PROS Path selected is not inside of a PROS Project" in line:
-        line = "The PROS Path selected is not inside of a PROS Project."
     elif ("NotOpenSSLWarning" in line
         or "RequestsDependencyWarning" in line
         or "currently the 'ssl' module is compiled with 'LibreSSL" in line
-        or "Unable to find acceptable character detection dependency" in line):
+        or "Unable to find acceptable character detection dependency" in line
+        or "Traceback (most recent call last):" in line
+        or "During handling of the above exception" in line
+        or "Exception in thread serial-rx-term:" in line
+        or "Failed to restore V5 pit channel during disconnect cleanup" in line
+        or "serial.serialutil.SerialException: read failed:" in line
+        or "PortConnectionException: read failed:" in line
+        or line.strip().startswith("[Errno 6] Device not configured")
+        or line.strip().startswith("OSError: [Errno 6] Device not configured")
+        or line.strip().startswith("TypeError: argument must be an int, or have a fileno() method.")
+    ):
         return
 
     async with _clients_lock:
@@ -490,6 +503,12 @@ class ProsTerminalRunner:
         self._pty_buf: bytes = b""
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
+    def _prune_exited_process_state(self):
+        if self.proc is not None and self.proc.returncode is not None:
+            self.proc = None
+            self.reader_task = None
+            self._close_pty_reader()
+
     def _close_pty_reader(self):
         if self._loop is not None and self._pty_master_fd is not None:
             try:
@@ -514,6 +533,7 @@ class ProsTerminalRunner:
 
     async def start(self) -> dict:
         async with self._op_lock:
+            self._prune_exited_process_state()
             if self.running:
                 return {"ok": True, "status": "already running", "pid": self.pid}
 
@@ -537,6 +557,7 @@ class ProsTerminalRunner:
 
     async def stop(self) -> dict:
         async with self._op_lock:
+            self._prune_exited_process_state()
             if not self.running:
                 # Still clean up stale PTY/reader state if present.
                 if self.proc is None and self.reader_task is None and self._pty_master_fd is None:
@@ -555,6 +576,7 @@ class ProsTerminalRunner:
 
     async def kill(self) -> dict:
         async with self._op_lock:
+            self._prune_exited_process_state()
             if not self.running:
                 return {"ok": True, "status": "not running"}
 
@@ -570,7 +592,7 @@ class ProsTerminalRunner:
             self.reader_task.cancel()
             try:
                 await self.reader_task
-            except Exception:
+            except BaseException:
                 pass
             self.reader_task = None
 
@@ -634,10 +656,8 @@ class ProsTerminalRunner:
                 pass
             try:
                 await asyncio.wait_for(proc.wait(), timeout=1.0)
-            except:
+            except BaseException:
                 pass
-        except Exception:
-            pass
 
     async def _start_unix_pty(self):
         import pty  # Unix only

@@ -32,7 +32,7 @@ MotionView's creation was inspired by other visualizers such as [Grafana](https:
 
 ## Quick Start
 1. **Download:** Grab the latest release for your OS from the [Releases Page](https://github.com/lewispinstein-hue/MotionView/releases).
-2. **Demo:** In older versions (v1.2.0 and earlier, newer versions have a built-in demo), download the [`Example Route`](MotionView_Example.json), press `Cmd + O` in MotionView to open it, and press `Space` to watch a recorded run.
+2. **Demo:** In older versions (v1.2.0 and earlier, newer versions have a built-in demo), download the [`Example Route`](MotionView_Example.json), press `Cmd + O` in MotionView to open it, and press `Space` to watch a recorded run (Note this is a VEX Pushback run, as the current season is still to early for an actual Override demo).
 3. **Connect your Robot:** Install [MVLib](MVLib/README.md) into your PROS project to start streaming your own live data.
 
 ## Docs

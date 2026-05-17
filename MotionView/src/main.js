@@ -7892,11 +7892,11 @@ async function connectLeft() {
     return;
   }
   if (!(await ensureBridgeOriginReady()) || ORIGIN == null || WS_ORIGIN == null) {
-    setLeftUi("Child process Bridge.py was not given a port. Live  streaming cannot start.");
+    leftSetUI("Child process Bridge.py was not given a port. Live streaming cannot start.");
     return;
   }
   if (!(await waitForBackendReady(6000, 200))) {
-    setLeftUi("Backend is still starting. Please try again in a moment.");
+    leftSetUI("Backend is still starting. Please try again in a moment.");
     return;
   }
   pause();
@@ -10378,6 +10378,15 @@ function refreshWS() {
   loadProsDirFromAPI();
 }
 
+async function validateConfiguredProsDirWhenReady() {
+  const configuredDir = prosDirInput?.value?.trim();
+  if (configuredDir) {
+    await updateProsDir(configuredDir);
+    return;
+  }
+  await loadProsDirFromAPI();
+}
+
 // PROS directory input
 async function updateProsDir(dir) {
   if (!dir) {
@@ -10497,9 +10506,9 @@ async function loadProsDirFromAPI() {
 // Check PROS dir and enable/disable connect button
 function updateConnectButtonState() {
   if (!btnLeftConnect) return;
-  const hasProsDir = prosDirInput && prosDirInput.value && prosDirInput.value.trim();
-  // Connect button should be enabled if PROS dir is set OR if we"re already connected
-  btnLeftConnect.disabled = (!hasProsDir && !leftConnected) || leftActionInFlight;
+  // Connect button should be enabled only after the PROS dir has been validated,
+  // unless we are already connected and need to allow disconnect.
+  btnLeftConnect.disabled = (!prosDirValid && !leftConnected) || leftActionInFlight;
 }
 
 // Robot image upload
@@ -11291,7 +11300,7 @@ if (planTemplateModal) {
 // Load PROS dir from backend after a short delay to ensure ORIGIN is set
 setTimeout(() => {
   try {
-    loadProsDirFromAPI();
+    validateConfiguredProsDirWhenReady();
     updateConnectButtonState();
   } catch (e) {
     console.error("Error loading PROS dir:", e);
@@ -11306,7 +11315,7 @@ const bridgeReadyPoll = setInterval(() => {
     if (!(await ensureBridgeOriginReady())) return;
     if (!(await waitForBackendReady(8000, 250))) return;
     clearInterval(bridgeReadyPoll);
-    loadProsDirFromAPI();
+    await validateConfiguredProsDirWhenReady();
   })().finally(() => {
     bridgeReadyInitInFlight = false;
   });

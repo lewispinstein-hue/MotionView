@@ -9,7 +9,7 @@ import colorama
 
 from pros.common.utils import logger
 from pros.serial import bytes_to_str, decode_bytes_to_str
-from pros.serial.devices import StreamDevice
+from pros.serial.devices import RawStreamDevice, StreamDevice
 from pros.serial.ports import PortConnectionException
 
 
@@ -222,6 +222,12 @@ class Terminal(object):
         self._transmitter_alive = False
         self.transmitter_thread.join()
 
+    def _report_disconnect(self, message: str):
+        try:
+            self.console.write(f"{message}\n")
+        except Exception:
+            pass
+
     def reader(self):
         if self.request_banner:
             try:
@@ -259,6 +265,15 @@ class Terminal(object):
                 self.console.write(text)
 
             except (OSError, AssertionError) as e:
+                # In MotionView raw-stream mode these errors usually indicate a
+                # physical disconnect, not transient packet framing noise.
+                if isinstance(self.device, RawStreamDevice):
+                    if not self.alive.is_set():
+                        logger(__name__).warning(f'Connection to {self.device.name} broken: {e}')
+                        self._report_disconnect("Connected device disconnected.")
+                    self.stop()
+                    break
+
                 # This catches the 'aa55' header issues without killing the thread.
                 # The terminal stays alive and simply waits for the next valid packet.
                 if not self.alive.is_set():
@@ -270,6 +285,7 @@ class Terminal(object):
                 # Catches the port-death race condition when the terminal is stopping.
                 if not self.alive.is_set():
                     logger(__name__).info("Serial port disconnected.")
+                    self._report_disconnect("Connected device disconnected.")
                 self.stop()
                 break
 
@@ -279,6 +295,7 @@ class Terminal(object):
             except PortConnectionException:
                 logger(__name__).warning(f'Connection to {self.device.name} broken')
                 if not self.alive.is_set():
+                    self._report_disconnect("Connected device disconnected.")
                     self.stop()
                 break
 
@@ -331,7 +348,10 @@ class Terminal(object):
         if not self.alive.is_set():
             logger(__name__).warning('Stopping terminal')
             self.alive.set()
-            self.device.destroy()
+            try:
+                self.device.destroy()
+            except Exception as e:
+                logger(__name__).warning(f"Terminal cleanup failed: {e}")
             if self.transmitter_thread and threading.current_thread() != self.transmitter_thread and self.transmitter_thread.is_alive():
                 self.console.cleanup()
                 self.console.cancel()
