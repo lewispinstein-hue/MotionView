@@ -798,6 +798,14 @@ let planPlayDist = 0;
 let planLastWall = null;
 const PLAN_POINT_R = 11; // Size of waypoint in planning mode
 const PLAN_OVERLAY_POINT_R = 7; // Size of waypoint in overlay (viewing) mode
+const PLAN_FIELD_NODE_TICK_LEN = 14; // Length of node tick
+const PLAN_FIELD_NODE_MARKER_LONG = 22; // Length of node marker
+const PLAN_FIELD_NODE_MARKER_THICK = 4; 
+const PLAN_FIELD_NODE_HIT_R = 10; // How close cursor is to highlight
+const PLAN_FIELD_NODE_TICK_MAX_IN = 0.7;
+const PLAN_FIELD_NODE_MARKER_LONG_MAX_IN = 2.15;
+const PLAN_FIELD_NODE_MARKER_THICK_MAX_IN = 0.28;
+const PLAN_FIELD_NODE_BORDER_PX = 1.5;
 const PLAN_THETA_HANDLE_R = 6; // Radius of theta handle
 const PLAN_THETA_HANDLE_OFFSET = 25;
 let PLAN_MARKER_MAX_IN = 3; // Max size of waypoint marker
@@ -808,6 +816,7 @@ let savedPathsSaveTimer = null;
 let planObjects = [];
 let planNodes = [];
 let planSelectedNodeId = null;
+let planFieldHoverNodeId = null;
 let planEditingObjectId = null;
 let planEditingObjectOriginalName = "";
 let planObjectEditSelectAll = false;
@@ -1764,10 +1773,88 @@ function selectPlanNode(nodeId, { scrollSidebar = false } = {}) {
   renderPlanningEventTimeline();
   renderPlanObjects();
   syncPlanObjectLatestValues();
+  requestDrawAll();
   if (scrollSidebar && nodeId) {
     const node = getPlanNodeById(nodeId);
     if (node) scrollPlanMethodIntoView(node.objectId, node.methodId);
   }
+}
+
+function buildFieldPlanNodeMarkers() {
+  if (appMode !== "planning" || planWaypoints.length < 2 || !planNodes.length) return [];
+
+  const markers = [];
+  const sortedNodes = getSortedPlanNodes();
+  const nodesByBucket = new Map();
+  for (const node of sortedNodes) {
+    if (!nodesByBucket.has(node.beforeWaypoint)) nodesByBucket.set(node.beforeWaypoint, []);
+    nodesByBucket.get(node.beforeWaypoint).push(node);
+  }
+
+  for (const [bucketIndex, bucketNodes] of nodesByBucket.entries()) {
+    if (!Array.isArray(bucketNodes) || !bucketNodes.length) continue;
+    if (bucketIndex <= 0 || bucketIndex >= planWaypoints.length) continue;
+
+    const start = planWaypoints[bucketIndex - 1];
+    const end = planWaypoints[bucketIndex];
+    if (!start || !end) continue;
+
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const len = Math.hypot(dx, dy);
+    if (!(len > 0)) continue;
+
+    const tx = dx / len;
+    const ty = dy / len;
+    const nx = -ty;
+    const ny = tx;
+    const count = bucketNodes.length;
+
+    for (let i = 0; i < count; i += 1) {
+      const node = bucketNodes[i];
+      const object = getPlanObjectById(node.objectId);
+      if (!object) continue;
+      const method = getPlanMethodById(node.objectId, node.methodId);
+      const frac = (i + 1) / (count + 1);
+      markers.push({
+        node,
+        object,
+        method,
+        tooltipText: `${object.name || "Object"} · ${getPlanMethodTooltipName(method?.name)}`,
+        x: start.x + dx * frac,
+        y: start.y + dy * frac,
+        tx,
+        ty,
+        nx,
+        ny,
+      });
+    }
+  }
+
+  return markers;
+}
+
+function hitTestPlanFieldNodeAtClient(clientX, clientY) {
+  const markers = buildFieldPlanNodeMarkers();
+  if (!markers.length) return null;
+  const rect = canvas.getBoundingClientRect();
+  const mx = clientX - rect.left;
+  const my = clientY - rect.top;
+  let best = null;
+  let bestD2 = Infinity;
+
+  for (const marker of markers) {
+    const sp = worldToScreen(marker.x, marker.y);
+    const dx = sp.x - mx;
+    const dy = sp.y - my;
+    const d2 = dx * dx + dy * dy;
+    if (d2 <= PLAN_FIELD_NODE_HIT_R * PLAN_FIELD_NODE_HIT_R && d2 < bestD2) {
+      best = marker;
+      bestD2 = d2;
+    }
+  }
+
+  return best;
 }
 
 function createPlanMethodDragGhostCard({ objectId, methodId }) {
@@ -2146,6 +2233,7 @@ function savePlanObjectsUi() {
   renderPlanObjects();
   renderPlanningEventTimeline();
   syncPlanObjectLatestValues();
+  requestDrawAll();
   scheduleSavedPathsSave();
 }
 
@@ -2583,6 +2671,7 @@ function planChanged(opts = {}) {
   setPlanDist(planPlayDist);
   renderPlanningEventTimeline();
   syncPlanObjectLatestValues();
+  updateExportButtonAvailability();
   if (!opts.skipSelectionPanel) updatePlanSelectionPanel();
   scheduleSavedPathsSave();
 }
@@ -2847,6 +2936,55 @@ function drawPlanningOverlay(force = false) {
     else ctx.lineTo(sp.x, sp.y);
   }
   ctx.stroke();
+
+  if (appMode === "planning") {
+    const markers = buildFieldPlanNodeMarkers();
+    for (const marker of markers) {
+      const sp = worldToScreen(marker.x, marker.y);
+      const startScreen = worldToScreen(marker.x - marker.tx, marker.y - marker.ty);
+      const endScreen = worldToScreen(marker.x + marker.tx, marker.y + marker.ty);
+      const segAngle = Math.atan2(endScreen.y - startScreen.y, endScreen.x - startScreen.x);
+      const normalAngle = segAngle + Math.PI / 2;
+      const longLen = Math.max(8, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_LONG, PLAN_FIELD_NODE_MARKER_LONG_MAX_IN));
+      const thick = Math.max(3, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_THICK, PLAN_FIELD_NODE_MARKER_THICK_MAX_IN));
+      const tickLen = Math.max(10, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_TICK_LEN, PLAN_FIELD_NODE_TICK_MAX_IN));
+      const color = marker.object.color || getDefaultPlanObjectColor();
+      const isSelected = planSelectedNodeId === marker.node.id;
+      const isHover = planFieldHoverNodeId === marker.node.id;
+      const strokeColor = isSelected || isHover ? "rgba(255,255,255,0.98)" : "rgba(15,25,35,0.65)";
+      const borderPad = (isSelected ? PLAN_FIELD_NODE_BORDER_PX + 0.5 : PLAN_FIELD_NODE_BORDER_PX) * Math.max(viewingFieldMarkerStyleScale(), 0.85);
+
+      ctx.save();
+      ctx.translate(sp.x, sp.y);
+      ctx.rotate(normalAngle);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = isSelected ? 2.5 : 2;
+      ctx.beginPath();
+      ctx.moveTo(-tickLen / 2, 0);
+      ctx.lineTo(tickLen / 2, 0);
+      ctx.stroke();
+
+      ctx.fillStyle = strokeColor;
+      ctx.beginPath();
+      ctx.roundRect(
+        -(longLen + borderPad * 2) / 2,
+        -(thick + borderPad * 2) / 2,
+        longLen + borderPad * 2,
+        thick + borderPad * 2,
+        Math.max(2, (thick + borderPad * 2) / 2),
+      );
+      ctx.fill();
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(-longLen / 2, -thick / 2, longLen, thick, Math.max(2, thick / 2));
+      ctx.fill();
+      ctx.restore();
+    }
+  }
 
   // points
   for (let i = 0; i < planWaypoints.length; i++) {
@@ -5878,6 +6016,10 @@ function scaledViewingFieldRadius(baseDiameterPx, maxDiameterPx = Infinity) {
   return scaledViewingFieldDiameter(baseDiameterPx, maxDiameterPx) / 2;
 }
 
+function scaledPlanFieldNodeSize(basePx, maxIn) {
+  return Math.min(basePx * Math.max(viewZoom, CANVAS_ZOOM_MIN), maxIn * scale);
+}
+
 function waypointByIdLike(id) {
   if (id == null) return null;
   return waypointsById.get(Number(id))
@@ -6747,6 +6889,12 @@ canvas.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     const hit = planHitTest(mx, my);
     const thetaHit = planThetaHandleHit(mx, my);
+    const nodeHit = (hit < 0 && thetaHit < 0) ? hitTestPlanFieldNodeAtClient(e.clientX, e.clientY) : null;
+    if (nodeHit) {
+      hidePlanNodeTooltip({ immediate: true });
+      selectPlanNode(nodeHit.node.id, { scrollSidebar: true });
+      return;
+    }
     const w = screenToWorld(mx, my);
     if (thetaHit >= 0) {
       pushPlanUndo();
@@ -7309,7 +7457,29 @@ canvas.addEventListener("mousemove", (e) => {
 });
 
 canvas.addEventListener("mousemove", (e) => {
-  if (appMode === "planning") return;
+  if (appMode === "planning") {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const waypointHit = planHitTest(mx, my) >= 0;
+    const thetaHandleHit = planThetaHandleHit(mx, my) >= 0;
+    const nodeHit = (!waypointHit && !thetaHandleHit) ? hitTestPlanFieldNodeAtClient(e.clientX, e.clientY) : null;
+    if (nodeHit) {
+      if (planFieldHoverNodeId !== nodeHit.node.id) {
+        planFieldHoverNodeId = nodeHit.node.id;
+        requestDrawAll();
+      }
+      canvas.style.cursor = "pointer";
+      updatePlanNodeTooltip(nodeHit.tooltipText, e.clientX, e.clientY);
+    } else {
+      const hadHover = planFieldHoverNodeId != null;
+      planFieldHoverNodeId = null;
+      canvas.style.cursor = "";
+      hidePlanNodeTooltip();
+      if (hadHover) requestDrawAll();
+    }
+    return;
+  }
   if (!data || playing || isPanning) return;
 
   // watch hover has priority
@@ -7357,7 +7527,14 @@ canvas.addEventListener("mousemove", (e) => {
 
 canvas.addEventListener("mouseleave", () => {
   setCursorPills("Cursor: —");
-  if (appMode === "planning") return;
+  if (appMode === "planning") {
+    const hadHover = planFieldHoverNodeId != null;
+    planFieldHoverNodeId = null;
+    hidePlanNodeTooltip({ immediate: true });
+    canvas.style.cursor = "";
+    if (hadHover) requestDrawAll();
+    return;
+  }
   hoverWatch = null;
   // ensure timeline hover preview can"t "stick"
   hoverTimelineTime = null;
@@ -7448,6 +7625,18 @@ canvas.addEventListener("click", (e) => {
     clearWaypointSelection();
     requestDrawAll();
   }
+});
+
+canvas.addEventListener("dblclick", (e) => {
+  if (appMode !== "planning") return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  if (planHitTest(mx, my) >= 0 || planThetaHandleHit(mx, my) >= 0) return;
+  const nodeHit = hitTestPlanFieldNodeAtClient(e.clientX, e.clientY);
+  if (!nodeHit) return;
+  e.preventDefault();
+  openPlanMethodEditModal(nodeHit.node.objectId, nodeHit.node.methodId);
 });
 
 
@@ -7883,7 +8072,7 @@ function setLeftUi() {
   }
 
   if (btnExport) {
-    btnExport.disabled = leftConnected && leftStreaming;
+    updateExportButtonAvailability();
   }
 
   if (btnLeftStop) {
@@ -8789,6 +8978,7 @@ function finalizeLoadedData() {
   if (btnPlay) btnPlay.disabled = rawPoses.length < 2;
   if (btnFit) btnFit.disabled = false;
   if (fieldSelect) fieldSelect.disabled = false;
+  updateExportButtonAvailability();
 
   updatePoseReadout();
   requestDrawAll();
@@ -9495,6 +9685,15 @@ function hasPlanningExportData() {
   return planWaypoints.length > 0 || planObjects.length > 0 || planNodes.length > 0;
 }
 
+function hasAnyExportData() {
+  return hasViewingExportData() || hasPlanningExportData();
+}
+
+function updateExportButtonAvailability() {
+  if (!btnExport) return;
+  btnExport.disabled = (leftConnected && leftStreaming) || !hasAnyExportData();
+}
+
 function buildExportPayload() {
   const rawPathName = exportPathNameInput ? exportPathNameInput.value : "";
   const pathName = sanitizeExportPathName(rawPathName) || "Untitled Path";
@@ -9619,9 +9818,7 @@ function setImportedRouteMeta(meta) {
   if (btnRouteInfo) {
     btnRouteInfo.disabled = !importedRouteMeta;
   }
-  if (btnExport) {
-    btnExport.disabled = !importedRouteMeta;
-  }
+  updateExportButtonAvailability();
   if (btnApplyRunSettings) {
     btnApplyRunSettings.disabled = !importedRouteMeta?.ViewingSettings;
   }
