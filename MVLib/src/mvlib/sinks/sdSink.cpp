@@ -52,17 +52,17 @@ void Logger::getTimestampedFile(char *buffer, size_t len) {
   char pathPrefix[64];
   snprintf(pathPrefix, sizeof(pathPrefix), "/usd%s", m_loggingFolder);
 
-  if (tstruct->tm_year < 100) {
+  if (tstruct->tm_year < 125 /* 2025 (1900 + 125) */) {
     _MVLIB_FORWARD_INFO("initSdCard() VEX RTC Inaccurate. Falling back to program duration.");
 
-    snprintf(buffer, len, "%s/MVLIB_%s_%u-%u_%05d.log",
-             pathPrefix, m_date, pros::millis() / 1000, pros::millis() / 100, randInt);
+    snprintf(buffer, len, "%s/MVLIB_%s_%u-%u_%03u.log",
+             pathPrefix, m_date, pros::millis() / 1000, pros::millis() % 1000, randInt);
   } else {
     _MVLIB_FORWARD_INFO("initSdCard() VEX RTC Plausible. Creating file name with date.");
 
     char timeBuf[128];
     // Format the date/time string
-    strftime(timeBuf, sizeof(timeBuf), "MVLIB_%Y-%m-%d_%H-%M", tstruct); 
+    strftime(timeBuf, sizeof(timeBuf), "MVLIB_%Y-%m-%d_%H-%M-%S", tstruct); 
 
     // Combine pathPrefix, formatted time, and random ID
     snprintf(buffer, len, "%s/%s_%05d.log", pathPrefix, timeBuf, randInt); 
@@ -122,8 +122,11 @@ bool Logger::setLoggingFolder(const char *folder, bool disableOnFail) {
   int err = pros::usd::list_files(folder, filenames.data(), filenames.size() - 1);
   if (err != 1) {
     if (errno == ENOENT /* Cannot find path specified */) {
+      char msg[128];
+      strncpy(msg, folder, sizeof(msg) - 1);
+      std::replace(msg, msg + strlen(msg), '\\', '/');
       _MVLIB_FORWARD_ERROR("setLoggingFolder() could not find the path specified. "
-        "Path: %s", folder);
+        "Path: /usd%s", folder);
     } else {
       _MVLIB_FORWARD_ERROR("setLoggingFolder() failed setting errno: %d", errno);
     }
