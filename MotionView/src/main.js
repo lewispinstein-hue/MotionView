@@ -805,6 +805,7 @@ const PLAN_FIELD_NODE_HIT_R = 10; // How close cursor is to highlight
 const PLAN_FIELD_NODE_TICK_MAX_IN = 0.7;
 const PLAN_FIELD_NODE_MARKER_LONG_MAX_IN = 2.15;
 const PLAN_FIELD_NODE_MARKER_THICK_MAX_IN = 0.28;
+const PLAN_FIELD_NODE_VIEWING_MAX_IN = 2.12;
 const PLAN_FIELD_NODE_BORDER_PX = 1.5;
 const PLAN_THETA_HANDLE_R = 6; // Radius of theta handle
 const PLAN_THETA_HANDLE_OFFSET = 25;
@@ -1781,11 +1782,12 @@ function selectPlanNode(nodeId, { scrollSidebar = false } = {}) {
 }
 
 function buildFieldPlanNodeMarkers() {
-  if (appMode !== "planning" || planWaypoints.length < 2 || !planNodes.length) return [];
+  if (planWaypoints.length < 2 || !planNodes.length) return [];
 
   const markers = [];
   const sortedNodes = getSortedPlanNodes();
   const nodesByBucket = new Map();
+  const distances = getPlanTimelineWaypointDistances();
   for (const node of sortedNodes) {
     if (!nodesByBucket.has(node.beforeWaypoint)) nodesByBucket.set(node.beforeWaypoint, []);
     nodesByBucket.get(node.beforeWaypoint).push(node);
@@ -1808,14 +1810,29 @@ function buildFieldPlanNodeMarkers() {
     const ty = dy / len;
     const nx = -ty;
     const ny = tx;
-    const count = bucketNodes.length;
+    const segStartDist = distances[bucketIndex - 1] ?? 0;
+    const markerLongPx = appMode === "planning"
+      ? Math.max(8, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_LONG, PLAN_FIELD_NODE_MARKER_LONG_MAX_IN))
+      : Math.min(
+        PLAN_FIELD_NODE_VIEWING_MAX_IN * scale,
+        Math.max(8, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_LONG, PLAN_FIELD_NODE_MARKER_LONG_MAX_IN)),
+      );
+    const waypointRadiusPx = appMode === "planning"
+      ? Math.min(PLAN_POINT_R, PLAN_MARKER_MAX_IN * scale)
+      : Math.min(PLAN_OVERLAY_POINT_R, PLAN_MARKER_MAX_IN_VIEWING * scale);
+    const startClearanceDist = Math.min(len, (waypointRadiusPx + markerLongPx * 0.3 + 1.5) / Math.max(scale, 0.0001));
 
-    for (let i = 0; i < count; i += 1) {
-      const node = bucketNodes[i];
+    for (const node of bucketNodes) {
       const object = getPlanObjectById(node.objectId);
       if (!object) continue;
       const method = getPlanMethodById(node.objectId, node.methodId);
-      const frac = (i + 1) / (count + 1);
+      const threshold = getPlanNodeThresholdDistance(node, bucketNodes);
+      const rawDist = clamp(threshold - segStartDist, 0, len);
+      const usableLen = Math.max(0, len - startClearanceDist);
+      const alongDist = usableLen <= 0
+        ? len
+        : startClearanceDist + (rawDist / len) * usableLen;
+      const frac = clamp(alongDist / len, 0, 1);
       markers.push({
         node,
         object,
@@ -2937,7 +2954,7 @@ function drawPlanningOverlay(force = false) {
   }
   ctx.stroke();
 
-  if (appMode === "planning") {
+  if (appMode === "planning" || (appMode !== "planning" && planOverlayVisible)) {
     const markers = buildFieldPlanNodeMarkers();
     for (const marker of markers) {
       const sp = worldToScreen(marker.x, marker.y);
@@ -2945,9 +2962,13 @@ function drawPlanningOverlay(force = false) {
       const endScreen = worldToScreen(marker.x + marker.tx, marker.y + marker.ty);
       const segAngle = Math.atan2(endScreen.y - startScreen.y, endScreen.x - startScreen.x);
       const normalAngle = segAngle + Math.PI / 2;
-      const longLen = Math.max(8, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_LONG, PLAN_FIELD_NODE_MARKER_LONG_MAX_IN));
-      const thick = Math.max(3, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_THICK, PLAN_FIELD_NODE_MARKER_THICK_MAX_IN));
-      const tickLen = Math.max(10, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_TICK_LEN, PLAN_FIELD_NODE_TICK_MAX_IN));
+      const longLenRaw = Math.max(8, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_LONG, PLAN_FIELD_NODE_MARKER_LONG_MAX_IN));
+      const thickRaw = Math.max(3, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_THICK, PLAN_FIELD_NODE_MARKER_THICK_MAX_IN));
+      const tickLenRaw = Math.max(10, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_TICK_LEN, PLAN_FIELD_NODE_TICK_MAX_IN));
+      const viewingCapPx = PLAN_FIELD_NODE_VIEWING_MAX_IN * scale;
+      const longLen = appMode === "planning" ? longLenRaw : Math.min(viewingCapPx, longLenRaw);
+      const thick = appMode === "planning" ? thickRaw : Math.min(viewingCapPx, thickRaw);
+      const tickLen = appMode === "planning" ? tickLenRaw : Math.min(viewingCapPx, tickLenRaw);
       const color = marker.object.color || getDefaultPlanObjectColor();
       const isSelected = planSelectedNodeId === marker.node.id;
       const isHover = planFieldHoverNodeId === marker.node.id;
