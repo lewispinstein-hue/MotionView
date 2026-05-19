@@ -1,9 +1,9 @@
 #pragma once
 
 /**
-* @file misc.hpp
-* @brief Internal MVLib helpers
-*/
+ * @file misc.hpp
+ * @brief Internal MVLib helpers
+ */
 
 #include "mvlib/watches.hpp"
 

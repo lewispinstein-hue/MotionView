@@ -32,21 +32,21 @@ struct Pose {
 };
 
 // Logger structs
-/**
-  * @struct LoggerTimings
-  * @brief Runtime configuration for Logger output and update loops.
-  *
-  * @note All timings are in ms.
-*/
+/** 
+ * @struct LoggerTimings
+ * @brief Runtime configuration for Logger output and update loops.
+ *
+ * @note All timings are in ms.
+ */
 struct LoggerTimings {
   /**
-    * @brief SD file flush interval. At 1s (default), 
-    *        SD card flushes out of RAM every 1 second.
-    *
-    * @note This interval is used to flush the file buffer. 
-    *       It uses the standard fflush(file) function for flushing.
-    *
-  */
+   * @brief SD file flush interval. At 1s (default), 
+   *        SD card flushes out of RAM every 1 second.
+   *
+   * @note This interval is used to flush the file buffer. 
+   *       It uses the standard fflush(file) function for flushing.
+   *
+   */
   uint32_t sdBufferFlushInterval = 1000;
   
   /**
@@ -96,10 +96,10 @@ struct LoggerTimings {
 
 /**
  * @struct loggerConfig
-  * @brief Runtime configuration for Logger output and periodic reporters.
-  *
-  * @note Most fields are atomic so they can be toggled while running.
-  */
+ * @brief Runtime configuration for Logger output and periodic reporters.
+ *
+ * @note Most fields are atomic so they can be toggled while running. 
+ */
 struct LoggerConfig {
   /// @brief Print logs to the terminal.
   std::atomic<bool> logToTerminal{true};

@@ -15,10 +15,10 @@ namespace mvlib {
 namespace {
 uint32_t getrandInt(const uint32_t& min, const uint32_t& max) {
   /**
-    * @note This method of generation is needed because the v5 brain is 
-    *       completely deterministic. Using std::rand or std::random_device
-    *       results in the same number every time.
-  */
+   * @note This method of generation is needed because the v5 brain is 
+   *       completely deterministic. Using std::rand or std::random_device
+   *       results in the same number every time.
+   */
 
   uint64_t seed = pros::micros();
   seed ^= (uint64_t)pros::battery::get_voltage() << 32;

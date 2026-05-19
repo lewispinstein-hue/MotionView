@@ -21,7 +21,7 @@ using WPId = uint16_t;
  * WaypointHandle waypoint = logger.addWaypoint(...);
  * logger.info("Waypoint name: %s", waypoint.getLabel().c_str());
  * @endcode
-*/
+ */
 struct WaypointParams {
   /// @brief The target X value of the point
   double tarX;
@@ -84,7 +84,7 @@ struct WaypointOffset {
 /**
  * @class WaypointHandle
  * @brief A handle to a waypoint. Returned from logger.addWaypoint(). 
-*/
+ */
 class WaypointHandle {
 private:
   /// ID of the waypoint
@@ -96,32 +96,32 @@ public:
   /** 
    * @brief Get the offset of the robot from the waypoint
    * \return Returns the offset of the waypoint in WaypointOffset struct
-  */
+   */
   WaypointOffset getOffset() const;
 
   /**
    * @brief Get the params of the waypoint
    * \return Returns the parameters of the waypoint
-  */
+   */
   WaypointParams getParams() const;
 
   /**
    * @brief Get the name of the waypoint
    * \return Returns the name of the waypoint
-  */
+   */
   std::string getLabel() const;
 
   /** 
    * @brief Check if the robot has reached the waypoint
    * \return Returns true if the robot has reached the waypoint
-  */
+   */
   bool reached() const;
 
   /** 
    * @brief Check if the waypoint has timed out.
    *        A timed out waypoint continues reporting true after timeout deactivates it.
    * \return Returns true if the waypoint has timed out
-  */
+   */
   bool timedOut() const;
 
   /** 
@@ -129,13 +129,13 @@ public:
    *        tracked, printed if needed, and watched for 
    *        timeouts/being reached.
    * \return Returns true if the waypoint is active
-  */
+   */
   bool active() const;
 
   /**
    * @brief Re-send this waypoint's roster entry over telemetry.
    * \return Returns true if the waypoint exists and was re-sent.
-  */
+   */
   bool resyncRoster() const;
 };
 } // namespace mvlib

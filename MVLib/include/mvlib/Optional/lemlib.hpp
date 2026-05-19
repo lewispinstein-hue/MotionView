@@ -18,7 +18,7 @@
  * Depending on your version of LemLib, this include might be outdated.
  * If lemlib/api.hpp is not found, it is likely this instead:
  * lemlib/lemlib.hpp
-*/
+ */
 #include "lemlib/api.hpp"  // IWYU pragma: keep
 
 namespace mvlib {

@@ -1,9 +1,9 @@
 #pragma once
 
 /**
-* @file dateGetter.hpp
-* @brief Internal MVLib helpers
-*/
+ * @file dateGetter.hpp
+ * @brief Internal MVLib helpers
+ */
 
 namespace mvlib {
 namespace detail {

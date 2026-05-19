@@ -3,7 +3,7 @@
  * @brief Forward log macros to the logger. These macros 
  *        should not be used by the user. Instead use 
  *        mvlib::Logger::getInstance().info/warn/etc
-*/
+ */
 
 #ifndef _MVLIB_FORWARD_LOG_MACROS
 #define _MVLIB_FORWARD_LOG_MACROS

@@ -98,7 +98,7 @@ public:
    *   logger.warn("Watch is invalid!");
    * }
    * @endcode
-  */
+   */
   bool valid() const;
 
   /**

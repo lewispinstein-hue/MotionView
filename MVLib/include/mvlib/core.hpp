@@ -140,19 +140,19 @@ public:
 
   /**
    * @brief Enable/disable printing of registered watches.
-  */
+   */
   void setPrintWatches(bool v);
   
   /**
    * @brief Enable/disable printing of waypoints.
-  */
+   */
   void setPrintWaypoints(bool v);
 
   /**
    * @brief Enable/disable printing of system messages. Recommended to 
    *        be left on for debugging. Disable if you want your MotionView
    *        GUI to be void of system messages.
-  */
+   */
   void setLogSystemInfo(bool v);
 
   /**
@@ -163,7 +163,7 @@ public:
   /**
    * @brief Set the minimum log level that will be emitted. Useful for
    *        Whenever you want to filter out logs that are not important to you.
-  */
+   */
   void setMinLogLevel(LogLevel level);
 
   // ------------------------------------------------------------------------
@@ -191,7 +191,7 @@ public:
    *   });
    * }
    * @endcode
-  */
+   */
   void setPoseGetter(std::function<std::optional<Pose>()> getter);
 
   /**
@@ -253,35 +253,35 @@ public:
    * logger.debug("Hello, %s", "world");
    * logger.info("Battery Temp: %.1f", pros::battery::get_temperature());
    * @endcode
-  */
+   */
   _MVLIB_FORMAT_CHECK(2, 3)
   void debug(const char *fmt, ...);
 
   /** 
-  * @copydoc debug
-  * @brief Emit info level log message.
-  */
+   * @copydoc debug
+   * @brief Emit info level log message.
+   */
   _MVLIB_FORMAT_CHECK(2, 3)
   void info(const char *fmt, ...);
 
   /** 
-  * @copydoc debug
-  * @brief Emit warning level log message.
-  */
+   * @copydoc debug
+   * @brief Emit warning level log message.
+   */
   _MVLIB_FORMAT_CHECK(2, 3)
   void warn(const char *fmt, ...);
 
   /** 
-  * @copydoc debug
-  * @brief Emit error level log message.
-  */
+   * @copydoc debug
+   * @brief Emit error level log message.
+   */
   _MVLIB_FORMAT_CHECK(2, 3)
   void error(const char *fmt, ...);
 
   /** 
-  * @copydoc debug 
-  * @brief Emit fatal level log message.
-  */
+   * @copydoc debug 
+   * @brief Emit fatal level log message.
+   */
   _MVLIB_FORMAT_CHECK(2, 3)
   void fatal(const char *fmt, ...);
 

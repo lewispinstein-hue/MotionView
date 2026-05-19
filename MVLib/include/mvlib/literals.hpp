@@ -17,7 +17,7 @@ namespace literals {
  * @code{.cpp}
  * logger.watch("foo", mvlib::LogLevel::INFO, 100_mvMs, ...);
  * @endcode
-*/
+ */
 constexpr uint32_t operator""_mvMs(const unsigned long long int ms) {
   return static_cast<uint32_t>(ms);
 }
@@ -33,7 +33,7 @@ constexpr uint32_t operator""_mvMs(const unsigned long long int ms) {
  * @code{.cpp}
  * logger.watch("foo", mvlib::LogLevel::INFO, 1.7_mvS, ...);
  * @endcode
-*/
+ */
 constexpr uint32_t operator""_mvS(const long double s) {
   return static_cast<uint32_t>(s * 1000);
 }
@@ -46,7 +46,7 @@ constexpr uint32_t operator""_mvS(const long double s) {
  * @code{.cpp}
  * logger.watch("foo", mvlib::LogLevel::INFO, 1_mvS, ...);
  * @endcode
-*/
+ */
 constexpr uint32_t operator""_mvS(const unsigned long long int s) {
   return static_cast<uint32_t>(s * 1000);
 }
