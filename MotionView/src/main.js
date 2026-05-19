@@ -499,7 +499,7 @@ let backendReadyLastCheckAt = 0;
 
 // --- FIELD IMAGES ---
 const CURRENT_GAME_YEAR = "2026-2027";
-const DEFAULT_PLAN_EXPORT_TEMPLATE = "chassis.moveToPoint(${x}, ${y}, ${theta}, {.maxSpeed = someMathFunctionToGetSpeed(${distance});";
+const DEFAULT_PLAN_EXPORT_TEMPLATE = "moveToPoint(${x}, ${y}, ${theta});";
 const FIELD_IMAGES = [
   { key: "./assets/fields/v5_match_field_2026-2027_override.png", label: "Match Field (V5 Override)" },
   { key: "./assets/fields/v5_skills_field_2026-2027_override.png", label: "Skills Field (V5 Override)" },
@@ -553,7 +553,7 @@ const WATCH_GRAPH_MAX_W = 1600;
 const WATCH_GRAPH_MIN_H = 170;
 const WATCH_GRAPH_MARGIN = 16;
 let data = null;
-let showPreviousYearFields = false;
+let showPreviousYearFields = true;
 let planExportTemplate = DEFAULT_PLAN_EXPORT_TEMPLATE;
 
 function readPlanSpeed(value, fallback = 127) {
@@ -2875,7 +2875,12 @@ function planThetaHandlePos(i) {
   if (!p) return null;
   const sp = worldToScreen(p.x, p.y);
   const theta = fieldHeadingToScreenDeg(planThetaDegAt(i)) * Math.PI / 180;
-  const dist = PLAN_POINT_R + PLAN_THETA_HANDLE_OFFSET;
+  const baseR = appMode !== "planning" ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
+  const r = appMode === "viewing"
+    ? Math.min(baseR, PLAN_MARKER_MAX_IN_VIEWING * scale)
+    : Math.min(baseR, PLAN_MARKER_MAX_IN * scale);
+  const handleOffset = PLAN_THETA_HANDLE_OFFSET * Math.max(viewZoom, CANVAS_ZOOM_MIN);
+  const dist = r + handleOffset;
   return {
     x: sp.x + Math.sin(theta) * dist,
     y: sp.y - Math.cos(theta) * dist,
@@ -2973,7 +2978,7 @@ function drawPlanningOverlay(force = false) {
       const isSelected = planSelectedNodeId === marker.node.id;
       const isHover = planFieldHoverNodeId === marker.node.id;
       const strokeColor = isSelected || isHover ? "rgba(255,255,255,0.98)" : "rgba(15,25,35,0.65)";
-      const borderPad = (isSelected ? PLAN_FIELD_NODE_BORDER_PX + 0.5 : PLAN_FIELD_NODE_BORDER_PX) * Math.max(viewingFieldMarkerStyleScale(), 0.85);
+      const borderPad = PLAN_FIELD_NODE_BORDER_PX * Math.max(viewingFieldMarkerStyleScale(), 0.85);
 
       ctx.save();
       ctx.translate(sp.x, sp.y);
@@ -3043,7 +3048,8 @@ function drawPlanningOverlay(force = false) {
       if (appMode === "viewing") var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN_VIEWING * scale);
       else var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN * scale);
 
-      const dist = r + PLAN_THETA_HANDLE_OFFSET;
+      const handleOffset = PLAN_THETA_HANDLE_OFFSET * Math.max(viewZoom, CANVAS_ZOOM_MIN);
+      const dist = r + handleOffset;
       const hx = sp.x + Math.sin(theta) * dist;
       const hy = sp.y - Math.cos(theta) * dist;
       ctx.save();
