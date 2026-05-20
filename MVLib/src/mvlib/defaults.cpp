@@ -172,7 +172,7 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
       });
   }
 
-  _MVLIB_FORWARD_INFO("Created default watches: %s%s%s",
+  _MVLIB_FORWARD_DEBUG("Created default watches: %s%s%s",
     w.leftDrivetrainWatchdog ? "Left Drivetrain Watchdog, " : "",
     w.rightDrivetrainWatchdog ? "Right Drivetrain Watchdog, " : "",
     w.batteryWatchdog ? "Battery Watchdog" : "");

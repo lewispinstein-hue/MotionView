@@ -55,6 +55,8 @@ namespace mvlib {
  * @class Logger
  * @brief Singleton logging + telemetry manager.
  *
+ * @note All methods are thread-safe and can be used from any thread.
+ *
  * @warning After creating the logger instance (Logger::getInstance()), the
  *          standard PROS terminal multiplexers (sout/serr) and native COBS 
  *          encoding are deactivated to optimize VEXnet bandwidth. Do not 
@@ -62,7 +64,8 @@ namespace mvlib {
  *          instantiating the logger. Raw text will collide with the high-speed 
  *          binary telemetry stream, resulting in corrupted packets and undefined 
  *          behavior during decoding. Use Logger::info(), warn(), etc. for
- *          safe logging.
+ *          safe logging. Standard print functions may work in some cases, but
+ *          it is not guaranteed.
  */
 class Logger {
 public:
@@ -99,7 +102,7 @@ public:
   void start();
 
   /// @brief Pause periodic printing without destroying the logger task.
-  void pause(bool byForce = false);
+  void pause();
 
   /// @brief Resume after pause().
   void resume();
@@ -126,8 +129,7 @@ public:
   /**
    * @brief Enable/disable SD logging.
    *
-   * @note Many implementations lock SD logging after start() to avoid file
-   *       lifecycle issues. Calls after start() may fail.
+   * @note Only changeable before start(). Calls after start() are ignored.
    */
   void setLogToSD(bool v);
 
@@ -209,29 +211,78 @@ public:
   bool setRobot(Drivetrain drivetrain, bool useSpeedEstimation = false);
 
   /**
-  * @brief Sets the SD card directory for saving log files.
-  *
-  * @note The folder must already exist on the SD card. This function will 
-  *       not create the folder.
-  * @note Pass a PROS SD path relative to `/usd`, starting with `\\`
-  *       (for example `\\logs`, not `/usd/logs`).
-  *
-  * @param folder        Absolute path to the directory (e.g. "\\logs").
-  * @param disableOnFail If true, permanently locks/disables SD logging if the folder is missing.
-  *                      If false, the logger falls back to the SD card root directory on failure.
-  *
-  * \return true if the folder exists and was set successfully, false otherwise. 
-  *
-  * \b Example
-  * @code
-  * // Route logs to "\telemetry". Disable SD logging entirely if the folder doesn't exist.
-  * if (!logger.setLoggingFolder("\\telemetry", true)) {
-  *   logger.warn("SD logging disabled: \\telemetry folder not found.");
-  * }
-  * @endcode
-  */
-  bool setLoggingFolder(const char *folder, bool disableOnFail = false);
-  
+   * @enum MissingFolderPolicy
+   * @brief Policy used when the requested SD logging folder does not exist.
+   */
+  enum class MissingFolderPolicy : uint8_t {
+    /// @brief Disable SD logging immediately and return failure.
+    disable = 0,
+
+    /// @brief Fall back to the SD root directory (`/usd/`) and continue file resolution there.
+    useRoot
+  };
+
+  /**
+   * @enum ExistingFilePolicy
+   * @brief Policy used when an explicit SD logging file already exists.
+   *
+   * @note This policy is only consulted after folder resolution has completed.
+   */
+  enum class ExistingFilePolicy : uint8_t {
+    /// @brief Disable SD logging immediately and return failure.
+    disable = 0,
+
+    /// @brief Reuse the explicit path and overwrite the existing file.
+    overwrite,
+
+    /// @brief Preserve the existing file and instead generate a new timestamped
+    ///        filename in the resolved folder.
+    automatic
+  };
+
+  /**
+   * @brief Sets the SD logging destination as either a folder or a specific file path.
+   *
+   * @param location      Absolute SD-relative folder or file path
+   *                      (e.g. "/logs" or "/logs/match.log").
+   * @param folderPolicy  Behavior when the requested folder does not exist.
+   * @param filePolicy    Behavior when the requested explicit file already exists.
+   *
+   * @note Pass a POSIX-style SD path relative to /usd, starting with /
+   *       (for example /logs or /logs/match.log, not /usd/logs).
+   * @note The target folder must already exist on the SD card. This function will
+   *       not create missing folders. If folderPolicy is useRoot, MVLib falls back
+   *       to the SD root directory instead.
+   * @note If location is a folder, MVLib will automatically generate a timestamped filename
+   *       inside it.
+   * @note If location is a file path, the file portion must include an extension
+   *       (for example .log). Folder segments must not contain '.'.
+   * @note File policy is only consulted after folder resolution has finished, and only
+   *       when an explicit filename remains selected and already exists.
+   * @note If filePolicy is automatic, MVLib clears the explicit filename and later
+   *       generates a timestamped filename in the resolved folder during initialization.
+   *
+   * \return true if the folder exists and the destination was accepted, false otherwise.
+   *
+   * \b Examples
+   * @code
+   * // Route logs to "/telemetry" with an auto-generated timestamped filename.
+   * if (!logger.setLoggingLocation("/telemetry",
+   *                                MissingFolderPolicy::disable,
+   *                                ExistingFilePolicy::automatic)) {
+   *   logger.warn("SD logging disabled: /telemetry folder not found.");
+   * }
+   *
+   * // Route logs to a specific file.
+   * logger.setLoggingLocation("/telemetry/match.log",
+   *                           MissingFolderPolicy::useRoot,
+   *                           ExistingFilePolicy::overwrite);
+   * @endcode
+   */
+  bool setLoggingLocation(const char *location,
+                          MissingFolderPolicy folderPolicy = MissingFolderPolicy::disable,
+                          ExistingFilePolicy filePolicy = ExistingFilePolicy::automatic);
+
   // ------------------------------------------------------------------------
   // Logging
   // ------------------------------------------------------------------------
@@ -362,6 +413,14 @@ public:
 
   /**
    * @brief Register the built-in default watchdog watches.
+   *
+   * @param watches Built-in watchdog watches
+   *
+   * @note These are affected by minLoggerLevel.
+   * @note Drivetrain watches will fail if setRobot has not been set, or if the
+   *       drivetrain pointers are invalid.
+   *
+   * \return True if all wanted watches were successfully registered.
    */
   bool setDefaultWatches(const DefaultWatches watches);
 
@@ -386,8 +445,8 @@ public:
    * @tparam Getter Callable that returns the value to render (numeric/bool/string/cstr).
    * @param label Display label for the watch.
    * @param baseLevel Level used for normal samples.
-   * @param type Watch behavior. `WatchMode::onInterval` emits on a regular interval.
-   *             `WatchMode::onChange` emits only after the rendered value changes and
+   * @param type Watch behavior. WatchMode::onInterval emits on a regular interval.
+   *             WatchMode::onChange emits only after the rendered value changes and
    *             the debounce interval has elapsed.
    * @param intervalMs Sampling/print interval in ms for interval watches, or debounce
    *                   interval in ms for on-change watches.
@@ -447,7 +506,7 @@ private:
   bool initSDLogger();
 
   /// @brief Return the current sessions filename.
-  void getTimestampedFile(char *buffer, size_t len);
+  void getTimestampedFilename(char *buffer, size_t len);
 
   /**
    * @brief Convert a LogLevel to a printable string.
@@ -663,7 +722,8 @@ private:
 
   uint32_t m_lastFileFlush{0};
   FILE* m_sdFile = nullptr;
-  char m_currentFilename[128] = {};
+  char m_currentFilename[128] = "";
+  char m_absoluteFilename[133] = "";
   const char* m_date = detail::getBuildDate(); 
   char m_loggingFolder[24] = "";
 

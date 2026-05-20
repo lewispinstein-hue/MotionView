@@ -78,7 +78,7 @@ struct WaypointOffset {
   bool reached;
 
   /// @brief True if the waypoint has timed out
-  std::optional<bool> timedOut = std::nullopt;
+  bool timedOut;
 };
 
 /**

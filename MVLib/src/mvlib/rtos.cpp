@@ -8,16 +8,13 @@ uint32_t Logger::status() const {
   return m_task->get_state();
 }
 
-void Logger::pause(bool byForce) {
+void Logger::pause() {
   uint32_t st = status();
   bool isPauseable = st != pros::E_TASK_STATE_DELETED && 
                      st != pros::E_TASK_STATE_INVALID &&
                      st != pros::E_TASK_STATE_SUSPENDED;
 
-  if (isPauseable && byForce) {
-    m_task->suspend();
-    _MVLIB_FORWARD_DEBUG("pause() Logger force suspended.");
-  } else if (isPauseable) {
+  if (isPauseable) {
     m_pauseRequested.store(true);
     _MVLIB_FORWARD_DEBUG("pause() Logger paused.");
   } else {

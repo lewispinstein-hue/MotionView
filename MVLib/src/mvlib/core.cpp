@@ -95,7 +95,7 @@ void Logger::start() {
       m_sdLocked = true;
       _MVLIB_FORWARD_FATAL("start() initSDCard failed! Unable to initialize SD card.");
     } else {
-      _MVLIB_FORWARD_INFO("start() Successfully initialized SD card with filename: %s", m_currentFilename);
+      _MVLIB_FORWARD_INFO("start() Successfully initialized SD card with filename: %s", m_absoluteFilename);
     }
   }
 

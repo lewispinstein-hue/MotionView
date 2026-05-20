@@ -209,21 +209,11 @@ logger.setRobot({
 
 Use that only if you intentionally want odometry-based speed estimation.
 
-## 6. Optional SD Folder Setup
+## 6. Optional SD Logging Location Setup
 
-If you want SD logs to go into a specific folder:
+`logger.setLoggingLocation(...)` lets you route all SD log data into a custom folder and/or file.
 
-```cpp
-if (!logger.setLoggingFolder("\\telemetry", true)) {
-  logger.warn("SD logging disabled: \\\\telemetry folder not found.");
-}
-```
-
-Rules:
-
-- folder must already exist on the SD card
-- pass a path relative to `/usd`
-- start the path with `\\`
+See [SDLogging.md](./SDLogging.md#setlogginglocation) for the full path rules, fallback policies, and examples.
 
 Do this before `logger.start()`.
 
@@ -243,7 +233,7 @@ Do your setup first:
 - waypoints
 - output toggles
 - timings
-- logging folder
+- logging location
 
 Then start the logger.
 

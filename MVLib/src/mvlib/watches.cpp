@@ -87,16 +87,6 @@ std::string Logger::evaluateWatch(WatchId id, bool emit) {
 
   nowMs = pros::millis();
 
-  {
-    detail::uniqueLock lock(m_mutex);
-    if (!lock.isLocked()) return {};
-
-    InternalWatch* watch = m_findWatchUnlocked(id);
-    if (!watch) return {};
-    watch->lastValue = valueStr;
-    watch->lastPrintMs = nowMs;
-  }
-
   if (m_config.logToTerminal.load()) {
     bool sentAsBinary = false;
 

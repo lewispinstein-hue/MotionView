@@ -78,7 +78,7 @@ void Logger::printWaypoints() {
       wp.active = wp.params.retriggerable;
     } else if (!off.reached && wp.prevReached) {
       wp.prevReached = false;
-    } else if (off.timedOut.value_or(false)) {
+    } else if (off.timedOut) {
       subType = 3; // TIMEDOUT
       statusStr = "TIMEDOUT";
       shouldTrigger = true;

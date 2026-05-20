@@ -211,7 +211,7 @@ struct WaypointOffset {
   std::optional<double> offT = std::nullopt;
   std::optional<uint32_t> remainingTimeout = std::nullopt;
   bool reached;
-  std::optional<bool> timedOut = std::nullopt;
+  bool timedOut;
 };
 ```
 
