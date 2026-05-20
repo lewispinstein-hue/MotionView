@@ -16,6 +16,6 @@ const char* Logger::levelToString(const LogLevel& level) const {
 }
 
 bool Logger::configValid() const {
-  return (m_pLeftDrivetrain && m_pRightDrivetrain);
+  return (m_pLeftDrivetrain && m_pRightDrivetrain) && m_configSet.load();
 }
 } // namespace mvlib

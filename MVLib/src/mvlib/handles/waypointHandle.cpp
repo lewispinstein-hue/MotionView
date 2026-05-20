@@ -43,11 +43,9 @@ bool WaypointHandle::timedOut() const {
   if (mutableWaypoint->params.timeoutMs.has_value() &&
       (pros::millis() - mutableWaypoint->startTimeMs >=
        mutableWaypoint->params.timeoutMs.value())) {
-    mutableWaypoint->timedOut = true;
-    mutableWaypoint->active = false;
+    return true;
   }
-
-  return mutableWaypoint->timedOut;
+  return false;
 }
 
 bool WaypointHandle::active() const {

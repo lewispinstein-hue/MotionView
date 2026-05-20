@@ -46,7 +46,7 @@ WaypointOffset Logger::getWaypointOffset(WPId id) {
     if (!lock.isLocked()) return {};
 
     const InternalWaypoint* waypoint = m_findWaypointUnlocked(id);
-    if (!waypoint || !waypoint->active) return {};
+    if (!waypoint) return {};
     params = waypoint->params;
     startTimeMs = waypoint->startTimeMs;
     poseGetter = m_getPose;

@@ -9,8 +9,6 @@
 
 namespace mvlib {
 namespace {
-double leftVelocity, rightVelocity;
-
 float estimateSpeed(const Pose& prevPose, const Pose& pose) {
   static uint32_t prevMs = pros::millis();
   uint32_t nowMs = pros::millis();
@@ -28,7 +26,7 @@ Logger& Logger::getInstance() {
 }
 
 bool Logger::setRobot(Drivetrain drivetrain, bool useSpeedEstimation) {
-  if (m_configSet) {
+  if (m_configSet.load()) {
     _MVLIB_FORWARD_WARN("setRobot(Drivetrain) called after successfully being set!");
     return false;
   }
@@ -45,7 +43,7 @@ bool Logger::setRobot(Drivetrain drivetrain, bool useSpeedEstimation) {
   _MVLIB_FORWARD_DEBUG("setRobot(Drivetrain) successfully set variables!");
 
   checkRobotConfig();
-  m_configSet = true;
+  m_configSet.store(true);
   return true;
 }
 
@@ -74,7 +72,7 @@ Logger::Logger() {
   // Begin IO Handle for user logs by constructing singleton
   (void) detail::Telemetry::getInstance(); 
 
-  // Disable PROS CBOS; we do it ourselves
+  // Disable PROS COBS; we do it ourselves
   pros::c::serctl(SERCTL_DISABLE_COBS, nullptr);
   // Disable PROS prepending messages with "sout"
   pros::c::serctl(SERCTL_DEACTIVATE, (void*)0x74756f73);
@@ -109,6 +107,7 @@ void Logger::start() {
     while (true) {
       if (m_pauseRequested.load()) {
         pros::delay(100);
+        now = pros::millis();
         continue;
       }
 
@@ -147,6 +146,7 @@ void Logger::Update() {
   std::optional<Pose> pose = std::nullopt;
   std::shared_ptr<std::function<std::optional<Pose>()>> poseGetter;
   std::shared_ptr<pros::Mutex> poseGetterMutex;
+  double leftVelocity, rightVelocity = 0.0;
 
   {
     detail::uniqueLock lock(m_mutex);

@@ -436,12 +436,6 @@ public:
   /**
    * @brief Register a watch on a getter function.
    *
-   * @note Adding a watch is computationally expensive. Don't call logger.watch()
-   *       repeatedly. Additionally, if the same .watch() is called
-   *       multiple times, each watch will be separate and logged independently.
-   *
-   * @note For performance reasons, names are truncated to 24 characters long.
-   *
    * @tparam Getter Callable that returns the value to render (numeric/bool/string/cstr).
    * @param label Display label for the watch.
    * @param baseLevel Level used for normal samples.
@@ -451,8 +445,13 @@ public:
    * @param intervalMs Sampling/print interval in ms for interval watches, or debounce
    *                   interval in ms for on-change watches.
    * @param getter Callable returning a value.
-   * @param fmt Optional printf-style format for numeric values (e.g. "%.2f").
+   * @param fmt Optional printf-style format for floating-point values (e.g. "%.2f").
    * @param ov Optional LevelOverride (type inferred from getter).
+   *
+   * @note For performance reasons, names are truncated to 24 characters long.
+   * @note Adding a watch is computationally expensive. Don't call logger.watch()
+   *       repeatedly. Additionally, if the same .watch() is called
+   *       multiple times, each watch will be separate and logged independently.
    *
    * \return WatchHandle for the registered watch.
    *
@@ -729,7 +728,7 @@ private:
 
   volatile bool m_sdLocked = false;    // Has sd card failed?
   bool m_started = false;     // Has start() been called?
-  bool m_configSet = false;   // Has setRobot() been called?
+  std::atomic<bool> m_configSet{false};   // Has setRobot() been called?
   bool m_forceSpeedEstimation = false;
 
   std::atomic<bool> m_pauseRequested{false}; 
