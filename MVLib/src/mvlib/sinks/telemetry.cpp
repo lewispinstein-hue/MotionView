@@ -116,7 +116,7 @@ uint16_t packTelemetryTheta(double degrees) {
   double normalized = std::fmod(degrees, 360.0);
   if (normalized < 0.0) normalized += 360.0;
 
-  return static_cast<uint16_t>(normalized * kThetaScale);
+  return static_cast<uint16_t>(static_cast<uint32_t>(normalized * kThetaScale));
 }
 
 int8_t packTelemetryVelocity(double velocity) {
