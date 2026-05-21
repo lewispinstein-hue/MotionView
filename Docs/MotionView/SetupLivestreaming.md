@@ -2,7 +2,7 @@
 MotionView `Settings` are located inside of the Gear icon, typically near the top left of your MotionView window.
 
 <p align="center">
-    <img src="../../assets/MotionView/pros_setup_settings.png" alt="Pros Config" width="800" />
+    <img src="./../../assets/MotionView/pros_setup_settings.png" alt="Pros Config" width="800" />
 </p>
 
 MotionView was made to be easy to setup, with auto-detection when available. 
@@ -17,4 +17,4 @@ If you have an existing PROS Project on your computer, enter its path into the `
 If you do not have an existing PROS project, create one using the [`PROS Extension`](https://marketplace.visualstudio.com/items?itemName=sigbots.pros).
 
 ## Live Streaming
-Once you have a connection between MotionView and your computer, the easiest way to bridge your robot and MotionView is to use [MVLib](../../MVLib/README.md). Using MVLib ensures full functionality and accurate logging. If you don't want to use MVLib, you may need help setting up a bridge. If you want to make your own logger, see [here](./MotionViewAPI.md).md.
+Once you have a connection between MotionView and your computer, the easiest way to bridge your robot and MotionView is to use [MVLib](./../../MVLib/README.md). Using MVLib ensures full functionality and accurate logging. If you don't want to use MVLib, you may need help setting up a bridge. If you want to make your own logger, see [here](./MotionViewAPI.md).md.
