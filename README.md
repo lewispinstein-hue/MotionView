@@ -86,6 +86,7 @@ Because MotionView and MVLib communicate using a highly optimized binary protoco
 
 | MotionView App | Requires MVLib | Notes |
 | :--- | :--- | :--- |
-| **v1.2.x** | **v2.0.x** | **Current Release:** Introduced high-speed binary telemetry. |
+| **v1.3.x** | **v3.0.x** <br> **v2.0.x** | Latest release |
+| **v1.2.x** | **v2.0.x** | Introduced high-speed binary telemetry. |
 | **v1.1.x** | **v1.1.x** | Non-binary data protocol |
 | **v1.0.x** | **v1.0.x** | Legacy data protocol (missing some features) |
