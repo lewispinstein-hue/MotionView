@@ -1,0 +1,6 @@
+title: MotionView Docs
+include:
+  - .nojekyll
+  - _sidebar.md
+exclude:
+  - pages-site-staging

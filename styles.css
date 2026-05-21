@@ -1,0 +1,36 @@
+:root {
+  --theme-color: #0969da;
+  --base-font-size: 16px;
+  --sidebar-width: 19rem;
+}
+
+body {
+  color: #24292f;
+}
+
+.sidebar {
+  border-right: 1px solid #d8dee4;
+}
+
+.sidebar > h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.markdown-section {
+  max-width: 920px;
+}
+
+.markdown-section h1,
+.markdown-section h2,
+.markdown-section h3 {
+  color: #1f2328;
+}
+
+.markdown-section pre {
+  border-radius: 6px;
+}
+
+.search input {
+  border-radius: 6px;
+}
