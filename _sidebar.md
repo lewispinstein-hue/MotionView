@@ -1,18 +1,18 @@
 - [Home](/Home.md)
 
 - MotionView
-  - [Installing on macOS](/Docs/MotionView/InstallingMacOS.md)
-  - [Installing on Windows](/Docs/MotionView/InstallingWindows.md)
-  - [MotionView API](/Docs/MotionView/MotionViewAPI.md)
-  - [Setup Livestreaming](/Docs/MotionView/SetupLivestreaming.md)
+  - [Installing on macOS](/docs/MotionView/InstallingMacOS.md)
+  - [Installing on Windows](/docs/MotionView/InstallingWindows.md)
+  - [MotionView API](/docs/MotionView/MotionViewAPI.md)
+  - [Setup Livestreaming](/docs/MotionView/SetupLivestreaming.md)
   - Changelog
-    - [v1.2.0](/Docs/MotionView/Changelog/v1.2.0.md)
+    - [v1.2.0](/docs/MotionView/Changelog/v1.2.0.md)
 
 - MVLib
-  - [Setup](/Docs/MVLib/Setup.md)
-  - [Configuration](/Docs/MVLib/Configuration.md)
-  - [Logs](/Docs/MVLib/Logs.md)
-  - [Watches](/Docs/MVLib/Watches.md)
-  - [Waypoints](/Docs/MVLib/Waypoints.md)
+  - [Setup](/docs/MVLib/Setup.md)
+  - [Configuration](/docs/MVLib/Configuration.md)
+  - [Logs](/docs/MVLib/Logs.md)
+  - [Watches](/docs/MVLib/Watches.md)
+  - [Waypoints](/docs/MVLib/Waypoints.md)
   - Changelog
-    - [v2.0.0](/Docs/MVLib/Changelog/v2.0.0.md)
+    - [v2.0.0](/docs/MVLib/Changelog/v2.0.0.md)
