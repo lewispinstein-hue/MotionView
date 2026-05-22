@@ -2,7 +2,7 @@
 MotionView `Settings` are located inside of the Gear icon, typically near the top left of your MotionView window.
 
 <p align="center">
-    <img src="../../assets/MotionView/pros_setup_settings.png" alt="Pros Config" width="800" />
+    <img src="assets/MotionView/pros_setup_settings.png" alt="Pros Config" width="800" />
 </p>
 
 MotionView was made to be easy to setup, with auto-detection when available. 

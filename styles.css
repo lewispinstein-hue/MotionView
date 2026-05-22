@@ -1,36 +1,187 @@
 :root {
-  --theme-color: #0969da;
-  --base-font-size: 16px;
+  --theme-color: #111111;
+  --base-font-size: 17px;
   --sidebar-width: 19rem;
 }
 
 body {
-  color: #24292f;
+  background: rgb(15, 20, 29);
+  color: #d8dee9;
+  font-size: 17px;
+}
+
+.sidebar,
+.sidebar-toggle,
+.sidebar-toggle-button,
+.content,
+.markdown-section,
+.app-nav {
+  background: rgb(15, 20, 29);
 }
 
 .sidebar {
-  border-right: 1px solid #d8dee4;
+  border-right: 1px solid #233244;
 }
 
 .sidebar > h1 {
+  background: rgb(15, 20, 29);
   font-size: 1.25rem;
   font-weight: 700;
 }
 
+.sidebar > h1 a,
+.sidebar-nav a,
+.sidebar-nav strong,
+.sidebar ul li a {
+  color: #d8dee9;
+}
+
+.sidebar ul li.active > a {
+  color: #6ea8ff;
+}
+
+.sidebar-nav .app-sub-sidebar a,
+.sidebar-nav .app-sub-sidebar a:hover,
+.sidebar-nav .app-sub-sidebar a:focus {
+  background: transparent;
+  border: 0;
+  color: #9aa6b2;
+  cursor: default;
+  pointer-events: none;
+  text-decoration: none;
+  transition: none;
+}
+
+.sidebar-nav ul,
+.sidebar-nav li {
+  list-style: none;
+}
+
+.sidebar-nav li::before {
+  content: none;
+}
+
+.sidebar-nav li.sidebar-tree-item {
+  position: relative;
+  padding-left: 1.15rem;
+}
+
+.sidebar-tree-toggle {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: #7d8a9a;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.9rem;
+  height: 1.4rem;
+  justify-content: center;
+  line-height: 1;
+  left: 0;
+  padding: 0;
+  position: absolute;
+  top: 0.05rem;
+  width: 1rem;
+}
+
+.sidebar-tree-toggle:hover,
+.sidebar-tree-toggle:focus-visible {
+  color: #d8dee9;
+}
+
+.sidebar-tree-toggle:focus-visible {
+  outline: 2px solid #6ea8ff;
+  outline-offset: 2px;
+}
+
+.sidebar-tree-collapsed > ul {
+  display: none;
+}
+
+.sidebar .search,
+.sidebar .search .input-wrap {
+  background: rgb(15, 20, 29);
+}
+
 .markdown-section {
   max-width: 920px;
+  color: #d8dee9;
+  font-size: 17px;
 }
 
 .markdown-section h1,
 .markdown-section h2,
 .markdown-section h3 {
-  color: #1f2328;
+  color: #fbfcff;
+}
+
+.markdown-section h1 a,
+.markdown-section h2 a,
+.markdown-section h3 a,
+.markdown-section h4 a,
+.markdown-section h5 a,
+.markdown-section h6 a,
+.markdown-section h1:hover a,
+.markdown-section h2:hover a,
+.markdown-section h3:hover a,
+.markdown-section h4:hover a,
+.markdown-section h5:hover a,
+.markdown-section h6:hover a {
+  background: transparent;
+  color: inherit;
+  cursor: default;
+  pointer-events: none;
+  text-decoration: none;
+  transition: none;
+}
+
+.markdown-section h1 .anchor span,
+.markdown-section h2 .anchor span,
+.markdown-section h3 .anchor span,
+.markdown-section h4 .anchor span,
+.markdown-section h5 .anchor span,
+.markdown-section h6 .anchor span {
+  color: inherit !important;
+}
+
+.markdown-section a {
+  color: #6ea8ff;
+}
+
+.markdown-section code {
+  background: #101823;
+  color: #d8dee9;
+}
+
+.markdown-section code {
+  border-radius: 4px;
 }
 
 .markdown-section pre {
+  background: #101823;
+  border: 1px solid #233244;
   border-radius: 6px;
 }
 
+.markdown-section pre > code {
+  background: transparent;
+  color: inherit;
+}
+
+.markdown-section pre[class*="language-"],
+.markdown-section code[class*="language-"] {
+  color: #f8f8f2;
+  text-shadow: none;
+}
+
 .search input {
+  background: #101823;
+  border: 1px solid #233244;
   border-radius: 6px;
+  color: #d8dee9;
+}
+
+.search input::placeholder {
+  color: #7d8a9a;
 }
