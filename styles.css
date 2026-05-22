@@ -36,8 +36,15 @@ body {
   color: #d8dee9;
 }
 
-.sidebar ul li.active > a {
+.sidebar ul li.active > a,
+.sidebar ul li.active > p > a,
+.sidebar-nav a.active {
   color: #6ea8ff;
+}
+
+.sidebar ul li.active > a,
+.sidebar ul li.active > p > a {
+  border-right: 2px solid #6ea8ff;
 }
 
 .sidebar-nav .app-sub-sidebar a,
