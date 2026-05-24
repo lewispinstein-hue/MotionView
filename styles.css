@@ -149,13 +149,18 @@ body {
   color: #6ea8ff;
 }
 
-.markdown-section code {
-  background: #101823;
-  color: #d8dee9;
+.markdown-section strong,
+.markdown-section b {
+  color: #ffffff;
+  font-weight: 800;
 }
 
 .markdown-section code {
+  background: #172232;
+  border: 1px solid #33465f;
   border-radius: 4px;
+  color: #f0f5ff;
+  padding: 0.08rem 0.28rem;
 }
 
 .markdown-section pre {
@@ -166,7 +171,9 @@ body {
 
 .markdown-section pre > code {
   background: transparent;
+  border: 0;
   color: inherit;
+  padding: 0;
 }
 
 .markdown-section pre[class*="language-"],
@@ -184,4 +191,50 @@ body {
 
 .search input::placeholder {
   color: #7d8a9a;
+}
+
+.search .results-panel {
+  background: #101823;
+  border-top: 1px solid #233244;
+}
+
+.search .matching-post {
+  border-bottom: 1px solid #233244;
+}
+
+.search .matching-post a {
+  color: #d8dee9;
+  transition: none;
+}
+
+.search .matching-post a:hover,
+.search .matching-post a:focus,
+.search .matching-post a:active {
+  background: #172232;
+  color: #ffffff;
+}
+
+.search .matching-post a:hover h2,
+.search .matching-post a:focus h2,
+.search .matching-post a:active h2,
+.search .matching-post a:hover p,
+.search .matching-post a:focus p,
+.search .matching-post a:active p {
+  color: #ffffff;
+}
+
+.search .matching-post p {
+  color: #aeb9c7;
+}
+
+.search .matching-post h2 {
+  color: #f3f6fb;
+}
+
+.search .matching-post em {
+  background: #243954;
+  border-radius: 3px;
+  color: #ffffff;
+  font-style: normal;
+  padding: 0 0.12rem;
 }
