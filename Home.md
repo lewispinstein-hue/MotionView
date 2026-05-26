@@ -35,45 +35,6 @@ MotionView's creation was inspired by other visualizers such as [Grafana](https:
 2. **Demo:** In older versions (v1.2.0 and earlier, newer versions have a built-in demo), download the [`Example Route`](MotionView_Example.json), press `Cmd + O` in MotionView to open it, and press `Space` to watch a recorded run (Note this is a VEX Pushback run, as the current season is still to early for an actual Override demo).
 3. **Connect your Robot:** Install [MVLib](MVLib/README.md) into your PROS project to start streaming your own live data.
 
-## Docs
-- [MotionView Docs](Docs/MotionView)
-- [MVLib Docs](Docs/MVLib)
-
-## Keybinds
-UX designed to keep your hands on the keyboard. Use the built-in keybinds to navigate MotionView. You can also view them inside MotionView through the help menu.
-
-<details>
-  <summary>Keybinds</summary>
-  <table>
-    <thead>
-      <tr> <th>Context</th> <th>Keybind</th> <th>Action</th> </tr>
-    </thead>
-    <tbody>
-      <tr> <td>Global</td> <td><code>Cmd + 1</code></td> <td>Switch to Viewing mode</td> </tr>
-      <tr> <td>Global</td> <td><code>Cmd + 2</code></td> <td>Switch to Planning mode</td> </tr>
-      <tr> <td>Global</td> <td><code>Cmd + Shift + K</code></td> <td>Clear everything (field + plan)</td> </tr>
-      <tr> <td>Global</td> <td><code>F</code></td> <td>Fit/reset field position</td> </tr>
-      <tr> <td>Global</td> <td><code>T</code></td> <td>Toggle Floating info panel</td> </tr>
-      <tr> <td>Viewing</td> <td><code>Space</code></td> <td>Play/Pause playback (or toggle Auto‑follow Head when live‑connected)</td> </tr>
-      <tr> <td>Viewing</td> <td><code>Cmd + O</code></td> <td>Open file selector</td> </tr>
-      <tr> <td>Viewing</td> <td><code>Cmd + K</code></td> <td>Clear Viewer</td> </tr>
-      <tr> <td>Viewing</td> <td><code>Cmd + S</code></td> <td>Start/stop live streaming (if connected)</td> </tr>
-      <tr> <td>Viewing</td> <td><code>Cmd + R</code></td> <td>Refresh & sync livestream (if streaming)</td> </tr>
-      <tr> <td>Viewing</td> <td><code>P</code></td> <td>Toggle Planned Overlay</td> </tr>
-      <tr> <td>Viewing</td> <td><code>G</code></td> <td>Toggle Floating Graph</td> </tr>
-      <tr> <td>Viewing</td> <td><code>Cmd + C</code></td> <td>Connect/disconnect</td> </tr>
-      <tr> <td>Viewing</td> <td><code>←</code> / <code>→</code></td> <td>Step to previous/next pose</td> </tr>
-      <tr> <td>Planning</td> <td><code>Space</code></td> <td>Play/Pause plan playback</td> </tr>
-      <tr> <td>Planning</td> <td><code>Delete</code> / <code>Backspace</code></td> <td>Delete selected waypoint(s)< td> </tr>
-      <tr> <td>Planning</td> <td><code>←</code> / <code>→</code> / <code>↑</code> / <code>↓</code></td> <td>Nudge selected waypoint(s)</td> </tr>
-      <tr> <td>Planning</td> <td><code>Shift + ←/→/↑/↓</code></td> <td>Nudge selected waypoint(s) by 5× step</td> </tr>
-      <tr> <td>Planning</td> <td><code>Cmd + Z</code></td> <td>Undo</td> </tr>
-      <tr> <td>Planning</td> <td><code>Cmd + Shift + Z</code></td> <td>Redo</td> </tr>
-      <tr> <td>Planning</td> <td><code>Cmd + K</code></td> <td>Clear planned path</td> </tr>
-    </tbody>
-  </table>
-</details>
-
 ---
 
 ## Version Compatibility
