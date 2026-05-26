@@ -1,12 +1,19 @@
 # MotionView 
 
-<p align="left">
-    <img src="https://img.shields.io/github/stars/lewispinstein-hue/MotionView?style=flat-square" alt="Stars">
-    <img src="https://img.shields.io/github/downloads/lewispinstein-hue/MotionView/total?style=flat-square" alt="Downloads">
-    <span style="font-size:25px;font-weight:850">|</span>
-    <img src="https://img.shields.io/badge/MotionView-v1.2.0-green?style=flat-square" alt="Version">
-    <img src="https://img.shields.io/badge/MVLib-v2.0.1-green?style=flat-square" alt="Version">
-</p>
+<table style="border-collapse: separate; border-spacing: 0; border: 1px solid #d0d7de; border-radius: 6px; width: auto; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+  <tr>
+    <!-- Repository Stats -->
+    <td style="padding: 10px 16px; vertical-align: middle; border-right: 1px solid #d0d7de;">
+      <img src="https://img.shields.io/github/stars/lewispinstein-hue/MotionView?style=flat-square" alt="Stars" style="vertical-align: middle; margin-right: 4px;">
+      <img src="https://img.shields.io/github/downloads/lewispinstein-hue/MotionView/total?style=flat-square" alt="Downloads" style="vertical-align: middle;">
+    </td>
+    <!-- Versions -->
+    <td style="padding: 10px 16px; vertical-align: middle;">
+      <img src="https://img.shields.io/badge/MotionView-v1.2.0-green?style=flat-square" alt="Version" style="vertical-align: middle; margin-right: 4px;">
+      <img src="https://img.shields.io/badge/MVLib-v2.0.1-green?style=flat-square" alt="Version" style="vertical-align: middle;">
+    </td>
+  </tr>
+</table>
 
 <p align="center">
     <img src="assets/Logo.png" alt="MotionView Logo" width="180" />
