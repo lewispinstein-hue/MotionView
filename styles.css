@@ -36,6 +36,12 @@ body {
   color: #d8dee9;
 }
 
+.sidebar-nav li.sidebar-tree-item {
+  color: #aeb9c7;
+  padding-left: 1.15rem;
+  position: relative;
+}
+
 .sidebar ul li.active > a {
   color: #6ea8ff;
 }
@@ -59,11 +65,6 @@ body {
 
 .sidebar-nav li::before {
   content: none;
-}
-
-.sidebar-nav li.sidebar-tree-item {
-  position: relative;
-  padding-left: 1.15rem;
 }
 
 .sidebar-tree-toggle {
@@ -181,6 +182,11 @@ body {
   background: #101823;
   border: 1px solid #233244;
   border-radius: 6px;
+  position: relative;
+}
+
+.markdown-section pre::after {
+  right: 1.85rem;
 }
 
 .markdown-section pre > code {
@@ -188,6 +194,50 @@ body {
   border: 0;
   color: inherit;
   padding: 0;
+}
+
+.code-copy-button {
+  align-items: center;
+  background: #172232;
+  border: 1px solid #33465f;
+  border-radius: 4px;
+  color: #d8dee9;
+  cursor: pointer;
+  display: inline-flex;
+  height: 1.1rem;
+  justify-content: center;
+  line-height: 1;
+  opacity: 0.82;
+  padding: 0;
+  position: absolute;
+  right: 0.35rem;
+  top: 0.28rem;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease;
+  width: 1.1rem;
+  z-index: 1;
+}
+
+.code-copy-button svg {
+  height: 0.72rem;
+  width: 0.72rem;
+}
+
+.code-copy-button:hover,
+.code-copy-button:focus-visible {
+  background: #243954;
+  border-color: #6ea8ff;
+  color: #ffffff;
+  opacity: 1;
+}
+
+.code-copy-button:focus-visible {
+  outline: 2px solid #6ea8ff;
+  outline-offset: 2px;
+}
+
+.code-copy-button-copied {
+  color: #8bdc9f;
+  font-weight: 800;
 }
 
 .markdown-section pre[class*="language-"],

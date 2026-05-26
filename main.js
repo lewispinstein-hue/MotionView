@@ -119,6 +119,76 @@ document.addEventListener('click', function (event) {
   }
 }, true);
 
+function copyTextToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+
+  var textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.top = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    document.execCommand('copy');
+    return Promise.resolve();
+  } catch (error) {
+    return Promise.reject(error);
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
+function enhanceCodeBlocks() {
+  document.querySelectorAll('.markdown-section pre').forEach(function (block) {
+    var code = block.querySelector('code');
+
+    if (!code || block.querySelector(':scope > .code-copy-button')) {
+      return;
+    }
+
+    var button = document.createElement('button');
+    button.className = 'code-copy-button';
+    button.type = 'button';
+    button.setAttribute('aria-label', 'Copy code to clipboard');
+    button.innerHTML = [
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">',
+      '<rect x="7" y="5" width="10" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>',
+      '<rect x="4" y="8" width="10" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>',
+      '</svg>'
+    ].join('');
+
+    button.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      copyTextToClipboard(code.innerText).then(function () {
+        button.classList.add('code-copy-button-copied');
+        button.setAttribute('aria-label', 'Copied');
+        button.textContent = '✓';
+
+        window.setTimeout(function () {
+          button.classList.remove('code-copy-button-copied');
+          button.setAttribute('aria-label', 'Copy code to clipboard');
+          button.innerHTML = [
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">',
+            '<rect x="7" y="5" width="10" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>',
+            '<rect x="4" y="8" width="10" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>',
+            '</svg>'
+          ].join('');
+        }, 1200);
+      }).catch(function () {
+        button.setAttribute('aria-label', 'Copy failed');
+      });
+    });
+
+    block.appendChild(button);
+  });
+}
+
 window.$docsify = {
   name: 'MotionView Docs',
   repo: 'lewispinstein-hue/MotionView',
@@ -143,7 +213,10 @@ window.$docsify = {
       });
 
       hook.doneEach(function () {
-        requestAnimationFrame(enhanceSidebarTree);
+        requestAnimationFrame(function () {
+          enhanceSidebarTree();
+          enhanceCodeBlocks();
+        });
       });
     }
   ]
