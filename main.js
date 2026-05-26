@@ -348,7 +348,6 @@ window.$docsify = {
   name: 'MotionView Docs',
   repo: 'lewispinstein-hue/MotionView',
   routerMode: 'history',
-  basePath: getSiteBasePath(),
   loadSidebar: '_sidebar.md?v=2026-05-26-filetree-v2',
   alias: {
     '/.*/_sidebar.md': '/_sidebar.md?v=2026-05-26-filetree-v2'
