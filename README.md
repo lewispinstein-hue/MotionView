@@ -26,7 +26,7 @@ MotionView's creation was inspired by other visualizers such as [Grafana](https:
 **MotionView is a high-speed telemetry dashboard and live visualizer for VEX PROS teams.** It turns a raw stream of terminal numbers into a highly visual, actionable representation of your robot's behavior. Stop guessing why your robot is failing, and start seeing it.
 
 <p align="center">
-    <img src="assets/MotionView/viewing_with_overlay.png" alt="MotionView Dashboard" width="800" />
+    <img src="assets/ViewingWithOverlay.png" alt="MotionView Dashboard" width="800" />
 </p>
 
 ## Core Features
