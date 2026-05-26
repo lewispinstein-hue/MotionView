@@ -1,4 +1,4 @@
-- [Home](Home.md)
+- [Home](/)
 - [Download](Download.md)
 
 - MotionView
