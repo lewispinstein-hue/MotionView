@@ -1,7 +1,21 @@
-var sidebarTreeState = {};
+let sidebarVersion = '2026-05-26-filetree-v2';
+let sidebarTreeState = {};
+
+function getSiteBasePath() {
+  return window.location.hostname.endsWith('github.io') ? '/MotionView/' : '/';
+}
+
+try {
+  if (localStorage.getItem('motionview-docs-sidebar-version') !== sidebarVersion) {
+    localStorage.removeItem('motionview-docs-sidebar-tree');
+    localStorage.setItem('motionview-docs-sidebar-version', sidebarVersion);
+  }
+} catch (error) {
+  // Ignore storage failures so the docs still load in restricted contexts.
+}
 
 function getSidebarItemLabel(item) {
-  var labelElement = Array.prototype.find.call(item.children, function (child) {
+  let labelElement = Array.prototype.find.call(item.children, function (child) {
     return ['A', 'P', 'STRONG'].indexOf(child.tagName) !== -1;
   });
 
@@ -32,21 +46,26 @@ function normalizeDocsPath(path) {
 function normalizeDocsRoute(path) {
   return (path || '')
     .replace(/^#\/?/, '')
+    .replace(new RegExp('^' + getSiteBasePath().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), '')
     .replace(/^\//, '')
     .replace(/\.md(?=\?|$)/, '')
     .toLowerCase();
 }
 
 function isCurrentSidebarLink(link) {
-  return normalizeDocsRoute(link.getAttribute('href')) === normalizeDocsRoute(window.location.hash);
+  let currentRoute = window.location.hash
+    ? window.location.hash
+    : window.location.pathname + window.location.search;
+
+  return normalizeDocsRoute(link.getAttribute('href')) === normalizeDocsRoute(currentRoute);
 }
 
 function getSidebarItemKey(item) {
-  var labels = [];
-  var currentItem = item;
+  let labels = [];
+  let currentItem = item;
 
   while (currentItem && currentItem.matches && currentItem.matches('.sidebar-nav li')) {
-    var label = getSidebarItemLabel(currentItem);
+    let label = getSidebarItemLabel(currentItem);
 
     if (label) {
       labels.unshift(label);
@@ -60,7 +79,7 @@ function getSidebarItemKey(item) {
 
 function captureSidebarTreeState() {
   document.querySelectorAll('.sidebar-tree-item, .sidebar-file-item').forEach(function (item) {
-    var itemKey = item.dataset.sidebarTreeKey;
+    let itemKey = item.dataset.sidebarTreeKey;
 
     if (itemKey) {
       sidebarTreeState[itemKey] = item.classList.contains('sidebar-outline-collapsed');
@@ -70,8 +89,8 @@ function captureSidebarTreeState() {
 
 function markCurrentSidebarLink() {
   document.querySelectorAll('.sidebar-nav a').forEach(function (link) {
-    var item = link.closest('li');
-    var isCurrent = isCurrentSidebarLink(link);
+    let item = link.closest('li');
+    let isCurrent = isCurrentSidebarLink(link);
 
     link.classList.toggle('active', isCurrent);
 
@@ -79,17 +98,17 @@ function markCurrentSidebarLink() {
       item.classList.toggle('active', isCurrent);
 
       if (isCurrent) {
-        var ancestor = item.parentElement.closest('li');
+        let ancestor = item.parentElement.closest('li');
 
         while (ancestor) {
-          var ancestorKey = ancestor.dataset.sidebarTreeKey;
+          let ancestorKey = ancestor.dataset.sidebarTreeKey;
           ancestor.classList.remove('sidebar-outline-collapsed');
 
           if (ancestorKey) {
             sidebarTreeState[ancestorKey] = false;
           }
 
-          var ancestorToggle = ancestor.querySelector(':scope > .sidebar-tree-toggle');
+          let ancestorToggle = ancestor.querySelector(':scope > .sidebar-tree-toggle');
           if (ancestorToggle) {
             ancestorToggle.textContent = '▾';
             ancestorToggle.setAttribute('aria-expanded', 'true');
@@ -103,9 +122,29 @@ function markCurrentSidebarLink() {
   });
 }
 
+function rewriteProjectPageLinks() {
+  let basePath = getSiteBasePath();
+
+  if (basePath === '/') {
+    return;
+  }
+
+  document.querySelectorAll('.sidebar-nav a, .search a').forEach(function (link) {
+    let href = link.getAttribute('href');
+
+    if (!href || href.startsWith('http') || href.startsWith(basePath)) {
+      return;
+    }
+
+    if (href.startsWith('/')) {
+      link.setAttribute('href', basePath.replace(/\/$/, '') + href);
+    }
+  });
+}
+
 function enhanceSidebarTree() {
-  var storageKey = 'motionview-docs-sidebar-tree';
-  var storedState = sidebarTreeState;
+  let storageKey = 'motionview-docs-sidebar-tree';
+  let storedState = sidebarTreeState;
 
   try {
     storedState = Object.assign(
@@ -146,17 +185,17 @@ function enhanceSidebarTree() {
   }
 
   document.querySelectorAll('.sidebar-nav li').forEach(function (item) {
-    var childList = Array.prototype.find.call(item.children, function (child) {
+    let childList = Array.prototype.find.call(item.children, function (child) {
       return child.tagName === 'UL';
     });
-    var directLink = getDirectSidebarLink(item);
+    let directLink = getDirectSidebarLink(item);
 
     if (!childList) {
       return;
     }
 
-    var itemKey = getSidebarItemKey(item);
-    var isCollapsed = storedState[itemKey] !== undefined
+    let itemKey = getSidebarItemKey(item);
+    let isCollapsed = storedState[itemKey] !== undefined
       ? storedState[itemKey]
       : true;
 
@@ -170,8 +209,9 @@ function enhanceSidebarTree() {
         if (item.classList.contains('active') || directLink.classList.contains('active') || isCurrentSidebarLink(directLink)) {
           event.preventDefault();
           event.stopPropagation();
-          storedState[itemKey] = false;
-          setOutlineState(item, false);
+          let nextCollapsedState = !item.classList.contains('sidebar-outline-collapsed');
+          storedState[itemKey] = nextCollapsedState;
+          setOutlineState(item, nextCollapsedState);
           saveState();
         }
       });
@@ -185,7 +225,7 @@ function enhanceSidebarTree() {
 
     item.classList.add('sidebar-tree-item');
 
-    var toggle = document.createElement('button');
+    let toggle = document.createElement('button');
     toggle.className = 'sidebar-tree-toggle';
     toggle.type = 'button';
     setToggleState(item, toggle, isCollapsed);
@@ -195,15 +235,14 @@ function enhanceSidebarTree() {
         return;
       }
 
-      if (item.classList.contains('active') || item.classList.contains('sidebar-outline-collapsed')) {
-        storedState[itemKey] = false;
-        setToggleState(item, toggle, false);
-        saveState();
-      }
+      let nextCollapsedState = !item.classList.contains('sidebar-outline-collapsed');
+      storedState[itemKey] = nextCollapsedState;
+      setToggleState(item, toggle, nextCollapsedState);
+      saveState();
     });
 
     toggle.addEventListener('click', function (event) {
-      var nextCollapsedState = !item.classList.contains('sidebar-outline-collapsed');
+      let nextCollapsedState = !item.classList.contains('sidebar-outline-collapsed');
       storedState[itemKey] = nextCollapsedState;
       setToggleState(item, toggle, nextCollapsedState);
       saveState();
@@ -216,18 +255,19 @@ function enhanceSidebarTree() {
 }
 
 document.addEventListener('click', function (event) {
-  var sidebarLink = event.target.closest('.sidebar-nav a');
+  let sidebarLink = event.target.closest('.sidebar-nav a');
 
   if (sidebarLink) {
-    var sidebarItem = sidebarLink.closest('li');
-    var directLink = sidebarItem ? getDirectSidebarLink(sidebarItem) : null;
-    var childList = sidebarItem ? sidebarItem.querySelector(':scope > ul') : null;
+    let sidebarItem = sidebarLink.closest('li');
+    let directLink = sidebarItem ? getDirectSidebarLink(sidebarItem) : null;
+    let childList = sidebarItem ? sidebarItem.querySelector(':scope > ul') : null;
 
     if (sidebarItem && childList && directLink === sidebarLink && isCurrentSidebarLink(sidebarLink)) {
       event.preventDefault();
       event.stopPropagation();
-      sidebarItem.classList.remove('sidebar-outline-collapsed');
-      sidebarTreeState[getSidebarItemKey(sidebarItem)] = false;
+      let nextCollapsedState = !sidebarItem.classList.contains('sidebar-outline-collapsed');
+      sidebarItem.classList.toggle('sidebar-outline-collapsed', nextCollapsedState);
+      sidebarTreeState[getSidebarItemKey(sidebarItem)] = nextCollapsedState;
     }
 
     captureSidebarTreeState();
@@ -239,7 +279,7 @@ function copyTextToClipboard(text) {
     return navigator.clipboard.writeText(text);
   }
 
-  var textarea = document.createElement('textarea');
+  let textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.setAttribute('readonly', '');
   textarea.style.position = 'fixed';
@@ -259,13 +299,13 @@ function copyTextToClipboard(text) {
 
 function enhanceCodeBlocks() {
   document.querySelectorAll('.markdown-section pre').forEach(function (block) {
-    var code = block.querySelector('code');
+    let code = block.querySelector('code');
 
     if (!code || block.querySelector(':scope > .code-copy-button')) {
       return;
     }
 
-    var button = document.createElement('button');
+    let button = document.createElement('button');
     button.className = 'code-copy-button';
     button.type = 'button';
     button.setAttribute('aria-label', 'Copy code to clipboard');
@@ -307,9 +347,11 @@ function enhanceCodeBlocks() {
 window.$docsify = {
   name: 'MotionView Docs',
   repo: 'lewispinstein-hue/MotionView',
-  loadSidebar: true,
+  routerMode: 'history',
+  basePath: getSiteBasePath(),
+  loadSidebar: '_sidebar.md?v=2026-05-26-filetree-v2',
   alias: {
-    '/.*/_sidebar.md': '/_sidebar.md'
+    '/.*/_sidebar.md': '/_sidebar.md?v=2026-05-26-filetree-v2'
   },
   subMaxLevel: 3,
   auto2top: true,
@@ -330,6 +372,7 @@ window.$docsify = {
       hook.doneEach(function () {
         requestAnimationFrame(function () {
           enhanceSidebarTree();
+          rewriteProjectPageLinks();
           markCurrentSidebarLink();
           enhanceCodeBlocks();
         });
