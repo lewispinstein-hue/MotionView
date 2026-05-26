@@ -350,11 +350,16 @@ window.$docsify = {
   routerMode: 'history',
   loadSidebar: '_sidebar.md?v=2026-05-26-filetree-v2',
   alias: {
+    '/': '/Home.md',
+    '/README': '/Home.md',
+    '/README.md': '/Home.md',
+    '/.*/README': '/Home.md',
+    '/.*/README.md': '/Home.md',
     '/.*/_sidebar.md': '/_sidebar.md?v=2026-05-26-filetree-v2'
   },
   subMaxLevel: 0,
   auto2top: true,
-  homepage: 'Home.md',
+  homepage: '/Home.md',
   search: {
     maxAge: 86400000,
     paths: 'auto',
