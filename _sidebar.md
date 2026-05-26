@@ -1,10 +1,11 @@
 - [Home](/Home.md)
 
 - MotionView
-  - [Installing on macOS](/docs/MotionView/InstallingMacOS.md)
-  - [Installing on Windows](/docs/MotionView/InstallingWindows.md)
+  - Setup
+    - [Installing on macOS](/docs/MotionView/InstallingMacOS.md)
+    - [Installing on Windows](/docs/MotionView/InstallingWindows.md)
+    - [Setup Livestreaming](/docs/MotionView/SetupLivestreaming.md)
   - [MotionView API](/docs/MotionView/MotionViewAPI.md)
-  - [Setup Livestreaming](/docs/MotionView/SetupLivestreaming.md)
   - Changelog
     - [v1.2.0](/docs/MotionView/Changelog/v1.2.0.md)
 
