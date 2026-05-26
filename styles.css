@@ -52,10 +52,14 @@ body {
   background: transparent;
   border: 0;
   color: #9aa6b2;
-  cursor: default;
-  pointer-events: none;
+  cursor: pointer;
   text-decoration: none;
   transition: none;
+}
+
+.sidebar-nav .app-sub-sidebar a:hover,
+.sidebar-nav .app-sub-sidebar a:focus {
+  color: #d8dee9;
 }
 
 .sidebar-nav ul,
@@ -96,7 +100,7 @@ body {
   outline-offset: 2px;
 }
 
-.sidebar-tree-collapsed > ul {
+.sidebar-outline-collapsed > ul {
   display: none;
 }
 

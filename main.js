@@ -16,6 +16,31 @@ function getSidebarItemLabel(item) {
   }).join(' ').trim();
 }
 
+function getDirectSidebarLink(item) {
+  return item.querySelector(':scope > a, :scope > p > a');
+}
+
+function normalizeDocsPath(path) {
+  return (path || '')
+    .replace(/^#\/?/, '')
+    .replace(/^\//, '')
+    .replace(/\?.*$/, '')
+    .replace(/\.md$/, '')
+    .toLowerCase();
+}
+
+function normalizeDocsRoute(path) {
+  return (path || '')
+    .replace(/^#\/?/, '')
+    .replace(/^\//, '')
+    .replace(/\.md(?=\?|$)/, '')
+    .toLowerCase();
+}
+
+function isCurrentSidebarLink(link) {
+  return normalizeDocsRoute(link.getAttribute('href')) === normalizeDocsRoute(window.location.hash);
+}
+
 function getSidebarItemKey(item) {
   var labels = [];
   var currentItem = item;
@@ -34,11 +59,46 @@ function getSidebarItemKey(item) {
 }
 
 function captureSidebarTreeState() {
-  document.querySelectorAll('.sidebar-tree-item').forEach(function (item) {
+  document.querySelectorAll('.sidebar-tree-item, .sidebar-file-item').forEach(function (item) {
     var itemKey = item.dataset.sidebarTreeKey;
 
     if (itemKey) {
-      sidebarTreeState[itemKey] = item.classList.contains('sidebar-tree-collapsed');
+      sidebarTreeState[itemKey] = item.classList.contains('sidebar-outline-collapsed');
+    }
+  });
+}
+
+function markCurrentSidebarLink() {
+  document.querySelectorAll('.sidebar-nav a').forEach(function (link) {
+    var item = link.closest('li');
+    var isCurrent = isCurrentSidebarLink(link);
+
+    link.classList.toggle('active', isCurrent);
+
+    if (item) {
+      item.classList.toggle('active', isCurrent);
+
+      if (isCurrent) {
+        var ancestor = item.parentElement.closest('li');
+
+        while (ancestor) {
+          var ancestorKey = ancestor.dataset.sidebarTreeKey;
+          ancestor.classList.remove('sidebar-outline-collapsed');
+
+          if (ancestorKey) {
+            sidebarTreeState[ancestorKey] = false;
+          }
+
+          var ancestorToggle = ancestor.querySelector(':scope > .sidebar-tree-toggle');
+          if (ancestorToggle) {
+            ancestorToggle.textContent = '▾';
+            ancestorToggle.setAttribute('aria-expanded', 'true');
+            ancestorToggle.setAttribute('aria-label', 'Collapse section');
+          }
+
+          ancestor = ancestor.parentElement.closest('li');
+        }
+      }
     }
   });
 }
@@ -68,22 +128,58 @@ function enhanceSidebarTree() {
     }
   }
 
+  function setOutlineState(item, isCollapsed) {
+    item.classList.toggle('sidebar-outline-collapsed', isCollapsed);
+  }
+
   function setToggleState(item, toggle, isCollapsed) {
-    item.classList.toggle('sidebar-tree-collapsed', isCollapsed);
-    toggle.textContent = isCollapsed ? '▸' : '▾';
-    toggle.setAttribute('aria-expanded', String(!isCollapsed));
-    toggle.setAttribute(
-      'aria-label',
-      isCollapsed ? 'Expand section' : 'Collapse section'
-    );
+    setOutlineState(item, isCollapsed);
+
+    if (toggle) {
+      toggle.textContent = isCollapsed ? '▸' : '▾';
+      toggle.setAttribute('aria-expanded', String(!isCollapsed));
+      toggle.setAttribute(
+        'aria-label',
+        isCollapsed ? 'Expand section' : 'Collapse section'
+      );
+    }
   }
 
   document.querySelectorAll('.sidebar-nav li').forEach(function (item) {
     var childList = Array.prototype.find.call(item.children, function (child) {
       return child.tagName === 'UL';
     });
+    var directLink = getDirectSidebarLink(item);
 
-    if (!childList || item.querySelector(':scope > .sidebar-tree-toggle')) {
+    if (!childList) {
+      return;
+    }
+
+    var itemKey = getSidebarItemKey(item);
+    var isCollapsed = storedState[itemKey] !== undefined
+      ? storedState[itemKey]
+      : true;
+
+    item.dataset.sidebarTreeKey = itemKey;
+
+    if (directLink) {
+      item.classList.add('sidebar-file-item');
+      setOutlineState(item, isCollapsed);
+
+      directLink.addEventListener('click', function (event) {
+        if (item.classList.contains('active') || directLink.classList.contains('active') || isCurrentSidebarLink(directLink)) {
+          event.preventDefault();
+          event.stopPropagation();
+          storedState[itemKey] = false;
+          setOutlineState(item, false);
+          saveState();
+        }
+      });
+
+      return;
+    }
+
+    if (item.querySelector(':scope > .sidebar-tree-toggle')) {
       return;
     }
 
@@ -92,16 +188,22 @@ function enhanceSidebarTree() {
     var toggle = document.createElement('button');
     toggle.className = 'sidebar-tree-toggle';
     toggle.type = 'button';
-    var itemKey = getSidebarItemKey(item);
-    var isCollapsed = storedState[itemKey] !== undefined
-      ? storedState[itemKey]
-      : true;
-
-    item.dataset.sidebarTreeKey = itemKey;
     setToggleState(item, toggle, isCollapsed);
 
+    item.addEventListener('click', function (event) {
+      if (event.target.closest('.sidebar-tree-toggle') || event.target.closest('a')) {
+        return;
+      }
+
+      if (item.classList.contains('active') || item.classList.contains('sidebar-outline-collapsed')) {
+        storedState[itemKey] = false;
+        setToggleState(item, toggle, false);
+        saveState();
+      }
+    });
+
     toggle.addEventListener('click', function (event) {
-      var nextCollapsedState = !item.classList.contains('sidebar-tree-collapsed');
+      var nextCollapsedState = !item.classList.contains('sidebar-outline-collapsed');
       storedState[itemKey] = nextCollapsedState;
       setToggleState(item, toggle, nextCollapsedState);
       saveState();
@@ -114,7 +216,20 @@ function enhanceSidebarTree() {
 }
 
 document.addEventListener('click', function (event) {
-  if (event.target.closest('.sidebar-nav a')) {
+  var sidebarLink = event.target.closest('.sidebar-nav a');
+
+  if (sidebarLink) {
+    var sidebarItem = sidebarLink.closest('li');
+    var directLink = sidebarItem ? getDirectSidebarLink(sidebarItem) : null;
+    var childList = sidebarItem ? sidebarItem.querySelector(':scope > ul') : null;
+
+    if (sidebarItem && childList && directLink === sidebarLink && isCurrentSidebarLink(sidebarLink)) {
+      event.preventDefault();
+      event.stopPropagation();
+      sidebarItem.classList.remove('sidebar-outline-collapsed');
+      sidebarTreeState[getSidebarItemKey(sidebarItem)] = false;
+    }
+
     captureSidebarTreeState();
   }
 }, true);
@@ -215,6 +330,7 @@ window.$docsify = {
       hook.doneEach(function () {
         requestAnimationFrame(function () {
           enhanceSidebarTree();
+          markCurrentSidebarLink();
           enhanceCodeBlocks();
         });
       });

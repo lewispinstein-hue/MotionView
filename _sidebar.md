@@ -1,11 +1,17 @@
 - [Home](/Home.md)
+- [Download](/Download.md)
 
 - MotionView
+  - [Viewing Mode](/docs/MotionView/ViewingMode.md)
+  - [Planning Mode](/docs/MotionView/PlanningMode.md)
   - Setup
     - [Installing on macOS](/docs/MotionView/InstallingMacOS.md)
     - [Installing on Windows](/docs/MotionView/InstallingWindows.md)
-    - [Setup Livestreaming](/docs/MotionView/SetupLivestreaming.md)
-  - [MotionView API](/docs/MotionView/MotionViewAPI.md)
+    - [Setup Live Streaming](/docs/MotionView/SetupLivestreaming.md)
+  - API References
+    - [JSON Schema v3](/docs/MotionView/MotionViewSchemaV3.md)
+    - [JSON Schema v2](/docs/MotionView/MotionViewSchemaV2.md)
+    - [Logging API](/docs/MotionView/MotionViewAPI.md)
   - Changelog
     - [v1.2.0](/docs/MotionView/Changelog/v1.2.0.md)
 
@@ -15,5 +21,7 @@
   - [Logs](/docs/MVLib/Logs.md)
   - [Watches](/docs/MVLib/Watches.md)
   - [Waypoints](/docs/MVLib/Waypoints.md)
+  - [SD Logging](/docs/MVLib/SDLogging.md)
+  - [Updating to v3.0.0](/docs/MVLib/UpdatingTo-v3.0.0.md)
   - Changelog
     - [v2.0.0](/docs/MVLib/Changelog/v2.0.0.md)

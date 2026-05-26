@@ -55,7 +55,7 @@ Turn it off when:
 
 Important:
 
-- In `v2.0.0`, terminal output is not the old plain-text MotionView stream. MVLib now uses a binary telemetry protocol for live MotionView data.
+- In `v2.0.0`, terminal output stopped using the old plain-text MotionView stream. MVLib now uses a binary telemetry protocol for live MotionView data.
 - If this is off, MotionView will not receive live telemetry from MVLib.
 
 ### `setLogToSD(bool)`
@@ -99,7 +99,7 @@ If disabled:
 
 Controls whether MVLib emits waypoint events.
 
-In `v2.0.0`, that means:
+In current MVLib, that means:
 
 - `CREATED`
 - `REACHED`
@@ -120,14 +120,14 @@ Turn it off if you want MotionView to stay focused on your own logs and telemetr
 
 ## `LoggerTimings`
 
-`LoggerTimings` is the runtime timing struct in `v2.0.0`:
+`LoggerTimings` is the runtime timing struct:
 
 ```cpp
 struct LoggerTimings {
   uint32_t sdBufferFlushInterval = 1000;
   uint32_t stdoutBufferFlushInterval = 400;
   uint32_t sdPollingRate = 80;
-  uint32_t terminalPollingRate = 120;
+  uint32_t terminalPollingRate = 100;
   uint32_t rosterSyncAllInterval = 8000;
 };
 ```
@@ -139,7 +139,7 @@ logger.setTimings({
   .sdBufferFlushInterval = 1000,
   .stdoutBufferFlushInterval = 400,
   .sdPollingRate = 80,
-  .terminalPollingRate = 120,
+  .terminalPollingRate = 100,
   .rosterSyncAllInterval = 8000
 });
 ```
@@ -192,7 +192,7 @@ Higher values:
 
 ### `terminalPollingRate`
 
-Default: `120`
+Default: `100`
 
 How often MVLib polls and emits terminal/live telemetry data.
 
@@ -226,59 +226,18 @@ Higher values:
 - reduce metadata traffic
 - may make late-join recovery slower
 
-## `setLoggingFolder(...)`
+## `setLoggingLocation(...)`
 
-MVLib `v2.0.0` also adds SD log folder routing:
+Allows you to set a custom logging folder and/or file to route all SD card data to.
 
-```cpp
-bool setLoggingFolder(const char *folder, bool disableOnFail = false);
-```
-
-Call this before `logger.start()`.
-
-Example:
-
-```cpp
-if (!logger.setLoggingFolder("\\telemetry", true)) {
-  logger.warn("SD logging disabled: \\\\telemetry folder not found.");
-}
-```
-
-Rules:
-
-- pass a path relative to `/usd`
-- start it with `\\`
-- must not have a trailing `/`
-- the folder must already exist on the SD card
-- call it before `logger.start()`
-
-Example valid value:
-
-- `\\logs`
-
-Example invalid value:
-
-- `/usd/logs/`
-
-Behavior:
-
-- returns `true` only if the folder exists and MVLib accepts it
-- returns `false` for an invalid path, non-existent folder, error during folder verification, or calls made after the logger has started
-- if `disableOnFail` is `true`, a failed call locks SD logging off
-- if `disableOnFail` is `false`, a failed call leaves MVLib able to fall back to the SD card root directory instead of a custom folder
-
-Notes:
-
-- MVLib checks folder existence with `pros::usd::list_files(...)`
-- log files are written under `/usd<folder>/...`
-- the generated log filename still uses the normal timestamp/randomized MVLib naming
+See [SDLogging.md](./SDLogging.md#setlogginglocation) for the full API contract, path rules, and fallback policy behavior.
 
 ## Minimum Log Level
 
-Use `setLoggerMinLevel(...)` to filter normal log output:
+Use `setMinLogLevel(...)` to filter normal log output:
 
 ```cpp
-logger.setLoggerMinLevel(mvlib::LogLevel::WARN);
+logger.setMinLogLevel(LogLevel::WARN);
 ```
 
 That filters out:
@@ -292,4 +251,4 @@ And still allows:
 - `ERROR`
 - `FATAL`
 
-This affects MVLib's standard log methods such as `logger.info(...)` and elevated watch output levels.
+This affects MVLib's standard log methods such as `logger.info(...)` and watch output levels.

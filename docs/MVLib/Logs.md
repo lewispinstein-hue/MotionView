@@ -31,10 +31,7 @@ In `v2.0.0`:
 - terminal/live logs are sent through MVLib's binary telemetry protocol
 - SD logs are still written as readable text lines
 
-So the important behavior is:
-
-- MotionView still receives and displays these logs
-- you should no longer think of them as hand-written `[LOG],...` text being printed to the live terminal stream
+So the important behavior is that MotionView still receives and displays these logs
 
 ## Examples
 
@@ -83,7 +80,7 @@ logger.fatal("Odometry failed to calibrate");
 These functions respect the logger minimum level:
 
 ```cpp
-logger.setLoggerMinLevel(mvlib::LogLevel::WARN);
+logger.setMinLogLevel(LogLevel::WARN);
 ```
 
 With that setting:

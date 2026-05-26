@@ -1,5 +1,5 @@
 # MotionView API
-This doc covers what types of data MotionView can consume, what behavior that will lead to, and examples. See also [MVLib](../Guides/MVLib/README.md) for a working implementation example.
+This doc covers what types of data MotionView can consume, what behavior that will lead to, and examples.
 
 ### Notes for this doc
 - Anything before the type tag is parsed and removed by MotionView. 
@@ -61,7 +61,7 @@ Expected format:
 Example:
 
 ```log
-[12.43] [INFO]: [WATCH],12342,INFO,7,"Tongue mech state",true
+[12.43] [INFO]: [WATCH],12342,INFO,7,Tongue mech state,true
 ```
 
 Parsed as:

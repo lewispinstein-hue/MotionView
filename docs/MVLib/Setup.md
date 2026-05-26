@@ -12,11 +12,11 @@ At a high level:
 6. Call `logger.start()`
 ## 1. Install MVLib
 
-Use the `v2.0.1` package:
+Use the `v3.0.0` package:
 
 ```bash
-pros c fetch libmvlib@2.0.1.zip
-pros c apply libmvlib@2.0.1
+pros c fetch libmvlib@3.0.0.zip
+pros c apply libmvlib@3.0.0
 pros make all
 ```
 
@@ -55,10 +55,11 @@ Without it, use the fully qualified names:
 
 ```cpp
 mvlib::LogLevel::INFO
+mvlib::WatchMode::onChange
 mvlib::literals::operator"" _mvS(...)
 ```
 
-## 3. Important `v2.0.1` Terminal Note
+## 3. Important `v2.0.x` Terminal Note
 
 As soon as you create the logger instance:
 
@@ -84,7 +85,10 @@ Without odometry, you still get:
 - standard logs
 - watches
 - waypoint registration
-- drivetrain-based speed telemetry if you call `setRobot(...)`
+
+Without odometry, you do not get live pose telemetry, path drawing, or waypoint reach math.
+
+Calling `setRobot(...)` without a pose source still registers the drivetrain for velocity reporting, but MVLib's live telemetry stream remains pose-gated in the current implementation.
 
 With odometry, MotionView can also draw:
 
@@ -205,21 +209,11 @@ logger.setRobot({
 
 Use that only if you intentionally want odometry-based speed estimation.
 
-## 6. Optional SD Folder Setup
+## 6. Optional SD Logging Location Setup
 
-If you want SD logs to go into a specific folder:
+`logger.setLoggingLocation(...)` lets you route all SD log data into a custom folder and/or file.
 
-```cpp
-if (!logger.setLoggingFolder("\\telemetry", true)) {
-  logger.warn("SD logging disabled: \\\\telemetry folder not found.");
-}
-```
-
-Rules:
-
-- folder must already exist on the SD card
-- pass a path relative to `/usd`
-- start the path with `\\`
+See [SDLogging.md](./SDLogging.md#setlogginglocation) for the full path rules, fallback policies, and examples.
 
 Do this before `logger.start()`.
 
@@ -239,7 +233,7 @@ Do your setup first:
 - waypoints
 - output toggles
 - timings
-- logging folder
+- logging location
 
 Then start the logger.
 
@@ -272,18 +266,21 @@ void initialize() {
 ## 9. Add A First Watch
 
 ```cpp
-logger.watch("Battery Voltage", mvlib::LogLevel::INFO, 1_mvS,
-  []() { return pros::battery::get_voltage(); },
-  mvlib::LevelOverride<int32_t>{});
+mvlib::WatchHandle batteryWatch = logger.watch("Battery Voltage", LogLevel::INFO,
+  WatchMode::onInterval, 1_mvS, []() { return pros::battery::get_voltage(); });
 ```
 
-For event-like values, use the on-change overload:
+For event-like values, use `WatchMode::onChange`:
 
 ```cpp
-logger.watch("Auton Stage", mvlib::LogLevel::INFO, true,
-  []() { return static_cast<int>(autonStage); },
-  mvlib::LevelOverride<int>{});
+logger.watch("Auton Stage", LogLevel::INFO, WatchMode::onChange, 250_mvMs,
+  []() { return static_cast<int>(autonStage); });
 ```
+
+You can keep the returned `WatchHandle` if you want to enable/disable the watch,
+change its interval, force an evaluation, or re-send its roster entry later.
+For `WatchMode::onChange` watches, `250_mvMs` above is the debounce interval.
+`LevelOverride` is optional.
 
 ## 10. Optional Runtime Controls
 
@@ -297,13 +294,13 @@ logger.setPrintWatches(true);
 logger.setPrintWaypoints(true);
 logger.setLogSystemInfo(true);
 
-logger.setLoggerMinLevel(mvlib::LogLevel::INFO);
+logger.setMinLogLevel(LogLevel::INFO);
 
 logger.setTimings({
   .sdBufferFlushInterval = 1000,
   .stdoutBufferFlushInterval = 400,
   .sdPollingRate = 80,
-  .terminalPollingRate = 120,
+  .terminalPollingRate = 100,
   .rosterSyncAllInterval = 8000
 });
 ```
