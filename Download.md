@@ -8,8 +8,8 @@
 
 ## Installing MotionView
 1. Based on your OS, follow these guides:
-  - [Installing on macOS](/docs/MotionView/InstallingMacOS.md)
-  - [Installing on Windows](/docs/MotionView/InstallingWindows.md)
+  - [Installing on macOS](https://lewispinstein-hue.github.io/MotionView/docs/MotionView/InstallingMacOS)
+  - [Installing on Windows](https://lewispinstein-hue.github.io/MotionView/docs/MotionView/InstallingWindows)
 
 ## Installing MVLib
 1. Drag and drop the download `libmvlib@<version>.zip ` into the root of your PROS project.
@@ -20,4 +20,4 @@ pros c fetch libmvlib@<version>.zip
 pros c apply libmvlib@<version>
 ```
 
-3. You now have MVLib installed in your project! For setup, see [here](/docs/MVLib/Setup.md).
+3. You now have MVLib installed in your project! For setup, see [here](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Setup).
