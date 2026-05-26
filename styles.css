@@ -174,6 +174,48 @@ body {
   margin: 0;
 }
 
+.markdown-section table {
+  background: #101823;
+  border: 1px solid #233244;
+  border-collapse: collapse;
+  color: #d8dee9;
+  display: table;
+  margin: 1rem 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.markdown-section thead {
+  background: #172232;
+}
+
+.markdown-section th {
+  color: #f3f6fb;
+  font-weight: 700;
+}
+
+.markdown-section th,
+.markdown-section td {
+  border: 1px solid #2b3c50;
+  padding: 0.55rem 0.75rem;
+}
+
+.markdown-section tr {
+  background: #101823;
+}
+
+.markdown-section tbody tr:nth-child(odd) {
+  background: #111a26;
+}
+
+.markdown-section tbody tr:nth-child(even) {
+  background: #162131;
+}
+
+.markdown-section tbody tr:hover {
+  background: #1b2a3d;
+}
+
 .markdown-section code {
   background: #172232;
   border: 1px solid #33465f;
