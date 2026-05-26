@@ -175,7 +175,7 @@ body {
 }
 
 .markdown-section table {
-  background: #101823;
+  background-color: #101823;
   border: 1px solid #233244;
   border-collapse: collapse;
   color: #d8dee9;
@@ -186,34 +186,39 @@ body {
 }
 
 .markdown-section thead {
-  background: #172232;
+  background-color: #172232;
 }
 
-.markdown-section th {
+.markdown-section table th {
+  background-color: #172232;
   color: #f3f6fb;
   font-weight: 700;
 }
 
-.markdown-section th,
-.markdown-section td {
+.markdown-section table th,
+.markdown-section table td {
   border: 1px solid #2b3c50;
+  color: #d8dee9;
   padding: 0.55rem 0.75rem;
 }
 
-.markdown-section tr {
-  background: #101823;
+.markdown-section table tr {
+  background-color: #101823;
 }
 
-.markdown-section tbody tr:nth-child(odd) {
-  background: #111a26;
+.markdown-section table tbody tr:nth-child(odd),
+.markdown-section table tbody tr:nth-child(odd) td {
+  background-color: #111a26;
 }
 
-.markdown-section tbody tr:nth-child(even) {
-  background: #162131;
+.markdown-section table tbody tr:nth-child(even),
+.markdown-section table tbody tr:nth-child(even) td {
+  background-color: #162131;
 }
 
-.markdown-section tbody tr:hover {
-  background: #1b2a3d;
+.markdown-section table tbody tr:hover,
+.markdown-section table tbody tr:hover td {
+  background-color: #1b2a3d;
 }
 
 .markdown-section code {
