@@ -353,7 +353,7 @@ window.$docsify = {
   alias: {
     '/.*/_sidebar.md': '/_sidebar.md?v=2026-05-26-filetree-v2'
   },
-  subMaxLevel: 3,
+  subMaxLevel: 0,
   auto2top: true,
   homepage: 'Home.md',
   search: {
