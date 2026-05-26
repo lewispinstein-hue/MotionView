@@ -25,17 +25,11 @@ Odometry and a tank-style drivetrain are not required. With a single line of set
 5. Add the `mvlib` headers to your project, and finally run `pros make all` to finish.
 
 ## Documentation
-Detailed Docs:
-
-- [`Initial setup`](../Docs/MVLib/Setup.md): installation, logger startup, odometry and drivetrain setup.
-- [`Configurables`](../Docs/MVLib/Configuration.md): user-configurable settings for the logger.
-- [`Watches`](../Docs/MVLib/Watches.md): `logger.watch(...)` and everything related, examples and documentation
-- [`Waypoints`](../Docs/MVLib/Waypoints.md): `logger.addWaypoint(...)`, waypoint handles, usage, and examples.
-- [`Logs`](../Docs/MVLib/Logs.md): the MotionView-formatted `debug`, `info`, `warn`, `error`, and `fatal` log functions.
+Find the GitHub Pages [here](https://lewispinstein-hue.github.io/MotionView/)
 
 ## Quick Setup (PROS V5)
 
-1. Install MVlib .zip into your PROS project. View the setup guide [here](../Docs/MVLib/Setup.md)
+1. Install MVlib .zip into your PROS project.
 2. Include the api header:
 
 ```cpp
@@ -101,11 +95,10 @@ Example:
 auto& logger = mvlib::Logger::getInstance();
 
 logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval, 1_mvS,
-  [&]() { return flywheel.get_actual_velocity(); },
-  "%.1f");
+  [&]() { return flywheel.get_actual_velocity(); }, "%.1f");
 
 logger.watch("Auton Stage", LogLevel::INFO, WatchMode::onChange, 250_mvMs,
-  [&]() { return (int)autonStage; });
+  [&]() { return autonStage; });
 ```
 
 That means:
@@ -116,7 +109,7 @@ That means:
 
 MotionView shows these in the watch list and can associate nearby watch values with points in the run.
 
-For the detailed watch guide, including `WatchMode`, optional `LevelOverride`, on-change debounce, `PREDICATE`, formatting, and more examples, see the [`Watches Guide`](../Docs/MVLib/Watches.md).
+For the detailed watch guide, including `WatchMode`, optional `LevelOverride`, on-change debounce, `PREDICATE`, formatting, and more examples, see the [`Watches Guide`](https://lewispinstein-hue.github.io/MotionView/MVLib/Watches).
 
 ## Logs
 
