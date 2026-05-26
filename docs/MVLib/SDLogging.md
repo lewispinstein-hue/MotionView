@@ -6,8 +6,8 @@ This guide covers MVLib's SD logging path API, fallback policies, and path rules
 
 ```cpp
 bool setLoggingLocation(const char *location,
-                        Logger::MissingFolderPolicy folderPolicy = Logger::MissingFolderPolicy::disable,
-                        Logger::ExistingFilePolicy filePolicy = Logger::ExistingFilePolicy::automatic);
+                        MissingFolderPolicy folderPolicy = MissingFolderPolicy::disable,
+                        ExistingFilePolicy filePolicy = ExistingFilePolicy::automatic);
 ```
 
 Use this to route SD log output to either:
@@ -70,8 +70,8 @@ Example:
 
 ```cpp
 logger.setLoggingLocation("/telem/route.log",
-                          Logger::MissingFolderPolicy::useRoot,
-                          Logger::ExistingFilePolicy::automatic);
+                          MissingFolderPolicy::useRoot,
+                          ExistingFilePolicy::automatic);
 ```
 
 If `/telem` does not exist, the resolved folder becomes `/`, and file resolution continues with `/route.log`.
@@ -118,8 +118,8 @@ If the explicit target file does not exist, no fallback is needed and MVLib uses
 
 ```cpp
 logger.setLoggingLocation("/telemetry",
-                          Logger::MissingFolderPolicy::disable,
-                          Logger::ExistingFilePolicy::automatic);
+                          MissingFolderPolicy::disable,
+                          ExistingFilePolicy::automatic);
 ```
 
 Result:
@@ -132,8 +132,8 @@ Result:
 
 ```cpp
 logger.setLoggingLocation("/telemetry/match.log",
-                          Logger::MissingFolderPolicy::disable,
-                          Logger::ExistingFilePolicy::overwrite);
+                          MissingFolderPolicy::disable,
+                          ExistingFilePolicy::overwrite);
 ```
 
 Result:
@@ -147,8 +147,8 @@ Result:
 
 ```cpp
 logger.setLoggingLocation("/telem/route.log",
-                          Logger::MissingFolderPolicy::useRoot,
-                          Logger::ExistingFilePolicy::automatic);
+                          MissingFolderPolicy::useRoot,
+                          ExistingFilePolicy::automatic);
 ```
 
 If `/telem` does not exist:

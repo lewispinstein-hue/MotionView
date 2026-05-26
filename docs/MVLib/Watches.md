@@ -213,8 +213,7 @@ Use this for continuously changing values:
 
 ```cpp
 logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval, 1_mvS,
-  [&]() { return flywheel.get_actual_velocity(); },
-  "%.1f");
+  [&]() { return flywheel.get_actual_velocity(); }, "%.1f");
 ```
 
 Good fits:
