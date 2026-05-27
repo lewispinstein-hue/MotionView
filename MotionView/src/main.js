@@ -1291,6 +1291,25 @@ function updatePlanControls() {
   if (btnPlanCopyCode) btnPlanCopyCode.disabled = planWaypoints.length === 0;
 }
 
+function getUtf8ByteLength(value) {
+  const text = String(value ?? "");
+  if (typeof TextEncoder === "function") return new TextEncoder().encode(text).length;
+  return text.length;
+}
+
+function getPlanningTelemetryProperties(extra = {}) {
+  const methodCount = planObjects.reduce((sum, obj) => sum + (Array.isArray(obj.methods) ? obj.methods.length : 0), 0);
+  return {
+    version: APP_VERSION,
+    plan_waypoints: planWaypoints.length,
+    plan_objects: planObjects.length,
+    plan_methods: methodCount,
+    plan_nodes: planNodes.length,
+    template_chars: String(planExportTemplate || "").length,
+    ...extra,
+  };
+}
+
 function buildPlanExportCode(template = planExportTemplate) {
   const rawTemplate = String(template ?? "");
   if (!rawTemplate.trim()) return "";
@@ -1365,8 +1384,13 @@ function openPlanTemplateModal() {
     showName: false,
     confirmLabel: "Confirm",
     onConfirm: ({ codeValue }) => {
+      const previousTemplate = planExportTemplate;
       planExportTemplate = codeValue.trim() ? codeValue : DEFAULT_PLAN_EXPORT_TEMPLATE;
       saveSettings();
+      void captureTelemetry("planning_template_updated", getPlanningTelemetryProperties({
+        template_changed: previousTemplate !== planExportTemplate,
+        template_bytes: getUtf8ByteLength(planExportTemplate),
+      }));
     },
   });
 }
@@ -1474,6 +1498,10 @@ function openPlanMethodCreateModal(objectId) {
         code: codeValue,
       });
       savePlanObjectsUi();
+      void captureTelemetry("planning_method_created", getPlanningTelemetryProperties({
+        method_code_chars: String(codeValue || "").length,
+        method_code_bytes: getUtf8ByteLength(codeValue),
+      }));
     },
   });
 }
@@ -1498,9 +1526,17 @@ function openPlanMethodEditModal(objectId, methodId) {
       const targetObject = planObjects.find((entry) => entry.id === objectId);
       const targetMethod = targetObject?.methods?.find((entry) => entry.id === methodId);
       if (!targetMethod) return;
+      const previousName = targetMethod.name || "";
+      const previousCode = targetMethod.code || "";
       targetMethod.name = nameValue.slice(0, 25);
       targetMethod.code = codeValue;
       savePlanObjectsUi();
+      void captureTelemetry("planning_method_updated", getPlanningTelemetryProperties({
+        method_name_changed: previousName !== targetMethod.name,
+        method_code_changed: previousCode !== targetMethod.code,
+        method_code_chars: String(codeValue || "").length,
+        method_code_bytes: getUtf8ByteLength(codeValue),
+      }));
     },
   });
 }
@@ -2306,16 +2342,26 @@ function addPlanObject() {
   planEditingObjectOriginalName = "";
   planObjectEditSelectAll = false;
   savePlanObjectsUi();
+  void captureTelemetry("planning_object_created", getPlanningTelemetryProperties({
+    object_methods: next.methods.length,
+  }));
 }
 
 function removePlanObject(objectId) {
   const idx = planObjects.findIndex((entry) => entry.id === objectId);
   if (idx < 0) return;
+  const removedObject = planObjects[idx];
+  const removedMethodIds = new Set((removedObject.methods || []).map((method) => method.id));
+  const removedNodeCount = planNodes.filter((entry) => entry.objectId === objectId || removedMethodIds.has(entry.methodId)).length;
   planObjects.splice(idx, 1);
   planNodes = planNodes.filter((entry) => entry.objectId !== objectId);
   if (planSelectedNodeId && !getPlanNodeById(planSelectedNodeId)) clearPlanNodeSelection();
   if (planEditingObjectId === objectId) clearPlanObjectEditState();
   savePlanObjectsUi();
+  void captureTelemetry("planning_object_removed", getPlanningTelemetryProperties({
+    removed_methods: removedMethodIds.size,
+    removed_nodes: removedNodeCount,
+  }));
 }
 
 function hasAnyPlanMethods() {
@@ -2466,10 +2512,14 @@ function removePlanMethod(objectId, methodId) {
   if (!object) return;
   const idx = object.methods.findIndex((entry) => entry.id === methodId);
   if (idx < 0) return;
+  const removedNodeCount = planNodes.filter((entry) => entry.objectId === objectId && entry.methodId === methodId).length;
   object.methods.splice(idx, 1);
   planNodes = planNodes.filter((entry) => !(entry.objectId === objectId && entry.methodId === methodId));
   if (planSelectedNodeId && !getPlanNodeById(planSelectedNodeId)) clearPlanNodeSelection();
   savePlanObjectsUi();
+  void captureTelemetry("planning_method_removed", getPlanningTelemetryProperties({
+    removed_nodes: removedNodeCount,
+  }));
 }
 
 function insertPlanNode(objectId, methodId, beforeWaypoint, index) {
@@ -2521,12 +2571,16 @@ function movePlanNode(nodeId, beforeWaypoint, index) {
 function removePlanNode(nodeId) {
   const idx = planNodes.findIndex((entry) => entry.id === nodeId);
   if (idx < 0) return;
+  const removedNode = planNodes[idx];
   planNodes.splice(idx, 1);
   normalizePlanNodeOrdering();
   if (planSelectedNodeId === nodeId) clearPlanNodeSelection();
   savePlanTimelineUi();
   normalizePlanningTimelineHeightForContent();
   renderPlanObjects();
+  void captureTelemetry("planning_timeline_node_removed", getPlanningTelemetryProperties({
+    before_waypoint: removedNode.beforeWaypoint,
+  }));
 }
 
 function attachPlanMethodCardDragHandlers(card) {
@@ -10129,6 +10183,21 @@ if (btnExportConfirm) {
         exportSuccessMessage.hidden = false;
       }
       setStatus(`Exported ${pendingExportRequest.filename}.`);
+      const includesPlanning = pendingExportRequest.exportType === "planning" || pendingExportRequest.exportType === "both";
+      const includesViewing = pendingExportRequest.exportType === "viewing" || pendingExportRequest.exportType === "both";
+      void captureTelemetry("motionview_json_exported", getPlanningTelemetryProperties({
+        export_type: pendingExportRequest.exportType,
+        includes_planning: includesPlanning,
+        includes_viewing: includesViewing,
+        export_location: pendingExportRequest.destination.kind,
+        exported_chars: pendingExportRequest.json.length,
+        exported_bytes: getUtf8ByteLength(pendingExportRequest.json),
+        exported_planning_template_bytes: includesPlanning ? getUtf8ByteLength(planExportTemplate) : 0,
+        exported_viewing_poses: includesViewing ? rawPoses.length : 0,
+        exported_viewing_watches: includesViewing ? watches.length : 0,
+        exported_viewing_logs: includesViewing ? logs.length : 0,
+        exported_viewing_waypoints: includesViewing ? waypoints.length : 0,
+      }));
       console.log("MotionView export payload written:", {
         request: pendingExportRequest,
         result,
@@ -10326,6 +10395,10 @@ function commitPlanTimelineDragTarget(context, target) {
   if (!node) return null;
   savePlanTimelineUi();
   selectPlanNode(node.id, { scrollSidebar: true });
+  void captureTelemetry(context.source === "sidebar" ? "planning_timeline_node_created" : "planning_timeline_node_moved", getPlanningTelemetryProperties({
+    before_waypoint: node.beforeWaypoint,
+    node_index: node.index,
+  }));
   return node;
 }
 
@@ -10465,6 +10538,11 @@ if (btnPlanCopyCode) {
     try {
       await copyTextToClipboard(code);
       setStatus(`Copied generated code for ${planWaypoints.length} waypoint${planWaypoints.length === 1 ? "" : "s"}.`);
+      void captureTelemetry("planning_template_exported", getPlanningTelemetryProperties({
+        export_surface: "clipboard",
+        exported_chars: code.length,
+        exported_bytes: getUtf8ByteLength(code),
+      }));
     } catch (err) {
       console.error("Failed to copy planning export code:", err);
       setStatus(`Failed to copy code: ${err?.message || err}`);
