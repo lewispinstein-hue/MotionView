@@ -10,7 +10,7 @@ Keybinds for MotionView
 
 
 | Context | Keybind | Action |
-| - | - | - |
+| --- | --- | --- |
 | Global | `Cmd + 1` | Switch to Viewing mode |
 | Global | `Cmd + 2` | Switch to Planning mode |
 | Global | `Cmd + Shift + K` | Clear everything (field + plan) |
