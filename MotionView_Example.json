@@ -77,7 +77,7 @@
     },
     {
       "x": 56.5,
-      "y": 40.900000000000006,
+      "y": 40.9,
       "theta": 170,
       "speed": 127
     },
@@ -173,13 +173,6 @@
       "index": 4
     },
     {
-      "id": "plan-node-1778819241591-awfptt",
-      "objectId": "plan-object-1778817940969-uwga0o",
-      "methodId": "plan-method-1778817951422-ytpcb5",
-      "beforeWaypoint": 5,
-      "index": 1
-    },
-    {
       "id": "plan-node-1778819273305-jg6mxo",
       "objectId": "plan-object-1778817975552-5joe92",
       "methodId": "plan-method-1778817981719-zzq0ti",
@@ -232,6 +225,13 @@
       "id": "plan-node-1778819081754-3qxj13",
       "objectId": "plan-object-1778817975552-5joe92",
       "methodId": "plan-method-1778819078588-g4h01h",
+      "beforeWaypoint": 5,
+      "index": 1
+    },
+    {
+      "id": "plan-node-1778819241591-awfptt",
+      "objectId": "plan-object-1778817940969-uwga0o",
+      "methodId": "plan-method-1778817951422-ytpcb5",
       "beforeWaypoint": 5,
       "index": 0
     }
