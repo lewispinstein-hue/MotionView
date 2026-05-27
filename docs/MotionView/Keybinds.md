@@ -2,13 +2,6 @@
 
 Keybinds for MotionView
 
-
-
-
-
-
-
-
 | Context | Keybind | Action |
 | --- | --- | --- |
 | Global | `Cmd + 1` | Switch to Viewing mode |
