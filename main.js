@@ -231,6 +231,10 @@ function enhanceSidebarTree() {
     setToggleState(item, toggle, isCollapsed);
 
     item.addEventListener('click', function (event) {
+      if (event.target.closest('.sidebar-nav li') !== item) {
+        return;
+      }
+
       if (event.target.closest('.sidebar-tree-toggle') || event.target.closest('a')) {
         return;
       }
