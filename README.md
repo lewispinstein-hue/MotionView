@@ -42,6 +42,17 @@ MotionView's creation was inspired by other visualizers such as [Grafana](https:
 2. **Demo:** In older versions (v1.2.0 and earlier, newer versions have a built-in demo), download the [`Example Route`](MotionView_Example.json), press `Cmd + O` in MotionView to open it, and press `Space` to watch a recorded run (Note this is a VEX Pushback run, as the current season is still to early for an actual Override demo).
 3. **Connect your Robot:** Install [MVLib](MVLib/README.md) into your PROS project to start streaming your own live data.
 
+## Launching From Source
+Install Node.js, pnpm, Python 3, and Rust/Tauri prerequisites for your platform. Then run the repository initializer:
+
+```sh
+./MotionView-initialize.sh
+cd MotionView
+pnpm dev
+```
+
+Use `./MotionView-initialize.sh --build-sidecars` if you also want to prebuild the Python sidecars that `pnpm dev` normally builds before launch.
+
 ## Docs
 - [MotionView Docs](Docs/MotionView)
 - [MVLib Docs](Docs/MVLib)
