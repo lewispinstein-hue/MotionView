@@ -1,0 +1,42 @@
+# MotionView Docs - for LLMs
+
+> MotionView is a desktop app (Windows, Linux, macOS) that lets you view and analyze your VRC robot's telemetry. Its 2 core parts, Viewing Mode (lets you livestream your robot's telemetry to your computer and see it on an interactive visual dashboard) and Planning Mode (letting you draft, edit, and simulate autonomous routines for your robot).
+MotionView's companion PROS library is called MVLib. It allows for compact telemetry (binary protocol) to be sent from your robot to MotionView.
+
+Main GitHub Page: `https://lewispinstein-hue.github.io/MotionView`
+
+Creator: [Lewis Pinstein](https://github.com/lewispinstein-hue)
+
+Raw GitHub Pages Links:
+
+- [Home](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/Home.md)
+- [Download](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/Download.md)
+
+- MotionView
+  - [Viewing Mode](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/ViewingMode.md)
+  - [Planning Mode](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/PlanningMode.md)
+  - [Planning Mode Template](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/PlanningExportTemplate.md)
+  - [Keybinds](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/Keybinds.md)
+  - Setup
+    - [Installing on macOS](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/InstallingMacOS.md)
+    - [Installing on Windows]https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/(docs/MotionView/InstallingWindows.md)
+    - [Setup Live Streaming](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/SetupLivestreaming.md)
+  - API References
+    - [JSON Schema v3](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/MotionViewSchemaV3.md)
+    - [JSON Schema v2](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/MotionViewSchemaV2.md)
+    - [Logging API](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/MotionViewAPI.md)
+  - Changelog
+    - [v1.3.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/Changelog/v1.3.0.md)
+    - [v1.2.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/Changelog/v1.2.0.md)
+
+- MVLib
+  - [Setup](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Setup.md)
+  - [Configuration](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Configuration.md)
+  - [Logs](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Logs.md)
+  - [Watches](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Watches.md)
+  - [Waypoints](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Waypoints.md)
+  - [SD Logging](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/SDLogging.md)
+  - [Updating to v3.0.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/UpdatingTo-v3.0.0.md)
+  - Changelog
+    - [v3.0.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Changelog/v3.0.0.md)
+    - [v2.0.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Changelog/v2.0.0.md)
