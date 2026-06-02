@@ -1,42 +1,42 @@
 # MotionView Docs - for LLMs
 
-> MotionView is a desktop app (Windows, Linux, macOS) that lets you view and analyze your VRC robot's telemetry. Its 2 core parts, Viewing Mode (lets you livestream your robot's telemetry to your computer and see it on an interactive visual dashboard) and Planning Mode (letting you draft, edit, and simulate autonomous routines for your robot).
-MotionView's companion PROS library is called MVLib. It allows for compact telemetry (binary protocol) to be sent from your robot to MotionView.
+> MotionView is a platform-agnostic desktop application (Windows, Linux, macOS) designed to visually plan, simulate, and analyze autonomous robotics routes. It features an interactive real-time Viewing dashboard and a low-code Planning timeline sequencer. Its companion C++ PROS library, MVLib, utilizes a compact binary serial protocol for low-overhead telemetry streaming.
 
-Main GitHub Page: `https://lewispinstein-hue.github.io/MotionView`
-
+Main GitHub Page: https://github.com/lewispinstein-hue/MotionView
+Live Documentation: https://lewispinstein-hue.github.io/MotionView
 Creator: [Lewis Pinstein](https://github.com/lewispinstein-hue)
 
-Raw GitHub Pages Links:
+## Core Resources
+- [Home](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/Home.md): Main documentation landing page and overview.
+- [Download](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/Download.md): Installation binaries and build targets for all desktop platforms.
 
-- [Home](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/Home.md)
-- [Download](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/Download.md)
+## MotionView (Desktop Client)
+- [Viewing Mode](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/ViewingMode.md): How to livestream robot telemetry and manage visual real-time dashboard layouts.
+- [Planning Mode](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/PlanningMode.md): Visual autonomous route drafting, waypoint placement, and the interactive object-method sequencer timeline.
+- [Planning Mode Template](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/PlanningExportTemplate.md): Custom templates and variables used to export visual timelines into deployable production robot code.
+- [Keybinds](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/Keybinds.md): Keyboard shortcuts for efficient map navigation and node manipulation.
 
-- MotionView
-  - [Viewing Mode](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/ViewingMode.md)
-  - [Planning Mode](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/PlanningMode.md)
-  - [Planning Mode Template](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/PlanningExportTemplate.md)
-  - [Keybinds](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/Keybinds.md)
-  - Setup
-    - [Installing on macOS](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/InstallingMacOS.md)
-    - [Installing on Windows]https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/(docs/MotionView/InstallingWindows.md)
-    - [Setup Live Streaming](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/SetupLivestreaming.md)
-  - API References
-    - [JSON Schema v3](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/MotionViewSchemaV3.md)
-    - [JSON Schema v2](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/MotionViewSchemaV2.md)
-    - [Logging API](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/MotionViewAPI.md)
-  - Changelog
-    - [v1.3.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/Changelog/v1.3.0.md)
-    - [v1.2.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/Changelog/v1.2.0.md)
+### Setup & Installation
+- [Installing on macOS](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/InstallingMacOS.md): Guardrails, security permissions, and installation steps for macOS.
+- [Installing on Windows](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/InstallingWindows.md): Installer usage and requirements for running MotionView natively on Windows.
+- [Setup Live Streaming](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/SetupLivestreaming.md): Configuring serial and wired port paths to stream telemetry to the frontend.
 
-- MVLib
-  - [Setup](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Setup.md)
-  - [Configuration](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Configuration.md)
-  - [Logs](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Logs.md)
-  - [Watches](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Watches.md)
-  - [Waypoints](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Waypoints.md)
-  - [SD Logging](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/SDLogging.md)
-  - [Updating to v3.0.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/UpdatingTo-v3.0.0.md)
-  - Changelog
-    - [v3.0.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Changelog/v3.0.0.md)
-    - [v2.0.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Changelog/v2.0.0.md)
+### Specifications & Changelogs
+- [JSON Schema v3](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/MotionViewSchemaV3.md): The structural schema definition supporting combined viewing paths and planning sequences.
+- [JSON Schema v2](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/MotionViewSchemaV2.md): Legacy export schema definition for backwards compatibility.
+- [Logging API](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/MotionViewAPI.md): Reference protocol detailing the underlying binary and raw terminal data transmission schemas.
+- [Changelog v1.3.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/Changelog/v1.3.0.md): Log of graph zooming enhancements, timeline sequencing features, and platform-wide bug fixes.
+- [Changelog v1.2.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/Changelog/v1.2.0.md): Historic log of initial widget upgrades and interface implementations.
+
+## MVLib (Companion C++ PROS Library)
+- [Setup](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Setup.md): Integrating the mvlib template pack directly into your PROS firmware environment.
+- [Configuration](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Configuration.md): Setting up ports, baud rates, and library definitions inside initialization files.
+- [Logs](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Logs.md): Utilizing global logging utilities for status reports and custom string telemetry.
+- [Watches](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Watches.md): Registering functions via the Watch API, utilizing debounced onChange filters, and handling compile-time naming constraints.
+- [Waypoints](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Waypoints.md): Tracking robot positioning markers, tracking timeouts, and assigning compile-time name length safety.
+- [SD Logging](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/SDLogging.md): Configuring micro-SD card logging fallbacks, folder generation rules, and file-retention policies.
+- [Updating to v3.0.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/UpdatingTo-v3.0.0.md): Complete API migration guide detailing renamed functions, unified enums, and breaking structural refactors.
+
+### Changelogs
+- [Changelog v3.0.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Changelog/v3.0.0.md): Complete breaking change record including unified WatchMode parameters, compile-time label limits, and theta scale ring optimizations.
+- [Changelog v2.0.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Changelog/v2.0.0.md): Historical reference for legacy v2 functional implementations.
