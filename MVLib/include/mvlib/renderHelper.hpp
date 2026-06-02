@@ -7,6 +7,7 @@
 
 #include <string>
 #include <cstdio>
+#include <cstdint>
 
 namespace mvlib {
 /**
@@ -31,6 +32,11 @@ static std::string renderValue(const char *v, const std::string&) {
  */
 static std::string renderValue(bool v, const std::string&) {
   return v ? "t" : "f";
+}
+
+template <class T>
+static std::string renderValue(const T* v, const std::string&) {
+  return v ? std::to_string((uintptr_t)v) : std::string("(null)");
 }
 
 /**
