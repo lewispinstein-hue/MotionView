@@ -5,12 +5,12 @@
     <!-- Repository Stats -->
     <td style="padding: 10px 16px; vertical-align: middle; border-right: 1px solid #d0d7de;">
       <img src="https://img.shields.io/github/stars/lewispinstein-hue/MotionView?style=flat-square" alt="Stars" style="vertical-align: middle; margin-right: 4px;">
-      <img src="https://img.shields.io/github/downloads/lewispinstein-hue/MotionView/total?style=flat-square" alt="Downloads" style="vertical-align: middle;">
+      <img src="https://img.shields.io/github/downloads/lewispinstein-hue/MotionView/total?style=flat-square&cacheSeconds=60" alt="Downloads" style="vertical-align: middle;">
     </td>
     <!-- Versions -->
     <td style="padding: 10px 16px; vertical-align: middle;">
-      <img src="https://img.shields.io/badge/MotionView-v1.2.0-green?style=flat-square" alt="Version" style="vertical-align: middle; margin-right: 4px;">
-      <img src="https://img.shields.io/badge/MVLib-v2.0.1-green?style=flat-square" alt="Version" style="vertical-align: middle;">
+      <img src="https://img.shields.io/badge/MotionView-v1.2.0-green?style=flat-square&cacheSeconds=60" alt="Version" style="vertical-align: middle; margin-right: 4px;">
+      <img src="https://img.shields.io/badge/MVLib-v2.0.1-green?style=flat-square&cacheSeconds=60" alt="Version" style="vertical-align: middle;">
     </td>
   </tr>
 </table>

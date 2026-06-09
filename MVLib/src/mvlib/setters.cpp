@@ -51,7 +51,7 @@ void Logger::setMinLogLevel(LogLevel level) {
 
   // Telemetry engine is now the source of truth for the min log level
   detail::Telemetry::getInstance().setMinLevel(level);
-  _MVLIB_FORWARD_DEBUG("SetLoggerMinLevel set to: %d", (int)level);
+  _MVLIB_FORWARD_DEBUG("SetMinLogLevel set to: %d", (int)level);
 }
 
 void Logger::setPoseGetter(std::function<std::optional<Pose>()> getter) {
