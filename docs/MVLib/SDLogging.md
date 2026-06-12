@@ -57,7 +57,6 @@ If the requested folder does not exist:
 
 - SD logging is disabled
 - `setLoggingLocation(...)` returns `false`
-- file policy is never evaluated
 
 ### `useRoot`
 
@@ -141,7 +140,7 @@ Result:
 - resolved folder: `/telemetry`
 - explicit filename: `/telemetry/match.log`
 - if the file exists, it is overwritten later
-- if the file does not exist, `fopen(..., "w")` creates it later
+- if the file does not exist, MVLib creates it later
 
 ### Missing folder with root fallback
 

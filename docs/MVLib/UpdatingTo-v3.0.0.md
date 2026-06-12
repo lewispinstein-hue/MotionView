@@ -2,10 +2,10 @@
 
 Full `v3.0.0` references:
 
-- [Watches](./Watches.md)
-- [Waypoints](./Waypoints.md)
-- [Configuration](./Configuration.md)
-- [Setup](./Setup.md)
+- [Watches](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Watches)
+- [Waypoints](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Waypoints)
+- [Configuration](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Configuration)
+- [Setup](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Setup)
 
 ## Quick Checklist
 
@@ -33,9 +33,7 @@ logger.watch("Auton Stage", LogLevel::INFO, WatchMode::onChange, 250_mvMs,
   [&]() { return static_cast<int>(autonStage); }, "%d");
 ```
 
-- Use `0_mvMs` for near-immediate on-change behavior. Use `100_mvMs` to
-  `250_mvMs` for most booleans, enums, and stage values.
-
+- Use `0_mvMs` for near-immediate on-change behavior.
 - If you stored the watch return value, change:
 
 ```cpp
@@ -57,14 +55,11 @@ batteryWatch.evaluate(true);
 batteryWatch.resyncRoster();
 ```
 
-Full `WatchHandle` reference:
-[Watches.md](./Watches.md#watchhandle)
-
 - If a watch uses both formatting and `LevelOverride`, the order changed:
 
 ```cpp
 logger.watch("Intake Current", LogLevel::INFO, WatchMode::onInterval, 750_mvMs,
-  getter, "%d", LevelOverride<int32_t>{
+  getter, {}, LevelOverride<int32_t>{
     .elevatedLevel = LogLevel::WARN
   });
 ```
@@ -84,7 +79,7 @@ logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval,
 ```
 
 Full watch reference:
-[Watches.md](./Watches.md)
+[Watches.md](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Watches)
 
 ## Waypoints
 
@@ -108,7 +103,7 @@ logger.info("Auton %s created Goal Pickup waypoint", selectedAutonName.c_str());
 ```
 
 Full waypoint reference:
-[Waypoints.md](./Waypoints.md)
+[Waypoints.md](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Waypoints)
 
 ## Logger API Renames
 
@@ -125,7 +120,7 @@ logger.setMinLogLevel(LogLevel::INFO);
 ```
 
 Full configuration reference:
-[Configuration.md](./Configuration.md)
+[Configuration.md](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Configuration)
 
 ## Before / After
 
@@ -148,7 +143,7 @@ logger.setMinLogLevel(LogLevel::INFO);
 
 WatchHandle stageWatch = logger.watch("Auton Stage", LogLevel::INFO,
   WatchMode::onChange, 250_mvMs,
-  [&]() { return static_cast<int>(autonStage); }, "%d");
+  [&]() { return autonStage; });
 
 auto goal = logger.addWaypoint("Blue Left ML", {
   .tarX = 70,

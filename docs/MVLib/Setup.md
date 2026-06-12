@@ -127,8 +127,6 @@ void initialize() {
 ### EZ-Template
 
 ```cpp
-#include "main.h"
-#include "mvlib/api.hpp"
 #include "mvlib/Optional/ezTemplate.hpp"
 
 extern ez::Drive chassis;
@@ -143,8 +141,6 @@ void initialize() {
 ### Okapi
 
 ```cpp
-#include "main.h"
-#include "mvlib/api.hpp"
 #include "mvlib/Optional/okapi.hpp"
 
 extern std::shared_ptr<okapi::OdomChassisController> odomChassis;
@@ -165,8 +161,6 @@ mvlib::setOdom(odomChassis.get(), okapi::inch);
 ### Custom odometry
 
 ```cpp
-#include "main.h"
-#include "mvlib/api.hpp"
 #include "mvlib/Optional/customOdom.hpp"
 
 void initialize() {
@@ -213,7 +207,7 @@ Use that only if you intentionally want odometry-based speed estimation.
 
 `logger.setLoggingLocation(...)` lets you route all SD log data into a custom folder and/or file.
 
-See [SDLogging.md](./SDLogging.md#setlogginglocation) for the full path rules, fallback policies, and examples.
+See [SD Logging](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/SDLogging) for the full path rules, fallback policies, and examples.
 
 Do this before `logger.start()`.
 
@@ -274,13 +268,15 @@ For event-like values, use `WatchMode::onChange`:
 
 ```cpp
 logger.watch("Auton Stage", LogLevel::INFO, WatchMode::onChange, 250_mvMs,
-  []() { return static_cast<int>(autonStage); });
+  []() { return autonStage; });
 ```
 
 You can keep the returned `WatchHandle` if you want to enable/disable the watch,
 change its interval, force an evaluation, or re-send its roster entry later.
 For `WatchMode::onChange` watches, `250_mvMs` above is the debounce interval.
 `LevelOverride` is optional.
+
+The full watches documentation is [here](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Watches).
 
 ## 10. Optional Runtime Controls
 
@@ -304,3 +300,5 @@ logger.setTimings({
   .rosterSyncAllInterval = 8000
 });
 ```
+
+The full runtime controls documentation is [here](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Configuration).
