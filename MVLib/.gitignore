@@ -15,9 +15,3 @@ temp.log
 temp.errors
 *.ini
 .d/
-
-# Automatic docs
-Docs/
-
-# Clangd config
-.clangd
