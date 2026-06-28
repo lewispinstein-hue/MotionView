@@ -444,8 +444,8 @@ public:
    *             the debounce interval has elapsed.
    * @param intervalMs Sampling/print interval in ms for interval watches, or debounce
    *                   interval in ms for on-change watches.
-   * @param getter Callable returning a value.
-   * @param fmt Optional printf-style format for floating-point values (e.g. "%.2f").
+   * @param getter Callable returning a value. Floating-point watch values are
+   *               rendered with two decimal places.
    * @param ov Optional LevelOverride (type inferred from getter).
    *
    * @note For performance reasons, names are truncated to 24 characters long.
@@ -458,7 +458,7 @@ public:
    * \b Example
    * @code
    * logger.watch("Intake RPM", LogLevel::INFO, WatchMode::onInterval, 1_mvS,
-   *   [&]() { return left_mg.get_actual_velocity(); }, "%.0f",
+   *   [&]() { return left_mg.get_actual_velocity(); },
    *   mvlib::LevelOverride<double>{
    *     .elevatedLevel = LogLevel::WARN,
    *     .predicate = mvlib::asPredicate<double>([](const double& v) { return v > 550; }),
@@ -471,7 +471,7 @@ public:
    */
   template <class Getter, size_t len>
   WatchHandle watch(const char (&label)[len], LogLevel baseLevel, WatchMode type, 
-                    uint32_t intervalMs, Getter&& getter, std::string fmt = {},
+                    uint32_t intervalMs, Getter&& getter,
                     LevelOverride<std::decay_t<std::invoke_result_t<
                       Getter&>>> ov = {}) {
     using T = std::decay_t<std::invoke_result_t<Getter &>>;
@@ -483,7 +483,6 @@ public:
     return WatchHandle(addWatch<T>(label, baseLevel, intervalMs,
                        std::forward<Getter>(getter),
                        std::move(ov),
-                       std::move(fmt),
                        (type == WatchMode::onChange)));
   }
 
@@ -537,9 +536,6 @@ private:
     /// @brief Last emit timestamp (ms).
     uint32_t lastPrintMs{0};
 
-    /// @brief Optional numeric format string.
-    std::string fmt{};
-
     /// @brief If true, only emit after a rendered value change.
     bool onChange = false;
 
@@ -584,7 +580,6 @@ private:
    * @param intervalMs Interval in ms, or debounce interval when onChange=true.
    * @param getter Getter callable.
    * @param ov Optional override predicate/level.
-   * @param fmt Optional numeric format.
    * @param onChange If true, print only on change after the debounce interval.
    * \return Assigned WatchId.
    *
@@ -593,7 +588,7 @@ private:
   template <class T, class Getter>
   WatchId addWatch(std::string label, const LogLevel baseLevel, 
                    const uint32_t intervalMs, Getter&& getter, 
-                   LevelOverride<T> ov, std::string fmt,
+                   LevelOverride<T> ov,
                    bool onChange = false) {
     detail::uniqueLock lock(m_mutex);
     if (!lock.isLocked()) return static_cast<WatchId>(-1);
@@ -607,17 +602,15 @@ private:
     w.baseLevel = baseLevel;
     w.intervalMs = intervalMs;
     w.onChange = onChange;
-    w.fmt = std::move(fmt);
 
     std::decay_t<Getter> eval = std::forward<Getter>(getter); // store callable by value
 
-    // Capture fmt by value (not by reference to w), and move ov in.
-    const std::string fmtCopy = w.fmt;
+    // Capture label by value (not by reference to w), and move ov in.
     const std::string labelCopy = w.label;
 
     // When w.eval is called, it returns final log level, getter eval, final label
     w.eval = std::make_shared<std::function<std::tuple<LogLevel, std::string, std::string, bool>()>>(
-              [baseLevel, labelCopy, fmtCopy, eval = std::move(eval),
+              [baseLevel, labelCopy, eval = std::move(eval),
               ov = std::move(ov)]() mutable ->
               std::tuple<LogLevel, std::string, std::string, bool> {
 
@@ -628,7 +621,7 @@ private:
       // Log level based on predicate
       const LogLevel lvl = tripped ? ov.elevatedLevel : baseLevel;
 
-      std::string rawOut = renderValue(evalValue, fmtCopy); // Raw eval of getter
+      std::string rawOut = renderValue(evalValue); // Raw eval of getter
 
       // Get label based on predicate
       const std::string& displayOut = (tripped && !ov.label.empty()) ? ov.label : labelCopy;

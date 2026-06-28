@@ -57,8 +57,7 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
 
         info.prevVal = info.currVal;
         return info.displayValue;
-      }, "%.1f",
-      LevelOverride<double>{
+      }, LevelOverride<double>{
         .elevatedLevel = LogLevel::WARN,
         .predicate = PREDICATE(v >= TEMP_THRESHOLD),
         .label = "Left Drivetrain Overheating"
@@ -91,8 +90,7 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
 
         info.prevVal = info.currVal;
         return info.displayValue;
-      }, "%.1f",
-      LevelOverride<double>{
+      }, LevelOverride<double>{
         .elevatedLevel = LogLevel::WARN,
         .predicate = PREDICATE(v >= TEMP_THRESHOLD),
         .label = "Right Drivetrain Overheating"
@@ -127,8 +125,7 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
         }
         info.prevVal = info.currVal;
         return info.displayValue;
-      }, "%.1f",
-      LevelOverride<double>{
+      }, LevelOverride<double>{
         .elevatedLevel = LogLevel::WARN,
         .predicate = PREDICATE(v >= BAT_TEMP_THRESHOLD),
         .label = "Battery Temp High"
@@ -162,8 +159,7 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
         }
         info.prevVal = info.currVal;
         return info.displayValue / 1000.0;
-      }, "%.1f",
-      LevelOverride<double>{
+      }, LevelOverride<double>{
         .elevatedLevel = LogLevel::WARN,
         .predicate = asPredicate<double>([](const double& v) {
           return (v * 1000) <= MIN_BAT_VOLT || (v * 1000) >= MAX_BAT_VOLT;

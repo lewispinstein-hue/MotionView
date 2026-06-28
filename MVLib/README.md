@@ -95,7 +95,7 @@ Example:
 auto& logger = mvlib::Logger::getInstance();
 
 logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval, 1_mvS,
-  [&]() { return flywheel.get_actual_velocity(); }, "%.1f");
+  [&]() { return flywheel.get_actual_velocity(); });
 
 logger.watch("Auton Stage", LogLevel::INFO, WatchMode::onChange, 250_mvMs,
   [&]() { return autonStage; });
@@ -105,11 +105,12 @@ That means:
 
 - `WatchMode::onInterval` watches emit on their normal interval
 - `WatchMode::onChange` watches emit only after the rendered value changes and the debounce interval has elapsed
+- floating-point watch values are rendered with two decimal places
 - you only need `LevelOverride` when you want elevated severity and/or an alternate label
 
 MotionView shows these in the watch list and can associate nearby watch values with points in the run.
 
-For the detailed watch guide, including `WatchMode`, optional `LevelOverride`, on-change debounce, `PREDICATE`, formatting, and more examples, see the [`Watches Guide`](https://lewispinstein-hue.github.io/MotionView/MVLib/Watches).
+For the detailed watch guide, including `WatchMode`, optional `LevelOverride`, on-change debounce, `PREDICATE`, and more examples, see the [`Watches Guide`](https://lewispinstein-hue.github.io/MotionView/MVLib/Watches).
 
 ## Logs
 
