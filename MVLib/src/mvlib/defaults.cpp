@@ -135,7 +135,7 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
       });
 
     // Battery Voltage Watch (thresholds in millivolts)
-    constexpr uint MIN_BAT_VOLT = 12000;
+    constexpr uint MIN_BAT_VOLT = 11700;
     constexpr uint MAX_BAT_VOLT = 13250;
 
     Logger::getInstance().watch("Battery Voltage OK", LogLevel::INFO, WatchMode::onChange, uint32_t{0},
@@ -172,10 +172,7 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
       });
   }
 
-  _MVLIB_FORWARD_DEBUG("Created default watches: %s%s%s",
-    w.leftDrivetrainWatchdog ? "Left Drivetrain Watchdog, " : "",
-    w.rightDrivetrainWatchdog ? "Right Drivetrain Watchdog, " : "",
-    w.batteryWatchdog ? "Battery Watchdog" : "");
+  _MVLIB_FORWARD_DEBUG("setDefaultWatches set all applicable watches");
 
   return retval;
 }

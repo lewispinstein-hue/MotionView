@@ -37,7 +37,7 @@ size_t telemetryQueueCount = 0;
 pros::Mutex telemetryQueueMutex;
 pros::Mutex telemetryWriteMutex;
 
-bool enqueueTelemetryFrame(const uint8_t *data, size_t len) {
+bool enqueueTelemetryFrame(const uint8_t* data, size_t len) {
   if (!telemetryQueueMutex.take(kTelemetryQueueLockTimeoutMs)) return false;
 
   const bool hasCapacity = telemetryQueueCount < kTelemetryQueueCapacity;
@@ -73,7 +73,7 @@ bool dequeueTelemetryFrame(TelemetryFrame& frame) {
   return hasFrame;
 }
 
-void writeFrameBlocking(const uint8_t *data, size_t len) {
+void writeFrameBlocking(const uint8_t* data, size_t len) {
   telemetryWriteMutex.take();
   size_t totalWritten = 0;
   size_t retryCount = 0;

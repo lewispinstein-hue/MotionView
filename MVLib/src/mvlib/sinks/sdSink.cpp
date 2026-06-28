@@ -10,6 +10,7 @@
 #include <cstring>
 #include <random>
 #include <cerrno>
+#include <time.h>
 #include <algorithm>
 #include <string_view>
 
@@ -20,6 +21,8 @@ enum class FolderCheckResult : uint8_t {
   notFound,
   unknownError
 };
+
+constexpr uint64_t recentEpochTime = 1781602800;
 
 uint32_t getrandInt(const uint32_t min, const uint32_t max) {
   /**
@@ -124,15 +127,17 @@ FolderCheckResult checkFolderExists(const std::string_view relativeFolderPath) {
 void Logger::getTimestampedFilename(char *buffer, size_t len) {
   if (!buffer || len == 0) return;
 
-  time_t now = time(0);
-  tm* tstruct = localtime(&now);
+  struct timespec tspec;
+  clock_gettime(CLOCK_REALTIME, &tspec);
 
-  const uint32_t randInt = getrandInt(0, 99999);
+  std::chrono::sys_seconds currentTime{std::chrono::seconds(tspec.tv_sec)};
+  const std::string formattedTime = std::format("{:%Y-%m-%d_%H-%M-%S}", currentTime);
 
   std::string folderBuf(m_loggingFolder);
   trimTrailingSeparator(folderBuf, '/');
+  const uint32_t randInt = getrandInt(0, 99999);
 
-  if (tstruct->tm_year < 125 /* 2025 (1900 + 125) */) {
+  if (tspec.tv_sec < recentEpochTime) {
     _MVLIB_FORWARD_INFO("initSdCard() VEX RTC Inaccurate. Falling back to program duration.");
 
     snprintf(buffer, len, "%s%sMVLIB_%s_%u-%u_%03u.log",
@@ -143,7 +148,7 @@ void Logger::getTimestampedFilename(char *buffer, size_t len) {
 
     char timeBuf[128];
     // Format the date/time string
-    strftime(timeBuf, sizeof(timeBuf), "MVLIB_%Y-%m-%d_%H-%M-%S", tstruct); 
+    snprintf(timeBuf, sizeof(timeBuf), "MVLIB_%s", formattedTime); 
 
     // Combine pathPrefix, formatted time, and random ID
     snprintf(buffer, len, "%s%s%s_%05d.log",
@@ -296,12 +301,10 @@ bool Logger::setLoggingLocation(const char *location,
     m_currentFilename[0] = '\0';
   }
 
-  strncpy(m_loggingFolder, resolvedDirectory.c_str(), sizeof(m_loggingFolder) - 1);
-  m_loggingFolder[sizeof(m_loggingFolder) - 1] = '\0';
-  std::string loggingFolder(m_loggingFolder);
-  trimTrailingSeparator(loggingFolder, '/');
-  strncpy(m_loggingFolder, loggingFolder.c_str(), sizeof(m_loggingFolder) - 1);
-  m_loggingFolder[sizeof(m_loggingFolder) - 1] = '\0';
+  // Trim the std::string before copying to the raw buffer
+  trimTrailingSeparator(resolvedDirectory, '/');
+  snprintf(m_loggingFolder, sizeof(m_loggingFolder), "%s", resolvedDirectory.c_str());
+
   _MVLIB_FORWARD_INFO("setLoggingLocation() successfully set logging folder to: %s", m_loggingFolder);
   if (m_currentFilename[0] != '\0') {
     _MVLIB_FORWARD_INFO("setLoggingLocation() successfully set logging file to: %s", m_currentFilename);

@@ -505,14 +505,14 @@ private:
   bool initSDLogger();
 
   /// @brief Return the current sessions filename.
-  void getTimestampedFilename(char *buffer, size_t len);
+  void getTimestampedFilename(char* buffer, size_t len);
 
   /**
    * @brief Convert a LogLevel to a printable string.
    * @param level Log level to convert.
    * \return C-string representation of the level.
    */
-  const char* levelToString(const LogLevel& level) const;
+  const char* levelToString(LogLevel level) const;
 
   /**
    * @struct Watch
@@ -726,9 +726,9 @@ private:
   const char* m_date = detail::getBuildDate(); 
   char m_loggingFolder[24] = "";
 
-  volatile bool m_sdLocked = false;    // Has sd card failed?
-  bool m_started = false;     // Has start() been called?
-  std::atomic<bool> m_configSet{false};   // Has setRobot() been called?
+  volatile bool m_sdLocked = false; // Has sd card failed?
+  bool m_started = false; // Has start() been called?
+  std::atomic<bool> m_configSet{false}; // Has setRobot() been called?
   bool m_forceSpeedEstimation = false;
 
   std::atomic<bool> m_pauseRequested{false}; 
