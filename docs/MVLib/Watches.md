@@ -21,7 +21,7 @@ MVLib provides 2 watch styles through `WatchMode`:
 ```cpp
 template<class Getter, size_t len>
 WatchHandle watch(const char (&label)[len], LogLevel baseLevel, WatchMode type,
-                  uint32_t intervalMs, Getter&& getter, std::string fmt = {},
+                  uint32_t intervalMs, Getter&& getter,
                   LevelOverride<std::decay_t<std::invoke_result_t<
                     Getter&>>> ov = {});
 ```
@@ -34,13 +34,13 @@ The core parameters are:
 - `intervalMs`: interval or debounce, depending on `type`
 - `getter`: callable returning the current value
 - `ov`: optional `LevelOverride`
-- `fmt`: optional numeric formatting string
 
 The mode parameters work like this:
 
 - `WatchMode::onInterval`: `intervalMs` is the sample/print interval
 - `WatchMode::onChange`: `intervalMs` is the debounce interval between emitted changes
 - the single `watch(...)` API returns a `WatchHandle`
+- floating-point watch values are rendered with two decimal places
 
 ## `WatchMode`
 
@@ -213,7 +213,7 @@ Use this for continuously changing values:
 
 ```cpp
 logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval, 1_mvS,
-  [&]() { return flywheel.get_actual_velocity(); }, "%.1f");
+  [&]() { return flywheel.get_actual_velocity(); });
 ```
 
 Good fits:
@@ -264,7 +264,7 @@ Example:
 
 ```cpp
 logger.watch("Intake Current", LogLevel::INFO, WatchMode::onInterval, 750_mvMs,
-  [&]() { return intake.get_current_draw(); }, {},
+  [&]() { return intake.get_current_draw(); },
   mvlib::LevelOverride<int32_t>{
     .elevatedLevel = LogLevel::WARN,
     .predicate = PREDICATE(v > 2000),
@@ -318,32 +318,18 @@ If your getter returns another type, use `asPredicate<T>(...)` directly:
 })
 ```
 
-## Formatting With `fmt`
+## Value Rendering
 
-`fmt` is only used for floating-point rendering.
+Watch values are rendered before `WatchMode::onChange` comparison and before SD logging.
 
-Examples:
+Rendering behavior:
 
-- `"%.0f"`
-- `"%.1f"`
-- `"%.2f"`
-
-Example:
-
-```cpp
-logger.watch("Avg Temp", LogLevel::INFO, WatchMode::onInterval, 5_mvS,
-  [&]() {
-    return (left_mg.get_temperature() + right_mg.get_temperature()) / 2.0;
-  }, "%.0f");
-```
-
-Important `v2.0.0` detail:
-
-- floating-point watches use `fmt` if you provide one
-- integral watches ignore `fmt` and use `std::to_string(...)`
+- floating-point watches are rendered with two decimal places
+- integral watches use `std::to_string(...)`
+- booleans render as `true`/`false` in SD logs and MotionView
 - `std::string` and `const char *` are sent as text watches
 
-Because on-change watches compare the rendered string, formatting can change when two float values count as "the same", and therefore when the debounce sees a "new" value.
+Because on-change watches compare the rendered string, floating-point values count as changed when their two-decimal rendered value changes.
 
 ## What MotionView Receives
 
@@ -387,7 +373,7 @@ logger.watch("Battery Voltage", LogLevel::INFO, WatchMode::onInterval, 1_mvS,
 logger.watch("Avg Temp", LogLevel::INFO, WatchMode::onInterval, 5_mvS,
   [&]() {
     return (left_mg.get_temperature() + right_mg.get_temperature()) / 2.0;
-  }, "%.0f",
+  },
   mvlib::LevelOverride<double>{
     .elevatedLevel = LogLevel::WARN,
     .predicate = mvlib::asPredicate<double>([](const double& v) {
@@ -417,6 +403,6 @@ logger.watch("Mode", LogLevel::INFO, WatchMode::onChange, 250_mvMs,
 - Using the wrong `LevelOverride<T>` type.
 - Assuming `LevelOverride` is required when you do not need alerting behavior.
 - Using `PREDICATE(...)` for non-`int32_t` watch types.
-- Expecting integer watches to honor `fmt`.
+- Expecting watch calls to accept a printf-style format specifier.
 - Forgetting that `WatchMode::onChange` uses `intervalMs` as a debounce window.
 - Assuming long labels will always survive intact in live telemetry; MotionView roster names are limited by the telemetry packet format.

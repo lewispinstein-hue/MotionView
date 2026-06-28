@@ -12,7 +12,7 @@ Full `v3.0.0` references:
 - replace old `watch(...)` overloads with `WatchMode::onInterval` or `WatchMode::onChange`
 - give every `WatchMode::onChange` watch a debounce interval
 - if you stored watch return values, change `WatchId` to `WatchHandle`
-- move watch format strings before `LevelOverride`
+- remove watch format strings; floating-point watch values now render with two decimal places
 - replace dynamic watch and waypoint labels with fixed string literals
 - shorten all watch and waypoint labels to 24 characters max
 - rename `setLoggerMinLevel(...)` to `setMinLogLevel(...)`
@@ -23,14 +23,14 @@ Full `v3.0.0` references:
 
 ```cpp
 logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval, 1_mvS,
-  [&]() { return flywheel.get_actual_velocity(); }, "%.1f");
+  [&]() { return flywheel.get_actual_velocity(); });
 ```
 
 - On-change watches now use `WatchMode::onChange` and require a debounce:
 
 ```cpp
 logger.watch("Auton Stage", LogLevel::INFO, WatchMode::onChange, 250_mvMs,
-  [&]() { return static_cast<int>(autonStage); }, "%d");
+  [&]() { return static_cast<int>(autonStage); });
 ```
 
 - Use `0_mvMs` for near-immediate on-change behavior.
@@ -55,11 +55,11 @@ batteryWatch.evaluate(true);
 batteryWatch.resyncRoster();
 ```
 
-- If a watch uses both formatting and `LevelOverride`, the order changed:
+- If a watch uses `LevelOverride`, pass it directly after the getter:
 
 ```cpp
 logger.watch("Intake Current", LogLevel::INFO, WatchMode::onInterval, 750_mvMs,
-  getter, {}, LevelOverride<int32_t>{
+  getter, LevelOverride<int32_t>{
     .elevatedLevel = LogLevel::WARN
   });
 ```
@@ -68,14 +68,14 @@ logger.watch("Intake Current", LogLevel::INFO, WatchMode::onInterval, 750_mvMs,
 
 ```cpp
 std::string label = "Flywheel " + sideName + " RPM";
-logger.watch(label, LogLevel::INFO, 500_mvMs, getter, {}, "%.0f");
+logger.watch(label, LogLevel::INFO, 500_mvMs, getter);
 ```
 
 with a fixed label:
 
 ```cpp
 logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval,
-  500_mvMs, getter, "%.0f");
+  500_mvMs, getter);
 ```
 
 Full watch reference:
