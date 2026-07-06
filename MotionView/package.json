@@ -6,6 +6,7 @@
   "scripts": {
     "py:clean": "node scripts/clean_py.js",
     "py:build": "node scripts/build_py.js",
+    "typecheck": "tsc --noEmit",
     "dev:web": "vite --config vite.config.js",
     "build:web": "vite build --config vite.config.js",
     "dev": "pnpm py:clean && pnpm py:build && tauri dev",
@@ -15,6 +16,7 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2",
     "dotenv-cli": "^11.0.0",
+    "typescript": "^6.0.3",
     "vite": "^5.4.19"
   },
   "dependencies": {

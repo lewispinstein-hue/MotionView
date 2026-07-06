@@ -1,0 +1,92 @@
+export interface Pose {
+  t: number | null;
+  x: number;
+  y: number;
+  theta: number;
+  l_vel: number | null;
+  r_vel: number | null;
+  speed_raw: number;
+  speed_norm: number;
+}
+
+export interface WatchEntry {
+  t: number;
+  id: number | null;
+  level: string;
+  label: string;
+  value: string;
+  visible?: boolean;
+}
+
+export interface LogEntry {
+  t: number;
+  level: string;
+  label: string;
+  value: string;
+  message: string;
+  isSystem: boolean;
+}
+
+export interface WaypointEvent {
+  t: number;
+  type: string;
+  id: number;
+  name: string;
+  params: Record<string, number | boolean | string | null>;
+}
+
+export interface Waypoint {
+  id: number;
+  name: string;
+  createdTime: number | null;
+  createdEvent: WaypointEvent;
+  target: {
+    x: number;
+    y: number;
+    theta: number | null;
+  };
+  retriggerable: boolean;
+  events: WaypointEvent[];
+  active: boolean;
+  terminalEvent: WaypointEvent | null;
+  latestEvent: WaypointEvent;
+  latestActiveEvent: WaypointEvent;
+}
+
+export interface PlanWaypoint {
+  x: number;
+  y: number;
+  theta?: number;
+  speed?: number;
+}
+
+export interface PlanObject {
+  id: string;
+  name: string;
+  color?: string;
+  methods?: PlanMethod[];
+}
+
+export interface PlanMethod {
+  id: string;
+  name: string;
+  code?: string;
+}
+
+export interface PlanNode {
+  id: string;
+  objectId: string;
+  methodId: string;
+  beforeWaypoint: number;
+  index: number;
+  name?: string;
+  code?: string;
+}
+
+export interface RouteData {
+  poses: unknown;
+  watches: WatchEntry[];
+  logs: LogEntry[];
+  waypoints: Waypoint[];
+  meta: Record<string, unknown>;
+}

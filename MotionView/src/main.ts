@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { resolveResource } from "@tauri-apps/api/path";
@@ -5,6 +6,11 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import Chart from "chart.js/auto";
 import iconsSpriteUrl from "./assets/svg/icons.svg?url";
 import demoRouteUrl from "./assets/demo/getting-started-route.json?url";
+import { createModeController } from "./app/modeController";
+import { applyLiveButtonState } from "./live/liveDomAdapter";
+import { LiveActionGate, LivePendingBuffer, LiveWebSocketClient, StreamingDurationTracker, stripToTag } from "./live/liveCore";
+import { LiveConsoleBuffer } from "./live/liveConsole";
+import { createPoseStore } from "./state/poseStore";
 
 const isWindowsPlatform = typeof navigator === "object" && /Windows/.test(navigator.userAgent);
 const isTauriRuntime = typeof window === "object" && !!window.__TAURI_INTERNALS__;
@@ -576,124 +582,6 @@ function getValidFieldKey(fieldKey) {
   return visibleFields[0]?.key || DEFAULT_FIELD_KEY;
 }
 
-function createPoseStore(initialCapacity = 1024) {
-  let capacity = Math.max(16, Number(initialCapacity) || 16);
-  let length = 0;
-
-  let tValues = new Float64Array(capacity);
-  let xValues = new Float32Array(capacity);
-  let yValues = new Float32Array(capacity);
-  let thetaValues = new Float32Array(capacity);
-  let lVelValues = new Float32Array(capacity);
-  let rVelValues = new Float32Array(capacity);
-  let speedRawValues = new Float32Array(capacity);
-  let speedNormValues = new Float32Array(capacity);
-
-  const readNullable = (value) => (Number.isNaN(value) ? null : value);
-  const writeNullable = (value) => (typeof value === "number" && Number.isFinite(value)) ? value : Number.NaN;
-
-  function grow(nextLength) {
-    if (nextLength <= capacity) return;
-    while (capacity < nextLength) capacity *= 2;
-
-    const nextT = new Float64Array(capacity);
-    const nextX = new Float32Array(capacity);
-    const nextY = new Float32Array(capacity);
-    const nextTheta = new Float32Array(capacity);
-    const nextLVel = new Float32Array(capacity);
-    const nextRVel = new Float32Array(capacity);
-    const nextSpeedRaw = new Float32Array(capacity);
-    const nextSpeedNorm = new Float32Array(capacity);
-
-    nextT.set(tValues.subarray(0, length));
-    nextX.set(xValues.subarray(0, length));
-    nextY.set(yValues.subarray(0, length));
-    nextTheta.set(thetaValues.subarray(0, length));
-    nextLVel.set(lVelValues.subarray(0, length));
-    nextRVel.set(rVelValues.subarray(0, length));
-    nextSpeedRaw.set(speedRawValues.subarray(0, length));
-    nextSpeedNorm.set(speedNormValues.subarray(0, length));
-
-    tValues = nextT;
-    xValues = nextX;
-    yValues = nextY;
-    thetaValues = nextTheta;
-    lVelValues = nextLVel;
-    rVelValues = nextRVel;
-    speedRawValues = nextSpeedRaw;
-    speedNormValues = nextSpeedNorm;
-  }
-
-  function getPose(index) {
-    if (!Number.isInteger(index) || index < 0 || index >= length) return undefined;
-    return {
-      t: readNullable(tValues[index]),
-      x: xValues[index],
-      y: yValues[index],
-      theta: thetaValues[index],
-      l_vel: readNullable(lVelValues[index]),
-      r_vel: readNullable(rVelValues[index]),
-      speed_raw: speedRawValues[index],
-      speed_norm: speedNormValues[index],
-    };
-  }
-
-  function pushPose(pose) {
-    if (!pose) return length;
-    grow(length + 1);
-
-    tValues[length] = writeNullable(pose.t);
-    xValues[length] = Number(pose.x) || 0;
-    yValues[length] = Number(pose.y) || 0;
-    thetaValues[length] = Number(pose.theta) || 0;
-    lVelValues[length] = writeNullable(pose.l_vel);
-    rVelValues[length] = writeNullable(pose.r_vel);
-    speedRawValues[length] = Number(pose.speed_raw) || 0;
-    speedNormValues[length] = Number(pose.speed_norm) || 0;
-
-    length += 1;
-    return length;
-  }
-
-  function clear() {
-    length = 0;
-  }
-
-  function mapPoses(callback, thisArg) {
-    const out = new Array(length);
-    for (let i = 0; i < length; i += 1) {
-      out[i] = callback.call(thisArg, getPose(i), i, proxy);
-    }
-    return out;
-  }
-
-  function setSpeedNorm(index, value) {
-    if (!Number.isInteger(index) || index < 0 || index >= length) return;
-    speedNormValues[index] = Number(value) || 0;
-  }
-
-  const api = {
-    push: pushPose,
-    clear,
-    map: mapPoses,
-    setSpeedNorm,
-    toArray: () => mapPoses((pose) => pose),
-    [Symbol.iterator]: function* poseIterator() {
-      for (let i = 0; i < length; i += 1) yield getPose(i);
-    },
-  };
-
-  const proxy = new Proxy(api, {
-    get(target, prop, receiver) {
-      if (prop === "length") return length;
-      if (typeof prop === "string" && /^\d+$/.test(prop)) return getPose(Number(prop));
-      return Reflect.get(target, prop, receiver);
-    },
-  });
-
-  return proxy;
-}
-
 // Raw poses are stored in FILE units; we convert to inches for rendering.
 // Fields: t, x, y, theta, l_vel, r_vel, speed_raw, speed_norm
 let rawPoses = createPoseStore();
@@ -776,7 +664,39 @@ let panStart = { x: 0, y: 0, panX: 0, panY: 0 };
 let suppressNextClick = false;
 let panDelta = 0;
 
-let appMode = "viewing";
+const modeController = createModeController({
+  initialMode: "viewing",
+  onModeChange: (mode) => {
+    document.body.classList.toggle("mode-planning", mode === "planning");
+    if (mode === "planning" && playing) pause();
+    if (mode === "viewing" && planPlaying) planPause();
+    planSetSelection([]);
+    if (modeViewingBtn) {
+      const active = mode === "viewing";
+      modeViewingBtn.classList.toggle("isActive", active);
+      modeViewingBtn.setAttribute("aria-selected", active ? "true" : "false");
+    }
+    if (modePlanningBtn) {
+      const active = mode === "planning";
+      modePlanningBtn.classList.toggle("isActive", active);
+      modePlanningBtn.setAttribute("aria-selected", active ? "true" : "false");
+    }
+    updateFieldLayout(true);
+    resizeTimeline();
+    resizePlanningTimeline();
+    renderPlanList();
+    updatePlanControls();
+    setPlanDist(planPlayDist);
+    void captureTelemetry("mode_changed", {
+      version: APP_VERSION,
+      mode,
+    }, { debounceMs: 700 });
+  },
+});
+
+function getAppMode() {
+  return modeController.getMode();
+}
 
 // -------- planning --------
 let planWaypoints = []; // {x,y} in inches
@@ -1160,7 +1080,7 @@ function planStatesEqual(a, b) {
 }
 
 function pushPlanUndo() {
-  if (appMode !== "planning" || planUndoApplying) return;
+  if (getAppMode() !== "planning" || planUndoApplying) return;
   const snap = clonePlanState();
   const last = planUndoStack[planUndoStack.length - 1];
   if (last && planStatesEqual(last, snap)) return;
@@ -1182,7 +1102,7 @@ function applyPlanState(state) {
 }
 
 function planUndo() {
-  if (appMode !== "planning") return;
+  if (getAppMode() !== "planning") return;
   if (!planUndoStack.length) return;
   planRedoStack.push(clonePlanState());
   const prev = planUndoStack.pop();
@@ -1190,7 +1110,7 @@ function planUndo() {
 }
 
 function planRedo() {
-  if (appMode !== "planning") return;
+  if (getAppMode() !== "planning") return;
   if (!planRedoStack.length) return;
   planUndoStack.push(clonePlanState());
   const next = planRedoStack.pop();
@@ -1340,7 +1260,7 @@ function setPlanDist(d) {
 
 function updatePlanControls() {
   if (btnPlay) {
-    if (appMode === "planning") btnPlay.disabled = planWaypoints.length < 2;
+    if (getAppMode() === "planning") btnPlay.disabled = planWaypoints.length < 2;
     else btnPlay.disabled = rawPoses.length < 2;
   }
   if (btnPlanCopyCode) btnPlanCopyCode.disabled = planWaypoints.length === 0;
@@ -1935,13 +1855,13 @@ function buildFieldPlanNodeMarkers() {
     const nx = -ty;
     const ny = tx;
     const segStartDist = distances[bucketIndex - 1] ?? 0;
-    const markerLongPx = appMode === "planning"
+    const markerLongPx = getAppMode() === "planning"
       ? Math.max(8, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_LONG, PLAN_FIELD_NODE_MARKER_LONG_MAX_IN))
       : Math.min(
         PLAN_FIELD_NODE_VIEWING_MAX_IN * scale,
         Math.max(8, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_LONG, PLAN_FIELD_NODE_MARKER_LONG_MAX_IN)),
       );
-    const waypointRadiusPx = appMode === "planning"
+    const waypointRadiusPx = getAppMode() === "planning"
       ? Math.min(PLAN_POINT_R, PLAN_MARKER_MAX_IN * scale)
       : Math.min(PLAN_OVERLAY_POINT_R, PLAN_MARKER_MAX_IN_VIEWING * scale);
     const startClearanceDist = Math.min(len, (waypointRadiusPx + markerLongPx * 0.3 + 1.5) / Math.max(scale, 0.0001));
@@ -3014,8 +2934,8 @@ function planThetaHandlePos(i) {
   if (!p) return null;
   const sp = worldToScreen(p.x, p.y);
   const theta = fieldHeadingToScreenDeg(planThetaDegAt(i)) * Math.PI / 180;
-  const baseR = appMode !== "planning" ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
-  const r = appMode === "viewing"
+  const baseR = getAppMode() !== "planning" ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
+  const r = getAppMode() === "viewing"
     ? Math.min(baseR, PLAN_MARKER_MAX_IN_VIEWING * scale)
     : Math.min(baseR, PLAN_MARKER_MAX_IN * scale);
   const handleOffset = PLAN_THETA_HANDLE_OFFSET * Math.max(viewZoom, CANVAS_ZOOM_MIN);
@@ -3079,8 +2999,8 @@ function isPointInFieldBounds(point) {
 }
 
 function drawPlanningOverlay(force = false) {
-  if (!force && appMode !== "planning") return;
-  if (appMode !== "planning" && !planOverlayVisible) return;
+  if (!force && getAppMode() !== "planning") return;
+  if (getAppMode() !== "planning" && !planOverlayVisible) return;
   if (!planWaypoints.length) return;
 
   ctx.save();
@@ -3098,7 +3018,7 @@ function drawPlanningOverlay(force = false) {
   }
   ctx.stroke();
 
-  if (appMode === "planning" || (appMode !== "planning" && planOverlayVisible)) {
+  if (getAppMode() === "planning" || (getAppMode() !== "planning" && planOverlayVisible)) {
     const markers = buildFieldPlanNodeMarkers();
     for (const marker of markers) {
       const sp = worldToScreen(marker.x, marker.y);
@@ -3110,9 +3030,9 @@ function drawPlanningOverlay(force = false) {
       const thickRaw = Math.max(3, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_THICK, PLAN_FIELD_NODE_MARKER_THICK_MAX_IN));
       const tickLenRaw = Math.max(10, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_TICK_LEN, PLAN_FIELD_NODE_TICK_MAX_IN));
       const viewingCapPx = PLAN_FIELD_NODE_VIEWING_MAX_IN * scale;
-      const longLen = appMode === "planning" ? longLenRaw : Math.min(viewingCapPx, longLenRaw);
-      const thick = appMode === "planning" ? thickRaw : Math.min(viewingCapPx, thickRaw);
-      const tickLen = appMode === "planning" ? tickLenRaw : Math.min(viewingCapPx, tickLenRaw);
+      const longLen = getAppMode() === "planning" ? longLenRaw : Math.min(viewingCapPx, longLenRaw);
+      const thick = getAppMode() === "planning" ? thickRaw : Math.min(viewingCapPx, thickRaw);
+      const tickLen = getAppMode() === "planning" ? tickLenRaw : Math.min(viewingCapPx, tickLenRaw);
       const color = marker.object.color || getDefaultPlanObjectColor();
       const isSelected = planSelectedNodeId === marker.node.id;
       const isHover = planFieldHoverNodeId === marker.node.id;
@@ -3156,10 +3076,10 @@ function drawPlanningOverlay(force = false) {
     const p = planWaypoints[i];
     const sp = worldToScreen(p.x, p.y);
     const isSel = planSelectedSet.has(i);
-    const baseR = (appMode !== "planning") ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
+    const baseR = (getAppMode() !== "planning") ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
     
     let r = 0;
-    if (appMode === "viewing") r = Math.min(baseR, PLAN_MARKER_MAX_IN_VIEWING * scale);
+    if (getAppMode() === "viewing") r = Math.min(baseR, PLAN_MARKER_MAX_IN_VIEWING * scale);
     else r = Math.min(baseR, PLAN_MARKER_MAX_IN * scale);
 
     ctx.beginPath();
@@ -3184,7 +3104,7 @@ function drawPlanningOverlay(force = false) {
     ctx.restore();
 
     if (isSel) {
-      if (appMode === "viewing") var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN_VIEWING * scale);
+      if (getAppMode() === "viewing") var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN_VIEWING * scale);
       else var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN * scale);
 
       const handleOffset = PLAN_THETA_HANDLE_OFFSET * Math.max(viewZoom, CANVAS_ZOOM_MIN);
@@ -3225,32 +3145,7 @@ function drawPlanningOverlay(force = false) {
 }
 
 function setMode(mode) {
-  appMode = (mode === "planning") ? "planning" : "viewing";
-  document.body.classList.toggle("mode-planning", appMode === "planning");
-  if (appMode === "planning" && playing) pause();
-  if (appMode === "viewing" && planPlaying) planPause();
-  planSetSelection([]);
-  if (modeViewingBtn) {
-    const active = appMode === "viewing";
-    modeViewingBtn.classList.toggle("isActive", active);
-    modeViewingBtn.setAttribute("aria-selected", active ? "true" : "false");
-  }
-  if (modePlanningBtn) {
-    const active = appMode === "planning";
-    modePlanningBtn.classList.toggle("isActive", active);
-    modePlanningBtn.setAttribute("aria-selected", active ? "true" : "false");
-  }
-  updateFieldLayout(true);
-  resizeTimeline();
-  resizePlanningTimeline();
-  renderPlanList();
-  updatePlanControls();
-  setPlanDist(planPlayDist);
-  void captureTelemetry("mode_changed", {
-    version: APP_VERSION,
-    mode: appMode,
-  }, { debounceMs: 700 }
-  );
+  modeController.setMode(mode === "planning" ? "planning" : "viewing");
 }
 
 
@@ -6366,7 +6261,7 @@ function waypointByIdLike(id) {
 }
 
 function selectedWaypointForOverlay() {
-  if (appMode !== "viewing") return null;
+  if (getAppMode() !== "viewing") return null;
   const filter = waypointFilterValue();
   const overlayWaypointId = (filter !== "all" && filter !== "active")
     ? filter
@@ -6638,7 +6533,7 @@ function currentDisplayPose() {
 function draw() {
   drawField();
   drawAxes();
-  if (appMode === "viewing") {
+  if (getAppMode() === "viewing") {
     drawPath();
     drawWaypointDots();
     drawWatchDots();
@@ -6823,7 +6718,7 @@ function drawTimeline() {
 
 function drawPlanningTimeline() {
   if (!planningTimelineCanvas || !pctx) return;
-  if (appMode !== "planning") return;
+  if (getAppMode() !== "planning") return;
   const rect = planningTimelineCanvas.getBoundingClientRect();
   const W = rect.width, H = rect.height;
   const layout = getCurrentPlanTimelineLayout();
@@ -7210,7 +7105,7 @@ canvas.addEventListener("wheel", (e) => {
 }, { passive: false });
 
 canvas.addEventListener("pointerdown", (e) => {
-  if (appMode === "planning") {
+  if (getAppMode() === "planning") {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
@@ -7318,7 +7213,7 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 
 canvas.addEventListener("pointermove", (e) => {
-  if (appMode === "planning") {
+  if (getAppMode() === "planning") {
     if (planThetaDragging && planPointerId === e.pointerId) {
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
@@ -7388,7 +7283,7 @@ canvas.addEventListener("pointermove", (e) => {
 });
 
 function endPan(e) {
-  if (appMode === "planning") {
+  if (getAppMode() === "planning") {
     if (planThetaDragging && (planPointerId === e.pointerId || planPointerId == null)) {
       planThetaDragging = false;
       planThetaDragIdx = -1;
@@ -7427,7 +7322,7 @@ function endPan(e) {
 canvas.addEventListener("pointerup", endPan);
 canvas.addEventListener("pointercancel", endPan);
 canvas.addEventListener("contextmenu", (e) => {
-  if (appMode === "planning") e.preventDefault();
+  if (getAppMode() === "planning") e.preventDefault();
 });
 
 // -------- track hover/lock --------
@@ -7672,7 +7567,7 @@ function isInsideTimelineC(cursor) {
   const y = (typeof cursor.clientY === "number") ? cursor.clientY : cursor.y;
   if (typeof x !== "number" || typeof y !== "number") return false;
 
-  const isPlanning = appMode === "planning";
+  const isPlanning = getAppMode() === "planning";
   const canvasEl = isPlanning ? planningTimelineCanvas : timelineCanvas;
   if (!canvasEl) return false;
   if (!isPlanning && timelineBar?.classList.contains("isCollapsed")) return false;
@@ -7769,7 +7664,7 @@ if (planningTimelineCanvas) {
     setPlanDist(planDistFromX(x));
   };
   planningTimelineCanvas.addEventListener("pointerdown", (e) => {
-    if (appMode !== "planning") return;
+    if (getAppMode() !== "planning") return;
     planScrubbing = true;
     planningTimelineCanvas.setPointerCapture(e.pointerId);
     onPlanScrub(e);
@@ -7794,7 +7689,7 @@ canvas.addEventListener("mousemove", (e) => {
 });
 
 canvas.addEventListener("mousemove", (e) => {
-  if (appMode === "planning") {
+  if (getAppMode() === "planning") {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
@@ -7864,7 +7759,7 @@ canvas.addEventListener("mousemove", (e) => {
 
 canvas.addEventListener("mouseleave", () => {
   setCursorPills("Cursor: —");
-  if (appMode === "planning") {
+  if (getAppMode() === "planning") {
     const hadHover = planFieldHoverNodeId != null;
     planFieldHoverNodeId = null;
     hidePlanNodeTooltip({ immediate: true });
@@ -7886,7 +7781,7 @@ canvas.addEventListener("mouseleave", () => {
 });
 
 canvas.addEventListener("click", (e) => {
-  if (appMode === "planning") return;
+  if (getAppMode() === "planning") return;
   if (!data) return;
   if (suppressNextClick) { suppressNextClick = false; return; }
 
@@ -7965,7 +7860,7 @@ canvas.addEventListener("click", (e) => {
 });
 
 canvas.addEventListener("dblclick", (e) => {
-  if (appMode !== "planning") return;
+  if (getAppMode() !== "planning") return;
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
@@ -7994,50 +7889,35 @@ const btnLeftConnectEl = document.getElementById("btnLeftConnect");
 const btnLeftRefreshEl = document.getElementById("btnLeftRefresh");
 const leftRefreshIntervalEl = document.getElementById("leftRefreshInterval");
 
-let leftWs = null;
 let leftConnected = false;
 let leftStreaming = false;
-let leftActionInFlight = false;
-let leftActionLastAt = 0;
-const LEFT_ACTION_COOLDOWN_MS = 400;
-let leftActionTimeout = null;
-
-let streamingSessionMs = 0; // Current session
-let streamingAccumulatedMs = 0; // Lifetime
-let streamingStartMs = null;
+const liveSocket = new LiveWebSocketClient();
+const livePendingBuffer = new LivePendingBuffer();
+const liveConsole = new LiveConsoleBuffer(liveWinEl);
+const streamingDurationTracker = new StreamingDurationTracker();
+const liveActionGate = new LiveActionGate(400, 6000, () => {
+  setLeftUi();
+  liveAppendLine("[UI] Action timed out; UI unlocked.");
+});
 
 function startStreamingTimer() {
-  if (streamingStartMs == null) {
-    streamingStartMs = performance.now();
-  }
+  streamingDurationTracker.start();
 }
 
 function stopStreamingTimer() {
-  if (streamingStartMs != null) {
-    streamingSessionMs += performance.now() - streamingStartMs;
-    streamingAccumulatedMs += performance.now() - streamingStartMs;
-    streamingStartMs = null;
-  }
+  streamingDurationTracker.stop();
 }
 
 function getStreamingDurationSeconds() {
-  let totalMs = streamingSessionMs;
-  if (streamingStartMs != null) {
-    totalMs += performance.now() - streamingStartMs;
-  }
-  return Math.round(totalMs / 1000);
+  return streamingDurationTracker.sessionSeconds();
 }
 
 function resetStreamingTimer() {
-  streamingSessionMs = 0;
-  streamingStartMs = null;
+  streamingDurationTracker.resetSession();
 }
 
 function consumeStreamingDurationSeconds() {
-  stopStreamingTimer();
-  const seconds = getStreamingDurationSeconds();
-  resetStreamingTimer();
-  return seconds;
+  return streamingDurationTracker.consumeSessionSeconds();
 }
 
 async function reportStreamingDuration() {
@@ -8050,18 +7930,7 @@ async function reportStreamingDuration() {
 }
 
 function setLeftActionInFlight(v) {
-  leftActionInFlight = v;
-  if (leftActionTimeout) {
-    clearTimeout(leftActionTimeout);
-    leftActionTimeout = null;
-  }
-  if (v) {
-    leftActionTimeout = setTimeout(() => {
-      leftActionInFlight = false;
-      setLeftUi();
-      liveAppendLine("[UI] Action timed out; UI unlocked.");
-    }, 6000);
-  }
+  liveActionGate.setInFlight(v);
 }
 
 function withTimeout(promise, ms, label) {
@@ -8084,12 +7953,6 @@ let leftRefreshMs = parseInt(leftRefreshIntervalEl?.value || "500", 10) || 500;
 
 // --- Live incremental processing ---
 // Buffer incoming WS lines; doLeftRefresh consumes them and updates poses/watches.
-let livePendingLines = [];
-let livePendingConsumed = 0; // index into livePendingLines
-let liveAppendQueue = [];
-let liveAppendScheduled = false;
-let liveWinRaw = "";
-
 // Track how much we"ve already integrated into rawPoses/watches
 let liveLastPoseT = null; // last pose timestamp integrated
 let liveLastPoseCount = 0;
@@ -8105,9 +7968,7 @@ function dbgLive(msg) {
 }
 
 function clearLivePending() {
-  if (livePendingLines.length === 0) return;
-  livePendingLines = [];
-  livePendingConsumed = 0;
+  livePendingBuffer.clear();
 }
 
 function parseLiveLineIntoState(line) {
@@ -8246,116 +8107,12 @@ function parseLiveLineIntoState(line) {
   return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
 }
 
-function flushLiveAppend() {
-  liveAppendScheduled = false;
-  if (!liveWinEl || liveAppendQueue.length === 0) return;
-
-  const nearBottom =
-    (liveWinEl.scrollTop + liveWinEl.clientHeight >= liveWinEl.scrollHeight - 12);
-
-  liveWinRaw += liveAppendQueue.join("");
-  liveAppendQueue = [];
-
-  // keep it responsive (basic cap)
-  const MAX_CHARS = 50_000;
-  if (liveWinRaw.length > MAX_CHARS) {
-    liveWinRaw = liveWinRaw.slice(liveWinRaw.length - MAX_CHARS);
-  }
-  // keep last ~2000 lines for perf
-  const MAX_LINES = 2000;
-  const lines = liveWinRaw.split("\n");
-  if (lines.length > MAX_LINES) {
-    liveWinRaw = lines.slice(lines.length - MAX_LINES).join("\n");
-  }
-
-  liveWinEl.innerHTML = ansiToHtml(liveWinRaw);
-
-  // only autoscroll if user was already at bottom
-  if (nearBottom) liveWinEl.scrollTop = liveWinEl.scrollHeight;
-}
-
 function liveAppendLine(s) {
-  if (!liveWinEl) return;
-  const trimmed = (s.endsWith("\n") || s.endsWith("\r\n")) ? s : (s + "\n");
-  liveAppendQueue.push(trimmed);
-  if (!liveAppendScheduled) {
-    liveAppendScheduled = true;
-    requestAnimationFrame(flushLiveAppend);
-  }
-}
-
-function mvEscapeHtml(str) {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/"/g, "&#39;");
-}
-
-function ansiToHtml(text) {
-  const fg = {
-    30: "#000000", 31: "#d9534f", 32: "#5cb85c", 33: "#f0ad4e",
-    34: "#5bc0de", 35: "#c678dd", 36: "#46b8da", 37: "#e9eef7",
-    90: "#8a8f98", 91: "#ff6b6b", 92: "#6dd96c", 93: "#ffd66b",
-    94: "#63b3ff", 95: "#e09bff", 96: "#76e4f7", 97: "#f8fbff",
-  };
-  const bg = {
-    40: "#000000", 41: "#d9534f", 42: "#5cb85c", 43: "#f0ad4e",
-    44: "#5bc0de", 45: "#c678dd", 46: "#46b8da", 47: "#e9eef7",
-    100: "#2b2d31", 101: "#ff6b6b", 102: "#6dd96c", 103: "#ffd66b",
-    104: "#63b3ff", 105: "#e09bff", 106: "#76e4f7", 107: "#f8fbff",
-  };
-
-  let cur = { fg: null, bg: null, bold: false };
-  let out = "";
-  let last = 0;
-  const re = /\u001b\[(\d+(?:;\d+)*)m/g;
-
-  function span(txt, style) {
-    if (!txt) return "";
-    const body = mvEscapeHtml(txt).replace(/\n/g, "<br>");
-    const css = [];
-    if (style.bold) css.push("font-weight:700");
-    if (style.fg) css.push(`color:${style.fg}`);
-    if (style.bg) css.push(`background-color:${style.bg}`);
-    if (!css.length) return body;
-    return `<span style="${css.join(";")}">${body}</span>`;
-  }
-
-  let m;
-  while ((m = re.exec(text)) !== null) {
-    const chunk = text.slice(last, m.index);
-    out += span(chunk, cur);
-    last = re.lastIndex;
-    const codes = m[1].split(";").map((n) => Number(n) || 0);
-    for (const c of codes) {
-      if (c === 0) { cur = { fg: null, bg: null, bold: false }; continue; }
-      if (c === 1) { cur.bold = true; continue; }
-      if (fg[c]) { cur.fg = fg[c]; continue; }
-      if (bg[c]) { cur.bg = bg[c]; continue; }
-    }
-  }
-  out += span(text.slice(last), cur);
-  return out;
+  liveConsole.appendLine(String(s));
 }
 
 function resetLiveWin() {
-  liveWinRaw = "";
-  if (liveWinEl) liveWinEl.innerHTML = "";
-}
-
-function stripToTag(line) {
-  // Accept library-prefixed lines like: "[28.08] [INFO]: [POSE],..."
-  const iData = line.indexOf("[POSE]");
-  const iWatch = line.indexOf("[WATCH]");
-  const iLog = line.indexOf("[LOG]");
-  const iWaypoint = line.indexOf("[WPOINT]");
-  const indices = [iData, iWatch, iLog, iWaypoint].filter((idx) => idx >= 0);
-  const i = indices.length ? Math.min(...indices) : -1;
-
-  if (i < 0) return "";
-  return line.slice(i).trim();
+  liveConsole.reset();
 }
 
 function parseWaypointLine(s) {
@@ -8400,66 +8157,29 @@ function parseWaypointLine(s) {
 }
 
 function setLeftUi() {
-  if (btnLeftConnect) {
-    btnLeftConnect.classList.toggle("isOn", leftConnected);
-    btnLeftConnect.textContent = leftConnected ? "Disconnect" : "Connect";
-    btnPlay.disabled = leftConnected;
-    btnFile.disabled = leftConnected;
-    updateConnectButtonState();
-  }
-
-  if (btnExport) {
-    updateExportButtonAvailability();
-  }
-
-  if (btnLeftStop) {
-    btnLeftStop.disabled = !leftConnected || leftActionInFlight;
-    if (!leftConnected) {
-      btnLeftStop.title = "Starts streaming. Connect to start.";
-      btnLeftStop.textContent = "Start";
-      btnLeftStop.classList.remove("isOn");
-    } else {
-      btnLeftStop.title = leftStreaming
-        ? "Stop streaming. Cmd/Ctrl+Click to force kill."
-        : "Starts streaming.";
-      btnLeftStop.textContent = leftStreaming ? "Stop" : "Start";
-      btnLeftStop.classList.toggle("isOn", leftStreaming);
-    }
-  }
-
-  if (btnLeftRefreshEl) {
-    btnLeftRefreshEl.disabled = !leftConnected || leftActionInFlight;
-  }
+  applyLiveButtonState({
+    connectButton: btnLeftConnect,
+    startStopButton: btnLeftStop,
+    refreshButton: btnLeftRefreshEl,
+    playButton: btnPlay,
+    fileButton: btnFile,
+  }, {
+    connected: leftConnected,
+    streaming: leftStreaming,
+    actionInFlight: liveActionGate.active,
+  });
+  updateConnectButtonState();
+  updateExportButtonAvailability();
 }
 
 function leftSetUI(reason) {
   setLeftUi();
   if (window.__live) { window.__live.connected = !!leftConnected; window.__live.streaming = !!leftStreaming; }
-  // Connect button state
-  if (btnLeftConnectEl) {
-    btnLeftConnectEl.classList.toggle("isOn", !!leftConnected);
-    btnLeftConnectEl.title = leftConnected ? "Disconnect" : "Connect";
-    btnLeftConnectEl.disabled = leftActionInFlight || btnLeftConnectEl.disabled;
-  }
-
-  // Start/Stop toggle state (this is btnLeftStop)
-  if (btnLeftStopEl) {
-    btnLeftStopEl.textContent = leftStreaming ? "Stop" : "Start";
-    btnLeftStopEl.disabled = !leftConnected || leftActionInFlight;
-    btnLeftStopEl.title = leftConnected
-      ? (leftStreaming ? "Stop streaming" : "Starts streaming.")
-      : "Starts streaming. Connect to start.";
-  }
-
   if (reason) liveAppendLine(`[UI] ${reason}`);
 }
 
 function canRunLeftAction() {
-  const now = Date.now();
-  if (leftActionInFlight) return false;
-  if (now - leftActionLastAt < LEFT_ACTION_COOLDOWN_MS) return false;
-  leftActionLastAt = now;
-  return true;
+  return liveActionGate.canRun();
 }
 
 async function apiPost(path, timeoutMs = 5000) {
@@ -8522,58 +8242,46 @@ async function connectLeft() {
     await stopStreaming(false, false);
   }
 
-  if (leftWs) return;
-  leftWs = new WebSocket(`${WS_ORIGIN}/ws`);
-
-  leftWs.addEventListener("open", () => {
-    leftConnected = true;
-    leftSetUI("Connected");
-    startLeftRefresh();
-  });
-
-  leftWs.addEventListener("message", (ev) => {
-    const raw = (typeof ev.data === "string") ? ev.data : "";
-    const trimmed = stripToTag(raw);
-    const isStreamData = !!trimmed;
-    if (trimmed) {
-      livePendingLines.push(trimmed);
-      // cap pending buffer to avoid unbounded growth
-      const MAX_PENDING = 12_000;
-      if (livePendingLines.length > MAX_PENDING) {
-        const drop = livePendingLines.length - MAX_PENDING;
-        livePendingLines.splice(0, drop);
-        livePendingConsumed = Math.max(0, livePendingConsumed - drop);
+  if (liveSocket.connected) return;
+  liveSocket.connect(`${WS_ORIGIN}/ws`, {
+    onOpen: () => {
+      leftConnected = true;
+      leftSetUI("Connected");
+      startLeftRefresh();
+    },
+    onMessage: (raw) => {
+      const trimmed = stripToTag(raw);
+      const isStreamData = !!trimmed;
+      if (trimmed) {
+        livePendingBuffer.push(trimmed);
       }
-    }
 
-    if (!isStreamData) {
-      liveAppendLine("\x1b[31m|\x1b[0m " + raw);
-    } else {
-      const malformedWaypoint = parseWaypointLine(trimmed).malformed;
-      if (!malformedWaypoint) {
-        liveAppendLine("\x1b[32m|\x1b[0m " + raw);
-      } else {
+      if (!isStreamData) {
         liveAppendLine("\x1b[31m|\x1b[0m " + raw);
+      } else {
+        const malformedWaypoint = parseWaypointLine(trimmed).malformed;
+        if (!malformedWaypoint) {
+          liveAppendLine("\x1b[32m|\x1b[0m " + raw);
+        } else {
+          liveAppendLine("\x1b[31m|\x1b[0m " + raw);
+        }
       }
-    }
-  });
-
-  leftWs.addEventListener("close", () => {
-    const wasStreaming = leftStreaming;
-    leftWs = null;
-    leftConnected = false;
-    leftStreaming = false;
-    if (wasStreaming) reportStreamingDuration();
-    else resetStreamingTimer();
-    if (window.__live) { window.__live.connected = false; window.__live.streaming = false; }
-    stopLeftRefresh();
-    leftSetUI("Disconnected");
-    dbgLive("ws: close");
-  });
-
-  leftWs.addEventListener("error", () => {
-    // Errors often precede close; keep it gentle.
-    liveAppendLine("[WS] error");
+    },
+    onClose: () => {
+      const wasStreaming = leftStreaming;
+      leftConnected = false;
+      leftStreaming = false;
+      if (wasStreaming) reportStreamingDuration();
+      else resetStreamingTimer();
+      if (window.__live) { window.__live.connected = false; window.__live.streaming = false; }
+      stopLeftRefresh();
+      leftSetUI("Disconnected");
+      dbgLive("ws: close");
+    },
+    onError: () => {
+      // Errors often precede close; keep it gentle.
+      liveAppendLine("[WS] error");
+    },
   });
 
   leftSetUI("Connecting...");
@@ -8585,10 +8293,7 @@ async function disconnectLeft() {
   if (wasStreaming) {
     await stopStreaming(false, false);
   }
-  if (leftWs) {
-    try { leftWs.close(); } catch (e) { }
-  }
-  leftWs = null;
+  liveSocket.close();
   leftConnected = false;
   leftStreaming = false;
   if (wasStreaming) reportStreamingDuration();
@@ -8631,9 +8336,8 @@ async function doLeftRefresh() {
     data = { poses: [], watches: [], logs: [], waypoints: [], meta: {} };
   }
 
-  const startIdx = livePendingConsumed;
-  const endIdx = livePendingLines.length;
-  if (startIdx >= endIdx) {
+  const batch = livePendingBuffer.batch();
+  if (!batch) {
     // Nothing new; still ensure we snap to latest if appropriate
     if (liveAutoFollowHead && rawPoses.length && hoverTimelineTime == null && !playing && !trackLockActive && !(trackHover && (trackHover.pose || trackHover.t))) {
       selectedIndex = rawPoses.length - 1;
@@ -8650,14 +8354,14 @@ async function doLeftRefresh() {
   let logsAdded = 0;
   let waypointsAdded = 0;
 
-  for (let i = startIdx; i < endIdx; i++) {
-    const r = parseLiveLineIntoState(livePendingLines[i]);
+  for (let i = batch.startIndex; i < batch.endIndex; i++) {
+    const r = parseLiveLineIntoState(batch.lines[i]);
     posesAdded += r.posesAdded;
     watchesAdded += r.watchesAdded;
     logsAdded += r.logsAdded;
     waypointsAdded += r.waypointsAdded;
   }
-  livePendingConsumed = endIdx;
+  livePendingBuffer.markConsumed(batch.endIndex);
 
   const hasNewData = posesAdded > 0 || watchesAdded > 0 || logsAdded > 0 || waypointsAdded > 0;
   if (!hasNewData) return;
@@ -8711,19 +8415,19 @@ async function doLeftRefresh() {
   if (
     rawPoses.length !== liveLastPoseCount
     || watches.length !== liveLastWatchCount
-    || livePendingConsumed !== liveLastRenderAt
+    || livePendingBuffer.consumedIndex !== liveLastRenderAt
   ) {
     requestDrawAll();
     liveLastPoseCount = rawPoses.length;
     liveLastWatchCount = watches.length;
-    liveLastRenderAt = livePendingConsumed;
+    liveLastRenderAt = livePendingBuffer.consumedIndex;
   }
   scheduleSavedPathsSave();
 
   const t1 = performance.now();
   const dt = t1 - t0;
   if (dt > 100) {
-    dbgLive(`doLeftRefresh: ${formatNumberString(dt, 1, "0")}ms (poses=${rawPoses.length}, watches=${watches.length}, pending=${livePendingLines.length - livePendingConsumed})`);
+    dbgLive(`doLeftRefresh: ${formatNumberString(dt, 1, "0")}ms (poses=${rawPoses.length}, watches=${watches.length}, pending=${livePendingBuffer.pendingCount()})`);
   }
 }
 
@@ -8932,7 +8636,7 @@ function isPlanningTimelineCollapsed() {
   vSplit.addEventListener("mousedown", (e) => {
     draggingV = true;
     startX = e.clientX;
-    startW = (appMode === "planning") ? getRightSidebarWPlanning() : getRightSidebarWViewing();
+    startW = (getAppMode() === "planning") ? getRightSidebarWPlanning() : getRightSidebarWViewing();
     document.body.style.cursor = "col-resize";
     e.preventDefault();
   });
@@ -8979,7 +8683,7 @@ function isPlanningTimelineCollapsed() {
 
   if (planningTimelineSplit) {
     planningTimelineSplit.addEventListener("mousedown", (e) => {
-      if (appMode !== "planning") return;
+      if (getAppMode() !== "planning") return;
       draggingPlanningTimeline = true;
       startPlanningTimelineY = e.clientY;
       startPlanningTimelineH = getPlanningTimelineH();
@@ -8998,7 +8702,7 @@ function isPlanningTimelineCollapsed() {
 
   if (planSplit) {
     planSplit.addEventListener("mousedown", (e) => {
-      if (appMode !== "planning") return;
+      if (getAppMode() !== "planning") return;
       draggingPlanList = true;
       startPlanY = e.clientY;
       startPlanH = getPlanListH();
@@ -9034,10 +8738,10 @@ function isPlanningTimelineCollapsed() {
 
       if (next <= COLLAPSE_PX_SIDEBAR) {
         next = 0;
-        if (appMode === "planning") rightPlanningEl?.classList?.add("isCollapsed");
+        if (getAppMode() === "planning") rightPlanningEl?.classList?.add("isCollapsed");
         else rightViewingEl?.classList?.add("isCollapsed");
       } else {
-        if (appMode === "planning") {
+        if (getAppMode() === "planning") {
           rightPlanningEl?.classList?.remove("isCollapsed");
           layoutState.lastRightSidebarWPlanning = next;
         } else {
@@ -9045,7 +8749,7 @@ function isPlanningTimelineCollapsed() {
           layoutState.lastRightSidebarW = next;
         }
       }
-      if (appMode === "planning") setRightSidebarWPlanning(next);
+      if (getAppMode() === "planning") setRightSidebarWPlanning(next);
       else setRightSidebarWViewing(next);
       resizeCanvas();
       resizeTimeline();
@@ -9104,13 +8808,13 @@ function isPlanningTimelineCollapsed() {
       draggingPlanningTimeline = false;
       document.body.style.cursor = "";
       // If user re-expands from collapsed by dragging, restore visibility automatically
-      if (appMode === "planning") {
+      if (getAppMode() === "planning") {
         if (getRightSidebarWPlanning() > COLLAPSE_PX_SIDEBAR) rightPlanningEl?.classList?.remove("isCollapsed");
       } else {
         if (getRightSidebarWViewing() > COLLAPSE_PX_SIDEBAR) rightViewingEl?.classList?.remove("isCollapsed");
       }
       if (getTimelineH() > COLLAPSE_PX_TIMELINE) timelineBar.classList.remove("isCollapsed");
-      if (appMode === "planning" && !isPlanningTimelineCollapsed()) timelineBar?.classList?.remove("isCollapsed");
+      if (getAppMode() === "planning" && !isPlanningTimelineCollapsed()) timelineBar?.classList?.remove("isCollapsed");
       resizeCanvas();
       resizeTimeline();
       void saveSettings();
@@ -9135,7 +8839,7 @@ function isPlanningTimelineCollapsed() {
   });
 
   vSplit.addEventListener("dblclick", () => {
-    if (appMode === "planning") {
+    if (getAppMode() === "planning") {
       const cur = getRightSidebarWPlanning();
       if (cur <= COLLAPSE_PX_SIDEBAR) {
         setRightSidebarWPlanning(Math.max(1, layoutState.lastRightSidebarWPlanning || 360));
@@ -10631,7 +10335,7 @@ function isClientInsidePlanningSidebar(clientX, clientY) {
 }
 
 function hasValidPlanTimelineDropTarget() {
-  return !!planTimelineDropTarget && appMode === "planning" && planWaypoints.length >= 2;
+  return !!planTimelineDropTarget && getAppMode() === "planning" && planWaypoints.length >= 2;
 }
 
 function commitPlanTimelineDragTarget(context, target) {
@@ -11154,7 +10858,7 @@ function updateConnectButtonState() {
   if (!btnLeftConnect) return;
   // Connect button should be enabled only after the PROS dir has been validated,
   // unless we are already connected and need to allow disconnect.
-  btnLeftConnect.disabled = (!prosDirValid && !leftConnected) || leftActionInFlight;
+  btnLeftConnect.disabled = (!prosDirValid && !leftConnected) || liveActionGate.active;
 }
 
 // Robot image upload
@@ -11247,7 +10951,7 @@ document.addEventListener("pointercancel", () => {
 });
 
 btnPlay.addEventListener("click", () => {
-  if (appMode === "planning") {
+  if (getAppMode() === "planning") {
     if (planPlaying) planPause();
     else planPlay();
     requestDrawAll();
@@ -11386,7 +11090,7 @@ function bindPlanField(el, getter, setter) {
   el.addEventListener("focus", () => {
     // capture last known good value before edits
     el.dataset.lastValid = el.dataset.lastValid ?? String(getter());
-    if (appMode === "planning" && planSelected >= 0 && planSelected < planWaypoints.length && !el.dataset.undoSession) {
+    if (getAppMode() === "planning" && planSelected >= 0 && planSelected < planWaypoints.length && !el.dataset.undoSession) {
       pushPlanUndo();
       el.dataset.undoSession = "1";
     }
@@ -11529,7 +11233,7 @@ function clearAllPosesAndWatches() {
   liveLastPoseCount = 0;
   liveLastWatchCount = 0;
   liveLastRenderAt = 0;
-  try { livePendingLines = []; livePendingConsumed = 0; } catch { }
+  try { livePendingBuffer.clear(); } catch { }
   setImportedRouteMeta(null);
 
   if (typeof data === "object" && data) {
@@ -11556,12 +11260,12 @@ btnClearField?.addEventListener("click", (event) => {
     const clearAll = () => {
       clearAllPosesAndWatches();
       resetLiveWin();
-      if (appMode === "planning") pushPlanUndo();
+      if (getAppMode() === "planning") pushPlanUndo();
       clearPlanningModeData();
       requestDrawAll();
       setStatus("Cleared Field and Planned Path");
     };
-    if (appMode === "planning" && hasAnyPlanMethods()) {
+    if (getAppMode() === "planning" && hasAnyPlanMethods()) {
       openPlanDangerConfirmModal("Are you sure you want to clear the field and Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearAll);
       return;
     }
@@ -11569,7 +11273,7 @@ btnClearField?.addEventListener("click", (event) => {
     return;
   }
 
-  if (appMode === "planning") {
+  if (getAppMode() === "planning") {
     const clearPlanOnly = () => {
       pushPlanUndo();
       clearPlanningModeData();
@@ -11594,7 +11298,7 @@ document.addEventListener("keydown", (e) => {
   const isTypingTarget = (mouseTag === "input" || mouseTag === "textarea" || (e.target && e.target.isContentEditable));
   if (isTypingTarget && e.target !== liveWinEl) return;
 
-  if (appMode === "planning" && planSelectedNodeId && (e.key === "Backspace" || e.key === "Delete")) {
+  if (getAppMode() === "planning" && planSelectedNodeId && (e.key === "Backspace" || e.key === "Delete")) {
     const planTemplateOpen = planTemplateModal && planTemplateModal.style.display !== "none" && !planTemplateModal.hasAttribute("hidden");
     const planObjectDeleteOpen = planObjectDeleteModal && planObjectDeleteModal.style.display !== "none" && !planObjectDeleteModal.hasAttribute("hidden");
     if (!planTemplateOpen && !planObjectDeleteOpen) {
@@ -11624,7 +11328,7 @@ document.addEventListener("keydown", (e) => {
     }
 
     if (e.key === "r" || e.key === "R") {
-      if (appMode !== "viewing") return;
+      if (getAppMode() !== "viewing") return;
       e.preventDefault();
       btnLeftRefresh?.click();
       return;
@@ -11632,14 +11336,14 @@ document.addEventListener("keydown", (e) => {
 
     if (e.key === "c" || e.key === "C") {
       e.preventDefault();
-      if (appMode !== "viewing") return;
+      if (getAppMode() !== "viewing") return;
       if (leftConnected) void disconnectLeft();
       else void connectLeft();
       return;
     }
     if (e.key === "s" || e.key === "S") {
       e.preventDefault();
-      if (appMode !== "viewing") return;
+      if (getAppMode() !== "viewing") return;
 
       if (leftConnected) {
         if (!leftStreaming) void startStreaming();
@@ -11650,7 +11354,7 @@ document.addEventListener("keydown", (e) => {
 
     if (e.key === "k" || e.key === "K") {
       e.preventDefault();
-      if (appMode === "planning") {
+      if (getAppMode() === "planning") {
         const clearPlanOnly = () => {
           pushPlanUndo();
           clearPlanningModeData();
@@ -11677,7 +11381,7 @@ document.addEventListener("keydown", (e) => {
     const clearAll = () => {
       clearAllPosesAndWatches();
       resetLiveWin();
-      if (appMode === "planning") pushPlanUndo();
+      if (getAppMode() === "planning") pushPlanUndo();
       clearPlanningModeData();
       requestDrawAll();
       setStatus("Cleared Field and Planned Path");
@@ -11693,7 +11397,7 @@ document.addEventListener("keydown", (e) => {
   if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
     if (e.key === "p" || e.key === "P") {
       e.preventDefault();
-      if (appMode === "viewing" && btnTogglePlanOverlay) btnTogglePlanOverlay.click();
+      if (getAppMode() === "viewing" && btnTogglePlanOverlay) btnTogglePlanOverlay.click();
       return;
     }
 
@@ -11704,7 +11408,7 @@ document.addEventListener("keydown", (e) => {
 
     if (e.key === "g" || e.key === "G") {
       e.preventDefault();
-      if (appMode !== "viewing") return;
+      if (getAppMode() !== "viewing") return;
       toggleCurrentWatchGraphPanel();
       return;
     }
@@ -11722,7 +11426,7 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
-  if (appMode === "planning") {
+  if (getAppMode() === "planning") {
     if ((e.metaKey || e.ctrlKey) && !e.altKey) {
       if (!e.shiftKey && (e.key === "z" || e.key === "Z")) {
         e.preventDefault();
@@ -11868,7 +11572,7 @@ async function appExit() {
 
   await captureTelemetry("total_streaming_duration", {
     version: APP_VERSION,
-    duration: fmtNum(streamingAccumulatedMs / 1000, 1),
+    duration: fmtNum(streamingDurationTracker.accumulatedSeconds(), 1),
   });
 
   await captureTelemetry("livestream_metrics", {
