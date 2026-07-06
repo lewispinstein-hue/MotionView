@@ -905,13 +905,18 @@ function normalizePlanObjects(arr) {
 
 function normalizePlanNodes(arr) {
   if (!Array.isArray(arr)) return [];
-  return arr.map((node) => ({
-    id: (typeof node?.id === "string" && node.id.trim()) ? node.id.trim() : createPlanNodeId(),
-    objectId: typeof node?.objectId === "string" ? node.objectId : "",
-    methodId: typeof node?.methodId === "string" ? node.methodId : "",
-    beforeWaypoint: Math.max(0, Number(node?.beforeWaypoint) || 0),
-    index: Math.max(0, Number(node?.index) || 0),
-  }));
+  return arr.map((node) => {
+    const normalized = {
+      id: (typeof node?.id === "string" && node.id.trim()) ? node.id.trim() : createPlanNodeId(),
+      objectId: typeof node?.objectId === "string" ? node.objectId : "",
+      methodId: typeof node?.methodId === "string" ? node.methodId : "",
+      beforeWaypoint: Math.max(0, Number(node?.beforeWaypoint) || 0),
+      index: Math.max(0, Number(node?.index) || 0),
+    };
+    if (Object.prototype.hasOwnProperty.call(node || {}, "name")) normalized.name = typeof node.name === "string" ? node.name : "";
+    if (Object.prototype.hasOwnProperty.call(node || {}, "code")) normalized.code = typeof node.code === "string" ? node.code : "";
+    return normalized;
+  });
 }
 
 function getPlanObjectById(objectId) {
@@ -920,6 +925,56 @@ function getPlanObjectById(objectId) {
 
 function getPlanMethodById(objectId, methodId) {
   return getPlanObjectById(objectId)?.methods?.find((entry) => entry.id === methodId) || null;
+}
+
+function hasPlanNodeMethodOverride(node) {
+  return !!node && (
+    Object.prototype.hasOwnProperty.call(node, "name") ||
+    Object.prototype.hasOwnProperty.call(node, "code")
+  );
+}
+
+function getPlanNodeEffectiveMethod(node) {
+  if (!node) return null;
+  const method = getPlanMethodById(node.objectId, node.methodId);
+  if (!method) return null;
+  return {
+    name: Object.prototype.hasOwnProperty.call(node, "name") ? node.name : method.name,
+    code: Object.prototype.hasOwnProperty.call(node, "code") ? node.code : method.code,
+    hostName: method.name,
+    hostCode: method.code,
+    hasOverride: hasPlanNodeMethodOverride(node),
+  };
+}
+
+function setPlanNodeCodeOverride(node, codeValue) {
+  if (!node) return false;
+  const method = getPlanMethodById(node.objectId, node.methodId);
+  if (!method) return false;
+  const nextCode = String(codeValue || "");
+  const hadNameOverride = Object.prototype.hasOwnProperty.call(node, "name");
+  const hadCodeOverride = Object.prototype.hasOwnProperty.call(node, "code");
+  const currentCode = hadCodeOverride ? node.code : method.code;
+  const matchesHost = nextCode === String(method.code || "");
+  const changed = hadNameOverride || nextCode !== String(currentCode || "") || (hadCodeOverride && matchesHost);
+  if (!changed) return false;
+  delete node.name;
+  if (matchesHost) delete node.code;
+  else node.code = nextCode;
+  return true;
+}
+
+function serializePlanNode(node) {
+  const serialized = {
+    id: node.id,
+    objectId: node.objectId,
+    methodId: node.methodId,
+    beforeWaypoint: node.beforeWaypoint,
+    index: node.index,
+  };
+  if (Object.prototype.hasOwnProperty.call(node, "name")) serialized.name = node.name;
+  if (Object.prototype.hasOwnProperty.call(node, "code")) serialized.code = node.code;
+  return serialized;
 }
 
 function getPlanMethodNumber(objectId, methodId) {
@@ -1338,7 +1393,7 @@ function buildPlanExportCode(template = planExportTemplate) {
   const appendBucketMethods = (beforeWaypoint) => {
     const bucketNodes = nodesByBucket.get(beforeWaypoint) || [];
     for (const node of bucketNodes) {
-      const method = getPlanMethodById(node.objectId, node.methodId);
+      const method = getPlanNodeEffectiveMethod(node);
       if (!method) continue;
       blocks.push(String(method.code || ""));
     }
@@ -1536,6 +1591,39 @@ function openPlanMethodEditModal(objectId, methodId) {
         method_code_changed: previousCode !== targetMethod.code,
         method_code_chars: String(codeValue || "").length,
         method_code_bytes: getUtf8ByteLength(codeValue),
+      }));
+    },
+  });
+}
+
+function openPlanNodeEditModal(nodeId) {
+  const node = getPlanNodeById(nodeId);
+  const object = node ? getPlanObjectById(node.objectId) : null;
+  const method = getPlanNodeEffectiveMethod(node);
+  if (!node || !object || !method) return;
+  cancelPlanObjectNameEdit();
+  openSharedPlanTemplateModal({
+    title: "Edit Placed Node",
+    subtitle: `Update this placed node from ${object.name || "this object"}.`,
+    groupTitle: "Node Code",
+    description: "These code changes only apply to this placed node. Matching the host code again clears the override.",
+    placeholder: "",
+    codeValue: method.code || "",
+    showName: false,
+    confirmLabel: "Confirm",
+    onConfirm: ({ codeValue }) => {
+      const targetNode = getPlanNodeById(nodeId);
+      const beforeOverride = hasPlanNodeMethodOverride(targetNode);
+      if (!setPlanNodeCodeOverride(targetNode, codeValue)) return;
+      savePlanTimelineUi();
+      renderPlanObjects();
+      requestDrawAll();
+      const effective = getPlanNodeEffectiveMethod(targetNode);
+      void captureTelemetry("planning_timeline_node_updated", getPlanningTelemetryProperties({
+        node_override_created: !beforeOverride && !!effective?.hasOverride,
+        node_override_cleared: beforeOverride && !effective?.hasOverride,
+        node_code_chars: String(codeValue || "").length,
+        node_code_bytes: getUtf8ByteLength(codeValue),
       }));
     },
   });
@@ -1766,7 +1854,7 @@ function getLatestPlanMethodNameForObject(objectId) {
     if (threshold <= planPlayDist + 0.0001) latest = node;
   }
   if (!latest) return "\u2014";
-  return getPlanMethodById(latest.objectId, latest.methodId)?.name || "\u2014";
+  return getPlanNodeEffectiveMethod(latest)?.name || "\u2014";
 }
 
 function syncPlanObjectLatestValues() {
@@ -1861,7 +1949,8 @@ function buildFieldPlanNodeMarkers() {
     for (const node of bucketNodes) {
       const object = getPlanObjectById(node.objectId);
       if (!object) continue;
-      const method = getPlanMethodById(node.objectId, node.methodId);
+      const method = getPlanNodeEffectiveMethod(node);
+      if (!method) continue;
       const threshold = getPlanNodeThresholdDistance(node, bucketNodes);
       const rawDist = clamp(threshold - segStartDist, 0, len);
       const usableLen = Math.max(0, len - startClearanceDist);
@@ -2051,11 +2140,13 @@ function renderPlanningEventTimeline() {
   for (const node of getSortedPlanNodes()) {
     const object = getPlanObjectById(node.objectId);
     const methodNumber = getPlanMethodNumber(node.objectId, node.methodId);
+    const method = getPlanNodeEffectiveMethod(node);
     const bucket = layout.buckets[node.beforeWaypoint];
-    if (!object || !methodNumber || !bucket) continue;
+    if (!object || !methodNumber || !method || !bucket) continue;
     const nodeEl = document.createElement("button");
     nodeEl.type = "button";
     nodeEl.className = "planningTimelineNode";
+    if (method.hasOverride) nodeEl.classList.add("hasOverride");
     if (planSelectedNodeId === node.id) nodeEl.classList.add("isSelected");
     nodeEl.draggable = false;
     nodeEl.dataset.nodeId = node.id;
@@ -2064,7 +2155,7 @@ function renderPlanningEventTimeline() {
     nodeEl.style.left = `${bucket.nodeStart + node.index * PLAN_TIMELINE_NODE_SLOT}px`;
     nodeEl.style.background = object.color || getDefaultPlanObjectColor();
     nodeEl.style.color = getContrastTextColor(object.color || getDefaultPlanObjectColor());
-    const tooltipText = `${object.name || "Object"} · ${getPlanMethodTooltipName(getPlanMethodById(node.objectId, node.methodId)?.name)}`;
+    const tooltipText = `${object.name || "Object"} · ${getPlanMethodTooltipName(method.name)}`;
     nodeEl.setAttribute("aria-label", tooltipText);
     nodeEl.textContent = String(methodNumber);
     nodeEl.addEventListener("click", (e) => {
@@ -2073,7 +2164,7 @@ function renderPlanningEventTimeline() {
     });
     nodeEl.addEventListener("dblclick", (e) => {
       e.preventDefault();
-      openPlanMethodEditModal(node.objectId, node.methodId);
+      openPlanNodeEditModal(node.id);
     });
     nodeEl.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
@@ -2819,13 +2910,7 @@ function buildSavedPathsPayload() {
         code: method.code,
       })),
     })),
-    "planned-nodes": planNodes.map((node) => ({
-      id: node.id,
-      objectId: node.objectId,
-      methodId: node.methodId,
-      beforeWaypoint: node.beforeWaypoint,
-      index: node.index,
-    })),
+    "planned-nodes": planNodes.map(serializePlanNode),
     "robot-path": rawPoses.map((p) => ({
       t: p.t ?? null,
       x: p.x, y: p.y,
@@ -7888,7 +7973,7 @@ canvas.addEventListener("dblclick", (e) => {
   const nodeHit = hitTestPlanFieldNodeAtClient(e.clientX, e.clientY);
   if (!nodeHit) return;
   e.preventDefault();
-  openPlanMethodEditModal(nodeHit.node.objectId, nodeHit.node.methodId);
+  openPlanNodeEditModal(nodeHit.node.id);
 });
 
 
@@ -9978,13 +10063,7 @@ function buildExportPayload() {
         code: method.code,
       })),
     }));
-    payload["planned-nodes"] = planNodes.map((node) => ({
-      id: node.id,
-      objectId: node.objectId,
-      methodId: node.methodId,
-      beforeWaypoint: node.beforeWaypoint,
-      index: node.index,
-    }));
+    payload["planned-nodes"] = planNodes.map(serializePlanNode);
   }
 
   if (includeViewing) {
