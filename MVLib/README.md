@@ -59,6 +59,7 @@ Find the GitHub Pages [here](https://lewispinstein-hue.github.io/MotionView/)
 extern lemlib::Chassis chassis; // Your chassis
 void initialize() {
   auto& logger = mvlib::Logger::getInstance();
+  logger.setBuildDate(__DATE__);
 
   // Attach your odom 
   mvlib::setOdom(&chassis);
@@ -72,7 +73,7 @@ void initialize() {
 }
 ```
 
-That’s it. Just 10 lines of code. Once the robot runs, MotionView can read your logs and show the path and watches.
+That’s it. Once the robot runs, MotionView can read your logs and show the path and watches.
 
 ## Watches
 
