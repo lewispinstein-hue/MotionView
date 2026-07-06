@@ -466,6 +466,7 @@ const settingsRobotImgOffX = document.getElementById("settingsRobotImgOffX");
 const settingsRobotImgOffY = document.getElementById("settingsRobotImgOffY");
 const settingsRobotImgRot = document.getElementById("settingsRobotImgRot");
 const settingsRobotImgAlpha = document.getElementById("settingsRobotImgAlpha");
+const settingsFieldCompetition = document.getElementById("settingsFieldCompetition");
 const settingsShowPreviousYearFields = document.getElementById("settingsShowPreviousYearFields");
 const settingsFieldRotation = document.getElementById("settingsFieldRotation");
 const settingsUnitsSelect = document.getElementById("settingsUnitsSelect");
@@ -507,14 +508,16 @@ let backendReadyLastCheckAt = 0;
 const CURRENT_GAME_YEAR = "2026-2027";
 const DEFAULT_PLAN_EXPORT_TEMPLATE = "moveToPoint(${x}, ${y}, ${theta});";
 const FIELD_IMAGES = [
-  { key: "./assets/fields/v5_match_field_2026-2027_override.png", label: "Match Field (V5 Override)" },
-  { key: "./assets/fields/v5_skills_field_2026-2027_override.png", label: "Skills Field (V5 Override)" },
-  { key: "./assets/fields/vU_match_field_2026-2027_override.png", label: "Match Field (VU Override)" },
-  { key: "./assets/fields/vU_skills_field_2026-2027_override.png", label: "Skills Field (VU Override)" },
-  { key: "./assets/fields/v5_match_field_2025-2026_pushback.png", label: "Match Field (V5 Pushback)" },
-  { key: "./assets/fields/v5_skills_field_2025-2026_pushback.png", label: "Skills Field (V5 Pushback)" },
-  { key: "./assets/fields/vU_field_2025-2026_pushback.png", label: "VexU Field (VU Pushback)" },
-  { key: "./assets/fields/v5_field_perimeter.png", label: "Field Perimeter" },
+  { key: "./assets/fields/v5/match_field_2026-2027_override.png", label: "Match Field (V5 Override)", comp: "v5" },
+  { key: "./assets/fields/v5/skills_field_2026-2027_override.png", label: "Skills Field (V5 Override)", comp: "v5" },
+  { key: "./assets/fields/IQ/head-to-head_field_2026-2027_level_up.png", label: "Head-to-Head Field (IQ Level Up)", comp: "iq" },
+  { key: "./assets/fields/IQ/skills_field_2026-2027_level_up.png", label: "Skills Field (IQ Level Up)", comp: "iq" },
+  { key: "./assets/fields/vU/match_field_2026-2027_override.png", label: "Match Field (VU Override)", comp: "vU" },
+  { key: "./assets/fields/vU/skills_field_2026-2027_override.png", label: "Skills Field (VU Override)", comp: "vU" },
+  { key: "./assets/fields/v5/match_field_2025-2026_pushback.png", label: "Match Field (V5 Pushback)", comp: "v5" },
+  { key: "./assets/fields/v5/skills_field_2025-2026_pushback.png", label: "Skills Field (V5 Pushback)", comp: "v5" },
+  { key: "./assets/fields/vU/field_2025-2026_pushback.png", label: "VexU Field (VU Pushback)", comp: "vU" },
+  { key: "./assets/fields/v5/field_perimeter.png", label: "Field Perimeter" },
 ];
 
 // Default field image
@@ -560,6 +563,7 @@ const WATCH_GRAPH_MIN_H = 170;
 const WATCH_GRAPH_MARGIN = 16;
 let data = null;
 let showPreviousYearFields = true;
+let fieldCompetition = "all";
 let planExportTemplate = DEFAULT_PLAN_EXPORT_TEMPLATE;
 
 function readPlanSpeed(value, fallback = 127) {
@@ -571,13 +575,26 @@ function isFieldCurrentYear(field) {
   return String(field?.key || "").includes(CURRENT_GAME_YEAR);
 }
 
+function normalizeFieldCompetition(value) {
+  return (value === "vU" || value === "v5" || value === "iq") ? value : "all";
+}
+
+function fieldMatchesCompetition(field) {
+  if (fieldCompetition === "all") return true;
+  return field?.comp === fieldCompetition;
+}
+
 function getVisibleFieldImages() {
-  if (showPreviousYearFields) return FIELD_IMAGES;
-  return FIELD_IMAGES.filter((field) => isFieldCurrentYear(field) || field.label.includes("Field Perimeter"));
+  return FIELD_IMAGES.filter((field) => {
+    if (!fieldMatchesCompetition(field)) return false;
+    if (showPreviousYearFields) return true;
+    return isFieldCurrentYear(field) || field.label.includes("Field Perimeter");
+  });
 }
 
 function getValidFieldKey(fieldKey) {
   const visibleFields = getVisibleFieldImages();
+  if (!visibleFields.length) return "";
   if (visibleFields.some((field) => field.key === fieldKey)) return fieldKey;
   return visibleFields[0]?.key || DEFAULT_FIELD_KEY;
 }
@@ -3868,7 +3885,17 @@ function loadFieldOptions() {
   }
   const previousValue = fieldSelect.value;
   fieldSelect.innerHTML = "";
-  for (const f of getVisibleFieldImages()) {
+  const visibleFields = getVisibleFieldImages();
+  if (!visibleFields.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "No fields available";
+    opt.disabled = true;
+    fieldSelect.appendChild(opt);
+    fieldSelect.value = "";
+    return;
+  }
+  for (const f of visibleFields) {
     const opt = document.createElement("option");
     opt.value = f.key;
     opt.textContent = f.label;
@@ -3898,6 +3925,12 @@ async function resolveFieldImageSrc(fieldKey) {
 
 async function loadFieldImage(filename) {
   const nextField = getValidFieldKey(filename);
+  if (!nextField) {
+    fieldImg = null;
+    draw();
+    setStatus("No field image is available for the selected competition.");
+    return;
+  }
   let imgSrc = nextField;
   if (isTauriRuntime) {
     try {
@@ -3956,7 +3989,7 @@ function drawFirstField() {
 
   const nextField = getValidFieldKey(fieldSelect.value || DEFAULT_FIELD_KEY);
   fieldSelect.value = nextField;
-  loadFieldImage(nextField);
+  if (nextField) loadFieldImage(nextField);
 }
 
 // -------- time helpers --------
@@ -9249,6 +9282,12 @@ async function loadSettings() {
       if (settings.showPreviousYearFields !== undefined) {
         showPreviousYearFields = !!settings.showPreviousYearFields;
       }
+      if (settings.fieldCompetition !== undefined) {
+        fieldCompetition = normalizeFieldCompetition(settings.fieldCompetition);
+      }
+      if (settingsFieldCompetition) {
+        settingsFieldCompetition.value = fieldCompetition;
+      }
       if (settingsShowPreviousYearFields) {
         settingsShowPreviousYearFields.checked = showPreviousYearFields;
       }
@@ -9368,6 +9407,7 @@ async function saveSettings() {
       refreshIntervalMs: leftRefreshIntervalEl ? leftRefreshIntervalEl.value : "0",
       liveDebug: settingsLiveDebug ? settingsLiveDebug.checked : liveDebugEnabled,
       showPreviousYearFields,
+      fieldCompetition,
       playbackSpeed: speedSelect ? speedSelect.value : "1",
       selectedField: fieldSelect ? fieldSelect.value : DEFAULT_FIELD_KEY,
       robotImgScale: robotImgTx.scale,
@@ -9519,6 +9559,9 @@ function syncMainToSettings() {
   }
   if (settingsShowPreviousYearFields) {
     settingsShowPreviousYearFields.checked = showPreviousYearFields;
+  }
+  if (settingsFieldCompetition) {
+    settingsFieldCompetition.value = fieldCompetition;
   }
 }
 
@@ -10557,15 +10600,25 @@ if (settingsFieldRotation) {
     saveSettings();
   });
 }
+async function refreshFieldOptionsForSettingsChange() {
+  const previousField = fieldSelect ? fieldSelect.value : DEFAULT_FIELD_KEY;
+  loadFieldOptions();
+  const nextField = getValidFieldKey(previousField);
+  if (fieldSelect) fieldSelect.value = nextField;
+  await loadFieldImage(nextField);
+  saveSettings();
+}
+
+if (settingsFieldCompetition) {
+  settingsFieldCompetition.addEventListener("change", async () => {
+    fieldCompetition = normalizeFieldCompetition(settingsFieldCompetition.value);
+    await refreshFieldOptionsForSettingsChange();
+  });
+}
 if (settingsShowPreviousYearFields) {
   settingsShowPreviousYearFields.addEventListener("change", async () => {
     showPreviousYearFields = !!settingsShowPreviousYearFields.checked;
-    const previousField = fieldSelect ? fieldSelect.value : DEFAULT_FIELD_KEY;
-    loadFieldOptions();
-    const nextField = getValidFieldKey(previousField);
-    if (fieldSelect) fieldSelect.value = nextField;
-    await loadFieldImage(nextField);
-    saveSettings();
+    await refreshFieldOptionsForSettingsChange();
   });
 }
 if (settingsRobotW) {
