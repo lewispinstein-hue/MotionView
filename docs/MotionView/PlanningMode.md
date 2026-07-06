@@ -3,7 +3,7 @@
 Just like block coding, you can create autonomous routines for your robot to follow using MotionView's Planning mode.
 
 <p align="left">
-    <img src="./../../assets/MotionView/PlanningMode.png" alt="Icon" />
+    <img src="assets/MotionView/PlanningMode.png" alt="Icon" />
 </p>
 
 ## Opening Planning Mode
