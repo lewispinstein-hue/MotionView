@@ -303,7 +303,7 @@ def _handle_roster(payload: bytes, subtype: int) -> str:
 def _handle_log(payload: bytes, level_bits: int) -> str:
     ts = _expand_timestamp(struct.unpack("<H", payload[:2])[0])
     msg = _decode_text(payload[2:])
-    return _csv_line("[LOG]", ts, _decode_level(level_bits), msg)
+    return f"[LOG],{ts},{_decode_level(level_bits)},{msg}\n"
 
 
 def _expected_payload_len(msg_type: int, subtype: int) -> Optional[int]:
