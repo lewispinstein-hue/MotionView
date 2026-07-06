@@ -119,6 +119,7 @@ extern lemlib::Chassis chassis;
 
 void initialize() {
   auto& logger = mvlib::Logger::getInstance();
+  logger.setBuildDate(__DATE__);
   mvlib::setOdom(&chassis);
   logger.start();
 }
@@ -133,6 +134,7 @@ extern ez::Drive chassis;
 
 void initialize() {
   auto& logger = mvlib::Logger::getInstance();
+  logger.setBuildDate(__DATE__);
   mvlib::setOdom(&chassis);
   logger.start();
 }
@@ -147,6 +149,7 @@ extern std::shared_ptr<okapi::OdomChassisController> odomChassis;
 
 void initialize() {
   auto& logger = mvlib::Logger::getInstance();
+  logger.setBuildDate(__DATE__);
   mvlib::setOdom(odomChassis.get());
   logger.start();
 }
@@ -165,6 +168,7 @@ mvlib::setOdom(odomChassis.get(), okapi::inch);
 
 void initialize() {
   auto& logger = mvlib::Logger::getInstance();
+  logger.setBuildDate(__DATE__);
 
   mvlib::setOdom([&]() -> std::optional<mvlib::Pose> {
     if (!odomReady()) return std::nullopt;
@@ -209,7 +213,13 @@ Use that only if you intentionally want odometry-based speed estimation.
 
 See [SD Logging](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/SDLogging) for the full path rules, fallback policies, and examples.
 
-Do this before `logger.start()`.
+Do this before `logger.start()`. If you want MVLib to automatically generate timestamped SD filenames, also provide the user project build date before `logger.start()`:
+
+```cpp
+logger.setBuildDate(__DATE__);
+```
+
+MVLib uses this date to decide whether the VEX Brain RTC is plausible before using it in an automatic SD filename.
 
 ## 7. Start The Logger
 
@@ -245,6 +255,7 @@ extern pros::MotorGroup right_motors;
 
 void initialize() {
   auto& logger = mvlib::Logger::getInstance();
+  logger.setBuildDate(__DATE__);
 
   mvlib::setOdom(&chassis);
 

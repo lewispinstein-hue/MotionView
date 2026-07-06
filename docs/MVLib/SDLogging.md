@@ -17,6 +17,17 @@ Use this to route SD log output to either:
 
 Call it before `logger.start()`.
 
+If MVLib will generate the filename automatically, also provide the user
+project build date before `logger.start()`:
+
+```cpp
+logger.setBuildDate(__DATE__);
+```
+
+MVLib uses this date to sanity-check the VEX Brain RTC before trusting it for
+timestamped SD filenames. If you do not provide it, MVLib falls back to the
+date baked into the MVLib archive.
+
 ## Path Rules
 
 - pass a POSIX-style path relative to `/usd`
@@ -116,6 +127,7 @@ If the explicit target file does not exist, no fallback is needed and MVLib uses
 ### Folder with generated file
 
 ```cpp
+logger.setBuildDate(__DATE__);
 logger.setLoggingLocation("/telemetry",
                           MissingFolderPolicy::disable,
                           ExistingFilePolicy::automatic);
@@ -157,6 +169,8 @@ If `/telem` does not exist:
 - if `/route.log` does not exist, that exact file is used
 - if `/route.log` does exist, `automatic` clears the explicit file and a timestamped root-level filename is generated later
 
+When relying on that automatic timestamped fallback, call `logger.setBuildDate(__DATE__);` before `logger.start()`.
+
 ## Common Mistakes
 
 - Passing `/usd/...` instead of a path relative to `/usd`
@@ -164,3 +178,4 @@ If `/telem` does not exist:
 - Passing a file path without an extension
 - Using `.` in a folder segment
 - Calling `setLoggingLocation(...)` after `logger.start()`
+- Relying on automatic timestamped filenames without calling `logger.setBuildDate(__DATE__)`
