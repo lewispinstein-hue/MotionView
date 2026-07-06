@@ -37,7 +37,6 @@
 #include "types.hpp"
 #include "watches.hpp"
 #include "private/misc.hpp"
-#include "private/dateGetter.hpp"
 #include "private/raii.hpp"
 
 #include <atomic>
@@ -167,6 +166,27 @@ public:
    *        Whenever you want to filter out logs that are not important to you.
    */
   void setMinLogLevel(LogLevel level);
+
+  /**
+   * @brief Provide the consumer project build date for RTC validation.
+   *
+   * @param buildDate Date string in the compiler __DATE__ format
+   *                  ("Mmm dd yyyy"). If omitted, this defaults to the
+   *                  consumer translation unit's build date.
+   *
+   * @note Call before start() if SD filename generation should validate
+   *       the VEX RTC against the consumer project build date instead of
+   *       MVLib's archive build date.
+   */
+  void setBuildDate(const char *buildDate);
+
+  /**
+   * @brief Return the active build date used for RTC validation.
+   *
+   * \return User-provided build date when set, otherwise MVLib's archive
+   *         build date.
+   */
+  [[nodiscard]] const char* getBuildDate() const;
 
   // ------------------------------------------------------------------------
   // Setup
@@ -716,7 +736,7 @@ private:
   FILE* m_sdFile = nullptr;
   char m_currentFilename[128] = "";
   char m_absoluteFilename[133] = "";
-  const char* m_date = detail::getBuildDate(); 
+  char m_userBuildDate[12] = "";
   char m_loggingFolder[24] = "";
 
   volatile bool m_sdLocked = false; // Has sd card failed?

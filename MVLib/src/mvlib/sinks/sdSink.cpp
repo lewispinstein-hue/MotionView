@@ -10,8 +10,11 @@
 #include <cstring>
 #include <random>
 #include <cerrno>
+#include <chrono>
+#include <format>
 #include <time.h>
 #include <algorithm>
+#include <optional>
 #include <string_view>
 
 namespace mvlib {
@@ -21,8 +24,6 @@ enum class FolderCheckResult : uint8_t {
   notFound,
   unknownError
 };
-
-constexpr uint64_t recentEpochTime = 1781602800;
 
 uint32_t getrandInt(const uint32_t min, const uint32_t max) {
   /**
@@ -122,6 +123,69 @@ FolderCheckResult checkFolderExists(const std::string_view relativeFolderPath) {
   if (errno == ENOENT) return FolderCheckResult::notFound;
   return FolderCheckResult::unknownError;
 }
+
+std::optional<std::chrono::sys_days> parseBuildDate(const std::string_view buildDate) {
+  // __DATE__ is formatted as "Mmm dd yyyy", with a leading space for single-digit days.
+  if (buildDate.size() != 11) return std::nullopt;
+
+  constexpr std::string_view months[] = {
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  };
+
+  unsigned month = 0;
+  const std::string_view monthName = buildDate.substr(0, 3);
+  for (unsigned i = 0; i < sizeof(months) / sizeof(months[0]); ++i) {
+    if (months[i] == monthName) {
+      month = i + 1;
+      break;
+    }
+  }
+  if (month == 0) return std::nullopt;
+
+  auto parseDigit = [](char ch) -> int {
+    return (ch >= '0' && ch <= '9') ? ch - '0' : -1;
+  };
+
+  const int dayTens = buildDate[4] == ' ' ? 0 : parseDigit(buildDate[4]);
+  const int dayOnes = parseDigit(buildDate[5]);
+  const int y0 = parseDigit(buildDate[7]);
+  const int y1 = parseDigit(buildDate[8]);
+  const int y2 = parseDigit(buildDate[9]);
+  const int y3 = parseDigit(buildDate[10]);
+  if (dayTens < 0 || dayOnes < 0 || y0 < 0 || y1 < 0 || y2 < 0 || y3 < 0) {
+    return std::nullopt;
+  }
+
+  const unsigned day = static_cast<unsigned>(dayTens * 10 + dayOnes);
+  const int year = y0 * 1000 + y1 * 100 + y2 * 10 + y3;
+  const std::chrono::year_month_day ymd{
+    std::chrono::year{year},
+    std::chrono::month{month},
+    std::chrono::day{day}
+  };
+
+  if (!ymd.ok()) return std::nullopt;
+  return std::chrono::sys_days{ymd};
+}
+
+bool isRtcWithinBuildWindow(const time_t rtcSeconds, const std::string_view buildDate) {
+  if (rtcSeconds <= 0) return false;
+
+  const auto buildDay = parseBuildDate(buildDate);
+  if (!buildDay.has_value()) return false;
+
+  const std::chrono::sys_seconds rtcTime{std::chrono::seconds{rtcSeconds}};
+  const std::chrono::sys_days rtcDay = std::chrono::floor<std::chrono::days>(rtcTime);
+  const std::chrono::year_month_day maxDate{
+    std::chrono::year_month_day{*buildDay} + std::chrono::years{5}
+  };
+
+  if (!maxDate.ok()) return false;
+
+  const std::chrono::sys_days maxDay{maxDate};
+  return rtcDay >= *buildDay && rtcDay <= maxDay;
+}
 } // namespace
 
 void Logger::getTimestampedFilename(char *buffer, size_t len) {
@@ -137,18 +201,23 @@ void Logger::getTimestampedFilename(char *buffer, size_t len) {
   trimTrailingSeparator(folderBuf, '/');
   const uint32_t randInt = getrandInt(0, 99999);
 
-  if (tspec.tv_sec < recentEpochTime) {
-    _MVLIB_FORWARD_INFO("initSdCard() VEX RTC Inaccurate. Falling back to program duration.");
+  const char* buildDate = getBuildDate();
+  if (m_userBuildDate[0] == '\0') {
+    _MVLIB_FORWARD_WARN("initSdCard() Build date not provided, using fallback date");
+  }
+
+  if (!isRtcWithinBuildWindow(tspec.tv_sec, buildDate)) {
+    _MVLIB_FORWARD_INFO("initSdCard() VEX RTC Inaccurate (%s). Falling back to program duration.", formattedTime.c_str());
 
     snprintf(buffer, len, "%s%sMVLIB_%s_%u-%u_%03u.log",
              folderBuf.c_str(), folderBuf == "/" ? "" : "/",
-             m_date, pros::millis() / 1000, pros::millis() % 1000, randInt);
+             buildDate, pros::millis() / 1000, pros::millis() % 1000, randInt);
   } else {
     _MVLIB_FORWARD_INFO("initSdCard() VEX RTC Plausible. Creating file name with date.");
 
     char timeBuf[128];
     // Format the date/time string
-    snprintf(timeBuf, sizeof(timeBuf), "MVLIB_%s", formattedTime); 
+    snprintf(timeBuf, sizeof(timeBuf), "MVLIB_%s", formattedTime.c_str()); 
 
     // Combine pathPrefix, formatted time, and random ID
     snprintf(buffer, len, "%s%s%s_%05d.log",

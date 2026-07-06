@@ -5,6 +5,8 @@
 #include "mvlib/private/forwardLogMacros.h"
 #include "mvlib/private/raii.hpp"
 
+#include <cstdio>
+
 namespace mvlib {
 
 void Logger::setLogToTerminal(bool v) {
@@ -52,6 +54,26 @@ void Logger::setMinLogLevel(LogLevel level) {
   // Telemetry engine is now the source of truth for the min log level
   detail::Telemetry::getInstance().setMinLevel(level);
   _MVLIB_FORWARD_DEBUG("SetMinLogLevel set to: %d", (int)level);
+}
+
+void Logger::setBuildDate(const char *buildDate) {
+  if (m_started || m_sdLocked) {
+    _MVLIB_FORWARD_WARN("setBuildDate() called after logger start — ignored.");
+    return;
+  }
+
+  if (!buildDate || buildDate[0] == '\0') {
+    m_userBuildDate[0] = '\0';
+    _MVLIB_FORWARD_DEBUG("setBuildDate() cleared user build date.");
+    return;
+  }
+
+  snprintf(m_userBuildDate, sizeof(m_userBuildDate), "%s", buildDate);
+  _MVLIB_FORWARD_DEBUG("setBuildDate() set user build date to: %s", m_userBuildDate);
+}
+
+const char* Logger::getBuildDate() const {
+  return m_userBuildDate[0] != '\0' ? m_userBuildDate : __DATE__;
 }
 
 void Logger::setPoseGetter(std::function<std::optional<Pose>()> getter) {
