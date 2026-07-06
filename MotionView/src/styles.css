@@ -323,6 +323,10 @@ label {
   border-radius: 10px;
 }
 
+#watchList {
+  container-type: inline-size;
+}
+
 .virtualList {
   position: relative;
   overflow: auto;
@@ -340,33 +344,111 @@ label {
 }
 
 .watchItem {
+  cursor: pointer;
+  position: relative;
+  overflow: visible;
+  min-height: 0;
+}
+
+.watchItem:not(.virtualListRow) {
   padding: 10px 10px;
   border-bottom: 1px solid var(--line);
-  cursor: pointer;
   overflow: hidden;
 }
 
-.watchItem:hover {
+.watchItem.virtualListRow {
+  position: absolute;
+}
+
+.watchItemContent {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 12px;
+  row-gap: 7px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  overflow: visible;
+  min-height: 0;
+}
+
+.watchItem:hover .watchItemContent {
   background: rgba(255, 255, 255, .04);
 }
 
-.watchItem:last-child {
+.watchItem:not(.virtualListRow):hover {
+  background: rgba(255, 255, 255, .04);
+}
+
+.watchItem:last-child .watchItemContent {
   border-bottom: none;
 }
 
-.watchItem.selected {
+.watchItem:not(.virtualListRow):last-child {
+  border-bottom: none;
+}
+
+.watchItem.selected .watchItemContent {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: -2px;
+  background: rgba(255, 255, 255, .03);
+}
+
+.watchItem:not(.virtualListRow).selected {
   outline: 2px solid rgba(255, 255, 255, 0.35);
   outline-offset: -2px;
   background: rgba(255, 255, 255, .03);
 }
 
 .watchMeta {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  align-self: start;
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: nowrap;
+  flex: 0 0 auto;
+}
+
+.watchItemHeader {
+  display: contents;
+}
+
+.watchTitleGroup {
+  display: contents;
+}
+
+.watchLevelPill {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.watchLabel {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  flex: 0 1 auto;
+  font-weight: 850;
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.watchTimestamp {
+  align-self: flex-start;
+  flex: 0 0 auto;
+  margin-left: auto;
+  line-height: 22px;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .watchActions {
@@ -386,11 +468,24 @@ label {
 
 .watchGraphBtn,
 .watchVisibilityBtn,
-.watchPinBtn {
+.watchPinBtn,
+.watchActionsMoreBtn {
   min-width: 28px;
   width: 28px;
   height: 28px;
   padding: 0;
+}
+
+.watchActionsFull .iconBtn {
+  min-width: 26px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.watchActionsFull .iconBtn svg {
+  width: 15px;
+  height: 15px;
 }
 
 .watchActionsPill .iconBtn {
@@ -399,10 +494,100 @@ label {
   background: transparent;
 }
 
+.watchActionsCompact {
+  display: none;
+  position: relative;
+}
+
+.watchActionsMoreBtn.iconBtn {
+  min-width: 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.watchActionsCompactMenu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(16, 23, 32, 0.96);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.watchActionsCompactMenu[hidden] {
+  display: none;
+}
+
+.watchActionsCompactMenu .iconBtn {
+  min-width: 30px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.watchItem.watchActionsCollapsed .watchActionsFull {
+  display: none;
+}
+
+.watchItem.watchActionsCollapsed .watchActionsCompact {
+  display: block;
+}
+
+.watchItem.watchLabelTruncated .watchLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@container (max-width: 315px) {
+  .watchActionsFull {
+    display: none;
+  }
+
+  .watchActionsCompact {
+    display: block;
+  }
+
+  .watchItemHeader {
+    display: contents;
+  }
+
+  .watchTitleGroup {
+    display: contents;
+  }
+
+  .watchMeta {
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+
+  .watchLabel {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 .bigValue {
+  grid-column: 1 / 4;
+  grid-row: 2;
   font-size: 15px;
   font-weight: 800;
-  margin-top: 6px;
+  margin-top: 0;
   word-break: break-word;
 }
 

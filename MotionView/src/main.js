@@ -3282,6 +3282,15 @@ function levelStyle(levelRaw) {
   return { name: "INFO", fill: "rgb(77,255,136)", text: "#081018" };
 }
 
+function levelFillWithAlpha(levelRaw, alpha) {
+  const L = String(levelRaw || "INFO").toUpperCase();
+  if (L.includes("FATAL")) return `rgba(164, 0, 0, ${alpha})`;
+  if (L.includes("ERROR")) return `rgba(255, 77, 77, ${alpha})`;
+  if (L.includes("WARN")) return `rgba(255, 212, 77, ${alpha})`;
+  if (L.includes("DEBUG")) return `rgba(78, 246, 255, ${alpha})`;
+  return `rgba(77, 255, 136, ${alpha})`;
+}
+
 function normalizeLogLevel(levelRaw) {
   const L = String(levelRaw || "INFO").trim().toUpperCase();
   if (L === "DEBUG" || L === "INFO" || L === "WARN" || L === "ERROR" || L === "FATAL") return L;
@@ -4439,7 +4448,9 @@ function createVirtualList(container, {
 
     for (let i = 0; i < renderedRows.length; i += 1) {
       const { key, row } = renderedRows[i];
-      const rowHeight = Math.ceil(row.getBoundingClientRect().height || row.offsetHeight || estimateRowHeight);
+      syncWatchItemActionLayout(row);
+      const measureEl = row.querySelector?.(".watchItemContent") || row;
+      const rowHeight = Math.ceil(measureEl.offsetHeight || row.offsetHeight || estimateRowHeight);
       if (rowHeight > 0 && measuredHeights.get(key) !== rowHeight) {
         measuredHeights.set(key, rowHeight);
         layoutDirty = true;
@@ -4473,6 +4484,7 @@ function createVirtualList(container, {
 
   function setItems(nextItems, { resetScroll = false } = {}) {
     items = (nextItems && typeof nextItems.length === "number") ? nextItems : [];
+    measuredHeights.clear();
     recomputeLayout();
     if (resetScroll) container.scrollTop = 0;
     requestRender();
@@ -4480,6 +4492,10 @@ function createVirtualList(container, {
 
   container.addEventListener("scroll", requestRender, { passive: true });
   window.addEventListener("resize", requestRender);
+  if (typeof ResizeObserver === "function") {
+    const resizeObserver = new ResizeObserver(requestRender);
+    resizeObserver.observe(container);
+  }
 
   return {
     setItems,
@@ -4492,7 +4508,7 @@ function createVirtualList(container, {
 let renderedWatchIndexByTime = new Map();
 
 const watchListVirtual = createVirtualList(watchList, {
-  estimateRowHeight: 86,
+  estimateRowHeight: 62,
   overscanPx: 480,
   getKey: (item, index) => `${item?.t ?? "watch"}:${index}`,
   renderItem: createWatchListItem,
@@ -4504,6 +4520,30 @@ const poseListVirtual = createVirtualList(poseList, {
   getKey: (_, index) => `pose:${index}`,
   renderItem: (_, index) => createPoseListItem(index),
 });
+
+document.addEventListener("pointerdown", (ev) => {
+  if (!openWatchActionsMenu) return;
+  const target = ev.target instanceof Element ? ev.target : null;
+  if (target && (
+    openWatchActionsMenu.menu?.contains(target)
+    || openWatchActionsMenu.button?.contains(target)
+  )) return;
+  closeOpenWatchActionsMenu();
+}, true);
+
+document.addEventListener("keydown", (ev) => {
+  if (!openWatchActionsMenu) return;
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    closeOpenWatchActionsMenu({ restoreFocus: true });
+  } else if (ev.key === "Tab") {
+    closeOpenWatchActionsMenu();
+  }
+}, true);
+
+watchList?.addEventListener("scroll", () => {
+  closeOpenWatchActionsMenu();
+}, { passive: true });
 
 function highlightWatchInList(tMs, doScroll) {
   if (!watchListVirtual) return;
@@ -4595,6 +4635,8 @@ let watchGraphChart = null;
 let watchGraphMarkersForKey = [];
 let watchGraphCompareMarkersForKey = [];
 let watchGraphZoomRange = null;
+let watchGraphFollowLatest = false;
+const WATCH_GRAPH_FOLLOW_HEAD_TOLERANCE_S = 2.5;
 let isWatchGraphDragging = false;
 let isWatchGraphResizing = false;
 let watchGraphDragStart = { x: 0, y: 0 };
@@ -4978,8 +5020,23 @@ function normalizeWatchGraphZoomRange(range, fullRange) {
   return { min, max };
 }
 
+function getLatestRobotTimeSeconds() {
+  const tMs = rawPoses[rawPoses.length - 1]?.t;
+  return Number.isFinite(tMs) ? tMs / 1000 : null;
+}
+
+function isWatchGraphRangeNearRobotHead(range) {
+  if (!range) return false;
+  const robotTime = getLatestRobotTimeSeconds();
+  const rightEdge = Number(range.max);
+  return Number.isFinite(robotTime)
+    && Number.isFinite(rightEdge)
+    && rightEdge >= robotTime - WATCH_GRAPH_FOLLOW_HEAD_TOLERANCE_S;
+}
+
 function setWatchGraphZoomRange(nextRange, fullRange) {
   watchGraphZoomRange = normalizeWatchGraphZoomRange(nextRange, fullRange);
+  watchGraphFollowLatest = isWatchGraphRangeNearRobotHead(watchGraphZoomRange);
 }
 
 function renderWatchGraphForKey(key) {
@@ -4991,8 +5048,19 @@ function renderWatchGraphForKey(key) {
   const hasPrimaryPoints = primaryPoints.length > 0;
   const hasComparePoints = comparePoints.length > 0;
   const fullTimeRange = watchGraphTimeRange(primaryPoints, comparePoints);
-  const zoomRange = normalizeWatchGraphZoomRange(watchGraphZoomRange, fullTimeRange);
+  let zoomRange = normalizeWatchGraphZoomRange(watchGraphZoomRange, fullTimeRange);
+  if (!watchGraphFollowLatest && isWatchGraphRangeNearRobotHead(zoomRange)) {
+    watchGraphFollowLatest = true;
+  }
+  if (watchGraphFollowLatest && zoomRange && fullTimeRange) {
+    const span = zoomRange.max - zoomRange.min;
+    zoomRange = normalizeWatchGraphZoomRange({
+      min: fullTimeRange.max - span,
+      max: fullTimeRange.max,
+    }, fullTimeRange);
+  }
   watchGraphZoomRange = zoomRange;
+  if (!watchGraphZoomRange) watchGraphFollowLatest = false;
 
   if (watchGraphEmpty) watchGraphEmpty.hidden = hasPrimaryPoints || hasComparePoints;
 
@@ -5163,7 +5231,10 @@ function showWatchGraphPanelForKey(key) {
   const { latest, count } = watchGraphStatsByKey(key);
   if (!latest || count <= 0) return false;
   if (!watchGraphPanel) return false;
-  if (watchGraphPanelKey !== key) watchGraphZoomRange = null;
+  if (watchGraphPanelKey !== key) {
+    watchGraphZoomRange = null;
+    watchGraphFollowLatest = false;
+  }
   watchGraphPanel.classList.remove("hidden");
   watchGraphPanel.classList.add("isOn");
   watchGraphPanelOpen = true;
@@ -5182,6 +5253,7 @@ function hideWatchGraphPanel({ preserveKey = false } = {}) {
     watchGraphPanelKey = null;
     watchGraphCompareKey = "";
     watchGraphZoomRange = null;
+    watchGraphFollowLatest = false;
   }
   watchGraphMarkersForKey = [];
   watchGraphCompareMarkersForKey = [];
@@ -5319,6 +5391,8 @@ if (watchGraphHeader && watchGraphPanel) {
 if (watchGraphCompareSelect) {
   watchGraphCompareSelect.addEventListener("change", () => {
     watchGraphCompareKey = watchGraphCompareSelect.value || "";
+    watchGraphZoomRange = null;
+    watchGraphFollowLatest = false;
     renderWatchGraphForKey(watchGraphPanelKey);
   });
   watchGraphCompareSelect.addEventListener("mousedown", (e) => {
@@ -5424,6 +5498,51 @@ function watchSortValueKey(value) {
   return { t: 0, n: 0, s: String(value) };
 }
 
+let openWatchActionsMenu = null;
+
+function closeOpenWatchActionsMenu({ restoreFocus = false } = {}) {
+  if (!openWatchActionsMenu) return;
+  const { menu, button } = openWatchActionsMenu;
+  menu?.setAttribute("hidden", "");
+  button?.setAttribute("aria-expanded", "false");
+  if (restoreFocus) button?.focus?.();
+  openWatchActionsMenu = null;
+}
+
+function toggleWatchActionsMenu(button, menu) {
+  if (!button || !menu) return;
+  const wasOpen = openWatchActionsMenu?.menu === menu && !menu.hasAttribute("hidden");
+  closeOpenWatchActionsMenu();
+  if (wasOpen) return;
+  menu.removeAttribute("hidden");
+  button.setAttribute("aria-expanded", "true");
+  openWatchActionsMenu = { button, menu };
+}
+
+function syncWatchItemActionLayout(row) {
+  if (!row?.classList?.contains("watchItem")) return;
+  const label = row.querySelector(".watchLabel");
+  const timestamp = row.querySelector(".watchTimestamp");
+  if (!label || !timestamp) return;
+
+  row.classList.remove("watchActionsCollapsed", "watchLabelTruncated");
+  const labelRect = label.getBoundingClientRect();
+  const timestampRect = timestamp.getBoundingClientRect();
+  const needsCollapse = labelRect.right > timestampRect.left - 4
+    || label.scrollWidth > label.clientWidth + 1;
+  if (!needsCollapse) return;
+
+  row.classList.add("watchActionsCollapsed");
+  const collapsedLabelRect = label.getBoundingClientRect();
+  const collapsedTimestampRect = timestamp.getBoundingClientRect();
+  if (
+    collapsedLabelRect.right > collapsedTimestampRect.left - 4
+    || label.scrollWidth > label.clientWidth + 1
+  ) {
+    row.classList.add("watchLabelTruncated");
+  }
+}
+
 function createWatchListItem(m) {
   if (!m) return null;
   const w = m.watch;
@@ -5439,35 +5558,61 @@ function createWatchListItem(m) {
   div.dataset.t = String(t);
 
   div.innerHTML = `
-    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span class="pill level" style="background:${st.fill};color:${st.text}">${escapeHtml(st.name)}</span>
-        <span style="font-weight:850;word-break:break-word">${escapeHtml(label)}</span>
-      </div>
-      <div class="watchMeta">
-        <div class="muted">${t != null ? (String(fmtNum(t / 1000, 2)) + "s") : "—"}</div>
-        <div class="watchActions watchActionsPill pill">
-          <button class="iconBtn watchPinBtn" type="button" title="Open watch graph">
+    <div class="watchItemContent">
+      <div class="watchItemHeader">
+        <div class="watchTitleGroup">
+          <span class="pill level watchLevelPill" style="background:${st.fill};color:${st.text}">${escapeHtml(st.name)}</span>
+          <span class="watchLabel">${escapeHtml(label)}</span>
+        </div>
+        <div class="watchMeta">
+          <div class="watchTimestamp muted">${t != null ? (String(fmtNum(t / 1000, 2)) + "s") : "—"}</div>
+          <div class="watchActions watchActionsPill watchActionsFull pill">
+            <button class="iconBtn watchPinBtn" type="button" title="Open watch graph">
+                <svg width="20" height="20">
+                  <use href="${svgIconHref("icon-pinWatch")}" xlink:href="${svgIconHref("icon-pinWatch")}"></use>
+                </svg>
+            </button>
+            <button class="iconBtn watchVisibilityBtn" type="button" title="Toggle watch visibility">
               <svg width="20" height="20">
-                <use href="${svgIconHref("icon-pinWatch")}" xlink:href="${svgIconHref("icon-pinWatch")}"></use>
+                <use href="${svgIconHref(watchVisibilityIconId(w))}" xlink:href="${svgIconHref(watchVisibilityIconId(w))}"></use>
               </svg>
-          </button>
-          <button class="iconBtn watchVisibilityBtn" type="button" title="Toggle watch visibility">
-            <svg width="20" height="20">
-              <use href="${svgIconHref(watchVisibilityIconId(w))}" xlink:href="${svgIconHref(watchVisibilityIconId(w))}"></use>
-            </svg>
-          </button>
-          ${showGraphButton ? `
-          <button class="iconBtn watchGraphBtn" type="button" title="Open watch graph">
-            <svg width="20" height="20">
-              <use href="${svgIconHref("icon-watchGraph")}" xlink:href="${svgIconHref("icon-watchGraph")}"></use>
-            </svg>
-          </button>
-          ` : ""}
+            </button>
+            ${showGraphButton ? `
+            <button class="iconBtn watchGraphBtn" type="button" title="Open watch graph">
+              <svg width="20" height="20">
+                <use href="${svgIconHref("icon-watchGraph")}" xlink:href="${svgIconHref("icon-watchGraph")}"></use>
+              </svg>
+            </button>
+            ` : ""}
+          </div>
+          <div class="watchActionsCompact">
+            <button class="iconBtn watchActionsMoreBtn" type="button" title="More watch actions" aria-label="More watch actions" aria-expanded="false">
+              ⋮
+            </button>
+            <div class="watchActionsCompactMenu" hidden>
+              <button class="iconBtn watchPinBtn" type="button" title="Pin watch">
+                <svg width="20" height="20">
+                  <use href="${svgIconHref("icon-pinWatch")}" xlink:href="${svgIconHref("icon-pinWatch")}"></use>
+                </svg>
+              </button>
+              <button class="iconBtn watchVisibilityBtn" type="button" title="Toggle watch visibility">
+                <svg width="20" height="20">
+                  <use href="${svgIconHref(watchVisibilityIconId(w))}" xlink:href="${svgIconHref(watchVisibilityIconId(w))}"></use>
+                </svg>
+              </button>
+              ${showGraphButton ? `
+              <button class="iconBtn watchGraphBtn" type="button" title="Open watch graph">
+                <svg width="20" height="20">
+                  <use href="${svgIconHref("icon-watchGraph")}" xlink:href="${svgIconHref("icon-watchGraph")}"></use>
+                </svg>
+              </button>
+              ` : ""}
+            </div>
+          </div>
         </div>
       </div>
+      <div class="bigValue${watchBooleanValueClass(value)}">${escapeHtml(String(value))}</div>
     </div>
-    <div class="bigValue${watchBooleanValueClass(value)}">${escapeHtml(String(value))}</div>
   `;
 
   div.addEventListener("pointerdown", (ev) => {
@@ -5476,22 +5621,48 @@ function createWatchListItem(m) {
     selectWatchMarker(m, true, { x: ev.clientX, y: ev.clientY });
   }, { passive: false });
 
-  const visibilityBtn = div.querySelector(".watchVisibilityBtn");
-  const pinBtn = div.querySelector(".watchPinBtn");
-  if (pinBtn) {
+  const moreBtn = div.querySelector(".watchActionsMoreBtn");
+  const compactMenu = div.querySelector(".watchActionsCompactMenu");
+  if (moreBtn && compactMenu) {
+    moreBtn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggleWatchActionsMenu(moreBtn, compactMenu);
+    });
+    moreBtn.addEventListener("pointerdown", (ev) => {
+      ev.stopPropagation();
+    }, { passive: true });
+    compactMenu.addEventListener("pointerdown", (ev) => {
+      ev.stopPropagation();
+    }, { passive: true });
+    compactMenu.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        closeOpenWatchActionsMenu({ restoreFocus: true });
+      } else if (ev.key === "Tab") {
+        closeOpenWatchActionsMenu();
+      }
+    });
+  }
+
+  const pinButtons = div.querySelectorAll(".watchPinBtn");
+  for (const pinBtn of pinButtons) {
     pinBtn.title = "Pin watch";
     pinBtn.setAttribute("aria-label", "Pin watch");
     pinBtn.addEventListener("click", (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
       toggleFloatingWatch(w.id ?? w.watchId ?? null);
+      closeOpenWatchActionsMenu();
     });
     pinBtn.addEventListener("pointerdown", (ev) => {
       ev.stopPropagation();
     }, { passive: true });
   }
 
-  if (visibilityBtn) {
+  const visibilityButtons = div.querySelectorAll(".watchVisibilityBtn");
+  for (const visibilityBtn of visibilityButtons) {
     const visibilityKey = watchVisibilityKeyForWatch(w);
     const visibilityTitle = watchVisibilityTitle(w);
     visibilityBtn.dataset.watchVisibilityKey = visibilityKey;
@@ -5503,18 +5674,20 @@ function createWatchListItem(m) {
       ev.preventDefault();
       ev.stopPropagation();
       toggleWatchVisibilityForWatch(w);
+      closeOpenWatchActionsMenu();
     });
     visibilityBtn.addEventListener("pointerdown", (ev) => {
       ev.stopPropagation();
     }, { passive: true });
   }
 
-  const graphBtn = div.querySelector(".watchGraphBtn");
-  if (graphBtn) {
+  const graphButtons = div.querySelectorAll(".watchGraphBtn");
+  for (const graphBtn of graphButtons) {
     graphBtn.addEventListener("click", (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
       openOrToggleWatchGraphPanel(m);
+      closeOpenWatchActionsMenu();
     });
     graphBtn.addEventListener("pointerdown", (ev) => {
       ev.stopPropagation();
@@ -5525,6 +5698,7 @@ function createWatchListItem(m) {
 }
 
 function renderWatchList() {
+  closeOpenWatchActionsMenu();
   if (watchFilter) {
     renderWatchFilter();
   }
@@ -5980,7 +6154,6 @@ function drawWatchDots() {
     const { pose, watch } = m;
     if (!isWatchMarkerVisible(m)) continue;
     if (!pose) continue;
-    const st = levelStyle(watch.level);
     const p = worldToScreen(pose.x, pose.y);
 
     const isHover = (hoverWatch === m);
@@ -5989,7 +6162,7 @@ function drawWatchDots() {
     const fillA = 0.40;
 
     ctx.save();
-    ctx.fillStyle = st.fill.replace("rgb(", "rgba(").replace(")", `,${fillA})`);
+    ctx.fillStyle = levelFillWithAlpha(watch.level, fillA);
     ctx.strokeStyle = "rgba(255,255,255,0.95)";
     ctx.lineWidth = Math.max(1, 2 * viewingFieldMarkerStyleScale());
     ctx.beginPath();
@@ -6000,7 +6173,6 @@ function drawWatchDots() {
   }
 
   if (selectedWatch?.marker?.pose && isWatchMarkerVisible(selectedWatch.marker)) {
-    const st = levelStyle(selectedWatch.marker.watch.level);
     const pose = selectedWatch.marker.pose;
     const p = worldToScreen(pose.x, pose.y);
 
@@ -6014,7 +6186,7 @@ function drawWatchDots() {
     ctx.arc(p.x, p.y, outerR, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.fillStyle = st.fill.replace("rgb(", "rgba(").replace(")", ",0.35)");
+    ctx.fillStyle = levelFillWithAlpha(selectedWatch.marker.watch.level, 0.35);
     ctx.beginPath();
     ctx.arc(p.x, p.y, innerR, 0, Math.PI * 2);
     ctx.fill();
@@ -6512,11 +6684,10 @@ function drawTimeline() {
   // watch dots
   for (const m of watchMarkers) {
     if (!isWatchMarkerVisible(m)) continue;
-    const st = levelStyle(m.watch.level);
     const x = timeToX(m.t);
     const y = 10;
     tctx.save();
-    tctx.fillStyle = st.fill.replace("rgb(", "rgba(").replace(")", ",0.25)");
+    tctx.fillStyle = levelFillWithAlpha(m.watch.level, 0.25);
     tctx.strokeStyle = "rgba(255,255,255,0.95)";
     tctx.lineWidth = 2;
     tctx.beginPath();
