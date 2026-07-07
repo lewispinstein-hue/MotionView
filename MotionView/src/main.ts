@@ -721,6 +721,7 @@ let planSelected = -1;
 let planDragging = false;
 let planPointerId = null;
 let planSelectedSet = new Set();
+let pendingPlanCanvasClick = null; // { world, clearMultiSelection }
 let planDragStart = { x: 0, y: 0 };
 let planDragOrig = [];
 let planSelecting = false;
@@ -7160,7 +7161,6 @@ canvas.addEventListener("pointerdown", (e) => {
       selectPlanNode(nodeHit.node.id, { scrollSidebar: true });
       return;
     }
-    const w = screenToWorld(mx, my);
     if (thetaHit >= 0) {
       pushPlanUndo();
       planThetaDragging = true;
@@ -7172,19 +7172,7 @@ canvas.addEventListener("pointerdown", (e) => {
       updatePlanThetaFromPointer(thetaHit, mx, my);
       return;
     }
-    if (!isInField(w) || !isPointInFieldBounds(w)) {
-      // allow panning when clicking outside the field
-      panArmed = true;
-      isPanning = false;
-      suppressNextClick = false;
-      panPointerId = e.pointerId;
-      panStart.x = mx;
-      panStart.y = my;
-      panStart.panX = viewPanXpx;
-      panStart.panY = viewPanYpx;
-      canvas.setPointerCapture(e.pointerId);
-      return;
-    }
+    const w = screenToWorld(mx, my);
     if (hit >= 0) {
       if (e.shiftKey) {
         planToggleSelection(hit);
@@ -7200,22 +7188,19 @@ canvas.addEventListener("pointerdown", (e) => {
         requestDrawAll();
       }
     } else {
-      if (planSelectedSet.size > 1) {
-        planSetSelection([]);
-        planChanged();
-        requestDrawAll();
-        return;
-      }
-      pushPlanUndo();
-      const previous = planWaypoints[planWaypoints.length - 1];
-      planWaypoints.push({
-        x: clampPlanCoordX(w.x),
-        y: clampPlanCoordY(w.y),
-        theta: 0,
-        speed: previous ? readPlanSpeed(previous.speed, 127) : 127,
-      });
-      planSelectSingle(planWaypoints.length - 1);
-      planChanged();
+      pendingPlanCanvasClick = (isInField(w) && isPointInFieldBounds(w))
+        ? { world: w, clearMultiSelection: planSelectedSet.size > 1 }
+        : null;
+      panArmed = true;
+      isPanning = false;
+      suppressNextClick = false;
+      panPointerId = e.pointerId;
+      panStart.x = mx;
+      panStart.y = my;
+      panStart.panX = viewPanXpx;
+      panStart.panY = viewPanYpx;
+      canvas.setPointerCapture(e.pointerId);
+      return;
     }
     planDragging = true;
     planPointerId = e.pointerId;
@@ -7345,11 +7330,39 @@ function endPan(e) {
     }
   }
   if (!panArmed) return;
+  const wasPanning = isPanning;
   panArmed = false;
   isPanning = false;
   canvas.style.cursor = "";
   try { canvas.releasePointerCapture(panPointerId ?? e.pointerId); } catch { }
   panPointerId = null;
+
+  if (getAppMode() === "planning") {
+    const pending = pendingPlanCanvasClick;
+    pendingPlanCanvasClick = null;
+    if (e.type !== "pointercancel" && !wasPanning && pending) {
+      if (pending.clearMultiSelection) {
+        planSetSelection([]);
+        planChanged();
+        requestDrawAll();
+        return;
+      }
+      pushPlanUndo();
+      const previous = planWaypoints[planWaypoints.length - 1];
+      planWaypoints.push({
+        x: clampPlanCoordX(pending.world.x),
+        y: clampPlanCoordY(pending.world.y),
+        theta: 0,
+        speed: previous ? readPlanSpeed(previous.speed, 127) : 127,
+      });
+      planSelectSingle(planWaypoints.length - 1);
+      planChanged();
+      planDragging = false;
+      renderPlanList();
+      updatePlanSelectionPanel();
+      requestDrawAll();
+    }
+  }
 }
 
 canvas.addEventListener("pointerup", endPan);
