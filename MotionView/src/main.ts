@@ -1,16 +1,22 @@
 // @ts-nocheck
-import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { resolveResource } from "@tauri-apps/api/path";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import Chart from "chart.js/auto";
-import iconsSpriteUrl from "./assets/svg/icons.svg?url";
+import fitIconUrl from "./assets/svg/common/fit.svg?url";
 import demoRouteUrl from "./assets/demo/getting-started-route.json?url";
+import changeObjectColorIconUrl from "./assets/svg/planning/changeObjectColor.svg?url";
+import removePlanningObjectIconUrl from "./assets/svg/planning/removePlanningObject.svg?url";
+import invisibleWatchIconUrl from "./assets/svg/viewing/invisibleWatch.svg?url";
+import pinWatchIconUrl from "./assets/svg/viewing/pinWatch.svg?url";
+import visibleWatchIconUrl from "./assets/svg/viewing/visibleWatch.svg?url";
+import watchGraphIconUrl from "./assets/svg/viewing/watchGraph.svg?url";
 import { createModeController } from "./app/modeController";
 import { applyLiveButtonState } from "./live/liveDomAdapter";
-import { LiveActionGate, LivePendingBuffer, LiveWebSocketClient, StreamingDurationTracker, stripToTag } from "./live/liveCore";
+import { LiveActionGate, LivePendingBuffer, LiveWebSocketClient, stripToTag } from "./live/liveCore";
 import { LiveConsoleBuffer } from "./live/liveConsole";
 import { createPoseStore } from "./state/poseStore";
+import { appTelemetry, exportTelemetry, initTelemetry, liveTelemetry, planningTelemetry, telemetryClient, viewingTelemetry } from "./telemetry/createTelemetry";
 
 const isWindowsPlatform = typeof navigator === "object" && /Windows/.test(navigator.userAgent);
 const isTauriRuntime = typeof window === "object" && !!window.__TAURI_INTERNALS__;
@@ -57,117 +63,8 @@ let WS_ORIGIN = ORIGIN ? ORIGIN.replace(/^http/, "ws") : null;
 const root = document.documentElement;
 let persistedAppState = null;
 
-const posthog = (() => {
-  const enabled = () => true;
-  const safeInvoke = async (command, payload = {}) => {
-    try {
-      await invoke(command, payload);
-    } catch (err) {
-      console.warn("PostHog telemetry failed:", err);
-      throw err;
-    }
-  };
-
-  const buildRequest = (base, properties) => {
-    const request = { ...base };
-    if (properties && Object.keys(properties).length > 0) {
-      request.properties = properties;
-    }
-    return request;
-  };
-
-  return {
-    enabled,
-    capture(event, properties = {}, extras = {}) {
-      const request = buildRequest({ event, ...extras }, properties);
-      console.log("PostHog capture:", request);
-      return safeInvoke("plugin:posthog|capture", { request });
-    },
-    identify(distinctId, properties) {
-      const request = buildRequest({ distinctId }, properties);
-      return safeInvoke("plugin:posthog|identify", { request });
-    },
-    alias(aliasValue, distinctId) {
-      const request = { alias: aliasValue };
-      if (distinctId) request.distinctId = distinctId;
-      return safeInvoke("plugin:posthog|alias", { request });
-    },
-  };
-})();
-
-async function withRetry(fn, attempts = 3, baseDelayMs = 300) {
-  let lastErr = null;
-  for (let i = 0; i < attempts; i += 1) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastErr = err;
-      if (i === attempts - 1) break;
-      await new Promise((resolve) => setTimeout(resolve, baseDelayMs * (2 ** i)));
-    }
-  }
-  throw lastErr;
-}
-
-const telemetryDebounceUntilByKey = new Map();
-
-async function captureTelemetry(event, properties = {}, opts = {}) {
-  const debounceMs = Number(opts.debounceMs || 0);
-  const debounceKey = opts.debounceKey || event;
-  if (!posthog.enabled()) return false;
-
-  if (debounceMs > 0) {
-    const now = Date.now();
-    const until = telemetryDebounceUntilByKey.get(debounceKey) || 0;
-    if (now < until) return false;
-    telemetryDebounceUntilByKey.set(debounceKey, now + debounceMs);
-  }
-
-  try {
-    await withRetry(() => posthog.capture(event, properties));
-    return true;
-  } catch (err) {
-    setStatus(`Telemetry capture failed for ${event}: ${err.message}`, false);
-    console.warn(`Telemetry capture failed for ${event}:`, err);
-    return false;
-  }
-}
-
-const APP_VERSION = await getVersion();
-
-async function initPosthogTelemetry() {
-  if (!posthog.enabled()) return;
-  try {
-    let distinctId = null;
-    try {
-      distinctId = await invoke("get_posthog_distinct_id");
-    } catch (err) {
-      console.warn("Failed to load native PostHog distinct ID:", err);
-    }
-    let systemInfo = null;
-    try {
-      systemInfo = await invoke("get_system_info");
-    } catch (err) {
-      console.warn("Failed to load system info from backend:", err);
-    }
-    if (distinctId) {
-      await withRetry(() => posthog.identify(distinctId));
-    }
-    await captureTelemetry("app_loaded", {
-      version: APP_VERSION,
-      OS: systemInfo?.os ?? "unknown",
-      arch: systemInfo?.arch ?? "unknown",
-      browser: navigator.userAgent,
-      plan_saved: planWaypoints.length > 0,
-      plan_points: planWaypoints.length,
-    });
-    console.log("Telemetry initialized and event sent.");
-  } catch (err) {
-    console.error("PostHog failed to initialize:", err);
-  }
-}
-
-window.posthog = posthog;
+const APP_VERSION = await initTelemetry();
+window.posthog = telemetryClient;
 // Live streaming state shared across handlers (avoids TDZ issues)
 window.__live = window.__live || { connected: false, streaming: false };
 
@@ -704,10 +601,9 @@ const modeController = createModeController({
     renderPlanList();
     updatePlanControls();
     setPlanDist(planPlayDist);
-    void captureTelemetry("mode_changed", {
-      version: APP_VERSION,
+    void appTelemetry.modeChanged({
       mode,
-    }, { debounceMs: 700 });
+    });
   },
 });
 
@@ -1293,7 +1189,6 @@ function getUtf8ByteLength(value) {
 function getPlanningTelemetryProperties(extra = {}) {
   const methodCount = planObjects.reduce((sum, obj) => sum + (Array.isArray(obj.methods) ? obj.methods.length : 0), 0);
   return {
-    version: APP_VERSION,
     plan_waypoints: planWaypoints.length,
     plan_objects: planObjects.length,
     plan_methods: methodCount,
@@ -1380,7 +1275,7 @@ function openPlanTemplateModal() {
       const previousTemplate = planExportTemplate;
       planExportTemplate = codeValue.trim() ? codeValue : DEFAULT_PLAN_EXPORT_TEMPLATE;
       saveSettings();
-      void captureTelemetry("planning_template_updated", getPlanningTelemetryProperties({
+      void planningTelemetry.templateUpdated(getPlanningTelemetryProperties({
         template_changed: previousTemplate !== planExportTemplate,
         template_bytes: getUtf8ByteLength(planExportTemplate),
       }));
@@ -1491,7 +1386,7 @@ function openPlanMethodCreateModal(objectId) {
         code: codeValue,
       });
       savePlanObjectsUi();
-      void captureTelemetry("planning_method_created", getPlanningTelemetryProperties({
+      void planningTelemetry.methodCreated(getPlanningTelemetryProperties({
         method_code_chars: String(codeValue || "").length,
         method_code_bytes: getUtf8ByteLength(codeValue),
       }));
@@ -1524,7 +1419,7 @@ function openPlanMethodEditModal(objectId, methodId) {
       targetMethod.name = nameValue.slice(0, 25);
       targetMethod.code = codeValue;
       savePlanObjectsUi();
-      void captureTelemetry("planning_method_updated", getPlanningTelemetryProperties({
+      void planningTelemetry.methodUpdated(getPlanningTelemetryProperties({
         method_name_changed: previousName !== targetMethod.name,
         method_code_changed: previousCode !== targetMethod.code,
         method_code_chars: String(codeValue || "").length,
@@ -1557,7 +1452,7 @@ function openPlanNodeEditModal(nodeId) {
       renderPlanObjects();
       requestDrawAll();
       const effective = getPlanNodeEffectiveMethod(targetNode);
-      void captureTelemetry("planning_timeline_node_updated", getPlanningTelemetryProperties({
+      void planningTelemetry.timelineNodeUpdated(getPlanningTelemetryProperties({
         node_override_created: !beforeOverride && !!effective?.hasOverride,
         node_override_cleared: beforeOverride && !effective?.hasOverride,
         node_code_chars: String(codeValue || "").length,
@@ -1951,7 +1846,7 @@ function createPlanMethodDragGhostCard({ objectId, methodId }) {
     </div>
     <button class="iconBtn planMethodRemoveBtn" type="button" aria-hidden="true" tabindex="-1">
       <svg width="30" height="30" aria-hidden="true">
-        <use href="${iconsSpriteUrl}#icon-removePlanningObject"></use>
+        <use href="${svgIconHref("icon-removePlanningObject")}"></use>
       </svg>
     </button>
   `;
@@ -2243,7 +2138,7 @@ function renderPlanObjects() {
           </div>
           <button class="iconBtn planMethodRemoveBtn" type="button" title="Remove Method" aria-label="Remove Method" data-object-id="${escapeHtml(obj.id)}" data-method-id="${escapeHtml(method.id)}">
             <svg width="30" height="30" aria-hidden="true">
-              <use href="${iconsSpriteUrl}#icon-removePlanningObject"></use>
+              <use href="${svgIconHref("icon-removePlanningObject")}"></use>
             </svg>
           </button>
         `;
@@ -2266,7 +2161,7 @@ function renderPlanObjects() {
         <div class="planObjectColorWrap">
           <button class="iconBtn secondaryBtn planObjectColorBtn" type="button" title="Change Object Color" aria-label="Change Object Color" data-object-id="${escapeHtml(obj.id)}" style="color:${escapeHtml(obj.color || getDefaultPlanObjectColor(i))}">
             <svg width="30" height="30" aria-hidden="true">
-              <use href="${iconsSpriteUrl}#icon-planningChangeObjectColor"></use>
+              <use href="${svgIconHref("icon-planningChangeObjectColor")}"></use>
             </svg>
           </button>
           <div class="planObjectColorPopover"${planOpenColorPickerObjectId === obj.id ? "" : " hidden"}>
@@ -2276,7 +2171,7 @@ function renderPlanObjects() {
       </div>
       <button class="iconBtn secondaryBtn planObjectRemoveActionBtn" type="button" title="Remove Object" aria-label="Remove Object" data-object-id="${escapeHtml(obj.id)}">
         <svg width="30" height="30" aria-hidden="true">
-          <use href="${iconsSpriteUrl}#icon-removePlanningObject"></use>
+          <use href="${svgIconHref("icon-removePlanningObject")}"></use>
         </svg>
       </button>
     `;
@@ -2371,7 +2266,7 @@ function addPlanObject() {
   planEditingObjectOriginalName = "";
   planObjectEditSelectAll = false;
   savePlanObjectsUi();
-  void captureTelemetry("planning_object_created", getPlanningTelemetryProperties({
+  void planningTelemetry.objectCreated(getPlanningTelemetryProperties({
     object_methods: next.methods.length,
   }));
 }
@@ -2387,7 +2282,7 @@ function removePlanObject(objectId) {
   if (planSelectedNodeId && !getPlanNodeById(planSelectedNodeId)) clearPlanNodeSelection();
   if (planEditingObjectId === objectId) clearPlanObjectEditState();
   savePlanObjectsUi();
-  void captureTelemetry("planning_object_removed", getPlanningTelemetryProperties({
+  void planningTelemetry.objectRemoved(getPlanningTelemetryProperties({
     removed_methods: removedMethodIds.size,
     removed_nodes: removedNodeCount,
   }));
@@ -2546,7 +2441,7 @@ function removePlanMethod(objectId, methodId) {
   planNodes = planNodes.filter((entry) => !(entry.objectId === objectId && entry.methodId === methodId));
   if (planSelectedNodeId && !getPlanNodeById(planSelectedNodeId)) clearPlanNodeSelection();
   savePlanObjectsUi();
-  void captureTelemetry("planning_method_removed", getPlanningTelemetryProperties({
+  void planningTelemetry.methodRemoved(getPlanningTelemetryProperties({
     removed_nodes: removedNodeCount,
   }));
 }
@@ -2607,7 +2502,7 @@ function removePlanNode(nodeId) {
   savePlanTimelineUi();
   normalizePlanningTimelineHeightForContent();
   renderPlanObjects();
-  void captureTelemetry("planning_timeline_node_removed", getPlanningTelemetryProperties({
+  void planningTelemetry.timelineNodeRemoved(getPlanningTelemetryProperties({
     before_waypoint: removedNode.beforeWaypoint,
   }));
 }
@@ -3953,10 +3848,9 @@ async function loadFieldImage(filename) {
     setStatus(`Could not load field image: ${nextField}`);
   };
   img.src = imgSrc;
-  await captureTelemetry("field_image_loaded", {
-    version: APP_VERSION,
+  await viewingTelemetry.fieldImageLoaded({
     field: nextField,
-  }, { debounceMs: 1500 });
+  });
 }
 
 function loadRobotImage() {
@@ -4787,8 +4681,19 @@ function setSvgUseHref(useEl, href) {
   useEl.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", href);
 }
 
+const svgIconUrls = {
+  "icon-fit": fitIconUrl,
+  "icon-removePlanningObject": removePlanningObjectIconUrl,
+  "icon-planningChangeObjectColor": changeObjectColorIconUrl,
+  "icon-pinWatch": pinWatchIconUrl,
+  "icon-invisibleWatch": invisibleWatchIconUrl,
+  "icon-visibleWatch": visibleWatchIconUrl,
+  "icon-watchGraph": watchGraphIconUrl,
+};
+
 function svgIconHref(iconId) {
-  return `${iconsSpriteUrl}#${iconId}`;
+  const iconUrl = svgIconUrls[iconId];
+  return iconUrl ? `${iconUrl}#${iconId}` : "";
 }
 
 function updateWatchVisibilityButtons(key) {
@@ -7001,10 +6906,9 @@ function toggleFloatingInfo() {
   btnToggleFloat.classList.toggle("isOn", !floatWin.classList.contains("hidden"));
   floatWin.classList.toggle("isOn", !floatWin.classList.contains("hidden"));
 
-  captureTelemetry("toggle_floating_info", {
-    version: APP_VERSION,
+  viewingTelemetry.floatingInfoToggled({
     enabled: !floatWin.classList.contains("hidden"),
-  }, { debounceMs: 1000 }).catch(err => console.error(err));
+  }).catch(err => console.error(err));
 }
 
 // -------- pose readout --------
@@ -7940,40 +7844,10 @@ let leftStreaming = false;
 const liveSocket = new LiveWebSocketClient();
 const livePendingBuffer = new LivePendingBuffer();
 const liveConsole = new LiveConsoleBuffer(liveWinEl);
-const streamingDurationTracker = new StreamingDurationTracker();
 const liveActionGate = new LiveActionGate(400, 6000, () => {
   setLeftUi();
   liveAppendLine("[UI] Action timed out; UI unlocked.");
 });
-
-function startStreamingTimer() {
-  streamingDurationTracker.start();
-}
-
-function stopStreamingTimer() {
-  streamingDurationTracker.stop();
-}
-
-function getStreamingDurationSeconds() {
-  return streamingDurationTracker.sessionSeconds();
-}
-
-function resetStreamingTimer() {
-  streamingDurationTracker.resetSession();
-}
-
-function consumeStreamingDurationSeconds() {
-  return streamingDurationTracker.consumeSessionSeconds();
-}
-
-async function reportStreamingDuration() {
-  const seconds = consumeStreamingDurationSeconds();
-  if (seconds <= 0) return;
-  await captureTelemetry("streaming_duration", {
-    version: APP_VERSION,
-    streaming_seconds: seconds,
-  }, { debounceMs: 1500 });
-}
 
 function setLeftActionInFlight(v) {
   liveActionGate.setInFlight(v);
@@ -8317,8 +8191,8 @@ async function connectLeft() {
       const wasStreaming = leftStreaming;
       leftConnected = false;
       leftStreaming = false;
-      if (wasStreaming) reportStreamingDuration();
-      else resetStreamingTimer();
+      if (wasStreaming) liveTelemetry.streamingStopped();
+      else liveTelemetry.resetCurrentStreamingSession();
       if (window.__live) { window.__live.connected = false; window.__live.streaming = false; }
       stopLeftRefresh();
       leftSetUI("Disconnected");
@@ -8336,14 +8210,15 @@ async function connectLeft() {
 async function disconnectLeft() {
   dbgLive("disconnectLeft: begin");
   const wasStreaming = leftStreaming;
+  let stopHandled = false;
   if (wasStreaming) {
-    await stopStreaming(false, false);
+    stopHandled = await stopStreaming(false, false);
   }
   liveSocket.close();
   leftConnected = false;
   leftStreaming = false;
-  if (wasStreaming) reportStreamingDuration();
-  else resetStreamingTimer();
+  if (wasStreaming && !stopHandled) await liveTelemetry.streamingStopped();
+  else liveTelemetry.resetCurrentStreamingSession();
   stopLeftRefresh();
   leftSetUI("Disconnected");
 }
@@ -8480,7 +8355,7 @@ async function doLeftRefresh() {
 
 async function startStreaming() {
   dbgLive("startStreaming: begin");
-  resetStreamingTimer();
+  liveTelemetry.resetCurrentStreamingSession();
   let r;
   try {
     r = await withTimeout(apiPost("/api/start"), 5000, "start");
@@ -8496,7 +8371,7 @@ async function startStreaming() {
     }
     if (!r || !r.ok) return false;
     leftStreaming = true;
-    startStreamingTimer();
+    liveTelemetry.streamingStarted();
     leftSetUI("Streaming started");
     dbgLive("startStreaming: ok (retry)");
     return true;
@@ -8510,7 +8385,7 @@ async function startStreaming() {
   // New session: allow timestamps to restart from 0 without being dropped.
   liveLastPoseT = null;
   leftStreaming = true;
-  startStreamingTimer();
+  liveTelemetry.streamingStarted();
   leftSetUI("Streaming started");
   dbgLive(`startStreaming: ok (status=${r.status || "n/a"})`);
   return true;
@@ -8544,7 +8419,7 @@ async function stopStreaming(forceKill = false, doMsg = true) {
   }
   leftStreaming = false;
   clearLivePending();
-  reportStreamingDuration();
+  await liveTelemetry.streamingStopped();
   if (doMsg) leftSetUI(forceKill ? "Force-killed" : "Streaming stopped");
   dbgLive("stopStreaming: ok");
   return true;
@@ -9102,8 +8977,7 @@ async function handleFile(file) {
   } catch (e) {
     console.error(e);
     setStatus(`Failed to load: ${e?.message || e}`);
-    await captureTelemetry("failed_file_load", {
-      version: APP_VERSION,
+    await viewingTelemetry.failedFileLoad({
       reason: e?.message || e,
     });
     throw e;
@@ -9125,8 +8999,7 @@ async function openFile(file, inputEl) {
   try {
     const loadedType = await handleFile(file);
     if (inputEl) inputEl.value = ""; // allow re selecting same file
-    await captureTelemetry("file_loaded", {
-      version: APP_VERSION,
+    await viewingTelemetry.fileLoaded({
       file_name: fileName,
       file_type: loadedType,
       file_size: file.size,
@@ -10195,7 +10068,7 @@ if (btnExportConfirm) {
       setStatus(`Exported ${pendingExportRequest.filename}.`);
       const includesPlanning = pendingExportRequest.exportType === "planning" || pendingExportRequest.exportType === "both";
       const includesViewing = pendingExportRequest.exportType === "viewing" || pendingExportRequest.exportType === "both";
-      void captureTelemetry("motionview_json_exported", getPlanningTelemetryProperties({
+      void exportTelemetry.motionviewJsonExported(getPlanningTelemetryProperties({
         export_type: pendingExportRequest.exportType,
         includes_planning: includesPlanning,
         includes_viewing: includesViewing,
@@ -10405,7 +10278,7 @@ function commitPlanTimelineDragTarget(context, target) {
   if (!node) return null;
   savePlanTimelineUi();
   selectPlanNode(node.id, { scrollSidebar: true });
-  void captureTelemetry(context.source === "sidebar" ? "planning_timeline_node_created" : "planning_timeline_node_moved", getPlanningTelemetryProperties({
+  void (context.source === "sidebar" ? planningTelemetry.timelineNodeCreated : planningTelemetry.timelineNodeMoved).call(planningTelemetry, getPlanningTelemetryProperties({
     before_waypoint: node.beforeWaypoint,
     node_index: node.index,
   }));
@@ -10548,7 +10421,7 @@ if (btnPlanCopyCode) {
     try {
       await copyTextToClipboard(code);
       setStatus(`Copied generated code for ${planWaypoints.length} waypoint${planWaypoints.length === 1 ? "" : "s"}.`);
-      void captureTelemetry("planning_template_exported", getPlanningTelemetryProperties({
+      void planningTelemetry.templateExported(getPlanningTelemetryProperties({
         export_surface: "clipboard",
         exported_chars: code.length,
         exported_bytes: getUtf8ByteLength(code),
@@ -11033,10 +10906,9 @@ if (btnTogglePlanOverlay) {
     planOverlayVisible = !planOverlayVisible;
     btnTogglePlanOverlay.classList.toggle("isOn", planOverlayVisible);
     requestDrawAll();
-    captureTelemetry("toggle_plan_overlay", {
-      version: APP_VERSION,
+    viewingTelemetry.planOverlayToggled({
       enabled: planOverlayVisible,
-    }, { debounceMs: 1000 }).catch(err => console.error(err));
+    }).catch(err => console.error(err));
   });
   btnTogglePlanOverlay.classList.toggle("isOn", planOverlayVisible);
 }
@@ -11615,7 +11487,10 @@ document.addEventListener("keydown", (e) => {
 });
 sanitizeExportFilename();
 // -------- init --------
-await initPosthogTelemetry();
+await appTelemetry.loaded({
+  plan_saved: planWaypoints.length > 0,
+  plan_points: planWaypoints.length,
+});
 loadFieldOptions();
 await loadSettings();
 await loadSavedPaths();
@@ -11636,13 +11511,9 @@ async function appExit() {
     await saveSettings();
   } catch (err) { }
 
-  await captureTelemetry("total_streaming_duration", {
-    version: APP_VERSION,
-    duration: fmtNum(streamingDurationTracker.accumulatedSeconds(), 1),
-  });
+  await liveTelemetry.totalStreamingDuration();
 
-  await captureTelemetry("livestream_metrics", {
-    version: APP_VERSION,
+  await liveTelemetry.livestreamMetrics({
     totalPosesReceived: telemetryMetrics.totalPosesReceived,
     totalLogsReceived: telemetryMetrics.totalLogsReceived,
     totalWatchesReceived: telemetryMetrics.totalWatchesReceived,
@@ -11653,8 +11524,7 @@ async function appExit() {
     ? fmtNum(performance.now() / 1000 / 60, 2)
     : fmtNum(performance.now() / 1000, 2);
 
-  await captureTelemetry("app_exit", {
-    version: APP_VERSION,
+  await appTelemetry.exiting({
     uptime: Number(uptime),
   });
 

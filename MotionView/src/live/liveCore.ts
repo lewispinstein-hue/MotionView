@@ -56,51 +56,6 @@ export class LivePendingBuffer {
   }
 }
 
-export class StreamingDurationTracker {
-  private sessionMs = 0;
-  private accumulatedMs = 0;
-  private startedAt: number | null = null;
-
-  start() {
-    if (this.startedAt == null) {
-      this.startedAt = performance.now();
-    }
-  }
-
-  stop() {
-    if (this.startedAt != null) {
-      const elapsed = performance.now() - this.startedAt;
-      this.sessionMs += elapsed;
-      this.accumulatedMs += elapsed;
-      this.startedAt = null;
-    }
-  }
-
-  resetSession() {
-    this.sessionMs = 0;
-    this.startedAt = null;
-  }
-
-  consumeSessionSeconds() {
-    this.stop();
-    const seconds = this.sessionSeconds();
-    this.resetSession();
-    return seconds;
-  }
-
-  sessionSeconds() {
-    let totalMs = this.sessionMs;
-    if (this.startedAt != null) {
-      totalMs += performance.now() - this.startedAt;
-    }
-    return Math.round(totalMs / 1000);
-  }
-
-  accumulatedSeconds() {
-    return this.accumulatedMs / 1000;
-  }
-}
-
 export class LiveActionGate {
   private inFlight = false;
   private lastActionAt = 0;
