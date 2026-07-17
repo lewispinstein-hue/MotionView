@@ -1,0 +1,10 @@
+<!-- MotionView icon asset -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="icon-fit" viewBox="0 0 256 256">
+    <g fill="currentColor" transform="translate(1.4065934065934016 1.4065934065934016) scale(2.81 2.81)">
+      <path d="M 27.194 90 H 1.5 C 0.671 90 0 89.328 0 88.5 V 62.806 c 0 -0.828 0.671 -1.5 1.5 -1.5 s 1.5 0.672 1.5 1.5 V 87 h 24.194 c 0.829 0 1.5 0.672 1.5 1.5 S 28.023 90 27.194 90 z" fill="currentColor" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/>
+      <path d="M 1.5 90 c -0.384 0 -0.768 -0.146 -1.061 -0.439 c -0.586 -0.586 -0.586 -1.535 0 -2.121 l 87 -87 c 0.586 -0.586 1.535 -0.586 2.121 0 c 0.586 0.585 0.586 1.536 0 2.121 l -87 87 C 2.268 89.854 1.884 90 1.5 90 z" fill="currentColor" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/>
+      <path d="M 88.5 28.694 c -0.828 0 -1.5 -0.671 -1.5 -1.5 V 3 H 62.806 c -0.828 0 -1.5 -0.671 -1.5 -1.5 s 0.672 -1.5 1.5 -1.5 H 88.5 C 89.328 0 90 0.671 90 1.5 v 25.694 C 90 28.023 89.328 28.694 88.5 28.694 z" fill="currentColor" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/>
+    </g>
+  </symbol>
+</svg>

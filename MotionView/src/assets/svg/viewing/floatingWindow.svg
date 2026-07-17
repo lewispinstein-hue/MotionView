@@ -1,0 +1,11 @@
+<!-- MotionView icon asset -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="icon-floatingWin" viewBox="0 0 256 256">
+    <g fill="currentColor" transform="translate(1.4065934065934016 1.4065934065934016) scale(2.81 2.81)">
+      <path d="M 27.429 72.429 c -2.209 0 -4 -1.791 -4 -4 v -11.8 c 0 -2.209 1.791 -4 4 -4 s 4 1.791 4 4 v 11.8 C 31.429 70.638 29.638 72.429 27.429 72.429 z" fill="currentColor" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/>
+      <path d="M 45 72.429 c -2.209 0 -4 -1.791 -4 -4 V 45 c 0 -2.209 1.791 -4 4 -4 s 4 1.791 4 4 v 23.429 C 49 70.638 47.209 72.429 45 72.429 z" fill="currentColor" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/>
+      <path d="M 62.571 72.429 c -2.209 0 -4 -1.791 -4 -4 V 21.571 c 0 -2.209 1.791 -4 4 -4 s 4 1.791 4 4 v 46.857 C 66.571 70.638 64.78 72.429 62.571 72.429 z" fill="currentColor" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/>
+      <path d="M 77.403 90 H 12.597 C 5.651 90 0 84.35 0 77.403 V 12.597 C 0 5.651 5.651 0 12.597 0 h 64.807 C 84.35 0 90 5.651 90 12.597 v 64.807 C 90 84.35 84.35 90 77.403 90 z M 12.597 8 C 10.062 8 8 10.062 8 12.597 v 64.807 C 8 79.938 10.062 82 12.597 82 h 64.807 C 79.938 82 82 79.938 82 77.403 V 12.597 C 82 10.062 79.938 8 77.403 8 H 12.597 z" fill="currentColor" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/>
+    </g>
+  </symbol>
+</svg>

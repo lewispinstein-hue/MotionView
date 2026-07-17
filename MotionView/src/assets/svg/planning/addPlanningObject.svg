@@ -1,0 +1,8 @@
+<!-- MotionView icon asset -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="icon-addPlanningObject" viewBox="0 0 24 24">
+    <g fill="currentColor">
+      <path d="M 11 4 c 0 -0.553 0.447 -1 1 -1 s 1 0.447 1 1 v 7 h 7 c 0.553 0 1 0.447 1 1 s -0.447 1 -1 1 h -7 v 7 c 0 0.553 -0.447 1 -1 1 s -1 -0.447 -1 -1 v -7 H 4 c -0.553 0 -1 -0.447 -1 -1 s 0.447 -1 1 -1 h 7 z"/>
+    </g>
+  </symbol>
+</svg>
