@@ -14,7 +14,7 @@ export interface WatchEntry {
   id: number | null;
   level: string;
   label: string;
-  value: string;
+  value: unknown;
   visible?: boolean;
 }
 

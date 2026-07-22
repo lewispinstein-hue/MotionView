@@ -15,8 +15,45 @@ import { createModeController } from "./app/modeController";
 import { applyLiveButtonState } from "./live/liveDomAdapter";
 import { LiveActionGate, LivePendingBuffer, LiveWebSocketClient, stripToTag } from "./live/liveCore";
 import { LiveConsoleBuffer } from "./live/liveConsole";
+import {
+  buildPlanExportCode,
+  createPlanningMode,
+  createPlanMethodId,
+  createPlanNodeId,
+  createPlanObjectId,
+  getContrastTextColor,
+  getDefaultPlanObjectColor,
+  getDefaultPlanObjectName,
+  getPlanMethodById,
+  getPlanMethodNumber,
+  getPlanMethodTooltipName,
+  getPlanNodeEffectiveMethod,
+  getPlanningTelemetryProperties,
+  getPlanObjectById,
+  getUtf8ByteLength,
+  hasPlanNodeMethodOverride,
+  normalizePlanNodes,
+  normalizePlanObjects,
+  serializePlanNode,
+  setPlanNodeCodeOverride,
+} from "./planning";
 import { createPoseStore } from "./state/poseStore";
 import { appTelemetry, exportTelemetry, initTelemetry, liveTelemetry, planningTelemetry, telemetryClient, viewingTelemetry } from "./telemetry/createTelemetry";
+import {
+  buildWaypointState,
+  createVirtualList,
+  createViewingMode,
+  lastWatchAtTime,
+  normalizeLogs,
+  normalizeSystemLogMessage,
+  normalizeWatches,
+  normalizeWaypointType,
+  parseWaypointNumber,
+  parseWaypointParams,
+  scrollIntoViewIfNeeded,
+  sortWatchMarkersByTime,
+  waypointEventCount,
+} from "./viewing";
 
 const isWindowsPlatform = typeof navigator === "object" && /Windows/.test(navigator.userAgent);
 const isTauriRuntime = typeof window === "object" && !!window.__TAURI_INTERNALS__;
@@ -669,13 +706,6 @@ let planNodeTooltipPointer = null;
 
 const PLAN_NODE_TOOLTIP_DELAY_MS = 90;
 
-const DEFAULT_PLAN_OBJECT_COLORS = [
-  "#6d8fb3",
-  "#8b7ab8",
-  "#739d87",
-  "#b38a6d",
-  "#a06f87",
-];
 const PLAN_TIMELINE_PAD_X = 6;
 const PLAN_TIMELINE_NODE_W = 18;
 const PLAN_TIMELINE_NODE_H = 24;
@@ -689,139 +719,6 @@ const MIN_PLANNING_TIMELINE_H_PX = 144;
 const DEFAULT_PLANNING_TIMELINE_H_PX = 144;
 const LEGACY_PLANNING_TIMELINE_H_PX = 156;
 const PLAN_POINTER_DRAG_THRESHOLD_PX = 4;
-
-function createPlanObjectId() {
-  return `plan-object-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function createPlanMethodId() {
-  return `plan-method-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function createPlanNodeId() {
-  return `plan-node-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function getDefaultPlanObjectColor(index = planObjects.length) {
-  return DEFAULT_PLAN_OBJECT_COLORS[index % DEFAULT_PLAN_OBJECT_COLORS.length];
-}
-
-function getDefaultPlanObjectName(index = planObjects.length) {
-  return `Object ${index + 1}`;
-}
-
-function getContrastTextColor(hexcolor) {
-  const normalized = String(hexcolor || "").replace("#", "");
-  const r = parseInt(normalized.slice(0, 2), 16);
-  const g = parseInt(normalized.slice(2, 4), 16);
-  const b = parseInt(normalized.slice(4, 6), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.5 ? "#000000" : "#FFFFFF";
-}
-
-function normalizePlanObjects(arr) {
-  if (!Array.isArray(arr)) return [];
-  return arr.map((obj, index) => {
-    const rawMethods = Array.isArray(obj?.methods) ? obj.methods : [];
-    return {
-      id: (typeof obj?.id === "string" && obj.id.trim()) ? obj.id.trim() : createPlanObjectId(),
-      name: typeof obj?.name === "string" ? obj.name : "",
-      color: (typeof obj?.color === "string" && obj.color.trim()) ? obj.color.trim() : getDefaultPlanObjectColor(index),
-      latestMethod: typeof obj?.latestMethod === "string" ? obj.latestMethod : "",
-      methods: rawMethods.map((method, methodIndex) => ({
-        id: (typeof method?.id === "string" && method.id.trim()) ? method.id.trim() : `plan-method-${index + 1}-${methodIndex + 1}`,
-        name: typeof method?.name === "string" ? method.name : "",
-        code: typeof method?.code === "string" ? method.code : "",
-      })),
-    };
-  });
-}
-
-function normalizePlanNodes(arr) {
-  if (!Array.isArray(arr)) return [];
-  return arr.map((node) => {
-    const normalized = {
-      id: (typeof node?.id === "string" && node.id.trim()) ? node.id.trim() : createPlanNodeId(),
-      objectId: typeof node?.objectId === "string" ? node.objectId : "",
-      methodId: typeof node?.methodId === "string" ? node.methodId : "",
-      beforeWaypoint: Math.max(0, Number(node?.beforeWaypoint) || 0),
-      index: Math.max(0, Number(node?.index) || 0),
-    };
-    if (Object.prototype.hasOwnProperty.call(node || {}, "name")) normalized.name = typeof node.name === "string" ? node.name : "";
-    if (Object.prototype.hasOwnProperty.call(node || {}, "code")) normalized.code = typeof node.code === "string" ? node.code : "";
-    return normalized;
-  });
-}
-
-function getPlanObjectById(objectId) {
-  return planObjects.find((entry) => entry.id === objectId) || null;
-}
-
-function getPlanMethodById(objectId, methodId) {
-  return getPlanObjectById(objectId)?.methods?.find((entry) => entry.id === methodId) || null;
-}
-
-function hasPlanNodeMethodOverride(node) {
-  return !!node && (
-    Object.prototype.hasOwnProperty.call(node, "name") ||
-    Object.prototype.hasOwnProperty.call(node, "code")
-  );
-}
-
-function getPlanNodeEffectiveMethod(node) {
-  if (!node) return null;
-  const method = getPlanMethodById(node.objectId, node.methodId);
-  if (!method) return null;
-  return {
-    name: Object.prototype.hasOwnProperty.call(node, "name") ? node.name : method.name,
-    code: Object.prototype.hasOwnProperty.call(node, "code") ? node.code : method.code,
-    hostName: method.name,
-    hostCode: method.code,
-    hasOverride: hasPlanNodeMethodOverride(node),
-  };
-}
-
-function setPlanNodeCodeOverride(node, codeValue) {
-  if (!node) return false;
-  const method = getPlanMethodById(node.objectId, node.methodId);
-  if (!method) return false;
-  const nextCode = String(codeValue || "");
-  const hadNameOverride = Object.prototype.hasOwnProperty.call(node, "name");
-  const hadCodeOverride = Object.prototype.hasOwnProperty.call(node, "code");
-  const currentCode = hadCodeOverride ? node.code : method.code;
-  const matchesHost = nextCode === String(method.code || "");
-  const changed = hadNameOverride || nextCode !== String(currentCode || "") || (hadCodeOverride && matchesHost);
-  if (!changed) return false;
-  delete node.name;
-  if (matchesHost) delete node.code;
-  else node.code = nextCode;
-  return true;
-}
-
-function serializePlanNode(node) {
-  const serialized = {
-    id: node.id,
-    objectId: node.objectId,
-    methodId: node.methodId,
-    beforeWaypoint: node.beforeWaypoint,
-    index: node.index,
-  };
-  if (Object.prototype.hasOwnProperty.call(node, "name")) serialized.name = node.name;
-  if (Object.prototype.hasOwnProperty.call(node, "code")) serialized.code = node.code;
-  return serialized;
-}
-
-function getPlanMethodNumber(objectId, methodId) {
-  const methods = getPlanObjectById(objectId)?.methods || [];
-  const index = methods.findIndex((entry) => entry.id === methodId);
-  return index >= 0 ? index + 1 : null;
-}
-
-function getPlanMethodTooltipName(name) {
-  const value = String(name || "").trim();
-  if (!value) return "Method";
-  return value.length > 10 ? `${value.slice(0, 10)}…` : value;
-}
 
 function getPlanNodeById(nodeId) {
   return planNodes.find((entry) => entry.id === nodeId) || null;
@@ -1180,67 +1077,6 @@ function updatePlanControls() {
   if (btnPlanCopyCode) btnPlanCopyCode.disabled = planWaypoints.length === 0;
 }
 
-function getUtf8ByteLength(value) {
-  const text = String(value ?? "");
-  if (typeof TextEncoder === "function") return new TextEncoder().encode(text).length;
-  return text.length;
-}
-
-function getPlanningTelemetryProperties(extra = {}) {
-  const methodCount = planObjects.reduce((sum, obj) => sum + (Array.isArray(obj.methods) ? obj.methods.length : 0), 0);
-  return {
-    plan_waypoints: planWaypoints.length,
-    plan_objects: planObjects.length,
-    plan_methods: methodCount,
-    plan_nodes: planNodes.length,
-    template_chars: String(planExportTemplate || "").length,
-    ...extra,
-  };
-}
-
-function buildPlanExportCode(template = planExportTemplate) {
-  const rawTemplate = String(template ?? "");
-  if (!rawTemplate.trim()) return "";
-  const renderWaypointBlock = (point, index) => {
-    const prev = planWaypoints[index - 1];
-    const distance = prev ? Math.hypot(point.x - prev.x, point.y - prev.y) : 0;
-    const replacements = {
-      x: formatTemplateNumber(point.x),
-      y: formatTemplateNumber(point.y),
-      theta: formatTemplateNumber(planThetaDegAt(index)),
-      distance: formatTemplateNumber(distance),
-      iteration: String(index),
-      speed: formatTemplateNumber(readPlanSpeed(point.speed, 127), 0),
-    };
-    return rawTemplate.replace(/\$\{(x|y|theta|distance|iteration|speed)\}/g, (_, token) => replacements[token] ?? "");
-  };
-
-  const nodesByBucket = new Map();
-  for (const node of getSortedPlanNodes()) {
-    const arr = nodesByBucket.get(node.beforeWaypoint) || [];
-    arr.push(node);
-    nodesByBucket.set(node.beforeWaypoint, arr);
-  }
-
-  const blocks = [];
-  const appendBucketMethods = (beforeWaypoint) => {
-    const bucketNodes = nodesByBucket.get(beforeWaypoint) || [];
-    for (const node of bucketNodes) {
-      const method = getPlanNodeEffectiveMethod(node);
-      if (!method) continue;
-      blocks.push(String(method.code || ""));
-    }
-  };
-
-  appendBucketMethods(0);
-  for (let i = 0; i < planWaypoints.length; i += 1) {
-    blocks.push(renderWaypointBlock(planWaypoints[i], i));
-    appendBucketMethods(i + 1);
-  }
-
-  return blocks.join("\n");
-}
-
 async function copyTextToClipboard(text) {
   const value = String(text ?? "");
   if (navigator.clipboard?.writeText) {
@@ -1275,7 +1111,7 @@ function openPlanTemplateModal() {
       const previousTemplate = planExportTemplate;
       planExportTemplate = codeValue.trim() ? codeValue : DEFAULT_PLAN_EXPORT_TEMPLATE;
       saveSettings();
-      void planningTelemetry.templateUpdated(getPlanningTelemetryProperties({
+      void planningTelemetry.templateUpdated(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
         template_changed: previousTemplate !== planExportTemplate,
         template_bytes: getUtf8ByteLength(planExportTemplate),
       }));
@@ -1386,7 +1222,7 @@ function openPlanMethodCreateModal(objectId) {
         code: codeValue,
       });
       savePlanObjectsUi();
-      void planningTelemetry.methodCreated(getPlanningTelemetryProperties({
+      void planningTelemetry.methodCreated(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
         method_code_chars: String(codeValue || "").length,
         method_code_bytes: getUtf8ByteLength(codeValue),
       }));
@@ -1419,7 +1255,7 @@ function openPlanMethodEditModal(objectId, methodId) {
       targetMethod.name = nameValue.slice(0, 25);
       targetMethod.code = codeValue;
       savePlanObjectsUi();
-      void planningTelemetry.methodUpdated(getPlanningTelemetryProperties({
+      void planningTelemetry.methodUpdated(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
         method_name_changed: previousName !== targetMethod.name,
         method_code_changed: previousCode !== targetMethod.code,
         method_code_chars: String(codeValue || "").length,
@@ -1431,8 +1267,8 @@ function openPlanMethodEditModal(objectId, methodId) {
 
 function openPlanNodeEditModal(nodeId) {
   const node = getPlanNodeById(nodeId);
-  const object = node ? getPlanObjectById(node.objectId) : null;
-  const method = getPlanNodeEffectiveMethod(node);
+  const object = node ? getPlanObjectById(planObjects, node.objectId) : null;
+  const method = getPlanNodeEffectiveMethod(planObjects, node);
   if (!node || !object || !method) return;
   cancelPlanObjectNameEdit();
   openSharedPlanTemplateModal({
@@ -1447,12 +1283,12 @@ function openPlanNodeEditModal(nodeId) {
     onConfirm: ({ codeValue }) => {
       const targetNode = getPlanNodeById(nodeId);
       const beforeOverride = hasPlanNodeMethodOverride(targetNode);
-      if (!setPlanNodeCodeOverride(targetNode, codeValue)) return;
+      if (!setPlanNodeCodeOverride(planObjects, targetNode, codeValue)) return;
       savePlanTimelineUi();
       renderPlanObjects();
       requestDrawAll();
-      const effective = getPlanNodeEffectiveMethod(targetNode);
-      void planningTelemetry.timelineNodeUpdated(getPlanningTelemetryProperties({
+      const effective = getPlanNodeEffectiveMethod(planObjects, targetNode);
+      void planningTelemetry.timelineNodeUpdated(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
         node_override_created: !beforeOverride && !!effective?.hasOverride,
         node_override_cleared: beforeOverride && !effective?.hasOverride,
         node_code_chars: String(codeValue || "").length,
@@ -1687,7 +1523,7 @@ function getLatestPlanMethodNameForObject(objectId) {
     if (threshold <= planPlayDist + 0.0001) latest = node;
   }
   if (!latest) return "\u2014";
-  return getPlanNodeEffectiveMethod(latest)?.name || "\u2014";
+  return getPlanNodeEffectiveMethod(planObjects, latest)?.name || "\u2014";
 }
 
 function syncPlanObjectLatestValues() {
@@ -1780,9 +1616,9 @@ function buildFieldPlanNodeMarkers() {
     const startClearanceDist = Math.min(len, (waypointRadiusPx + markerLongPx * 0.3 + 1.5) / Math.max(scale, 0.0001));
 
     for (const node of bucketNodes) {
-      const object = getPlanObjectById(node.objectId);
+      const object = getPlanObjectById(planObjects, node.objectId);
       if (!object) continue;
-      const method = getPlanNodeEffectiveMethod(node);
+      const method = getPlanNodeEffectiveMethod(planObjects, node);
       if (!method) continue;
       const threshold = getPlanNodeThresholdDistance(node, bucketNodes);
       const rawDist = clamp(threshold - segStartDist, 0, len);
@@ -1833,13 +1669,13 @@ function hitTestPlanFieldNodeAtClient(clientX, clientY) {
 }
 
 function createPlanMethodDragGhostCard({ objectId, methodId }) {
-  const object = getPlanObjectById(objectId);
-  const method = getPlanMethodById(objectId, methodId);
+  const object = getPlanObjectById(planObjects, objectId);
+  const method = getPlanMethodById(planObjects, objectId, methodId);
   const ghost = document.createElement("div");
   ghost.className = "planMethodCard planMethodDragGhost";
   ghost.innerHTML = `
     <div class="planMethodGrip" aria-hidden="true">⋮⋮</div>
-    <div class="planMethodIndex">${escapeHtml(String(getPlanMethodNumber(objectId, methodId) || ""))}</div>
+    <div class="planMethodIndex">${escapeHtml(String(getPlanMethodNumber(planObjects, objectId, methodId) || ""))}</div>
     <div class="planMethodContent">
       <div class="planMethodName">${escapeHtml(method?.name || "")}</div>
       <div class="planMethodCode">${escapeHtml(method?.code || "")}</div>
@@ -1971,9 +1807,9 @@ function renderPlanningEventTimeline() {
   }
 
   for (const node of getSortedPlanNodes()) {
-    const object = getPlanObjectById(node.objectId);
-    const methodNumber = getPlanMethodNumber(node.objectId, node.methodId);
-    const method = getPlanNodeEffectiveMethod(node);
+    const object = getPlanObjectById(planObjects, node.objectId);
+    const methodNumber = getPlanMethodNumber(planObjects, node.objectId, node.methodId);
+    const method = getPlanNodeEffectiveMethod(planObjects, node);
     const bucket = layout.buckets[node.beforeWaypoint];
     if (!object || !methodNumber || !method || !bucket) continue;
     const nodeEl = document.createElement("button");
@@ -1986,8 +1822,8 @@ function renderPlanningEventTimeline() {
     nodeEl.dataset.objectId = node.objectId;
     nodeEl.dataset.methodId = node.methodId;
     nodeEl.style.left = `${bucket.nodeStart + node.index * PLAN_TIMELINE_NODE_SLOT}px`;
-    nodeEl.style.background = object.color || getDefaultPlanObjectColor();
-    nodeEl.style.color = getContrastTextColor(object.color || getDefaultPlanObjectColor());
+    nodeEl.style.background = object.color || getDefaultPlanObjectColor(planObjects.length);
+    nodeEl.style.color = getContrastTextColor(object.color || getDefaultPlanObjectColor(planObjects.length));
     const tooltipText = `${object.name || "Object"} · ${getPlanMethodTooltipName(method.name)}`;
     nodeEl.setAttribute("aria-label", tooltipText);
     nodeEl.textContent = String(methodNumber);
@@ -2266,7 +2102,7 @@ function addPlanObject() {
   planEditingObjectOriginalName = "";
   planObjectEditSelectAll = false;
   savePlanObjectsUi();
-  void planningTelemetry.objectCreated(getPlanningTelemetryProperties({
+  void planningTelemetry.objectCreated(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
     object_methods: next.methods.length,
   }));
 }
@@ -2282,7 +2118,7 @@ function removePlanObject(objectId) {
   if (planSelectedNodeId && !getPlanNodeById(planSelectedNodeId)) clearPlanNodeSelection();
   if (planEditingObjectId === objectId) clearPlanObjectEditState();
   savePlanObjectsUi();
-  void planningTelemetry.objectRemoved(getPlanningTelemetryProperties({
+  void planningTelemetry.objectRemoved(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
     removed_methods: removedMethodIds.size,
     removed_nodes: removedNodeCount,
   }));
@@ -2379,8 +2215,8 @@ function hasImportedPlanningWaypoints(obj) {
 
 function hasImportedViewingData(obj) {
   return normalizePoseArray(obj?.poses || obj?.["robot-path"] || []).length > 0
-    || normalizeWatches(obj?.watches || obj?.watch || []).length > 0
-    || normalizeLogs(obj?.logs || obj?.log || []).length > 0
+    || normalizeWatches(obj?.watches || obj?.watch || [], toNumMaybe).length > 0
+    || normalizeLogs(obj?.logs || obj?.log || [], toNumMaybe, normalizeLogLevel).length > 0
     || normalizeWaypoints(obj?.waypoints || []).length > 0;
 }
 
@@ -2412,8 +2248,8 @@ function applyImportedPlanningData(obj) {
 
 function applyImportedViewingData(obj) {
   rawPoses = normalizePoseArray(obj.poses || obj["robot-path"] || []);
-  watches = normalizeWatches(obj.watches || obj.watch || []);
-  logs = normalizeLogs(obj.logs || obj.log || []);
+  watches = normalizeWatches(obj.watches || obj.watch || [], toNumMaybe);
+  logs = normalizeLogs(obj.logs || obj.log || [], toNumMaybe, normalizeLogLevel);
   waypoints = normalizeWaypoints(obj.waypoints || []);
   setImportedRouteMeta(obj.meta);
 }
@@ -2441,14 +2277,14 @@ function removePlanMethod(objectId, methodId) {
   planNodes = planNodes.filter((entry) => !(entry.objectId === objectId && entry.methodId === methodId));
   if (planSelectedNodeId && !getPlanNodeById(planSelectedNodeId)) clearPlanNodeSelection();
   savePlanObjectsUi();
-  void planningTelemetry.methodRemoved(getPlanningTelemetryProperties({
+  void planningTelemetry.methodRemoved(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
     removed_nodes: removedNodeCount,
   }));
 }
 
 function insertPlanNode(objectId, methodId, beforeWaypoint, index) {
-  const object = getPlanObjectById(objectId);
-  const method = getPlanMethodById(objectId, methodId);
+  const object = getPlanObjectById(planObjects, objectId);
+  const method = getPlanMethodById(planObjects, objectId, methodId);
   if (!object || !method || planWaypoints.length < 2) return null;
   const node = {
     id: createPlanNodeId(),
@@ -2502,7 +2338,7 @@ function removePlanNode(nodeId) {
   savePlanTimelineUi();
   normalizePlanningTimelineHeightForContent();
   renderPlanObjects();
-  void planningTelemetry.timelineNodeRemoved(getPlanningTelemetryProperties({
+  void planningTelemetry.timelineNodeRemoved(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
     before_waypoint: removedNode.beforeWaypoint,
   }));
 }
@@ -2701,8 +2537,8 @@ async function loadSavedPaths() {
     renderPlanningEventTimeline();
     normalizePlanningTimelineHeightForContent();
     rawPoses = normalizePoseArray(obj?.["robot-path"] || []);
-    watches = normalizeWatches(obj?.["watches"] || []);
-    logs = normalizeLogs(obj?.["logs"] || []);
+    watches = normalizeWatches(obj?.["watches"] || [], toNumMaybe);
+    logs = normalizeLogs(obj?.["logs"] || [], toNumMaybe, normalizeLogLevel);
     waypoints = normalizeWaypoints(obj?.["waypoints"] || []);
     data = { poses: rawPoses, watches, logs, waypoints, meta: {} };
     if (hasLoadedData()) {
@@ -2946,7 +2782,7 @@ function drawPlanningOverlay(force = false) {
       const longLen = getAppMode() === "planning" ? longLenRaw : Math.min(viewingCapPx, longLenRaw);
       const thick = getAppMode() === "planning" ? thickRaw : Math.min(viewingCapPx, thickRaw);
       const tickLen = getAppMode() === "planning" ? tickLenRaw : Math.min(viewingCapPx, tickLenRaw);
-      const color = marker.object.color || getDefaultPlanObjectColor();
+      const color = marker.object.color || getDefaultPlanObjectColor(planObjects.length);
       const isSelected = planSelectedNodeId === marker.node.id;
       const isHover = planFieldHoverNodeId === marker.node.id;
       const strokeColor = isSelected || isHover ? "rgba(255,255,255,0.98)" : "rgba(15,25,35,0.65)";
@@ -3951,128 +3787,6 @@ function nearestIndexWithinTol(tMs, tolMs) {
 }
 
 // -------- watches --------
-function normalizeWatches(arr) {
-  const out = [];
-  if (!Array.isArray(arr)) return out;
-
-  for (const w of arr) {
-    if (!w || typeof w !== "object") continue;
-    const tRaw = (w.t ?? w.timestamp ?? w.time ?? w.ms);
-    const t = toNumMaybe(tRaw);
-    if (t == null) continue;
-    const idRaw = w.id ?? w.watchId;
-    const idNum = Number(idRaw);
-    const id = Number.isInteger(idNum) ? idNum : null;
-
-    out.push({
-      t,
-      id,
-      visible: w.visible !== false,
-      level: w.level ?? w.lvl ?? w.severity ?? "INFO",
-      label: w.label ?? w.name ?? "",
-      value: (w.value ?? w.val ?? w.message ?? ""),
-    });
-  }
-  out.sort((a, b) => a.t - b.t);
-  return out;
-}
-
-function normalizeLogs(arr) {
-  const out = [];
-  if (!Array.isArray(arr)) return out;
-
-  for (const entry of arr) {
-    if (!entry || typeof entry !== "object") continue;
-    const tRaw = entry.t ?? entry.timestamp ?? entry.time ?? entry.ms;
-    const t = toNumMaybe(tRaw);
-    if (t == null) continue;
-
-    const parsed = normalizeSystemLogMessage(entry.message ?? entry.value ?? entry.val ?? "");
-    const isSystem = entry.isSystem === true || parsed.isSystem;
-    if (!parsed.message) continue;
-
-    out.push({
-      t,
-      level: normalizeLogLevel(entry.level ?? entry.lvl ?? entry.severity ?? "INFO"),
-      label: entry.label ?? "",
-      value: parsed.message,
-      message: parsed.message,
-      isSystem,
-    });
-  }
-
-  out.sort((a, b) => a.t - b.t);
-  return out;
-}
-
-function normalizeSystemLogMessage(rawMessage) {
-  const text = String(rawMessage ?? "").trim();
-  if (!text) return { message: "", isSystem: false };
-  const prefix = "[MVLIB] ";
-  if (text.startsWith(prefix)) {
-    return {
-      message: text.slice(prefix.length).trim(),
-      isSystem: true,
-    };
-  }
-  return { message: text, isSystem: false };
-}
-
-function normalizeWaypointType(typeRaw) {
-  const T = String(typeRaw || "").trim().toUpperCase();
-  if (T === "CREATED" || T === "REACHED" || T === "TIMEDOUT") return T;
-  return "";
-}
-
-function parseWaypointNumber(raw) {
-  const text = String(raw ?? "").trim();
-  if (!text || text.toUpperCase() === "NA") return null;
-  const num = Number(text);
-  return Number.isFinite(num) ? num : null;
-}
-
-function parseWaypointParams(type, paramsText) {
-  const text = String(paramsText ?? "").trim();
-  const parts = text ? text.split(",").map((part) => part.trim()) : [];
-  if (type === "CREATED") {
-    if (parts.length !== 6 && parts.length !== 7) return null;
-    const tarX = parseWaypointNumber(parts[0]);
-    const tarY = parseWaypointNumber(parts[1]);
-    const tarT = parseWaypointNumber(parts[2]);
-    const timeoutMs = parseWaypointNumber(parts[3]);
-    const linearTol = parseWaypointNumber(parts[4]);
-    const thetaTol = parseWaypointNumber(parts[5]);
-    let retriggerable = false;
-    if (parts.length === 7) {
-      if (parts[6] !== "0" && parts[6] !== "1") return null;
-      retriggerable = parts[6] === "1";
-    }
-    if (tarX == null || tarY == null || linearTol == null) return null;
-    return { tarX, tarY, tarT, timeoutMs, linearTol, thetaTol, retriggerable };
-  }
-
-  if (type === "REACHED") {
-    if (!parts.length) return {};
-    if (parts.length === 1) {
-      const remainingTime = parseWaypointNumber(parts[0]);
-      return remainingTime == null ? null : { remainingTime };
-    }
-    if (parts.length === 4) {
-      const remainingTime = parseWaypointNumber(parts[3]);
-      return remainingTime == null ? {} : { remainingTime };
-    }
-    return null;
-  }
-
-  if (type === "TIMEDOUT") {
-    if (!parts.length) return {};
-    if (parts.length === 4) return {};
-    return null;
-  }
-
-  return null;
-}
-
 function fmtNumToString(value, decimals = 2) {
   return formatNumberString(value, decimals);
 }
@@ -4114,88 +3828,15 @@ function waypointEventLines(event) {
   return [];
 }
 
-function rebuildWaypointState() {
-  waypointsById = new Map();
-  for (const entry of waypoints) {
-    if (!entry || typeof entry !== "object") continue;
-    const id = Number(entry.id);
-    if (!Number.isInteger(id)) continue;
-    const createdEvent = entry.createdEvent && typeof entry.createdEvent === "object"
-      ? entry.createdEvent
-      : (Array.isArray(entry.events) ? entry.events.find((event) => event?.type === "CREATED") : null);
-    if (!createdEvent?.params || createdEvent.params.tarX == null || createdEvent.params.tarY == null) continue;
-
-    const events = Array.isArray(entry.events)
-      ? entry.events
-        .filter((event) => event && typeof event === "object" && typeof event.t === "number")
-        .map((event) => ({
-          t: event.t,
-          type: normalizeWaypointType(event.type),
-          id: Number.isInteger(event.id) ? event.id : id,
-          name: String(event.name ?? entry.name ?? createdEvent.name ?? ""),
-          params: event.params || {},
-        }))
-        .filter((event) => event.type)
-        .sort((a, b) => (a.t ?? 0) - (b.t ?? 0))
-      : [];
-    if (!events.length) continue;
-
-    const isRetriggerable = !!createdEvent?.params?.retriggerable;
-    let terminalEvent = null;
-    for (let i = events.length - 1; i >= 0; i -= 1) {
-      const event = events[i];
-      if (event.type === "TIMEDOUT" || (!isRetriggerable && event.type === "REACHED")) {
-        terminalEvent = event;
-        break;
-      }
-    }
-    const latestEvent = events[events.length - 1];
-    let latestActiveEvent = latestEvent;
-    if (terminalEvent) {
-      latestActiveEvent = createdEvent;
-      for (let i = events.length - 1; i >= 0; i -= 1) {
-        const event = events[i];
-        if (event.t <= terminalEvent.t) {
-          latestActiveEvent = event;
-          break;
-        }
-      }
-    }
-
-    waypointsById.set(id, {
-      id,
-      name: String(entry.name ?? createdEvent.name ?? ""),
-      createdTime: createdEvent.t,
-      createdEvent,
-      target: { x: createdEvent.params.tarX, y: createdEvent.params.tarY, theta: createdEvent.params.tarT },
-      retriggerable: isRetriggerable,
-      events,
-      active: !terminalEvent,
-      terminalEvent: terminalEvent || null,
-      latestEvent: latestEvent || createdEvent,
-      latestActiveEvent: latestActiveEvent || createdEvent,
-    });
-  }
-  waypoints = Array.from(waypointsById.values()).sort((a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0));
-}
-
 function normalizeWaypoints(arr) {
-  waypoints = Array.isArray(arr) ? arr.slice() : [];
-  rebuildWaypointState();
+  const normalized = buildWaypointState(arr);
+  waypointsById = normalized.waypointsById;
+  waypoints = normalized.waypoints;
   return waypoints;
 }
 
 function waypointFilterValue() {
   return waypointFilter?.value || "all";
-}
-
-function waypointEventCount(arr) {
-  if (!Array.isArray(arr)) return 0;
-  let total = 0;
-  for (const waypoint of arr) {
-    if (Array.isArray(waypoint?.events)) total += waypoint.events.length;
-  }
-  return total;
 }
 
 function waypointFilterMatches(waypoint) {
@@ -4235,182 +3876,7 @@ function recomputeWatchMarkers() {
 let watchMarkersByTime = [];
 
 function rebuildWatchMarkersByTime() {
-  watchMarkersByTime = watchMarkers.slice().sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
-}
-
-function lastWatchAtTime(tMs) {
-  if (!watchMarkersByTime.length) return null;
-  let lo = 0, hi = watchMarkersByTime.length - 1;
-  if ((watchMarkersByTime[0].t ?? 0) > tMs) return null;
-  while (lo < hi) {
-    const mid = Math.ceil((lo + hi) / 2);
-    const tm = watchMarkersByTime[mid].t ?? 0;
-    if (tm <= tMs) lo = mid; else hi = mid - 1;
-  }
-  return watchMarkersByTime[lo];
-}
-
-function scrollIntoViewIfNeeded(container, el, pad = 10) {
-  if (!container || !el) return;
-  const c = container.getBoundingClientRect();
-  const r = el.getBoundingClientRect();
-  // already in view
-  if (r.top >= c.top + pad && r.bottom <= c.bottom - pad) return;
-  const topDelta = (r.top - (c.top + pad));
-  const botDelta = (r.bottom - (c.bottom - pad));
-  if (topDelta < 0) container.scrollTop += topDelta;
-  else if (botDelta > 0) container.scrollTop += botDelta;
-}
-
-function createVirtualList(container, {
-  estimateRowHeight = 64,
-  overscanPx = 320,
-  getKey,
-  renderItem,
-} = {}) {
-  if (!container) return null;
-
-  const content = document.createElement("div");
-  content.className = "virtualListContent";
-  container.replaceChildren(content);
-  container.classList.add("virtualList");
-
-  let items = [];
-  let renderQueued = false;
-  let tops = [];
-  let heights = [];
-  let totalHeight = 0;
-  const measuredHeights = new Map();
-
-  function recomputeLayout() {
-    tops = new Array(items.length);
-    heights = new Array(items.length);
-
-    let cursor = 0;
-    for (let i = 0; i < items.length; i += 1) {
-      tops[i] = cursor;
-      const key = getKey(items[i], i);
-      const height = measuredHeights.get(key) ?? estimateRowHeight;
-      heights[i] = height;
-      cursor += height;
-    }
-
-    totalHeight = cursor;
-    content.style.height = `${totalHeight}px`;
-  }
-
-  function lowerBoundTop(target) {
-    let lo = 0;
-    let hi = tops.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if ((tops[mid] + heights[mid]) < target) lo = mid + 1;
-      else hi = mid;
-    }
-    return lo;
-  }
-
-  function upperBoundTop(target) {
-    let lo = 0;
-    let hi = tops.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (tops[mid] <= target) lo = mid + 1;
-      else hi = mid;
-    }
-    return lo;
-  }
-
-  function renderNow() {
-    renderQueued = false;
-    if (!items.length) {
-      content.replaceChildren();
-      content.style.height = "0px";
-      return;
-    }
-
-    const scrollTop = container.scrollTop;
-    const viewportHeight = container.clientHeight || (estimateRowHeight * 8);
-    const startPx = Math.max(0, scrollTop - overscanPx);
-    const endPx = scrollTop + viewportHeight + overscanPx;
-
-    const startIndex = Math.max(0, lowerBoundTop(startPx));
-    const endIndex = Math.min(items.length, Math.max(startIndex + 1, upperBoundTop(endPx)));
-
-    const frag = document.createDocumentFragment();
-    const renderedRows = [];
-    let layoutDirty = false;
-
-    for (let i = startIndex; i < endIndex; i += 1) {
-      const item = items[i];
-      const row = renderItem(item, i);
-      if (!row) continue;
-      row.classList.add("virtualListRow");
-      row.style.top = `${tops[i]}px`;
-      const key = getKey(item, i);
-      renderedRows.push({ key, row });
-      frag.appendChild(row);
-    }
-
-    content.replaceChildren(frag);
-
-    for (let i = 0; i < renderedRows.length; i += 1) {
-      const { key, row } = renderedRows[i];
-      syncWatchItemActionLayout(row);
-      const measureEl = row.querySelector?.(".watchItemContent") || row;
-      const rowHeight = Math.ceil(measureEl.offsetHeight || row.offsetHeight || estimateRowHeight);
-      if (rowHeight > 0 && measuredHeights.get(key) !== rowHeight) {
-        measuredHeights.set(key, rowHeight);
-        layoutDirty = true;
-      }
-    }
-
-    if (layoutDirty) {
-      recomputeLayout();
-      requestRender();
-    }
-  }
-
-  function requestRender() {
-    if (renderQueued) return;
-    renderQueued = true;
-    requestAnimationFrame(renderNow);
-  }
-
-  function scrollToIndex(index, pad = 12) {
-    if (!Number.isInteger(index) || index < 0 || index >= items.length) return;
-    const top = tops[index] ?? 0;
-    const height = heights[index] ?? estimateRowHeight;
-    const visibleTop = container.scrollTop + pad;
-    const visibleBottom = container.scrollTop + container.clientHeight - pad;
-    if (top < visibleTop) container.scrollTop = Math.max(0, top - pad);
-    else if ((top + height) > visibleBottom) {
-      container.scrollTop = Math.max(0, top + height - container.clientHeight + pad);
-    }
-    requestRender();
-  }
-
-  function setItems(nextItems, { resetScroll = false } = {}) {
-    items = (nextItems && typeof nextItems.length === "number") ? nextItems : [];
-    measuredHeights.clear();
-    recomputeLayout();
-    if (resetScroll) container.scrollTop = 0;
-    requestRender();
-  }
-
-  container.addEventListener("scroll", requestRender, { passive: true });
-  window.addEventListener("resize", requestRender);
-  if (typeof ResizeObserver === "function") {
-    const resizeObserver = new ResizeObserver(requestRender);
-    resizeObserver.observe(container);
-  }
-
-  return {
-    setItems,
-    refresh: requestRender,
-    scrollToIndex,
-    getItems: () => items,
-  };
+  watchMarkersByTime = sortWatchMarkersByTime(watchMarkers);
 }
 
 let renderedWatchIndexByTime = new Map();
@@ -4420,6 +3886,7 @@ const watchListVirtual = createVirtualList(watchList, {
   overscanPx: 480,
   getKey: (item, index) => `${item?.t ?? "watch"}:${index}`,
   renderItem: createWatchListItem,
+  syncRowLayout: syncWatchItemActionLayout,
 });
 
 const poseListVirtual = createVirtualList(poseList, {
@@ -5223,7 +4690,7 @@ function toggleCurrentWatchGraphPanel() {
   const selectedMarker = selectedWatch?.marker ?? null;
   const poseTime = Number(currentDisplayPose()?.t);
   const fallbackMarker = Number.isFinite(poseTime)
-    ? (lastWatchAtTime(poseTime) ?? findClosestWatchMarker(poseTime))
+    ? (lastWatchAtTime(watchMarkersByTime, poseTime) ?? findClosestWatchMarker(poseTime))
     : (watchMarkers[watchMarkers.length - 1] ?? null);
   const marker = selectedMarker || fallbackMarker;
   if (!marker) return;
@@ -7465,7 +6932,7 @@ function play() {
 
     // Highlight the most recent watch hit without overriding the user"s
     // collapsed/expanded state for the Watches panel.
-    const last = lastWatchAtTime(playTimeMs);
+    const last = lastWatchAtTime(watchMarkersByTime, playTimeMs);
     if (last && (!selectedWatch || selectedWatch.marker?.t !== last.t)) {
       selectedWatch = { marker: last };
       highlightWatchInList(last.t, false);
@@ -10068,7 +9535,7 @@ if (btnExportConfirm) {
       setStatus(`Exported ${pendingExportRequest.filename}.`);
       const includesPlanning = pendingExportRequest.exportType === "planning" || pendingExportRequest.exportType === "both";
       const includesViewing = pendingExportRequest.exportType === "viewing" || pendingExportRequest.exportType === "both";
-      void exportTelemetry.motionviewJsonExported(getPlanningTelemetryProperties({
+      void exportTelemetry.motionviewJsonExported(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
         export_type: pendingExportRequest.exportType,
         includes_planning: includesPlanning,
         includes_viewing: includesViewing,
@@ -10278,7 +9745,7 @@ function commitPlanTimelineDragTarget(context, target) {
   if (!node) return null;
   savePlanTimelineUi();
   selectPlanNode(node.id, { scrollSidebar: true });
-  void (context.source === "sidebar" ? planningTelemetry.timelineNodeCreated : planningTelemetry.timelineNodeMoved).call(planningTelemetry, getPlanningTelemetryProperties({
+  void (context.source === "sidebar" ? planningTelemetry.timelineNodeCreated : planningTelemetry.timelineNodeMoved).call(planningTelemetry, getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
     before_waypoint: node.beforeWaypoint,
     node_index: node.index,
   }));
@@ -10413,7 +9880,16 @@ if (btnPlanObjectDeleteConfirm) {
 
 if (btnPlanCopyCode) {
   btnPlanCopyCode.addEventListener("click", async () => {
-    const code = buildPlanExportCode();
+    const code = buildPlanExportCode({
+      template: planExportTemplate,
+      waypoints: planWaypoints,
+      nodes: planNodes,
+      objects: planObjects,
+      readPlanSpeed,
+      formatTemplateNumber,
+      planThetaDegAt,
+      getSortedPlanNodes,
+    });
     if (!code) {
       setStatus("Add at least one waypoint and a template before copying code.");
       return;
@@ -10421,7 +9897,7 @@ if (btnPlanCopyCode) {
     try {
       await copyTextToClipboard(code);
       setStatus(`Copied generated code for ${planWaypoints.length} waypoint${planWaypoints.length === 1 ? "" : "s"}.`);
-      void planningTelemetry.templateExported(getPlanningTelemetryProperties({
+      void planningTelemetry.templateExported(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
         export_surface: "clipboard",
         exported_chars: code.length,
         exported_bytes: getUtf8ByteLength(code),
@@ -11485,6 +10961,82 @@ document.addEventListener("keydown", (e) => {
     requestDrawAll();
   }
 });
+
+const planningMode = createPlanningMode({
+  getAppMode,
+  requestDrawAll,
+  setStatus,
+  scheduleSavedPathsSave,
+}, {
+  loadImportedData: applyImportedPlanningData,
+  clear: clearPlanningModeData,
+  render: () => {
+    renderPlanList();
+    renderPlanObjects();
+    renderPlanningEventTimeline();
+  },
+  pause: planPause,
+  play: planPlay,
+  togglePlayback: () => {
+    if (planPlaying) planPause();
+    else planPlay();
+  },
+  setDistance: setPlanDist,
+  getExportData: () => ({
+    waypoints: planWaypoints,
+    objects: planObjects,
+    nodes: planNodes,
+    template: planExportTemplate,
+  }),
+  hasData: () => planWaypoints.length > 0 || planObjects.length > 0 || planNodes.length > 0,
+  bindEvents: () => {},
+  handleKeydown: () => false,
+  drawOverlay: drawPlanningOverlay,
+  drawTimeline: drawPlanningTimeline,
+  hitTestField: planHitTest,
+  getTelemetryProperties: (extra = {}) => getPlanningTelemetryProperties(
+    planWaypoints,
+    planObjects,
+    planNodes,
+    planExportTemplate,
+    extra,
+  ),
+});
+
+const viewingMode = createViewingMode({
+  loadViewingData: applyImportedViewingData,
+  clear: clearAllPosesAndWatches,
+  renderLists: () => {
+    renderWatchList();
+    renderLogList();
+    renderWaypointList();
+    renderPoseList();
+  },
+  renderWatchList,
+  renderLogList,
+  renderWaypointList,
+  renderPoseList,
+  selectPose: (index) => {
+    selectedIndex = index;
+    highlightPoseInList();
+    updatePoseReadout();
+    requestDrawAll();
+  },
+  selectWatch: (marker) => selectWatchMarker(marker, false, null),
+  selectWaypoint: (waypoint, event = null) => selectWaypointEvent(waypoint, event, false),
+  updatePoseReadout,
+  currentDisplayPose,
+  getExportData: () => ({
+    poses: rawPoses,
+    watches,
+    logs,
+    waypoints,
+    meta: importedRouteMeta,
+  }),
+  hasData: () => rawPoses.length > 0 || watches.length > 0 || logs.length > 0 || waypoints.length > 0,
+  bindEvents: () => {},
+});
+
 sanitizeExportFilename();
 // -------- init --------
 await appTelemetry.loaded({
