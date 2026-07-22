@@ -2,4 +2,6 @@ export * from "./planningTypes";
 export * from "./planningState";
 export * from "./planningObjects";
 export * from "./planningTemplate";
+export * from "./planningSidebar";
+export * from "./planningTimeline";
 export * from "./createPlanningMode";

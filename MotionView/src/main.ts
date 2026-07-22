@@ -32,6 +32,8 @@ import {
   getPlanObjectById,
   getUtf8ByteLength,
   hasPlanNodeMethodOverride,
+  createPlanningSidebarRenderer,
+  createPlanningTimelineRenderer,
   normalizePlanNodes,
   normalizePlanObjects,
   serializePlanNode,
@@ -41,7 +43,12 @@ import { createPoseStore } from "./state/poseStore";
 import { appTelemetry, exportTelemetry, initTelemetry, liveTelemetry, planningTelemetry, telemetryClient, viewingTelemetry } from "./telemetry/createTelemetry";
 import {
   buildWaypointState,
+  createLogListRenderer,
+  createPoseListRenderer,
   createVirtualList,
+  createWatchListRenderer,
+  createWaypointListRenderer,
+  createViewingFieldOverlayRenderer,
   createViewingMode,
   lastWatchAtTime,
   normalizeLogs,
@@ -635,7 +642,7 @@ const modeController = createModeController({
     updateFieldLayout(true);
     resizeTimeline();
     resizePlanningTimeline();
-    renderPlanList();
+    planningSidebarRenderer.renderPlanList();
     updatePlanControls();
     setPlanDist(planPlayDist);
     void appTelemetry.modeChanged({
@@ -1064,7 +1071,7 @@ function setPlanDist(d) {
   if (planPointPill) {
     planPointPill.textContent = `Points: ${planWaypoints.length}`;
   }
-  drawPlanningTimeline();
+  planningTimelineRenderer.draw();
   syncPlanObjectLatestValues();
   requestDrawAll();
 }
@@ -1285,7 +1292,7 @@ function openPlanNodeEditModal(nodeId) {
       const beforeOverride = hasPlanNodeMethodOverride(targetNode);
       if (!setPlanNodeCodeOverride(planObjects, targetNode, codeValue)) return;
       savePlanTimelineUi();
-      renderPlanObjects();
+      planningSidebarRenderer.renderPlanObjects();
       requestDrawAll();
       const effective = getPlanNodeEffectiveMethod(planObjects, targetNode);
       void planningTelemetry.timelineNodeUpdated(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
@@ -1565,7 +1572,7 @@ function scrollPlanMethodIntoView(objectId, methodId) {
 function selectPlanNode(nodeId, { scrollSidebar = false } = {}) {
   planSelectedNodeId = nodeId || null;
   renderPlanningEventTimeline();
-  renderPlanObjects();
+  planningSidebarRenderer.renderPlanObjects();
   syncPlanObjectLatestValues();
   requestDrawAll();
   if (scrollSidebar && nodeId) {
@@ -1795,7 +1802,7 @@ function renderPlanningEventTimeline() {
   if (!canPlace) {
     syncPlanningTimelineCanvasSize();
     clearPlanTimelineDropTarget();
-    drawPlanningTimeline();
+    planningTimelineRenderer.draw();
     return;
   }
 
@@ -1873,158 +1880,7 @@ function renderPlanningEventTimeline() {
     clearPlanTimelineDropTarget();
   }
   syncPlanningTimelineCanvasSize();
-  drawPlanningTimeline();
-}
-
-function renderPlanObjects() {
-  if (!planObjectListEl) return;
-  planObjectListEl.innerHTML = "";
-  const selectedNode = getPlanNodeById(planSelectedNodeId);
-  const highlightedObjectId = selectedNode?.objectId || "";
-  const highlightedMethodId = selectedNode?.methodId || "";
-
-  if (planEventsHintEl) {
-    planEventsHintEl.textContent = planObjects.length
-      ? "Double-click an object name to rename it."
-      : "Add an object to define reusable method groups for this route.";
-  }
-
-  for (let i = 0; i < planObjects.length; i += 1) {
-    const obj = planObjects[i];
-    const card = document.createElement("article");
-    card.className = "planObjectCard";
-    card.dataset.objectId = obj.id;
-    if (obj.id === highlightedObjectId) card.classList.add("isHighlighted");
-
-    const header = document.createElement("div");
-    header.className = "planObjectHeader";
-
-    const meta = document.createElement("div");
-    meta.className = "planObjectMeta";
-
-    if (planEditingObjectId === obj.id) {
-      const input = document.createElement("input");
-      input.type = "text";
-      input.className = "planObjectNameEditor";
-      input.value = obj.name;
-      input.placeholder = "Object name";
-      input.autocomplete = "off";
-      input.spellcheck = false;
-      input.dataset.objectId = obj.id;
-
-      input.addEventListener("blur", () => {
-        commitPlanObjectNameEdit(obj.id, input.value);
-      });
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          commitPlanObjectNameEdit(obj.id, input.value);
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          cancelPlanObjectNameEdit();
-        }
-      });
-      meta.appendChild(input);
-    } else {
-      const name = document.createElement("div");
-      name.className = "planObjectName";
-      name.textContent = obj.name || getDefaultPlanObjectName(i);
-      name.addEventListener("dblclick", () => {
-        startPlanObjectNameEdit(obj.id, true);
-      });
-      meta.appendChild(name);
-    }
-
-    const subtle = document.createElement("div");
-    subtle.className = "planObjectSubtle";
-    subtle.textContent = `${obj.methods.length} method${obj.methods.length === 1 ? "" : "s"}`;
-    meta.appendChild(subtle);
-    header.appendChild(meta);
-
-    const latest = document.createElement("div");
-    latest.className = "planObjectLatest";
-    latest.innerHTML = `
-      <span class="planObjectLatestLabel">Latest</span>
-      <span class="planObjectLatestValue">${escapeHtml(getPlanObjectLatestValue(obj))}</span>
-    `;
-    header.appendChild(latest);
-    card.appendChild(header);
-
-    const methodList = document.createElement("div");
-    methodList.className = "planMethodList";
-    if (!obj.methods.length) {
-      const empty = document.createElement("div");
-      empty.className = "planMethodEmpty";
-      empty.textContent = "No methods yet.";
-      methodList.appendChild(empty);
-    } else {
-      for (const [methodIndex, method] of obj.methods.entries()) {
-        const methodCard = document.createElement("div");
-        methodCard.className = "planMethodCard";
-        if (obj.id === highlightedObjectId && method.id === highlightedMethodId) methodCard.classList.add("isHighlighted");
-        methodCard.draggable = false;
-        methodCard.dataset.objectId = obj.id;
-        methodCard.dataset.methodId = method.id;
-        methodCard.innerHTML = `
-          <div class="planMethodGrip" aria-hidden="true">⋮⋮</div>
-          <div class="planMethodIndex">${methodIndex + 1}</div>
-          <div class="planMethodContent">
-            <div class="planMethodName">${escapeHtml(method.name || "")}</div>
-            <div class="planMethodCode">${escapeHtml(method.code || "")}</div>
-          </div>
-          <button class="iconBtn planMethodRemoveBtn" type="button" title="Remove Method" aria-label="Remove Method" data-object-id="${escapeHtml(obj.id)}" data-method-id="${escapeHtml(method.id)}">
-            <svg width="30" height="30" aria-hidden="true">
-              <use href="${svgIconHref("icon-removePlanningObject")}"></use>
-            </svg>
-          </button>
-        `;
-        attachPlanMethodCardDragHandlers(methodCard);
-        methodCard.addEventListener("dblclick", (e) => {
-          const removeBtn = e.target instanceof Element ? e.target.closest(".planMethodRemoveBtn") : null;
-          if (removeBtn) return;
-          openPlanMethodEditModal(obj.id, method.id);
-        });
-        methodList.appendChild(methodCard);
-      }
-    }
-    card.appendChild(methodList);
-
-    const actions = document.createElement("div");
-    actions.className = "planObjectActions";
-    actions.innerHTML = `
-      <button class="iconBtn secondaryBtn planMethodAddBtn" type="button" title="Add Method" aria-label="Add Method" data-object-id="${escapeHtml(obj.id)}">Add Method</button>
-      <div class="planObjectActionTools">
-        <div class="planObjectColorWrap">
-          <button class="iconBtn secondaryBtn planObjectColorBtn" type="button" title="Change Object Color" aria-label="Change Object Color" data-object-id="${escapeHtml(obj.id)}" style="color:${escapeHtml(obj.color || getDefaultPlanObjectColor(i))}">
-            <svg width="30" height="30" aria-hidden="true">
-              <use href="${svgIconHref("icon-planningChangeObjectColor")}"></use>
-            </svg>
-          </button>
-          <div class="planObjectColorPopover"${planOpenColorPickerObjectId === obj.id ? "" : " hidden"}>
-            <input class="planObjectColorInput" type="color" value="${escapeHtml(obj.color || getDefaultPlanObjectColor(i))}" aria-label="Object color" data-object-id="${escapeHtml(obj.id)}" />
-          </div>
-        </div>
-      </div>
-      <button class="iconBtn secondaryBtn planObjectRemoveActionBtn" type="button" title="Remove Object" aria-label="Remove Object" data-object-id="${escapeHtml(obj.id)}">
-        <svg width="30" height="30" aria-hidden="true">
-          <use href="${svgIconHref("icon-removePlanningObject")}"></use>
-        </svg>
-      </button>
-    `;
-    card.appendChild(actions);
-    planObjectListEl.appendChild(card);
-
-    if (planEditingObjectId === obj.id) {
-      const input = card.querySelector(".planObjectNameEditor");
-      if (input) {
-        requestAnimationFrame(() => {
-          input.focus();
-          if (planObjectEditSelectAll) input.select();
-          else input.setSelectionRange(input.value.length, input.value.length);
-        });
-      }
-    }
-  }
+  planningTimelineRenderer.draw();
 }
 
 function startPlanObjectNameEdit(objectId, selectAll = false) {
@@ -2033,7 +1889,7 @@ function startPlanObjectNameEdit(objectId, selectAll = false) {
   planEditingObjectId = objectId;
   planEditingObjectOriginalName = object.name || "";
   planObjectEditSelectAll = !!selectAll;
-  renderPlanObjects();
+  planningSidebarRenderer.renderPlanObjects();
 }
 
 function clearPlanObjectEditState() {
@@ -2043,7 +1899,7 @@ function clearPlanObjectEditState() {
 }
 
 function savePlanObjectsUi() {
-  renderPlanObjects();
+  planningSidebarRenderer.renderPlanObjects();
   renderPlanningEventTimeline();
   syncPlanObjectLatestValues();
   requestDrawAll();
@@ -2052,7 +1908,7 @@ function savePlanObjectsUi() {
 
 function cancelPlanObjectNameEdit() {
   clearPlanObjectEditState();
-  renderPlanObjects();
+  planningSidebarRenderer.renderPlanObjects();
 }
 
 function commitActivePlanObjectEdit() {
@@ -2137,7 +1993,7 @@ function clearPlanningModeData() {
   planPlayDist = 0;
   planPause();
   planChanged();
-  renderPlanObjects();
+  planningSidebarRenderer.renderPlanObjects();
   renderPlanningEventTimeline();
   normalizePlanningTimelineHeightForContent();
 }
@@ -2241,7 +2097,7 @@ function applyImportedPlanningData(obj) {
   planNodes = normalizePlanNodes(obj["planned-nodes"] || []);
   pruneInvalidPlanNodes();
   clearPlanNodeSelection();
-  renderPlanObjects();
+  planningSidebarRenderer.renderPlanObjects();
   renderPlanningEventTimeline();
   normalizePlanningTimelineHeightForContent();
 }
@@ -2337,7 +2193,7 @@ function removePlanNode(nodeId) {
   if (planSelectedNodeId === nodeId) clearPlanNodeSelection();
   savePlanTimelineUi();
   normalizePlanningTimelineHeightForContent();
-  renderPlanObjects();
+  planningSidebarRenderer.renderPlanObjects();
   void planningTelemetry.timelineNodeRemoved(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
     before_waypoint: removedNode.beforeWaypoint,
   }));
@@ -2361,30 +2217,63 @@ function attachPlanMethodCardDragHandlers(card) {
   });
 }
 
-function renderPlanList() {
-  if (!planListEl) return;
-  planListEl.innerHTML = "";
-  if (planCountEl) planCountEl.textContent = `${planWaypoints.length}`;
-  for (let i = 0; i < planWaypoints.length; i++) {
-    const p = planWaypoints[i];
-    const item = document.createElement("div");
-    item.className = "planItem" + (planSelectedSet.has(i) ? " selected" : "");
-    item.dataset.idx = String(i);
-    const theta = planThetaDegAt(i);
-    item.innerHTML = `
-      <div class="muted">#${i + 1}</div>
-      <div>X: ${fmtNum(p.x, 2)}  Y: ${fmtNum(p.y, 2)}  θ: ${fmtNum(theta, 1)}°  S: ${fmtNum(readPlanSpeed(p.speed, 127), 0)}</div>
-    `;
-    item.addEventListener("click", (e) => {
-      if (e.shiftKey) planToggleSelection(i);
-      else planSelectSingle(i);
-      requestDrawAll();
-      renderPlanList();
-      updatePlanSelectionPanel();
-    });
-    planListEl.appendChild(item);
-  }
-}
+const planningSidebarRenderer = createPlanningSidebarRenderer({
+  planListEl,
+  planCountEl,
+  planObjectListEl,
+  planEventsHintEl,
+  getPlanWaypoints: () => planWaypoints,
+  getPlanObjects: () => planObjects,
+  getSelectedPlanSet: () => planSelectedSet,
+  getSelectedNode: () => getPlanNodeById(planSelectedNodeId),
+  getEditingObjectId: () => planEditingObjectId,
+  getPlanOpenColorPickerObjectId: () => planOpenColorPickerObjectId,
+  getPlanObjectEditSelectAll: () => planObjectEditSelectAll,
+  planThetaDegAt,
+  readPlanSpeed,
+  fmtNum,
+  escapeHtml,
+  svgIconHref,
+  getDefaultPlanObjectName,
+  getDefaultPlanObjectColor,
+  getPlanObjectLatestValue,
+  planToggleSelection,
+  planSelectSingle,
+  requestDrawAll,
+  renderPlanList: () => planningSidebarRenderer.renderPlanList(),
+  updatePlanSelectionPanel,
+  commitPlanObjectNameEdit,
+  cancelPlanObjectNameEdit,
+  startPlanObjectNameEdit,
+  attachPlanMethodCardDragHandlers,
+  openPlanMethodEditModal,
+});
+
+const planningTimelineRenderer = createPlanningTimelineRenderer({
+  planningTimelineCanvas,
+  context: pctx,
+  getAppMode,
+  getCurrentPlanTimelineLayout,
+  getPlanTotalLength: planTotalLength,
+  getPlanPlayDistance: () => planPlayDist,
+  getPlanTimelineXFromDistance,
+  timelinePadX: PLAN_TIMELINE_PAD_X,
+});
+
+const viewingFieldOverlayRenderer = createViewingFieldOverlayRenderer({
+  context: ctx,
+  getWatchMarkers: () => watchMarkers,
+  getWaypoints: () => waypoints,
+  getSelectedWatch: () => selectedWatch,
+  getSelectedWaypointId: () => selectedWaypointId,
+  getHoverWatch: () => hoverWatch,
+  isWatchMarkerVisible,
+  waypointFilterMatches,
+  worldToScreen,
+  levelFillWithAlpha,
+  scaledViewingFieldRadius,
+  viewingFieldMarkerStyleScale,
+});
 
 function applySavedLayout(settings) {
   if (!settings) return;
@@ -2497,7 +2386,7 @@ function centerOnWorld(x, y) {
 
 function planChanged(opts = {}) {
   pruneInvalidPlanNodes();
-  renderPlanList();
+  planningSidebarRenderer.renderPlanList();
   updatePlanControls();
   setPlanDist(planPlayDist);
   renderPlanningEventTimeline();
@@ -2533,7 +2422,7 @@ async function loadSavedPaths() {
     planNodes = normalizePlanNodes(obj?.["planned-nodes"] || []);
     pruneInvalidPlanNodes();
     clearPlanNodeSelection();
-    renderPlanObjects();
+    planningSidebarRenderer.renderPlanObjects();
     renderPlanningEventTimeline();
     normalizePlanningTimelineHeightForContent();
     rawPoses = normalizePoseArray(obj?.["robot-path"] || []);
@@ -2724,7 +2613,7 @@ function updatePlanThetaFromPointer(idx, mx, my) {
   } else {
     p.theta = planThetaDisplayToRaw(applyPlanThetaSnapDeg(thetaPlan));
   }
-  renderPlanList();
+  planningSidebarRenderer.renderPlanList();
   updatePlanSelectionPanel();
   requestDrawAll();
 }
@@ -3606,7 +3495,7 @@ function resizePlanningTimeline() {
   if (!planningTimelineCanvas || !pctx) return;
   renderPlanningEventTimeline();
   syncPlanningTimelineCanvasSize();
-  drawPlanningTimeline();
+  planningTimelineRenderer.draw();
 }
 
 // -------- field images --------
@@ -3881,43 +3770,141 @@ function rebuildWatchMarkersByTime() {
 
 let renderedWatchIndexByTime = new Map();
 
-const watchListVirtual = createVirtualList(watchList, {
+let watchListVirtual = null;
+const watchListRenderer = createWatchListRenderer({
+  watchList,
+  watchFilter,
+  watchSort,
+  watchCount,
+  get watchListVirtual() { return watchListVirtual; },
+  getWatchMarkers: () => watchMarkers,
+  getWatches: () => watches,
+  getSelectedWatch: () => selectedWatch,
+  setRenderedWatchIndexByTime: (indexByTime) => { renderedWatchIndexByTime = indexByTime; },
+  refreshWatchGraphPanelData,
+  requestDrawAll,
+  levelStyle,
+  levelSortRank,
+  watchSortValueKey,
+  watchFilterKeyForWatch,
+  watchFilterMatches,
+  watchFilterLabelForWatch,
+  watchVisibilityKeyForWatch,
+  watchVisibilityIconId,
+  watchVisibilityTitle,
+  isGraphableWatchValue,
+  svgIconHref,
+  setSvgUseHref,
+  escapeHtml,
+  fmtNum,
+  selectWatchMarker,
+  toggleFloatingWatch,
+  toggleWatchVisibilityForWatch,
+  openOrToggleWatchGraphPanel,
+});
+
+watchListVirtual = createVirtualList(watchList, {
   estimateRowHeight: 62,
   overscanPx: 480,
   getKey: (item, index) => `${item?.t ?? "watch"}:${index}`,
-  renderItem: createWatchListItem,
-  syncRowLayout: syncWatchItemActionLayout,
+  renderItem: (item) => watchListRenderer.createItem(item),
+  syncRowLayout: watchListRenderer.syncItemActionLayout,
 });
 
-const poseListVirtual = createVirtualList(poseList, {
+let poseListVirtual = null;
+const poseListRenderer = createPoseListRenderer({
+  poseList,
+  poseCount,
+  get poseListVirtual() { return poseListVirtual; },
+  getPoseCount: () => rawPoses.length,
+  getPose: (index) => rawPoses[index],
+  getSelectedIndex: () => selectedIndex,
+  poseToInches,
+  formatNumberString,
+  fmtNum,
+  escapeHtml,
+  onPoseSelected: (index) => {
+    pause();
+    clearTrackHover(true);
+    clearTrackLock();
+    selectedWatch = null;
+    selectedLogTime = null;
+    selectedWaypointId = null;
+    selectedWaypointEventTime = null;
+    waypointListRenderer.highlight(null, null, false);
+    selectedIndex = index;
+    if (leftConnected && leftStreaming) liveAutoFollowHead = false;
+    lastPoseIndex = selectedIndex;
+    setStatus(`Jumped to pose #${index + 1}.`);
+    poseListRenderer.highlight();
+    updatePoseReadout();
+    requestDrawAll();
+  },
+});
+
+poseListVirtual = createVirtualList(poseList, {
   estimateRowHeight: 52,
   overscanPx: 320,
   getKey: (_, index) => `pose:${index}`,
-  renderItem: (_, index) => createPoseListItem(index),
+  renderItem: (_, index) => poseListRenderer.createItem(index),
+});
+
+const waypointListRenderer = createWaypointListRenderer({
+  waypointList,
+  waypointCount,
+  waypointFilter,
+  getWaypoints: () => waypoints,
+  getVisibleEvents: waypointVisibleEvents,
+  getSelectedWaypointId: () => selectedWaypointId,
+  getSelectedWaypointEventTime: () => selectedWaypointEventTime,
+  waypointTypeStyle,
+  waypointEventLines,
+  fmtSecondsToString,
+  escapeHtml,
+  scrollIntoViewIfNeeded,
+  onWaypointEventSelected: (waypoint, event) => selectWaypointEvent(waypoint, event, true),
+});
+
+const logListRenderer = createLogListRenderer({
+  logList,
+  logCount,
+  logSort,
+  watchToleranceMs: WATCH_TOL_MS,
+  getLogs: () => logs,
+  getSelectedLogTime: () => selectedLogTime,
+  setSelectedLogTime: (time) => { selectedLogTime = time; },
+  clearWaypointSelectionState: () => {
+    selectedWaypointId = null;
+    selectedWaypointEventTime = null;
+  },
+  highlightWaypointInList: (waypointId, eventTime, doScroll) => waypointListRenderer.highlight(waypointId, eventTime, doScroll),
+  jumpToEventTime,
+  setStatus,
+  getRawPoseTime: (index) => rawPoses[index]?.t,
+  levelStyle,
+  levelSortRank,
+  fmtNum,
+  escapeHtml,
+  scrollIntoViewIfNeeded,
 });
 
 document.addEventListener("pointerdown", (ev) => {
-  if (!openWatchActionsMenu) return;
   const target = ev.target instanceof Element ? ev.target : null;
-  if (target && (
-    openWatchActionsMenu.menu?.contains(target)
-    || openWatchActionsMenu.button?.contains(target)
-  )) return;
-  closeOpenWatchActionsMenu();
+  if (watchListRenderer.isActionsMenuTarget(target)) return;
+  watchListRenderer.closeActionsMenu();
 }, true);
 
 document.addEventListener("keydown", (ev) => {
-  if (!openWatchActionsMenu) return;
   if (ev.key === "Escape") {
     ev.preventDefault();
-    closeOpenWatchActionsMenu({ restoreFocus: true });
+    watchListRenderer.closeActionsMenu({ restoreFocus: true });
   } else if (ev.key === "Tab") {
-    closeOpenWatchActionsMenu();
+    watchListRenderer.closeActionsMenu();
   }
 }, true);
 
 watchList?.addEventListener("scroll", () => {
-  closeOpenWatchActionsMenu();
+  watchListRenderer.closeActionsMenu();
 }, { passive: true });
 
 function highlightWatchInList(tMs, doScroll) {
@@ -3927,18 +3914,6 @@ function highlightWatchInList(tMs, doScroll) {
     if (idx != null) watchListVirtual.scrollToIndex(idx, 12);
   }
   watchListVirtual.refresh();
-}
-
-function highlightLogInList(tMs, doScroll) {
-  if (!logList) return;
-  const items = logList.querySelectorAll(".watchItem");
-  items.forEach(el => el.classList.remove("selected"));
-  if (tMs == null) return;
-  const el = logList.querySelector(`.watchItem[data-t="${CSS.escape(String(tMs))}"]`);
-  if (el) {
-    el.classList.add("selected");
-    if (doScroll) requestAnimationFrame(() => scrollIntoViewIfNeeded(logList, el, 12));
-  }
 }
 
 function jumpToEventTime(tMs, {
@@ -3963,13 +3938,13 @@ function jumpToEventTime(tMs, {
 
     if (clearWatchSelection) {
       selectedWatch = null;
-      highlightWatchInList(null, false);
+      watchListRenderer.highlight(null, false);
       hideWatchPopup();
     }
 
     if (typeof noPoseStatus === "function") noPoseStatus();
 
-    highlightPoseInList();
+    poseListRenderer.highlight();
     updatePoseReadout();
     requestDrawAll();
     return;
@@ -3991,11 +3966,11 @@ function jumpToEventTime(tMs, {
 
   if (clearWatchSelection) {
     selectedWatch = null;
-    highlightWatchInList(null, false);
+    watchListRenderer.highlight(null, false);
     hideWatchPopup();
   }
 
-  highlightPoseInList();
+  poseListRenderer.highlight();
   updatePoseReadout();
   requestDrawAll();
 }
@@ -4870,13 +4845,6 @@ if (watchGraphCanvas) {
   }, { passive: false });
 }
 
-function watchBooleanValueClass(value) {
-  const text = String(value ?? "").trim().toLowerCase();
-  if (text === "true") return " isBooleanTrue";
-  if (text === "false") return " isBooleanFalse";
-  return "";
-}
-
 function watchSortValueKey(value) {
   if (value == null) return { t: 2, n: 0, s: "" };
   if (typeof value === "boolean") return { t: 0, n: value ? 1 : 0, s: String(value) };
@@ -4884,390 +4852,10 @@ function watchSortValueKey(value) {
   return { t: 0, n: 0, s: String(value) };
 }
 
-let openWatchActionsMenu = null;
-
-function closeOpenWatchActionsMenu({ restoreFocus = false } = {}) {
-  if (!openWatchActionsMenu) return;
-  const { menu, button } = openWatchActionsMenu;
-  menu?.setAttribute("hidden", "");
-  button?.setAttribute("aria-expanded", "false");
-  if (restoreFocus) button?.focus?.();
-  openWatchActionsMenu = null;
-}
-
-function toggleWatchActionsMenu(button, menu) {
-  if (!button || !menu) return;
-  const wasOpen = openWatchActionsMenu?.menu === menu && !menu.hasAttribute("hidden");
-  closeOpenWatchActionsMenu();
-  if (wasOpen) return;
-  menu.removeAttribute("hidden");
-  button.setAttribute("aria-expanded", "true");
-  openWatchActionsMenu = { button, menu };
-}
-
-function syncWatchItemActionLayout(row) {
-  if (!row?.classList?.contains("watchItem")) return;
-  const label = row.querySelector(".watchLabel");
-  const timestamp = row.querySelector(".watchTimestamp");
-  if (!label || !timestamp) return;
-
-  row.classList.remove("watchActionsCollapsed", "watchLabelTruncated");
-  const labelRect = label.getBoundingClientRect();
-  const timestampRect = timestamp.getBoundingClientRect();
-  const needsCollapse = labelRect.right > timestampRect.left - 4
-    || label.scrollWidth > label.clientWidth + 1;
-  if (!needsCollapse) return;
-
-  row.classList.add("watchActionsCollapsed");
-  const collapsedLabelRect = label.getBoundingClientRect();
-  const collapsedTimestampRect = timestamp.getBoundingClientRect();
-  if (
-    collapsedLabelRect.right > collapsedTimestampRect.left - 4
-    || label.scrollWidth > label.clientWidth + 1
-  ) {
-    row.classList.add("watchLabelTruncated");
-  }
-}
-
-function createWatchListItem(m) {
-  if (!m) return null;
-  const w = m.watch;
-  const st = levelStyle(w.level);
-  const label = w.label || "";
-  const value = w.value ?? "";
-  const t = m.t;
-  const showGraphButton = isGraphableWatchValue(value);
-
-  const div = document.createElement("div");
-  div.className = "watchItem";
-  if (selectedWatch?.marker?.t === t) div.classList.add("selected");
-  div.dataset.t = String(t);
-
-  div.innerHTML = `
-    <div class="watchItemContent">
-      <div class="watchItemHeader">
-        <div class="watchTitleGroup">
-          <span class="pill level watchLevelPill" style="background:${st.fill};color:${st.text}">${escapeHtml(st.name)}</span>
-          <span class="watchLabel">${escapeHtml(label)}</span>
-        </div>
-        <div class="watchMeta">
-          <div class="watchTimestamp muted">${t != null ? (String(fmtNum(t / 1000, 2)) + "s") : "—"}</div>
-          <div class="watchActions watchActionsPill watchActionsFull pill">
-            <button class="iconBtn watchPinBtn" type="button" title="Open watch graph">
-                <svg width="20" height="20">
-                  <use href="${svgIconHref("icon-pinWatch")}" xlink:href="${svgIconHref("icon-pinWatch")}"></use>
-                </svg>
-            </button>
-            <button class="iconBtn watchVisibilityBtn" type="button" title="Toggle watch visibility">
-              <svg width="20" height="20">
-                <use href="${svgIconHref(watchVisibilityIconId(w))}" xlink:href="${svgIconHref(watchVisibilityIconId(w))}"></use>
-              </svg>
-            </button>
-            ${showGraphButton ? `
-            <button class="iconBtn watchGraphBtn" type="button" title="Open watch graph">
-              <svg width="20" height="20">
-                <use href="${svgIconHref("icon-watchGraph")}" xlink:href="${svgIconHref("icon-watchGraph")}"></use>
-              </svg>
-            </button>
-            ` : ""}
-          </div>
-          <div class="watchActionsCompact">
-            <button class="iconBtn watchActionsMoreBtn" type="button" title="More watch actions" aria-label="More watch actions" aria-expanded="false">
-              ⋮
-            </button>
-            <div class="watchActionsCompactMenu" hidden>
-              <button class="iconBtn watchPinBtn" type="button" title="Pin watch">
-                <svg width="20" height="20">
-                  <use href="${svgIconHref("icon-pinWatch")}" xlink:href="${svgIconHref("icon-pinWatch")}"></use>
-                </svg>
-              </button>
-              <button class="iconBtn watchVisibilityBtn" type="button" title="Toggle watch visibility">
-                <svg width="20" height="20">
-                  <use href="${svgIconHref(watchVisibilityIconId(w))}" xlink:href="${svgIconHref(watchVisibilityIconId(w))}"></use>
-                </svg>
-              </button>
-              ${showGraphButton ? `
-              <button class="iconBtn watchGraphBtn" type="button" title="Open watch graph">
-                <svg width="20" height="20">
-                  <use href="${svgIconHref("icon-watchGraph")}" xlink:href="${svgIconHref("icon-watchGraph")}"></use>
-                </svg>
-              </button>
-              ` : ""}
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="bigValue${watchBooleanValueClass(value)}">${escapeHtml(String(value))}</div>
-    </div>
-  `;
-
-  div.addEventListener("pointerdown", (ev) => {
-    if (ev.button !== 0) return;
-    ev.preventDefault();
-    selectWatchMarker(m, true, { x: ev.clientX, y: ev.clientY });
-  }, { passive: false });
-
-  const moreBtn = div.querySelector(".watchActionsMoreBtn");
-  const compactMenu = div.querySelector(".watchActionsCompactMenu");
-  if (moreBtn && compactMenu) {
-    moreBtn.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      toggleWatchActionsMenu(moreBtn, compactMenu);
-    });
-    moreBtn.addEventListener("pointerdown", (ev) => {
-      ev.stopPropagation();
-    }, { passive: true });
-    compactMenu.addEventListener("pointerdown", (ev) => {
-      ev.stopPropagation();
-    }, { passive: true });
-    compactMenu.addEventListener("keydown", (ev) => {
-      if (ev.key === "Escape") {
-        ev.preventDefault();
-        ev.stopPropagation();
-        closeOpenWatchActionsMenu({ restoreFocus: true });
-      } else if (ev.key === "Tab") {
-        closeOpenWatchActionsMenu();
-      }
-    });
-  }
-
-  const pinButtons = div.querySelectorAll(".watchPinBtn");
-  for (const pinBtn of pinButtons) {
-    pinBtn.title = "Pin watch";
-    pinBtn.setAttribute("aria-label", "Pin watch");
-    pinBtn.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      toggleFloatingWatch(w.id ?? w.watchId ?? null);
-      closeOpenWatchActionsMenu();
-    });
-    pinBtn.addEventListener("pointerdown", (ev) => {
-      ev.stopPropagation();
-    }, { passive: true });
-  }
-
-  const visibilityButtons = div.querySelectorAll(".watchVisibilityBtn");
-  for (const visibilityBtn of visibilityButtons) {
-    const visibilityKey = watchVisibilityKeyForWatch(w);
-    const visibilityTitle = watchVisibilityTitle(w);
-    visibilityBtn.dataset.watchVisibilityKey = visibilityKey;
-    visibilityBtn.dataset.iconId = watchVisibilityIconId(w);
-    visibilityBtn.dataset.title = visibilityTitle;
-    visibilityBtn.title = visibilityTitle;
-    visibilityBtn.setAttribute("aria-label", visibilityTitle);
-    visibilityBtn.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      toggleWatchVisibilityForWatch(w);
-      closeOpenWatchActionsMenu();
-    });
-    visibilityBtn.addEventListener("pointerdown", (ev) => {
-      ev.stopPropagation();
-    }, { passive: true });
-  }
-
-  const graphButtons = div.querySelectorAll(".watchGraphBtn");
-  for (const graphBtn of graphButtons) {
-    graphBtn.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      openOrToggleWatchGraphPanel(m);
-      closeOpenWatchActionsMenu();
-    });
-    graphBtn.addEventListener("pointerdown", (ev) => {
-      ev.stopPropagation();
-    }, { passive: true });
-  }
-
-  return div;
-}
-
-function renderWatchList() {
-  closeOpenWatchActionsMenu();
-  if (watchFilter) {
-    renderWatchFilter();
-  }
-  watchCount.textContent = "0";
-
-  const mode = watchSort ? watchSort.value : "time";
-  const items = watchMarkers.filter((marker) => watchFilterMatches(marker.watch));
-  watchCount.textContent = `${items.length}`;
-
-  items.sort((a, b) => {
-    const wa = a.watch || {};
-    const wb = b.watch || {};
-    if (mode === "level") {
-      const r = levelSortRank(wb.level) - levelSortRank(wa.level);
-      if (r !== 0) return r;
-      return (b.t ?? 0) - (a.t ?? 0);
-    }
-    if (mode === "time") return (a.t ?? 0) - (b.t ?? 0);
-    if (mode === "-time") return (b.t ?? 0) - (a.t ?? 0);
-    if (mode === "value") {
-      const ka = watchSortValueKey(wa.value);
-      const kb = watchSortValueKey(wb.value);
-      if (ka.t !== kb.t) return ka.t - kb.t;
-      if (ka.t === 1) return (ka.n - kb.n);
-      return ka.s.localeCompare(kb.s);
-    }
-    return 0;
-  });
-
-  renderedWatchIndexByTime = new Map();
-  for (let i = 0; i < items.length; i += 1) {
-    renderedWatchIndexByTime.set(items[i].t, i);
-  }
-
-  watchListVirtual?.setItems(items);
-
-  if (selectedWatch?.marker?.t != null) highlightWatchInList(selectedWatch.marker.t, false);
-  refreshWatchGraphPanelData();
-}
-
-function renderWatchFilter() {
-  if (!watchFilter) return;
-  const current = watchFilter.value || "all";
-  watchFilter.innerHTML = "";
-
-  const allOpt = document.createElement("option");
-  allOpt.value = "all";
-  allOpt.textContent = "All";
-  watchFilter.appendChild(allOpt);
-
-  const seen = new Set();
-  const options = [];
-  const source = watchMarkers.length > 0
-    ? watchMarkers.map((marker) => marker.watch).filter(Boolean)
-    : watches;
-  for (let i = 0; i < source.length; i += 1) {
-    const watch = source[i];
-    const key = watchFilterKeyForWatch(watch);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    options.push({
-      key,
-      label: watchFilterLabelForWatch(watch),
-    });
-  }
-
-  options.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" }));
-  for (const option of options) {
-    const opt = document.createElement("option");
-    opt.value = option.key;
-    opt.textContent = option.label;
-    watchFilter.appendChild(opt);
-  }
-
-  const nextValue = Array.from(watchFilter.options).some((opt) => opt.value === current) ? current : "all";
-  watchFilter.value = nextValue;
-}
-
-function renderLogList() {
-  if (!logList || !logCount) return;
-
-  logList.innerHTML = "";
-  logCount.textContent = `${logs.length}`;
-
-  const mode = logSort ? logSort.value : "-time";
-  const items = logs.slice();
-
-  items.sort((a, b) => {
-    if (mode === "level") {
-      const r = levelSortRank(b.level) - levelSortRank(a.level);
-      if (r !== 0) return r;
-      return (b.t ?? 0) - (a.t ?? 0);
-    }
-    if (mode === "time") return (a.t ?? 0) - (b.t ?? 0);
-    return (b.t ?? 0) - (a.t ?? 0);
-  });
-
-  for (const entry of items) {
-    const st = levelStyle(entry.level);
-    const systemPill = entry.isSystem
-      ? '<span class="pill logSystemPill">SYSTEM</span>'
-      : "";
-    const div = document.createElement("div");
-    div.className = "watchItem";
-    div.dataset.t = String(entry.t);
-    div.innerHTML = `
-      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <span class="pill level" style="background:${st.fill};color:${st.text}">${escapeHtml(st.name)}</span>
-          ${systemPill}
-        </div>
-        <div class="muted">${entry.t != null ? (String(fmtNum(entry.t / 1000, 2)) + "s") : "—"}</div>
-      </div>
-      <div class="bigValue selectableText">${escapeHtml(String(entry.message ?? entry.value ?? ""))}</div>
-    `;
-    div.addEventListener("pointerdown", (ev) => {
-      if (ev.button !== 0) return;
-      if (ev.target instanceof Element && ev.target.closest(".selectableText")) return;
-      ev.preventDefault();
-      selectedLogTime = entry.t ?? null;
-      selectedWaypointId = null;
-      selectedWaypointEventTime = null;
-      highlightWaypointInList(null, null, false);
-      jumpToEventTime(entry.t, {
-        exactStatus: (near) => setStatus(`Log @${entry.t}ms mapped to pose @${rawPoses[near.idx].t}ms (Δ=${near.dt}ms).`),
-        interpolatedStatus: () => setStatus(`Log @${entry.t}ms shown via interpolation (no pose within ±${WATCH_TOL_MS}ms).`),
-        noPoseStatus: () => setStatus(`Log @${entry.t}ms selected (no poses loaded).`),
-        clearWatchSelection: true,
-      });
-      highlightLogInList(entry.t, true);
-    }, { passive: false });
-    logList.appendChild(div);
-  }
-
-  if (selectedLogTime != null) highlightLogInList(selectedLogTime, false);
-}
-
-function renderWaypointFilter() {
-  if (!waypointFilter) return;
-  const current = waypointFilter.value || "all";
-  waypointFilter.innerHTML = "";
-
-  const allOpt = document.createElement("option");
-  allOpt.value = "all";
-  allOpt.textContent = "All";
-  waypointFilter.appendChild(allOpt);
-
-  const activeOpt = document.createElement("option");
-  activeOpt.value = "active";
-  activeOpt.textContent = "Active";
-  waypointFilter.appendChild(activeOpt);
-
-  for (const waypoint of waypoints) {
-    const opt = document.createElement("option");
-    opt.value = String(waypoint.id);
-    opt.textContent = waypoint.name || `Waypoint ${waypoint.id}`;
-    waypointFilter.appendChild(opt);
-  }
-
-  const nextValue = Array.from(waypointFilter.options).some((opt) => opt.value === current) ? current : "all";
-  waypointFilter.value = nextValue;
-}
-
-function highlightWaypointInList(waypointId, eventTime, doScroll) {
-  if (!waypointList) return;
-  const items = waypointList.querySelectorAll(".watchItem");
-  items.forEach((el) => el.classList.remove("selected"));
-  if (waypointId == null) return;
-
-  let selector = `.watchItem[data-waypoint-id="${CSS.escape(String(waypointId))}"]`;
-  if (eventTime != null) selector += `[data-event-time="${CSS.escape(String(eventTime))}"]`;
-  let el = waypointList.querySelector(selector);
-  if (!el) el = waypointList.querySelector(`.watchItem[data-waypoint-id="${CSS.escape(String(waypointId))}"]`);
-  if (el) {
-    el.classList.add("selected");
-    if (doScroll) requestAnimationFrame(() => scrollIntoViewIfNeeded(waypointList, el, 12));
-  }
-}
-
 function clearWaypointSelection() {
   selectedWaypointId = null;
   selectedWaypointEventTime = null;
-  highlightWaypointInList(null, null, false);
+  waypointListRenderer.highlight(null, null, false);
 }
 
 function waypointPoseIndexForSelection(waypoint, eventTime = null) {
@@ -5300,14 +4888,14 @@ function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
   selectedWaypointEventTime = event?.t ?? waypoint.latestActiveEvent?.t ?? waypoint.createdTime ?? null;
   selectedWatch = null;
   selectedLogTime = null;
-  highlightWatchInList(null, false);
-  highlightLogInList(null, false);
+  watchListRenderer.highlight(null, false);
+  logListRenderer.highlight(null, false);
   hideWatchPopup();
 
   if (leftConnected && leftStreaming) {
     requestDrawAll();
     setStatus(`Waypoint: ${waypoint.name || waypoint.id} selected.`);
-    highlightWaypointInList(waypoint.id, selectedWaypointEventTime, fromUserClick);
+    waypointListRenderer.highlight(waypoint.id, selectedWaypointEventTime, fromUserClick);
     return;
   }
 
@@ -5320,7 +4908,7 @@ function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
     timelineHoverSaved = null;
     selectedIndex = poseIdx;
     lastPoseIndex = selectedIndex;
-    highlightPoseInList();
+    poseListRenderer.highlight();
     updatePoseReadout();
     requestDrawAll();
     setStatus(`Waypoint: ${waypoint.name || waypoint.id} mapped to pose @${rawPoses[poseIdx].t}ms.`);
@@ -5329,59 +4917,7 @@ function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
     requestDrawAll();
   }
 
-  highlightWaypointInList(waypoint.id, selectedWaypointEventTime, fromUserClick);
-}
-
-function renderWaypointList() {
-  if (!waypointList || !waypointCount) return;
-  waypointList.innerHTML = "";
-
-  const visible = waypointVisibleEvents();
-  waypointCount.textContent = `${visible.length}`;
-
-  const ACTIVE_BACKGROUND = "rgba(0, 114, 176, 0.5)";
-  const TIMEDOUT_BACKGROUND = "rgba(211, 24, 24, 0.45)";
-  const REACHED_BACKGROUND = "rgba(22, 183, 70, 0.4)";
-
-  for (const { waypoint, event } of visible) {
-    const div = document.createElement("div");
-    div.className = "watchItem";
-    div.dataset.waypointId = String(waypoint.id);
-    div.dataset.eventTime = String(event.t);
-    const stateLabel = waypoint.retriggerable ? "RETRIGGERABLE" : (waypoint.active ? "ACTIVE" : "INACTIVE");
-    const stateFill = waypoint.retriggerable
-      ? ((waypoint.terminalEvent?.type === "TIMEDOUT") ? TIMEDOUT_BACKGROUND : ACTIVE_BACKGROUND)
-      : (waypoint.active ? ACTIVE_BACKGROUND : (waypoint.terminalEvent?.type === "REACHED" ? REACHED_BACKGROUND : TIMEDOUT_BACKGROUND));
-    const stateText = waypoint.retriggerable
-      ? "#f1e7ff"
-      : (waypoint.active ? "#e7f2ff" : "#d5e3f3ff");
-    const eventStyle = waypointTypeStyle(event.type);
-    const detailsHtml = waypointEventLines(event)
-      .map((line) => `<div class="waypointValue">${escapeHtml(line)}</div>`)
-      .join("");
-    div.innerHTML = `
-      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <span class="pill" style="background:${stateFill};color:${stateText}">${escapeHtml(stateLabel)}</span>
-          <span class="pill" style="background:${eventStyle.fill};color:${eventStyle.text}">${escapeHtml(event.type)}</span>
-          <span style="font-weight:850;word-break:break-word">${escapeHtml(waypoint.name || `Waypoint ${waypoint.id}`)}</span>
-          <div class="subValue" style="margin-top: 0px !important;">(Id: ${escapeHtml(String(waypoint.id))})</div>
-        </div>
-        <div class="muted">${fmtSecondsToString(event.t) || "—"}</div>
-      </div>
-      ${detailsHtml}
-    `;
-    div.addEventListener("pointerdown", (ev) => {
-      if (ev.button !== 0) return;
-      ev.preventDefault();
-      selectWaypointEvent(waypoint, event, true);
-    }, { passive: false });
-    waypointList.appendChild(div);
-  }
-
-  if (selectedWaypointId != null) {
-    highlightWaypointInList(selectedWaypointId, selectedWaypointEventTime, false);
-  }
+  waypointListRenderer.highlight(waypoint.id, selectedWaypointEventTime, fromUserClick);
 }
 
 function selectWatchMarker(marker, fromUserClick = false, clickPos = null) {
@@ -5399,68 +4935,12 @@ function selectWatchMarker(marker, fromUserClick = false, clickPos = null) {
     noPoseStatus: () => setStatus(`Watch @${timeStr} selected (no poses loaded).`),
   });
 
-  highlightWatchInList(marker.t, fromUserClick);
-  highlightLogInList(null, false);
-  highlightWaypointInList(null, null, false);
+  watchListRenderer.highlight(marker.t, fromUserClick);
+  logListRenderer.highlight(null, false);
+  waypointListRenderer.highlight(null, null, false);
 
   if (fromUserClick) showWatchPopup(marker, clickPos);
   else hideWatchPopup();
-}
-
-// -------- pose list --------
-function createPoseListItem(i) {
-  const p = rawPoses[i];
-  const t = (typeof p.t === "number") ? Math.round(p.t) : "—";
-  const pi = poseToInches(p);
-  const poseSummary = `X: ${formatNumberString(pi.x, 1, "0")}in, Y: ${formatNumberString(pi.y, 1, "0")}in, θ: ${formatNumberString(pi.theta, 1, "0")}°`;
-  const div = document.createElement("div");
-  div.className = "poseItem";
-  if (i === selectedIndex) div.classList.add("selected");
-  div.dataset.idx = String(i);
-  div.innerHTML = `<div style="display:flex;justify-content:space-between;gap:10px">
-    <div style="font-weight:800">#${i + 1}</div>
-    <div class="muted">${fmtNum(t / 1000)}s</div>
-  </div>
-  <div class="sub">${escapeHtml(poseSummary)}</div>`;
-  div.addEventListener("pointerdown", (ev) => {
-    if (ev.button !== 0) return;
-    ev.preventDefault();
-
-    pause();
-    clearTrackHover(true);
-    clearTrackLock();
-    selectedWatch = null;
-    selectedLogTime = null;
-    selectedWaypointId = null;
-    selectedWaypointEventTime = null;
-    highlightWaypointInList(null, null, false);
-    selectedIndex = i;
-    if (leftConnected && leftStreaming) liveAutoFollowHead = false;
-    lastPoseIndex = selectedIndex;
-    setStatus(`Jumped to pose #${i + 1}.`);
-    highlightPoseInList();
-    updatePoseReadout();
-    requestDrawAll();
-  }, { passive: false });
-  return div;
-}
-
-function renderPoseList() {
-  if (!poseList) return;
-  if (!rawPoses.length) {
-    poseCount.textContent = "—";
-    poseListVirtual?.setItems([]);
-    return;
-  }
-  poseCount.textContent = `${rawPoses.length}`;
-  poseListVirtual?.setItems({ length: rawPoses.length });
-  highlightPoseInList();
-}
-
-function highlightPoseInList() {
-  if (!poseListVirtual) return;
-  poseListVirtual.scrollToIndex(selectedIndex, 12);
-  poseListVirtual.refresh();
 }
 
 // -------- drawing --------
@@ -5472,7 +4952,7 @@ function requestDrawAll() {
     drawQueued = false;
     draw();
     drawTimeline();
-    drawPlanningTimeline();
+    planningTimelineRenderer.draw();
   });
 }
 
@@ -5530,86 +5010,6 @@ function drawPath() {
     ctx.moveTo(pa.x, pa.y);
     ctx.lineTo(pb.x, pb.y);
     ctx.stroke();
-  }
-}
-
-function drawWatchDots() {
-  if (!watchMarkers.length) return;
-
-  for (const m of watchMarkers) {
-    const { pose, watch } = m;
-    if (!isWatchMarkerVisible(m)) continue;
-    if (!pose) continue;
-    const p = worldToScreen(pose.x, pose.y);
-
-    const isHover = (hoverWatch === m);
-    const baseDiameter = isHover ? 11.2 : 8.4;
-    const r = scaledViewingFieldRadius(baseDiameter);
-    const fillA = 0.40;
-
-    ctx.save();
-    ctx.fillStyle = levelFillWithAlpha(watch.level, fillA);
-    ctx.strokeStyle = "rgba(255,255,255,0.95)";
-    ctx.lineWidth = Math.max(1, 2 * viewingFieldMarkerStyleScale());
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  if (selectedWatch?.marker?.pose && isWatchMarkerVisible(selectedWatch.marker)) {
-    const pose = selectedWatch.marker.pose;
-    const p = worldToScreen(pose.x, pose.y);
-
-    const outerR = scaledViewingFieldRadius(18);
-    const innerR = scaledViewingFieldRadius(13);
-
-    ctx.save();
-    ctx.strokeStyle = "rgba(255,255,255,0.95)";
-    ctx.lineWidth = Math.max(1, 2 * viewingFieldMarkerStyleScale());
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, outerR, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.fillStyle = levelFillWithAlpha(selectedWatch.marker.watch.level, 0.35);
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, innerR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-}
-
-function drawWaypointDots() {
-  if (!waypoints.length) return;
-
-  for (const waypoint of waypoints) {
-    if (!waypointFilterMatches(waypoint)) continue;
-    const p = worldToScreen(waypoint.target.x, waypoint.target.y);
-    const isSelected = selectedWaypointId === waypoint.id;
-    const fill = waypoint.active ? "rgba(0,0,0,0.10)" : "rgba(120,120,120,0.10)";
-    const stroke = "rgba(255,255,255,0.96)";
-    const baseDiameter = isSelected ? 15 : 12;
-    const radius = scaledViewingFieldRadius(baseDiameter);
-    const selectedRingGap = 4 * viewingFieldMarkerStyleScale();
-
-    ctx.save();
-    ctx.fillStyle = fill;
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = Math.max(1, 2 * viewingFieldMarkerStyleScale());
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    if (isSelected) {
-      ctx.strokeStyle = "rgba(255,255,255,0.85)";
-      ctx.lineWidth = Math.max(1, 2 * viewingFieldMarkerStyleScale());
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, radius + selectedRingGap, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.restore();
   }
 }
 
@@ -5941,8 +5341,8 @@ function draw() {
   drawAxes();
   if (getAppMode() === "viewing") {
     drawPath();
-    drawWaypointDots();
-    drawWatchDots();
+    viewingFieldOverlayRenderer.drawWaypointDots();
+    viewingFieldOverlayRenderer.drawWatchDots();
     if (planOverlayVisible) drawPlanningOverlay(true);
     const p = currentDisplayPose();
     if (p) drawWaypointOffsetOverlay(p);
@@ -6119,51 +5519,6 @@ function drawTimeline() {
     tctx.arc(x, y, 9.0, 0, Math.PI * 2);
     tctx.stroke();
     tctx.restore();
-  }
-}
-
-function drawPlanningTimeline() {
-  if (!planningTimelineCanvas || !pctx) return;
-  if (getAppMode() !== "planning") return;
-  const rect = planningTimelineCanvas.getBoundingClientRect();
-  const W = rect.width, H = rect.height;
-  const layout = getCurrentPlanTimelineLayout();
-  pctx.clearRect(0, 0, W, H);
-
-  const total = planTotalLength();
-  if (total <= 0) return;
-
-  const y = H / 2;
-  pctx.strokeStyle = "rgba(255,255,255,0.12)";
-  pctx.lineWidth = 2;
-  pctx.beginPath();
-  pctx.moveTo(PLAN_TIMELINE_PAD_X, y);
-  pctx.lineTo(W - PLAN_TIMELINE_PAD_X, y);
-  pctx.stroke();
-
-  const progX = getPlanTimelineXFromDistance(planPlayDist);
-  pctx.strokeStyle = "rgba(120,180,255,0.9)";
-  pctx.beginPath();
-  pctx.moveTo(PLAN_TIMELINE_PAD_X, y);
-  pctx.lineTo(progX, y);
-  pctx.stroke();
-
-  // end marker above the blue line
-  pctx.beginPath();
-  pctx.arc(progX, y, 8, 0, Math.PI * 2);
-  pctx.fillStyle = "rgba(90, 162, 250, 0.9)";
-  pctx.fill();
-  pctx.strokeStyle = "rgba(0,0,0,0.9)";
-  pctx.lineWidth = 1.5;
-  pctx.stroke();
-
-  // markers at waypoints
-  pctx.fillStyle = "rgba(180,220,255,0.9)";
-  const waypointX = layout?.waypointX?.length ? layout.waypointX : [];
-  for (const x of waypointX) {
-    pctx.beginPath();
-    pctx.arc(x, y, 3.5, 0, Math.PI * 2);
-    pctx.fill();
   }
 }
 
@@ -6547,14 +5902,14 @@ canvas.addEventListener("pointerdown", (e) => {
     if (hit >= 0) {
       if (e.shiftKey) {
         planToggleSelection(hit);
-        renderPlanList();
+        planningSidebarRenderer.renderPlanList();
         updatePlanSelectionPanel();
         requestDrawAll();
         return;
       }
       if (!planSelectedSet.has(hit) || planSelectedSet.size > 1) {
         planSelectSingle(hit);
-        renderPlanList();
+        planningSidebarRenderer.renderPlanList();
         updatePlanSelectionPanel();
         requestDrawAll();
       }
@@ -6614,7 +5969,7 @@ canvas.addEventListener("pointermove", (e) => {
       const rect = canvas.getBoundingClientRect();
       planSelectRect.x1 = e.clientX - rect.left;
       planSelectRect.y1 = e.clientY - rect.top;
-      renderPlanList();
+      planningSidebarRenderer.renderPlanList();
       updatePlanSelectionPanel();
       requestDrawAll();
       return;
@@ -6632,7 +5987,7 @@ canvas.addEventListener("pointermove", (e) => {
         planWaypoints[p.i].x = clampPlanCoordX(nx);
         planWaypoints[p.i].y = clampPlanCoordY(ny);
       }
-      renderPlanList();
+      planningSidebarRenderer.renderPlanList();
       renderPlanningEventTimeline();
       updatePlanSelectionPanel();
       requestDrawAll();
@@ -6658,7 +6013,7 @@ canvas.addEventListener("pointermove", (e) => {
     // If a hover-preview was active, clear it so the view feels stable while panning.
     if (trackHover) {
       clearTrackHover(!trackLockActive);
-      highlightPoseInList();
+      poseListRenderer.highlight();
       updatePoseReadout();
     }
   }
@@ -6729,7 +6084,7 @@ function endPan(e) {
       planSelectSingle(planWaypoints.length - 1);
       planChanged();
       planDragging = false;
-      renderPlanList();
+      planningSidebarRenderer.renderPlanList();
       updatePlanSelectionPanel();
       requestDrawAll();
     }
@@ -6935,7 +6290,7 @@ function play() {
     const last = lastWatchAtTime(watchMarkersByTime, playTimeMs);
     if (last && (!selectedWatch || selectedWatch.marker?.t !== last.t)) {
       selectedWatch = { marker: last };
-      highlightWatchInList(last.t, false);
+      watchListRenderer.highlight(last.t, false);
     }
 
     updatePoseReadout();
@@ -7061,7 +6416,7 @@ timelineCanvas.addEventListener("mousedown", (e) => {
   selectedLogTime = null;
   selectedWaypointId = null;
   selectedWaypointEventTime = null;
-  highlightWaypointInList(null, null, false);
+  waypointListRenderer.highlight(null, null, false);
 
   const t = xToTime(x);
   selectedIndex = findFloorIndexByTime(t);
@@ -7069,7 +6424,7 @@ timelineCanvas.addEventListener("mousedown", (e) => {
   hoverTimelineTime = null;
   timelineHoverSaved = null;
 
-  highlightPoseInList();
+  poseListRenderer.highlight();
   updatePoseReadout();
   requestDrawAll();
 });
@@ -7157,7 +6512,7 @@ canvas.addEventListener("mousemove", (e) => {
 
     if (trackHover) {
       clearTrackHover(!trackLockActive);
-      highlightPoseInList();
+      poseListRenderer.highlight();
       updatePoseReadout();
       requestDrawAll();
     }
@@ -7191,7 +6546,7 @@ canvas.addEventListener("mouseleave", () => {
   canvas.style.cursor = "";
   if (trackHover) {
     clearTrackHover(!trackLockActive);
-    highlightPoseInList();
+    poseListRenderer.highlight();
     updatePoseReadout();
     requestDrawAll();
   }
@@ -7219,7 +6574,7 @@ canvas.addEventListener("click", (e) => {
       return;
     }
     if (waypointFilter && waypointFilter.value === "all") {
-      renderWaypointList();
+      waypointListRenderer.renderList();
     }
     selectWaypointEvent(waypointHit, waypointHit.latestActiveEvent, true);
     return;
@@ -7236,7 +6591,7 @@ canvas.addEventListener("click", (e) => {
     selectedLogTime = null;
     selectedWaypointId = null;
     selectedWaypointEventTime = null;
-    highlightWaypointInList(null, null, false);
+    waypointListRenderer.highlight(null, null, false);
 
     trackLockActive = true;
     trackLockPose = hit.pose;
@@ -7257,7 +6612,7 @@ canvas.addEventListener("click", (e) => {
       };
     }
 
-    highlightPoseInList();
+    poseListRenderer.highlight();
     updatePoseReadout();
     requestDrawAll();
     return;
@@ -7301,6 +6656,8 @@ canvas.addEventListener("dblclick", (e) => {
 // Output always appends into #liveWin.
 
 const liveWinEl = document.getElementById("liveWin");
+document.addEventListener("keydown", handleGlobalKeydown);
+
 const btnLeftStopEl = document.getElementById("btnLeftStop");
 const btnLeftConnectEl = document.getElementById("btnLeftConnect");
 const btnLeftRefreshEl = document.getElementById("btnLeftRefresh");
@@ -7775,28 +7132,28 @@ async function doLeftRefresh() {
   if (watchesAdded > 0) {
     recomputeWatchMarkers();
     rebuildWatchMarkersByTime();
-    renderWatchFilter();
-    renderWatchList();
+    watchListRenderer.renderFilter();
+    watchListRenderer.renderList();
     refreshPinnedWatchPanels();
   }
 
   if (logsAdded > 0) {
-    renderLogList();
+    logListRenderer.render();
   }
   if (waypointsAdded > 0) {
-    renderWaypointFilter();
-    renderWaypointList();
+    waypointListRenderer.renderFilter();
+    waypointListRenderer.renderList();
   }
 
   if (posesAdded > 0) {
-    renderPoseList();
+    poseListRenderer.render();
     // If not hovering timeline/track, keep the robot on the most recent pose.
     if (liveAutoFollowHead && hoverTimelineTime == null && !playing && !trackLockActive && !(trackHover && (trackHover.pose || trackHover.t))) {
       selectedIndex = rawPoses.length - 1;
     } else if (!liveAutoFollowHead && rawPoses.length && hoverTimelineTime == null && !playing && !trackLockActive && !(trackHover && (trackHover.pose || trackHover.t))) {
       selectedIndex = lastPoseIndex;
     }
-    highlightPoseInList();
+    poseListRenderer.highlight();
   }
 
   updatePoseReadout();
@@ -7948,7 +7305,7 @@ if (btnFit) {
 
 // Initialize UI on load
 leftSetUI("");
-renderPlanObjects();
+planningSidebarRenderer.renderPlanObjects();
 renderPlanningEventTimeline();
 
 
@@ -8309,7 +7666,7 @@ function setDataFromStreamText(text) {
   planObjects = [];
   planNodes = [];
   clearPlanNodeSelection();
-  renderPlanObjects();
+  planningSidebarRenderer.renderPlanObjects();
   renderPlanningEventTimeline();
   normalizePlanningTimelineHeightForContent();
   planSetSelection([]);
@@ -8392,13 +7749,13 @@ function finalizeLoadedData() {
 
   recomputeWatchMarkers();
   rebuildWatchMarkersByTime();
-  renderWatchFilter();
-  renderWatchList();
+  watchListRenderer.renderFilter();
+  watchListRenderer.renderList();
   refreshPinnedWatchPanels();
-  renderLogList();
-  renderWaypointFilter();
-  renderWaypointList();
-  renderPoseList();
+  logListRenderer.render();
+  waypointListRenderer.renderFilter();
+  waypointListRenderer.renderList();
+  poseListRenderer.render();
 
   bounds = { ...FIELD_BOUNDS_IN };
   computeTransform();
@@ -9299,12 +8656,12 @@ async function applyImportedRunSettings() {
   syncMainToSettings();
   updateOffsetsFromInputs();
   computeSpeedNormRange();
-  renderPoseList();
-  renderWatchFilter();
-  renderWatchList();
-  renderLogList();
-  renderWaypointFilter();
-  renderWaypointList();
+  poseListRenderer.render();
+  watchListRenderer.renderFilter();
+  watchListRenderer.renderList();
+  logListRenderer.render();
+  waypointListRenderer.renderFilter();
+  waypointListRenderer.renderList();
   updatePoseReadout();
   requestDrawAll();
   await saveSettings();
@@ -9684,7 +9041,7 @@ if (planObjectListEl) {
       const objectId = colorBtn.getAttribute("data-object-id") || "";
       if (!objectId) return;
       planOpenColorPickerObjectId = planOpenColorPickerObjectId === objectId ? null : objectId;
-      renderPlanObjects();
+      planningSidebarRenderer.renderPlanObjects();
       return;
     }
     const methodAddBtn = e.target.closest(".planMethodAddBtn");
@@ -9842,7 +9199,7 @@ if (planningEventTimelineEl) {
     if (e.target instanceof Element && e.target.closest(".planningTimelineNode")) return;
     clearPlanNodeSelection();
     renderPlanningEventTimeline();
-    renderPlanObjects();
+    planningSidebarRenderer.renderPlanObjects();
     syncPlanObjectLatestValues();
   });
 }
@@ -9862,7 +9219,7 @@ window.__motionViewPlanColorMousedownHandler = (e) => {
   if (!planOpenColorPickerObjectId) return;
   if (e.target instanceof Element && e.target.closest(".planObjectColorWrap")) return;
   planOpenColorPickerObjectId = null;
-  renderPlanObjects();
+  planningSidebarRenderer.renderPlanObjects();
 };
 document.addEventListener("mousedown", window.__motionViewPlanColorMousedownHandler, true);
 
@@ -10611,14 +9968,14 @@ offThetaEl.addEventListener("input", () => {
   saveSettings();
 });
 
-if (watchSort) watchSort.addEventListener("change", () => { renderWatchList(); requestDrawAll(); });
+if (watchSort) watchSort.addEventListener("change", () => { watchListRenderer.renderList(); requestDrawAll(); });
 if (watchFilter) watchFilter.addEventListener("change", () => {
-  renderWatchList();
+  watchListRenderer.renderList();
   requestDrawAll();
 });
-if (logSort) logSort.addEventListener("change", () => { renderLogList(); });
+if (logSort) logSort.addEventListener("change", () => { logListRenderer.render(); });
 if (waypointFilter) waypointFilter.addEventListener("change", () => {
-  renderWaypointList();
+  waypointListRenderer.renderList();
   requestDrawAll();
 });
 
@@ -10657,15 +10014,15 @@ function clearAllPosesAndWatches() {
     data.waypoints = [];
   }
 
-  try { renderPoseList?.(); } catch { }
-  try { renderWatchList?.(); } catch { }
+  try { poseListRenderer.render(); } catch { }
+  try { watchListRenderer.renderList(); } catch { }
   try { refreshPinnedWatchPanels?.(); } catch { }
-  try { renderLogList?.(); } catch { }
-  try { renderWaypointFilter?.(); } catch { }
-  try { renderWaypointList?.(); } catch { }
+  try { logListRenderer.render(); } catch { }
+  try { waypointListRenderer.renderFilter(); } catch { }
+  try { waypointListRenderer.renderList(); } catch { }
   try { updatePoseReadout?.(); } catch { }
   try { updateFloatingInfo?.(null, 0); } catch { }
-  try { requestDrawAll?.(); } catch { } 2
+  try { requestDrawAll?.(); } catch { }
 }
 
 btnClearField?.addEventListener("click", (event) => {
@@ -10707,7 +10064,7 @@ btnClearField?.addEventListener("click", (event) => {
 });
 
 
-document.addEventListener("keydown", (e) => {
+function handleGlobalKeydown(e) {
   const mouseTag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
   const isTypingTarget = (mouseTag === "input" || mouseTag === "textarea" || (e.target && e.target.isContentEditable));
   if (isTypingTarget && e.target !== liveWinEl) return;
@@ -10937,10 +10294,10 @@ document.addEventListener("keydown", (e) => {
     selectedLogTime = null;
     selectedWaypointId = null;
     selectedWaypointEventTime = null;
-    highlightWaypointInList(null, null, false);
+    waypointListRenderer.highlight(null, null, false);
     selectedIndex = Math.max(0, selectedIndex - 1);
     lastPoseIndex = selectedIndex;
-    highlightPoseInList();
+    poseListRenderer.highlight();
     updatePoseReadout();
     requestDrawAll();
   }
@@ -10953,14 +10310,14 @@ document.addEventListener("keydown", (e) => {
     selectedLogTime = null;
     selectedWaypointId = null;
     selectedWaypointEventTime = null;
-    highlightWaypointInList(null, null, false);
+    waypointListRenderer.highlight(null, null, false);
     selectedIndex = Math.min(rawPoses.length - 1, selectedIndex + 1);
     lastPoseIndex = selectedIndex;
-    highlightPoseInList();
+    poseListRenderer.highlight();
     updatePoseReadout();
     requestDrawAll();
   }
-});
+}
 
 const planningMode = createPlanningMode({
   getAppMode,
@@ -10971,8 +10328,8 @@ const planningMode = createPlanningMode({
   loadImportedData: applyImportedPlanningData,
   clear: clearPlanningModeData,
   render: () => {
-    renderPlanList();
-    renderPlanObjects();
+    planningSidebarRenderer.renderPlanList();
+    planningSidebarRenderer.renderPlanObjects();
     renderPlanningEventTimeline();
   },
   pause: planPause,
@@ -10992,7 +10349,7 @@ const planningMode = createPlanningMode({
   bindEvents: () => {},
   handleKeydown: () => false,
   drawOverlay: drawPlanningOverlay,
-  drawTimeline: drawPlanningTimeline,
+  drawTimeline: () => planningTimelineRenderer.draw(),
   hitTestField: planHitTest,
   getTelemetryProperties: (extra = {}) => getPlanningTelemetryProperties(
     planWaypoints,
@@ -11007,18 +10364,18 @@ const viewingMode = createViewingMode({
   loadViewingData: applyImportedViewingData,
   clear: clearAllPosesAndWatches,
   renderLists: () => {
-    renderWatchList();
-    renderLogList();
-    renderWaypointList();
-    renderPoseList();
+    watchListRenderer.renderList();
+    logListRenderer.render();
+    waypointListRenderer.renderList();
+    poseListRenderer.render();
   },
-  renderWatchList,
-  renderLogList,
-  renderWaypointList,
-  renderPoseList,
+  renderWatchList: () => watchListRenderer.renderList(),
+  renderLogList: () => logListRenderer.render(),
+  renderWaypointList: () => waypointListRenderer.renderList(),
+  renderPoseList: () => poseListRenderer.render(),
   selectPose: (index) => {
     selectedIndex = index;
-    highlightPoseInList();
+    poseListRenderer.highlight();
     updatePoseReadout();
     requestDrawAll();
   },
