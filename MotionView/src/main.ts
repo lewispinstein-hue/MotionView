@@ -1380,7 +1380,7 @@ function openPlanMethodCreateModal(objectId) {
     onConfirm: ({ nameValue, codeValue }) => {
       const target = planObjects.find((entry) => entry.id === objectId);
       if (!target) return;
-      target.methods.unshift({
+      target.methods.push({
         id: createPlanMethodId(),
         name: nameValue.slice(0, 25),
         code: codeValue,
