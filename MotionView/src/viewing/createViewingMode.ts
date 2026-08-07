@@ -7,9 +7,6 @@ import {
   type NumberParser,
 } from "./viewingActions";
 import { createViewingDataState } from "./viewingData";
-import { createViewingInput } from "./viewingInput";
-import { createViewingLegacyBridge } from "./viewingLegacyBridge";
-import { createViewingRendering } from "./viewingRendering";
 import { createViewingInternalState } from "./viewingState";
 import type { ViewingModeController, ViewingExportData } from "./viewingTypes";
 import type { WatchEntry } from "../state/models";
@@ -31,14 +28,10 @@ export function createViewingMode(options: CreateViewingModeOptions = {}): Viewi
     normalizeLogLevel: options.normalizeLogLevel ?? defaultLogLevelNormalizer,
     getWatchVisibility: options.getWatchVisibility,
   });
-  const rendering = createViewingRendering();
-  const input = createViewingInput();
 
   const controller = {
     data,
     actions,
-    rendering,
-    input,
     getExportData(): Readonly<ViewingExportData> {
       return {
         poses: state.poses,
@@ -49,11 +42,6 @@ export function createViewingMode(options: CreateViewingModeOptions = {}): Viewi
       };
     },
   };
-
-  Object.defineProperty(controller, "legacy", {
-    enumerable: false,
-    value: createViewingLegacyBridge(state),
-  });
 
   return controller;
 }

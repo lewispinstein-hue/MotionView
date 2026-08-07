@@ -47,6 +47,7 @@ export interface ViewingDataState {
   getWatches(): readonly WatchEntry[];
   getLogs(): readonly LogEntry[];
   getWaypoints(): readonly Waypoint[];
+  getWaypointMap(): ReadonlyMap<number, Waypoint>;
   getWatchMarkers(): readonly WatchMarker[];
   getSelectedIndex(): number;
   getSelectedWatch(): Readonly<{ marker: WatchMarker }> | null;
@@ -69,8 +70,10 @@ export interface ViewingDataActions {
 
 export interface ViewingRendering {
   renderLists(): void;
+  renderWatchFilter(): void;
   renderWatchList(): void;
   renderLogList(): void;
+  renderWaypointFilter(): void;
   renderWaypointList(): void;
   renderPoseList(): void;
   drawFieldOverlay(): void;
@@ -86,7 +89,5 @@ export interface ViewingInput {
 export interface ViewingModeController {
   data: ViewingDataState;
   actions: ViewingDataActions;
-  rendering: ViewingRendering;
-  input: ViewingInput;
   getExportData(): Readonly<ViewingExportData>;
 }

@@ -7,6 +7,7 @@ export function createViewingDataState(state: ViewingInternalState): ViewingData
     getWatches: () => state.watches,
     getLogs: () => state.logs,
     getWaypoints: () => state.waypoints,
+    getWaypointMap: () => state.waypointsById,
     getWatchMarkers: () => state.watchMarkers,
     getSelectedIndex: () => state.selectedIndex,
     getSelectedWatch: () => state.selectedWatch,

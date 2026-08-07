@@ -72,6 +72,11 @@ function appendWatches(
   return watches.length;
 }
 
+function replaceArrayContents<T>(target: T[], items: readonly T[]) {
+  target.length = 0;
+  appendMany(target, items);
+}
+
 function applyWaypointEvent(state: ViewingInternalState, event: WaypointEvent) {
   if (event.type === "CREATED") {
     const isRetriggerable = !!event.params?.retriggerable;
@@ -131,25 +136,28 @@ export function createViewingActions(
     loadViewingData(data: unknown) {
       const obj = (data && typeof data === "object") ? data as Record<string, any> : {};
       const poses = Array.isArray(obj.poses) ? obj.poses : (Array.isArray(obj["robot-path"]) ? obj["robot-path"] : []);
-      state.poses = normalizePoseArray(poses, deps.toNumMaybe, deps.makePoseStore);
-      state.watches = normalizeWatches(obj.watches || obj.watch || [], deps.toNumMaybe);
-      state.logs = normalizeLogs(obj.logs || obj.log || [], deps.toNumMaybe, deps.normalizeLogLevel);
+      const normalizedPoses = normalizePoseArray(poses, deps.toNumMaybe, deps.makePoseStore);
+      state.poses.clear();
+      for (const pose of normalizedPoses) state.poses.push(pose);
+      replaceArrayContents(state.watches, normalizeWatches(obj.watches || obj.watch || [], deps.toNumMaybe));
+      replaceArrayContents(state.logs, normalizeLogs(obj.logs || obj.log || [], deps.toNumMaybe, deps.normalizeLogLevel));
       const normalizedWaypoints = buildWaypointState(obj.waypoints || []);
-      state.waypoints = normalizedWaypoints.waypoints;
-      state.waypointsById = normalizedWaypoints.waypointsById;
-      state.watchMarkers = [];
+      replaceArrayContents(state.waypoints, normalizedWaypoints.waypoints);
+      state.waypointsById.clear();
+      for (const [id, waypoint] of normalizedWaypoints.waypointsById) state.waypointsById.set(id, waypoint);
+      state.watchMarkers.length = 0;
       state.selectedIndex = 0;
       state.meta = obj.meta ?? null;
       clearTransientSelection();
     },
 
     clear() {
-      state.poses = deps.makePoseStore();
-      state.watches = [];
-      state.logs = [];
-      state.waypoints = [];
-      state.waypointsById = new Map<number, Waypoint>();
-      state.watchMarkers = [];
+      state.poses.clear();
+      state.watches.length = 0;
+      state.logs.length = 0;
+      state.waypoints.length = 0;
+      state.waypointsById.clear();
+      state.watchMarkers.length = 0;
       state.selectedIndex = 0;
       state.meta = null;
       clearTransientSelection();
@@ -171,7 +179,7 @@ export function createViewingActions(
       if (watchesAdded > 0) state.watches.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
       if (logsAdded > 0) state.logs.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
       if (waypointsAdded > 0) {
-        state.waypoints = Array.from(state.waypointsById.values()).sort((a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0));
+        replaceArrayContents(state.waypoints, Array.from(state.waypointsById.values()).sort((a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0)));
       }
       if (batch.meta !== undefined) state.meta = batch.meta;
       return {

@@ -8,4 +8,6 @@ export * from "./logList";
 export * from "./waypointList";
 export * from "./watchList";
 export * from "./viewingFieldOverlay";
+export * from "./viewingInput";
+export * from "./viewingRendering";
 export * from "./createViewingMode";
