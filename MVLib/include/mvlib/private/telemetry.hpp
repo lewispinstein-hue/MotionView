@@ -43,7 +43,7 @@ int8_t packTelemetryVelocity(double velocity);
 // Optimized Packets
 struct __attribute__((packed)) PosePacket {
   uint16_t timestamp;
-  float x; 
+  float x;
   float y;
   uint16_t theta;
   int8_t leftVel; 

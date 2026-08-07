@@ -512,7 +512,7 @@ private:
   Logger& operator=(const Logger&) = delete;
 
   /// @brief Background update loop invoked by the logger task.
-  void Update();
+  void update();
 
   /// @brief Validate that required robot references are present.
   bool checkRobotConfig();

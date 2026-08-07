@@ -111,7 +111,7 @@ void Logger::start() {
         continue;
       }
 
-      try { this->Update(); }
+      try { this->update(); }
       catch (std::exception& e) {
         _MVLIB_FORWARD_ERROR("MVLib Update loop exception: %s", e.what());
       }
@@ -131,7 +131,7 @@ void Logger::start() {
   _MVLIB_FORWARD_INFO("start() Background logger task started.");
 }
 
-void Logger::Update() {
+void Logger::update() {
   if (m_config.printWatches.load()) printWatches();
   if (m_config.printWaypoints.load()) printWaypoints();
 
