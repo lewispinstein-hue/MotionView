@@ -632,9 +632,7 @@ let panStart = { x: 0, y: 0, panX: 0, panY: 0 };
 let suppressNextClick = false;
 let panDelta = 0;
 
-const modeController = createModeController({
-  initialMode: "viewing",
-});
+const modeController = createModeController("viewing");
 
 const planningMode = createPlanningMode({
   getAppMode: modeController.getMode,
@@ -1716,7 +1714,7 @@ planningMode.rendering.renderTimelineDom = function renderTimelineDom() {
   if (!canPlace) {
     syncPlanningTimelineCanvasSize();
     clearPlanTimelineDropTarget();
-    planningMode.rendering.viewingTimeline.draw();
+    planningMode.rendering.drawTimeline();
     return;
   }
 
@@ -1794,7 +1792,7 @@ planningMode.rendering.renderTimelineDom = function renderTimelineDom() {
     clearPlanTimelineDropTarget();
   }
   syncPlanningTimelineCanvasSize();
-  planningMode.rendering.viewingTimeline.draw();
+  planningMode.rendering.drawTimeline();
 };
 
 function startPlanObjectNameEdit(objectId, selectAll = false) {
@@ -3233,7 +3231,7 @@ function resizePlanningTimeline() {
   if (!planningTimelineCanvas || !pctx) return;
   planningMode.rendering.renderTimelineDom();
   syncPlanningTimelineCanvasSize();
-  planningMode.rendering.viewingTimeline.draw();
+  planningMode.rendering.drawTimeline();
 }
 
 // -------- field images --------
@@ -4144,7 +4142,7 @@ function requestDrawAll() {
     drawQueued = false;
     draw();
     viewingTimeline.draw();
-    planningMode.rendering.viewingTimeline.draw();
+    planningMode.rendering.drawTimeline();
   });
 }
 
