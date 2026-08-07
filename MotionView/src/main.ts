@@ -540,31 +540,59 @@ function getValidFieldKey(fieldKey) {
 
 // Raw poses are stored in FILE units; we convert to inches for rendering.
 // Fields: t, x, y, theta, l_vel, r_vel, speed_raw, speed_norm
-let rawPoses = createPoseStore();
+const viewingMode = createViewingMode({
+  createPoseStore,
+  toNumMaybe,
+  normalizeLogLevel,
+  getWatchVisibility: currentVisibilityForWatch,
+});
+const viewingLegacy = viewingMode.legacy;
+let rawPoses = viewingLegacy.rawPoses;
 
 // Watches: normalized
-let watches = [];
-let logs = [];
-let waypoints = [];
-let waypointsById = new Map();
-let watchMarkers = []; // {watch, t, pose(in), ok, idx, dt}
+let watches = viewingLegacy.watches;
+let logs = viewingLegacy.logs;
+let waypoints = viewingLegacy.waypoints;
+let waypointsById = viewingLegacy.waypointsById;
+let watchMarkers = viewingLegacy.watchMarkers; // {watch, t, pose(in), ok, idx, dt}
 
-let selectedWatch = null;       // { marker }
-let selectedLogTime = null;
-let selectedWaypointId = null;
-let selectedWaypointEventTime = null;
-let selectedIndex = 0;          // nearest pose index for "locked" selection
-let hoverTimelineTime = null;   // preview time on timeline (ms)
+let selectedWatch = viewingLegacy.selectedWatch;       // { marker }
+let selectedLogTime = viewingLegacy.selectedLogTime;
+let selectedWaypointId = viewingLegacy.selectedWaypointId;
+let selectedWaypointEventTime = viewingLegacy.selectedWaypointEventTime;
+let selectedIndex = viewingLegacy.selectedIndex;          // nearest pose index for "locked" selection
+let hoverTimelineTime = viewingLegacy.hoverTimelineTime;   // preview time on timeline (ms)
 let timelineHoverSaved = null;  // { index, lockActive, lockPose, lockIndex }
 
 let hoverWatch = null;
 
 // Track preview + lock
-let trackHover = null;          // { pose, idxNearest }
-let trackHoverSavedIndex = null;
-let trackLockActive = false;
-let trackLockPose = null;       // pose in inches
-let trackLockIndex = null;
+let trackHover = viewingLegacy.trackHover;          // { pose, idxNearest }
+let trackHoverSavedIndex = viewingLegacy.trackHoverSavedIndex;
+let trackLockActive = viewingLegacy.trackLockActive;
+let trackLockPose = viewingLegacy.trackLockPose;       // pose in inches
+let trackLockIndex = viewingLegacy.trackLockIndex;
+
+function syncViewingAliasesFromOwner() {
+  const exportData = viewingMode.getExportData();
+  rawPoses = viewingLegacy.rawPoses = exportData.poses;
+  watches = viewingLegacy.watches = exportData.watches;
+  logs = viewingLegacy.logs = exportData.logs;
+  waypoints = viewingLegacy.waypoints = exportData.waypoints;
+  waypointsById = viewingLegacy.waypointsById;
+  watchMarkers = viewingLegacy.watchMarkers;
+  selectedWatch = viewingLegacy.selectedWatch;
+  selectedLogTime = viewingLegacy.selectedLogTime;
+  selectedWaypointId = viewingLegacy.selectedWaypointId;
+  selectedWaypointEventTime = viewingLegacy.selectedWaypointEventTime;
+  selectedIndex = viewingLegacy.selectedIndex;
+  hoverTimelineTime = viewingLegacy.hoverTimelineTime;
+  trackHover = viewingLegacy.trackHover;
+  trackHoverSavedIndex = viewingLegacy.trackHoverSavedIndex;
+  trackLockActive = viewingLegacy.trackLockActive;
+  trackLockPose = viewingLegacy.trackLockPose;
+  trackLockIndex = viewingLegacy.trackLockIndex;
+}
 
 const telemetryMetrics = {
   totalPosesReceived: 0,
@@ -1965,11 +1993,9 @@ function hasImportedViewingData(obj) {
 }
 
 function applyImportedViewingData(obj) {
-  rawPoses = normalizePoseArray(obj.poses || obj["robot-path"] || []);
-  watches = normalizeWatches(obj.watches || obj.watch || [], toNumMaybe);
-  logs = normalizeLogs(obj.logs || obj.log || [], toNumMaybe, normalizeLogLevel);
-  waypoints = normalizeWaypoints(obj.waypoints || []);
-  setImportedRouteMeta(obj.meta);
+  viewingMode.actions.loadViewingData(obj);
+  syncViewingAliasesFromOwner();
+  setImportedRouteMeta(viewingMode.getExportData().meta);
 }
 
 function confirmPlanningImportOverride() {
@@ -2278,11 +2304,9 @@ async function loadSavedPaths() {
     if (!saved) return;
     const obj = JSON.parse(saved);
     planningMode.loadImportedData(obj);
-    rawPoses = normalizePoseArray(obj?.["robot-path"] || []);
-    watches = normalizeWatches(obj?.["watches"] || [], toNumMaybe);
-    logs = normalizeLogs(obj?.["logs"] || [], toNumMaybe, normalizeLogLevel);
-    waypoints = normalizeWaypoints(obj?.["waypoints"] || []);
-    data = { poses: rawPoses, watches, logs, waypoints, meta: {} };
+    viewingMode.actions.loadViewingData(obj);
+    syncViewingAliasesFromOwner();
+    data = { poses: rawPoses, watches, logs, waypoints, meta: viewingMode.getExportData().meta ?? {} };
     if (hasLoadedData()) {
       finalizeLoadedData();
       planningMode.playback.updateControls();
@@ -3568,8 +3592,8 @@ function waypointEventLines(event) {
 
 function normalizeWaypoints(arr) {
   const normalized = buildWaypointState(arr);
-  waypointsById = normalized.waypointsById;
-  waypoints = normalized.waypoints;
+  waypointsById = viewingLegacy.waypointsById = normalized.waypointsById;
+  waypoints = viewingLegacy.waypoints = normalized.waypoints;
   return waypoints;
 }
 
@@ -3596,7 +3620,7 @@ function waypointVisibleEvents() {
 }
 
 function recomputeWatchMarkers() {
-  watchMarkers = [];
+  watchMarkers = viewingLegacy.watchMarkers = [];
   for (const w of watches) {
     const t = w.t;
     const near = nearestIndexWithinTol(t, WATCH_TOL_MS);
@@ -3611,15 +3635,15 @@ function recomputeWatchMarkers() {
 }
 
 // watchMarkersByTime is used for fast "last watch hit" lookup during playback
-let watchMarkersByTime = [];
+let watchMarkersByTime = viewingLegacy.watchMarkersByTime;
 
 function rebuildWatchMarkersByTime() {
-  watchMarkersByTime = sortWatchMarkersByTime(watchMarkers);
+  watchMarkersByTime = viewingLegacy.watchMarkersByTime = sortWatchMarkersByTime(watchMarkers);
 }
 
-let renderedWatchIndexByTime = new Map();
+let renderedWatchIndexByTime = viewingLegacy.renderedWatchIndexByTime;
 
-let watchListVirtual = null;
+let watchListVirtual = viewingLegacy.watchListVirtual;
 const watchListRenderer = createWatchListRenderer({
   watchList,
   watchFilter,
@@ -3629,7 +3653,7 @@ const watchListRenderer = createWatchListRenderer({
   getWatchMarkers: () => watchMarkers,
   getWatches: () => watches,
   getSelectedWatch: () => selectedWatch,
-  setRenderedWatchIndexByTime: (indexByTime) => { renderedWatchIndexByTime = indexByTime; },
+  setRenderedWatchIndexByTime: (indexByTime) => { renderedWatchIndexByTime = viewingLegacy.renderedWatchIndexByTime = indexByTime; },
   refreshWatchGraphPanelData,
   requestDrawAll,
   levelStyle,
@@ -3652,7 +3676,7 @@ const watchListRenderer = createWatchListRenderer({
   openOrToggleWatchGraphPanel,
 });
 
-watchListVirtual = createVirtualList(watchList, {
+watchListVirtual = viewingLegacy.watchListVirtual = createVirtualList(watchList, {
   estimateRowHeight: 62,
   overscanPx: 480,
   getKey: (item, index) => `${item?.t ?? "watch"}:${index}`,
@@ -3660,7 +3684,7 @@ watchListVirtual = createVirtualList(watchList, {
   syncRowLayout: watchListRenderer.syncItemActionLayout,
 });
 
-let poseListVirtual = null;
+let poseListVirtual = viewingLegacy.poseListVirtual;
 const poseListRenderer = createPoseListRenderer({
   poseList,
   poseCount,
@@ -3676,12 +3700,12 @@ const poseListRenderer = createPoseListRenderer({
     pause();
     clearTrackHover(true);
     clearTrackLock();
-    selectedWatch = null;
-    selectedLogTime = null;
-    selectedWaypointId = null;
-    selectedWaypointEventTime = null;
+    selectedWatch = viewingLegacy.selectedWatch = null;
+    selectedLogTime = viewingLegacy.selectedLogTime = null;
+    selectedWaypointId = viewingLegacy.selectedWaypointId = null;
+    selectedWaypointEventTime = viewingLegacy.selectedWaypointEventTime = null;
     waypointListRenderer.highlight(null, null, false);
-    selectedIndex = index;
+    selectedIndex = viewingLegacy.selectedIndex = index;
     if (leftConnected && leftStreaming) liveAutoFollowHead = false;
     lastPoseIndex = selectedIndex;
     setStatus(`Jumped to pose #${index + 1}.`);
@@ -3691,7 +3715,7 @@ const poseListRenderer = createPoseListRenderer({
   },
 });
 
-poseListVirtual = createVirtualList(poseList, {
+poseListVirtual = viewingLegacy.poseListVirtual = createVirtualList(poseList, {
   estimateRowHeight: 52,
   overscanPx: 320,
   getKey: (_, index) => `pose:${index}`,
@@ -3721,10 +3745,10 @@ const logListRenderer = createLogListRenderer({
   watchToleranceMs: WATCH_TOL_MS,
   getLogs: () => logs,
   getSelectedLogTime: () => selectedLogTime,
-  setSelectedLogTime: (time) => { selectedLogTime = time; },
+  setSelectedLogTime: (time) => { selectedLogTime = viewingLegacy.selectedLogTime = time; },
   clearWaypointSelectionState: () => {
-    selectedWaypointId = null;
-    selectedWaypointEventTime = null;
+    selectedWaypointId = viewingLegacy.selectedWaypointId = null;
+    selectedWaypointEventTime = viewingLegacy.selectedWaypointEventTime = null;
   },
   highlightWaypointInList: (waypointId, eventTime, doScroll) => waypointListRenderer.highlight(waypointId, eventTime, doScroll),
   jumpToEventTime,
@@ -3778,15 +3802,15 @@ function jumpToEventTime(tMs, {
   if (leftConnected && leftStreaming) liveAutoFollowHead = false;
 
   if (!rawPoses.length) {
-    selectedIndex = 0;
+    selectedIndex = viewingLegacy.selectedIndex = 0;
     lastPoseIndex = 0;
 
     pause();
-    hoverTimelineTime = null;
+    hoverTimelineTime = viewingLegacy.hoverTimelineTime = null;
     timelineHoverSaved = null;
 
     if (clearWatchSelection) {
-      selectedWatch = null;
+      selectedWatch = viewingLegacy.selectedWatch = null;
       watchListRenderer.highlight(null, false);
       hideWatchPopup();
     }
@@ -3801,20 +3825,20 @@ function jumpToEventTime(tMs, {
 
   const near = nearestIndexWithinTol(tMs, WATCH_TOL_MS);
   if (near) {
-    selectedIndex = near.idx;
+    selectedIndex = viewingLegacy.selectedIndex = near.idx;
     if (typeof exactStatus === "function") exactStatus(near);
   } else {
-    selectedIndex = findFloorIndexByTime(tMs);
+    selectedIndex = viewingLegacy.selectedIndex = findFloorIndexByTime(tMs);
     if (typeof interpolatedStatus === "function") interpolatedStatus();
   }
   lastPoseIndex = selectedIndex;
 
   pause();
-  hoverTimelineTime = null;
+  hoverTimelineTime = viewingLegacy.hoverTimelineTime = null;
   timelineHoverSaved = null;
 
   if (clearWatchSelection) {
-    selectedWatch = null;
+    selectedWatch = viewingLegacy.selectedWatch = null;
     watchListRenderer.highlight(null, false);
     hideWatchPopup();
   }
@@ -3827,19 +3851,19 @@ function jumpToEventTime(tMs, {
 // --- Watch popup (tiny, click to show, click elsewhere to dismiss) ---
 const watchPopup = document.getElementById("watchPopup");
 let watchPopupOpen = false;
-let watchGraphPanelOpen = false;
-let watchGraphPanelKey = null;
-let watchGraphCompareKey = "";
-let watchGraphChart = null;
-let watchGraphMarkersForKey = [];
-let watchGraphCompareMarkersForKey = [];
-let watchGraphZoomRange = null;
-let watchGraphFollowLatest = false;
+let watchGraphPanelOpen = viewingLegacy.watchGraphPanelOpen;
+let watchGraphPanelKey = viewingLegacy.watchGraphPanelKey;
+let watchGraphCompareKey = viewingLegacy.watchGraphCompareKey;
+let watchGraphChart = viewingLegacy.watchGraphChart;
+let watchGraphMarkersForKey = viewingLegacy.watchGraphMarkersForKey;
+let watchGraphCompareMarkersForKey = viewingLegacy.watchGraphCompareMarkersForKey;
+let watchGraphZoomRange = viewingLegacy.watchGraphZoomRange;
+let watchGraphFollowLatest = viewingLegacy.watchGraphFollowLatest;
 const WATCH_GRAPH_FOLLOW_HEAD_TOLERANCE_S = 2.5;
-let isWatchGraphDragging = false;
-let isWatchGraphResizing = false;
-let watchGraphDragStart = { x: 0, y: 0 };
-let watchGraphHoverSaved = null;
+let isWatchGraphDragging = viewingLegacy.isWatchGraphDragging;
+let isWatchGraphResizing = viewingLegacy.isWatchGraphResizing;
+let watchGraphDragStart = viewingLegacy.watchGraphDragStart;
+let watchGraphHoverSaved = viewingLegacy.watchGraphHoverSaved;
 
 function hideWatchPopup() {
   if (!watchPopup) return;
@@ -3946,7 +3970,7 @@ function refreshWatchGraphCompareSelect() {
 
   const options = graphableWatchOptions(watchGraphPanelKey);
   const previousValue = options.some((option) => option.key === watchGraphCompareKey) ? watchGraphCompareKey : "";
-  watchGraphCompareKey = previousValue;
+  watchGraphCompareKey = viewingLegacy.watchGraphCompareKey = previousValue;
 
   watchGraphCompareSelect.innerHTML = "";
 
@@ -4245,22 +4269,22 @@ function isWatchGraphRangeNearRobotHead(range) {
 }
 
 function setWatchGraphZoomRange(nextRange, fullRange) {
-  watchGraphZoomRange = normalizeWatchGraphZoomRange(nextRange, fullRange);
-  watchGraphFollowLatest = isWatchGraphRangeNearRobotHead(watchGraphZoomRange);
+  watchGraphZoomRange = viewingLegacy.watchGraphZoomRange = normalizeWatchGraphZoomRange(nextRange, fullRange);
+  watchGraphFollowLatest = viewingLegacy.watchGraphFollowLatest = isWatchGraphRangeNearRobotHead(watchGraphZoomRange);
 }
 
 function renderWatchGraphForKey(key) {
   if (!watchGraphCanvas) return;
 
   const { primarySeries, compareSeries, primaryPoints, comparePoints, yRange } = buildWatchGraphDatasets(key, watchGraphCompareKey);
-  watchGraphMarkersForKey = primarySeries.markers;
-  watchGraphCompareMarkersForKey = compareSeries.markers;
+  watchGraphMarkersForKey = viewingLegacy.watchGraphMarkersForKey = primarySeries.markers;
+  watchGraphCompareMarkersForKey = viewingLegacy.watchGraphCompareMarkersForKey = compareSeries.markers;
   const hasPrimaryPoints = primaryPoints.length > 0;
   const hasComparePoints = comparePoints.length > 0;
   const fullTimeRange = watchGraphTimeRange(primaryPoints, comparePoints);
   let zoomRange = normalizeWatchGraphZoomRange(watchGraphZoomRange, fullTimeRange);
   if (!watchGraphFollowLatest && isWatchGraphRangeNearRobotHead(zoomRange)) {
-    watchGraphFollowLatest = true;
+    watchGraphFollowLatest = viewingLegacy.watchGraphFollowLatest = true;
   }
   if (watchGraphFollowLatest && zoomRange && fullTimeRange) {
     const span = zoomRange.max - zoomRange.min;
@@ -4269,15 +4293,15 @@ function renderWatchGraphForKey(key) {
       max: fullTimeRange.max,
     }, fullTimeRange);
   }
-  watchGraphZoomRange = zoomRange;
-  if (!watchGraphZoomRange) watchGraphFollowLatest = false;
+  watchGraphZoomRange = viewingLegacy.watchGraphZoomRange = zoomRange;
+  if (!watchGraphZoomRange) watchGraphFollowLatest = viewingLegacy.watchGraphFollowLatest = false;
 
   if (watchGraphEmpty) watchGraphEmpty.hidden = hasPrimaryPoints || hasComparePoints;
 
   if (!hasPrimaryPoints) {
     if (watchGraphChart) {
       watchGraphChart.destroy();
-      watchGraphChart = null;
+      watchGraphChart = viewingLegacy.watchGraphChart = null;
     }
     return;
   }
@@ -4309,7 +4333,7 @@ function renderWatchGraphForKey(key) {
   }
 
   if (!watchGraphChart) {
-    watchGraphChart = new Chart(watchGraphCanvas, {
+    watchGraphChart = viewingLegacy.watchGraphChart = new Chart(watchGraphCanvas, {
       type: "line",
       data: {
         datasets,
@@ -4365,7 +4389,7 @@ function resizeWatchGraphChart() {
 
 function saveWatchGraphHoverState() {
   if (watchGraphHoverSaved != null) return;
-  watchGraphHoverSaved = {
+  watchGraphHoverSaved = viewingLegacy.watchGraphHoverSaved = {
     index: selectedIndex,
     lockActive: trackLockActive,
     lockPose: trackLockPose,
@@ -4374,16 +4398,16 @@ function saveWatchGraphHoverState() {
 }
 
 function clearWatchGraphHoverPreview({ restore = true } = {}) {
-  hoverTimelineTime = null;
+  hoverTimelineTime = viewingLegacy.hoverTimelineTime = null;
 
   if (restore && watchGraphHoverSaved != null) {
-    selectedIndex = watchGraphHoverSaved.index;
-    trackLockActive = watchGraphHoverSaved.lockActive;
-    trackLockPose = watchGraphHoverSaved.lockPose;
-    trackLockIndex = watchGraphHoverSaved.lockIndex;
+    selectedIndex = viewingLegacy.selectedIndex = watchGraphHoverSaved.index;
+    trackLockActive = viewingLegacy.trackLockActive = watchGraphHoverSaved.lockActive;
+    trackLockPose = viewingLegacy.trackLockPose = watchGraphHoverSaved.lockPose;
+    trackLockIndex = viewingLegacy.trackLockIndex = watchGraphHoverSaved.lockIndex;
   }
 
-  watchGraphHoverSaved = null;
+  watchGraphHoverSaved = viewingLegacy.watchGraphHoverSaved = null;
   updatePoseReadout();
   requestDrawAll();
 }
@@ -4442,13 +4466,13 @@ function showWatchGraphPanelForKey(key) {
   if (!latest || count <= 0) return false;
   if (!watchGraphPanel) return false;
   if (watchGraphPanelKey !== key) {
-    watchGraphZoomRange = null;
-    watchGraphFollowLatest = false;
+    watchGraphZoomRange = viewingLegacy.watchGraphZoomRange = null;
+    watchGraphFollowLatest = viewingLegacy.watchGraphFollowLatest = false;
   }
   watchGraphPanel.classList.remove("hidden");
   watchGraphPanel.classList.add("isOn");
-  watchGraphPanelOpen = true;
-  watchGraphPanelKey = key;
+  watchGraphPanelOpen = viewingLegacy.watchGraphPanelOpen = true;
+  watchGraphPanelKey = viewingLegacy.watchGraphPanelKey = key;
   refreshWatchGraphPanelData();
   resizeWatchGraphChart();
   return true;
@@ -4458,19 +4482,19 @@ function hideWatchGraphPanel({ preserveKey = false } = {}) {
   if (!watchGraphPanel) return;
   watchGraphPanel.classList.add("hidden");
   watchGraphPanel.classList.remove("isOn");
-  watchGraphPanelOpen = false;
+  watchGraphPanelOpen = viewingLegacy.watchGraphPanelOpen = false;
   if (!preserveKey) {
-    watchGraphPanelKey = null;
-    watchGraphCompareKey = "";
-    watchGraphZoomRange = null;
-    watchGraphFollowLatest = false;
+    watchGraphPanelKey = viewingLegacy.watchGraphPanelKey = null;
+    watchGraphCompareKey = viewingLegacy.watchGraphCompareKey = "";
+    watchGraphZoomRange = viewingLegacy.watchGraphZoomRange = null;
+    watchGraphFollowLatest = viewingLegacy.watchGraphFollowLatest = false;
   }
-  watchGraphMarkersForKey = [];
-  watchGraphCompareMarkersForKey = [];
+  watchGraphMarkersForKey = viewingLegacy.watchGraphMarkersForKey = [];
+  watchGraphCompareMarkersForKey = viewingLegacy.watchGraphCompareMarkersForKey = [];
   clearWatchGraphHoverPreview({ restore: true });
   if (!preserveKey && watchGraphChart) {
     watchGraphChart.destroy();
-    watchGraphChart = null;
+    watchGraphChart = viewingLegacy.watchGraphChart = null;
   }
   if (!preserveKey && watchGraphEmpty) watchGraphEmpty.hidden = false;
   refreshWatchGraphCompareSelect();
@@ -4589,8 +4613,8 @@ if (watchGraphHeader && watchGraphPanel) {
   watchGraphHeader.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
     if (e.target && e.target.closest("#btnCloseWatchGraph, #watchGraphCompareSelect")) return;
-    isWatchGraphDragging = true;
-    watchGraphDragStart = {
+    isWatchGraphDragging = viewingLegacy.isWatchGraphDragging = true;
+    watchGraphDragStart = viewingLegacy.watchGraphDragStart = {
       x: e.clientX - watchGraphPanel.offsetLeft,
       y: e.clientY - watchGraphPanel.offsetTop,
     };
@@ -4600,9 +4624,9 @@ if (watchGraphHeader && watchGraphPanel) {
 
 if (watchGraphCompareSelect) {
   watchGraphCompareSelect.addEventListener("change", () => {
-    watchGraphCompareKey = watchGraphCompareSelect.value || "";
-    watchGraphZoomRange = null;
-    watchGraphFollowLatest = false;
+    watchGraphCompareKey = viewingLegacy.watchGraphCompareKey = watchGraphCompareSelect.value || "";
+    watchGraphZoomRange = viewingLegacy.watchGraphZoomRange = null;
+    watchGraphFollowLatest = viewingLegacy.watchGraphFollowLatest = false;
     renderWatchGraphForKey(watchGraphPanelKey);
   });
   watchGraphCompareSelect.addEventListener("mousedown", (e) => {
@@ -4616,7 +4640,7 @@ if (watchGraphCompareSelect) {
 if (watchGraphResizer) {
   watchGraphResizer.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
-    isWatchGraphResizing = true;
+    isWatchGraphResizing = viewingLegacy.isWatchGraphResizing = true;
     e.preventDefault();
     e.stopPropagation();
   });
@@ -4633,7 +4657,7 @@ if (watchGraphCanvas) {
     }
 
     saveWatchGraphHoverState();
-    hoverTimelineTime = marker.t ?? null;
+    hoverTimelineTime = viewingLegacy.hoverTimelineTime = marker.t ?? null;
     updatePoseReadout();
     requestDrawAll();
   });
@@ -4702,8 +4726,8 @@ function watchSortValueKey(value) {
 }
 
 function clearWaypointSelection() {
-  selectedWaypointId = null;
-  selectedWaypointEventTime = null;
+  selectedWaypointId = viewingLegacy.selectedWaypointId = null;
+  selectedWaypointEventTime = viewingLegacy.selectedWaypointEventTime = null;
   waypointListRenderer.highlight(null, null, false);
 }
 
@@ -4733,10 +4757,10 @@ function waypointPoseIndexForSelection(waypoint, eventTime = null) {
 
 function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
   if (!waypoint) return;
-  selectedWaypointId = waypoint.id;
-  selectedWaypointEventTime = event?.t ?? waypoint.latestActiveEvent?.t ?? waypoint.createdTime ?? null;
-  selectedWatch = null;
-  selectedLogTime = null;
+  selectedWaypointId = viewingLegacy.selectedWaypointId = waypoint.id;
+  selectedWaypointEventTime = viewingLegacy.selectedWaypointEventTime = event?.t ?? waypoint.latestActiveEvent?.t ?? waypoint.createdTime ?? null;
+  selectedWatch = viewingLegacy.selectedWatch = null;
+  selectedLogTime = viewingLegacy.selectedLogTime = null;
   watchListRenderer.highlight(null, false);
   logListRenderer.highlight(null, false);
   hideWatchPopup();
@@ -4753,9 +4777,9 @@ function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
     clearTrackHover(true);
     clearTrackLock();
     pause();
-    hoverTimelineTime = null;
+    hoverTimelineTime = viewingLegacy.hoverTimelineTime = null;
     timelineHoverSaved = null;
-    selectedIndex = poseIdx;
+    selectedIndex = viewingLegacy.selectedIndex = poseIdx;
     lastPoseIndex = selectedIndex;
     poseListRenderer.highlight();
     updatePoseReadout();
@@ -4770,10 +4794,10 @@ function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
 }
 
 function selectWatchMarker(marker, fromUserClick = false, clickPos = null) {
-  selectedWatch = { marker };
-  selectedLogTime = null;
-  selectedWaypointId = null;
-  selectedWaypointEventTime = null;
+  selectedWatch = viewingLegacy.selectedWatch = { marker };
+  selectedLogTime = viewingLegacy.selectedLogTime = null;
+  selectedWaypointId = viewingLegacy.selectedWaypointId = null;
+  selectedWaypointEventTime = viewingLegacy.selectedWaypointEventTime = null;
 
   const timeStr = (marker.t != null) ? `${fmtNum(marker.t / 1000)}s` : "—";;
 
@@ -5473,8 +5497,8 @@ window.addEventListener("mousemove", (e) => {
 window.addEventListener("mouseup", () => {
   isDragging = false;
   isResizing = false;
-  isWatchGraphDragging = false;
-  isWatchGraphResizing = false;
+  isWatchGraphDragging = viewingLegacy.isWatchGraphDragging = false;
+  isWatchGraphResizing = viewingLegacy.isWatchGraphResizing = false;
   pinnedWatchDragTarget = null;
 });
 
@@ -5550,7 +5574,7 @@ function updateFloatingInfo(pose, idx) {
     clickable.onclick = () => {
       pause();
       playTimeMs = watch.t;
-      selectedIndex = findFloorIndexByTime(watch.t);
+      selectedIndex = viewingLegacy.selectedIndex = findFloorIndexByTime(watch.t);
       updatePoseReadout();
       requestDrawAll();
     };
@@ -5591,8 +5615,8 @@ function updatePoseReadout() {
     refreshPinnedWatchPanels();
     return;
   }
-  if (selectedIndex < 0) selectedIndex = 0;
-  if (selectedIndex >= rawPoses.length) selectedIndex = Math.max(0, rawPoses.length - 1);
+  if (selectedIndex < 0) selectedIndex = viewingLegacy.selectedIndex = 0;
+  if (selectedIndex >= rawPoses.length) selectedIndex = viewingLegacy.selectedIndex = Math.max(0, rawPoses.length - 1);
   let idx = selectedIndex;
   let t = rawPoses[idx]?.t ?? null;
   let p = null;
@@ -6005,17 +6029,17 @@ function pickTrackPose(clientX, clientY) {
 }
 
 function clearTrackHover(restore) {
-  trackHover = null;
+  trackHover = viewingLegacy.trackHover = null;
   if (restore && trackHoverSavedIndex != null) {
-    selectedIndex = trackHoverSavedIndex;
-    trackHoverSavedIndex = null;
+    selectedIndex = viewingLegacy.selectedIndex = trackHoverSavedIndex;
+    trackHoverSavedIndex = viewingLegacy.trackHoverSavedIndex = null;
   }
 }
 
 function clearTrackLock() {
-  trackLockActive = false;
-  trackLockPose = null;
-  trackLockIndex = null;
+  trackLockActive = viewingLegacy.trackLockActive = false;
+  trackLockPose = viewingLegacy.trackLockPose = null;
+  trackLockIndex = viewingLegacy.trackLockIndex = null;
 }
 
 // -------- watch hit test on field --------
@@ -6086,7 +6110,7 @@ function play() {
   const tMin = rawPoses[0]?.t ?? 0;
   const tMax = rawPoses[rawPoses.length - 1]?.t ?? tMin;
   if (selectedIndex >= rawPoses.length - 1 || (typeof playTimeMs === "number" && playTimeMs >= tMax)) {
-    selectedIndex = 0;
+    selectedIndex = viewingLegacy.selectedIndex = 0;
     playTimeMs = tMin;
     playPose = null;
   }
@@ -6094,8 +6118,8 @@ function play() {
   // starting playback clears track lock to avoid confusing states
   clearTrackHover(true);
   clearTrackLock();
-  selectedWatch = null;
-  selectedLogTime = null;
+  selectedWatch = viewingLegacy.selectedWatch = null;
+  selectedLogTime = viewingLegacy.selectedLogTime = null;
   timelineHoverSaved = null;
   setStatus(`Playing from time ${formatNumberString((rawPoses[selectedIndex]?.t ?? 0) / 1000, 1, "0")}s`);
 
@@ -6116,7 +6140,7 @@ function play() {
     if (playTimeMs >= tMax) {
       playTimeMs = tMax;
       playPose = interpolatePoseAtTime(playTimeMs);
-      selectedIndex = rawPoses.length - 1;
+      selectedIndex = viewingLegacy.selectedIndex = rawPoses.length - 1;
       updatePoseReadout();
       requestDrawAll();
       pause();
@@ -6124,13 +6148,13 @@ function play() {
     }
 
     playPose = interpolatePoseAtTime(playTimeMs);
-    selectedIndex = findFloorIndexByTime(playTimeMs);
+    selectedIndex = viewingLegacy.selectedIndex = findFloorIndexByTime(playTimeMs);
 
     // Highlight the most recent watch hit without overriding the user"s
     // collapsed/expanded state for the Watches panel.
     const last = lastWatchAtTime(watchMarkersByTime, playTimeMs);
     if (last && (!selectedWatch || selectedWatch.marker?.t !== last.t)) {
-      selectedWatch = { marker: last };
+      selectedWatch = viewingLegacy.selectedWatch = { marker: last };
       watchListRenderer.highlight(last.t, false);
     }
 
@@ -6191,21 +6215,21 @@ timelineCanvas.addEventListener("mousemove", (e) => {
   }
 
   // timeline hover always previews, even if track lock is active
-  hoverTimelineTime = xToTime(x);
+  hoverTimelineTime = viewingLegacy.hoverTimelineTime = xToTime(x);
   updatePoseReadout();
   requestDrawAll();
 });
 
 timelineCanvas.addEventListener("mouseleave", () => {
   if (!data || playing) return;
-  hoverTimelineTime = null;
+  hoverTimelineTime = viewingLegacy.hoverTimelineTime = null;
   timelineCanvas.style.cursor = "default";
 
   if (timelineHoverSaved != null) {
-    selectedIndex = timelineHoverSaved.index;
-    trackLockActive = timelineHoverSaved.lockActive;
-    trackLockPose = timelineHoverSaved.lockPose;
-    trackLockIndex = timelineHoverSaved.lockIndex;
+    selectedIndex = viewingLegacy.selectedIndex = timelineHoverSaved.index;
+    trackLockActive = viewingLegacy.trackLockActive = timelineHoverSaved.lockActive;
+    trackLockPose = viewingLegacy.trackLockPose = timelineHoverSaved.lockPose;
+    trackLockIndex = viewingLegacy.trackLockIndex = timelineHoverSaved.lockIndex;
     timelineHoverSaved = null;
   }
 
@@ -6227,16 +6251,16 @@ timelineCanvas.addEventListener("mousedown", (e) => {
   // lock selection at time (clears track lock)
   clearTrackHover(true);
   clearTrackLock();
-  selectedWatch = null;
-  selectedLogTime = null;
-  selectedWaypointId = null;
-  selectedWaypointEventTime = null;
+  selectedWatch = viewingLegacy.selectedWatch = null;
+  selectedLogTime = viewingLegacy.selectedLogTime = null;
+  selectedWaypointId = viewingLegacy.selectedWaypointId = null;
+  selectedWaypointEventTime = viewingLegacy.selectedWaypointEventTime = null;
   waypointListRenderer.highlight(null, null, false);
 
   const t = xToTime(x);
-  selectedIndex = findFloorIndexByTime(t);
+  selectedIndex = viewingLegacy.selectedIndex = findFloorIndexByTime(t);
   lastPoseIndex = selectedIndex;
-  hoverTimelineTime = null;
+  hoverTimelineTime = viewingLegacy.hoverTimelineTime = null;
   timelineHoverSaved = null;
 
   poseListRenderer.highlight();
@@ -6323,7 +6347,7 @@ canvas.addEventListener("mousemove", (e) => {
 
   if (!hit) {
     // no field hit => remove timeline hover preview too
-    hoverTimelineTime = null;
+    hoverTimelineTime = viewingLegacy.hoverTimelineTime = null;
 
     if (trackHover) {
       clearTrackHover(!trackLockActive);
@@ -6334,11 +6358,11 @@ canvas.addEventListener("mousemove", (e) => {
     return;
   }
 
-  if (trackHoverSavedIndex == null) trackHoverSavedIndex = selectedIndex;
-  trackHover = { t: hit.pose.t, idxNearest: hit.nearestIdx };
+  if (trackHoverSavedIndex == null) trackHoverSavedIndex = viewingLegacy.trackHoverSavedIndex = selectedIndex;
+  trackHover = viewingLegacy.trackHover = { t: hit.pose.t, idxNearest: hit.nearestIdx };
 
   // Drive the timeline grey line from the hovered field pose
-  hoverTimelineTime = hit.pose.t ?? null;
+  hoverTimelineTime = viewingLegacy.hoverTimelineTime = hit.pose.t ?? null;
 
   updatePoseReadout();
   requestDrawAll();
@@ -6356,7 +6380,7 @@ canvas.addEventListener("mouseleave", () => {
   }
   hoverWatch = null;
   // ensure timeline hover preview can"t "stick"
-  hoverTimelineTime = null;
+  hoverTimelineTime = viewingLegacy.hoverTimelineTime = null;
   timelineHoverSaved = null;
   canvas.style.cursor = "";
   if (trackHover) {
@@ -6402,20 +6426,20 @@ canvas.addEventListener("click", (e) => {
   if (hit) {
     // lock to clicked position
     pause();
-    selectedWatch = null;
-    selectedLogTime = null;
-    selectedWaypointId = null;
-    selectedWaypointEventTime = null;
+    selectedWatch = viewingLegacy.selectedWatch = null;
+    selectedLogTime = viewingLegacy.selectedLogTime = null;
+    selectedWaypointId = viewingLegacy.selectedWaypointId = null;
+    selectedWaypointEventTime = viewingLegacy.selectedWaypointEventTime = null;
     waypointListRenderer.highlight(null, null, false);
 
-    trackLockActive = true;
-    trackLockPose = hit.pose;
-    trackLockIndex = hit.nearestIdx;
+    trackLockActive = viewingLegacy.trackLockActive = true;
+    trackLockPose = viewingLegacy.trackLockPose = hit.pose;
+    trackLockIndex = viewingLegacy.trackLockIndex = hit.nearestIdx;
 
-    selectedIndex = hit.nearestIdx;
+    selectedIndex = viewingLegacy.selectedIndex = hit.nearestIdx;
     lastPoseIndex = selectedIndex;
     clearTrackHover(false);
-    trackHoverSavedIndex = null;
+    trackHoverSavedIndex = viewingLegacy.trackHoverSavedIndex = null;
 
     // Show locked pos on timeline
     if (timelineHoverSaved == null) {
@@ -6530,7 +6554,37 @@ function clearLivePending() {
   livePendingBuffer.clear();
 }
 
-function parseLiveLineIntoState(line) {
+function createParsedLiveViewingBatch() {
+  return { poses: [], watches: [], logs: [], waypointEvents: [] };
+}
+
+function appendParsedLiveRecords(batch, targetBatch = null) {
+  if (targetBatch) {
+    if (batch.poses?.length) targetBatch.poses.push(...batch.poses);
+    if (batch.watches?.length) targetBatch.watches.push(...batch.watches);
+    if (batch.logs?.length) targetBatch.logs.push(...batch.logs);
+    if (batch.waypointEvents?.length) targetBatch.waypointEvents.push(...batch.waypointEvents);
+    return {
+      posesAdded: batch.poses?.length || 0,
+      watchesAdded: batch.watches?.length || 0,
+      logsAdded: batch.logs?.length || 0,
+      waypointsAdded: batch.waypointEvents?.length || 0,
+      hasNewData: !!(batch.poses?.length || batch.watches?.length || batch.logs?.length || batch.waypointEvents?.length),
+    };
+  }
+
+  const result = viewingMode.actions.appendLiveBatch(batch);
+  syncViewingAliasesFromOwner();
+  return result;
+}
+
+function viewingWillAcceptWaypointEvent(event, targetBatch = null) {
+  if (event.type === "CREATED") return true;
+  if (waypointsById.has(event.id)) return true;
+  return !!targetBatch?.waypointEvents?.some((queuedEvent) => queuedEvent.type === "CREATED" && queuedEvent.id === event.id);
+}
+
+function parseLiveLineIntoState(line, targetBatch = null) {
   const s = stripToTag(line);
   if (!s) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
 
@@ -6554,17 +6608,17 @@ function parseLiveLineIntoState(line) {
     const rv = (typeof r_vel === "number" && isFinite(r_vel)) ? r_vel : 0;
     const speed_raw = (Math.abs(lv) + Math.abs(rv)) / 2;
 
-    rawPoses.push({
+    const pose = {
       t, x, y,
       theta: (theta == null) ? 0 : theta,
       l_vel: (l_vel == null) ? null : l_vel,
       r_vel: (r_vel == null) ? null : r_vel,
       speed_raw,
       speed_norm: 0,
-    });
+    };
     telemetryMetrics.totalPosesReceived += 1;
     liveLastPoseT = t;
-    return { posesAdded: 1, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
+    return appendParsedLiveRecords({ poses: [pose] }, targetBatch);
   }
 
   // WATCH (new): [WATCH],millis,level,id,label,value (value may contain commas)
@@ -6596,10 +6650,8 @@ function parseLiveLineIntoState(line) {
 
     label = label.replaceAll(":", "");
     const nextWatch = { t, id, level, label, value };
-    nextWatch.visible = currentVisibilityForWatch(nextWatch);
-    watches.push(nextWatch);
     telemetryMetrics.totalWatchesReceived += 1;
-    return { posesAdded: 0, watchesAdded: 1, logsAdded: 0, waypointsAdded: 0 };
+    return appendParsedLiveRecords({ watches: [nextWatch] }, targetBatch);
   }
 
   if (s.startsWith("[LOG],")) {
@@ -6609,58 +6661,27 @@ function parseLiveLineIntoState(line) {
     if (t == null) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
     const parsed = normalizeSystemLogMessage(parts.slice(3).join(","));
     if (!parsed.message) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-    logs.push({
+    const logEntry = {
       t,
       level: normalizeLogLevel(parts[2]),
       label: "",
       value: parsed.message,
       message: parsed.message,
       isSystem: parsed.isSystem,
-    });
+    };
     telemetryMetrics.totalLogsReceived += 1;
-    return { posesAdded: 0, watchesAdded: 0, logsAdded: 1, waypointsAdded: 0 };
+    return appendParsedLiveRecords({ logs: [logEntry] }, targetBatch);
   }
 
   if (s.startsWith("[WPOINT],")) {
     const parsed = parseWaypointLine(s);
     if (!parsed.ok) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
     const event = parsed.waypointEvent;
-    if (event.type === "CREATED") {
-      const isRetriggerable = !!event.params?.retriggerable;
-      telemetryMetrics.totalWaypointsReceived += 1;
-      waypointsById.set(event.id, {
-        id: event.id,
-        name: event.name,
-        createdTime: event.t,
-        createdEvent: event,
-        target: { x: event.params.tarX, y: event.params.tarY, theta: event.params.tarT },
-        retriggerable: isRetriggerable,
-        events: [event],
-        active: true,
-        terminalEvent: null,
-        latestEvent: event,
-        latestActiveEvent: event,
-      });
-      waypoints = Array.from(waypointsById.values()).sort((a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0));
-      return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 1 };
+    if (!viewingWillAcceptWaypointEvent(event, targetBatch)) {
+      return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
     }
-
-    const waypoint = waypointsById.get(event.id);
-    if (!waypoint) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-
     telemetryMetrics.totalWaypointsReceived += 1;
-    waypoint.events.push(event);
-    waypoint.events.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
-    waypoint.latestEvent = event;
-    if (event.type === "TIMEDOUT" || (!waypoint.retriggerable && event.type === "REACHED")) {
-      waypoint.active = false;
-      waypoint.terminalEvent = event;
-    }
-    if (!waypoint.terminalEvent || event.t <= waypoint.terminalEvent.t) {
-      waypoint.latestActiveEvent = event;
-    }
-    waypoints = Array.from(waypointsById.values()).sort((a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0));
-    return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 1 };
+    return appendParsedLiveRecords({ waypointEvents: [event] }, targetBatch);
   }
 
   return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
@@ -6900,27 +6921,22 @@ async function doLeftRefresh() {
   if (!batch) {
     // Nothing new; still ensure we snap to latest if appropriate
     if (liveAutoFollowHead && rawPoses.length && hoverTimelineTime == null && !playing && !trackLockActive && !(trackHover && (trackHover.pose || trackHover.t))) {
-      selectedIndex = rawPoses.length - 1;
+      selectedIndex = viewingLegacy.selectedIndex = rawPoses.length - 1;
       lastPoseIndex = selectedIndex;
       updatePoseReadout();
     } else if (!liveAutoFollowHead && rawPoses.length && hoverTimelineTime == null && !playing && !trackLockActive && !(trackHover && (trackHover.pose || trackHover.t))) {
-      selectedIndex = lastPoseIndex;
+      selectedIndex = viewingLegacy.selectedIndex = lastPoseIndex;
     }
     return;
   }
 
-  let posesAdded = 0;
-  let watchesAdded = 0;
-  let logsAdded = 0;
-  let waypointsAdded = 0;
+  const parsedViewingBatch = createParsedLiveViewingBatch();
 
   for (let i = batch.startIndex; i < batch.endIndex; i++) {
-    const r = parseLiveLineIntoState(batch.lines[i]);
-    posesAdded += r.posesAdded;
-    watchesAdded += r.watchesAdded;
-    logsAdded += r.logsAdded;
-    waypointsAdded += r.waypointsAdded;
+    parseLiveLineIntoState(batch.lines[i], parsedViewingBatch);
   }
+  const { posesAdded, watchesAdded, logsAdded, waypointsAdded } = viewingMode.actions.appendLiveBatch(parsedViewingBatch);
+  syncViewingAliasesFromOwner();
   livePendingBuffer.markConsumed(batch.endIndex);
 
   const hasNewData = posesAdded > 0 || watchesAdded > 0 || logsAdded > 0 || waypointsAdded > 0;
@@ -6964,9 +6980,9 @@ async function doLeftRefresh() {
     poseListRenderer.render();
     // If not hovering timeline/track, keep the robot on the most recent pose.
     if (liveAutoFollowHead && hoverTimelineTime == null && !playing && !trackLockActive && !(trackHover && (trackHover.pose || trackHover.t))) {
-      selectedIndex = rawPoses.length - 1;
+      selectedIndex = viewingLegacy.selectedIndex = rawPoses.length - 1;
     } else if (!liveAutoFollowHead && rawPoses.length && hoverTimelineTime == null && !playing && !trackLockActive && !(trackHover && (trackHover.pose || trackHover.t))) {
-      selectedIndex = lastPoseIndex;
+      selectedIndex = viewingLegacy.selectedIndex = lastPoseIndex;
     }
     poseListRenderer.highlight();
   }
@@ -7478,17 +7494,17 @@ function setData(obj, options = {}) {
 
 function setDataFromStreamText(text) {
   planningMode.clear();
-  rawPoses = createPoseStore();
-  watches = [];
-  logs = [];
-  waypoints = [];
-  waypointsById = new Map();
+  viewingMode.actions.clear();
+  syncViewingAliasesFromOwner();
   liveLastPoseT = null;
 
+  const parsedViewingBatch = createParsedLiveViewingBatch();
   const lines = String(text ?? "").split(/\r?\n/);
   for (const line of lines) {
-    parseLiveLineIntoState(line);
+    parseLiveLineIntoState(line, parsedViewingBatch);
   }
+  viewingMode.actions.appendLiveBatch(parsedViewingBatch);
+  syncViewingAliasesFromOwner();
 
   watches.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
   logs.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
@@ -7525,7 +7541,7 @@ function normalizePoseArray(arr) {
 }
 
 function hasLoadedData() {
-  return rawPoses.length > 0 || watches.length > 0 || logs.length > 0 || waypoints.length > 0 || planningMode.state.hasData();
+  return viewingMode.data.hasData() || planningMode.state.hasData();
 }
 
 function finalizeLoadedData() {
@@ -7540,13 +7556,13 @@ function finalizeLoadedData() {
   syncMainToSettings();
   saveSettings();
 
-  selectedWatch = null;
+  selectedWatch = viewingLegacy.selectedWatch = null;
   hideWatchGraphPanel();
-  selectedLogTime = null;
-  selectedWaypointId = null;
-  selectedWaypointEventTime = null;
-  selectedIndex = 0;
-  hoverTimelineTime = null;
+  selectedLogTime = viewingLegacy.selectedLogTime = null;
+  selectedWaypointId = viewingLegacy.selectedWaypointId = null;
+  selectedWaypointEventTime = viewingLegacy.selectedWaypointEventTime = null;
+  selectedIndex = viewingLegacy.selectedIndex = 0;
+  hoverTimelineTime = viewingLegacy.hoverTimelineTime = null;
   timelineHoverSaved = null;
   hoverWatch = null;
 
@@ -8331,10 +8347,11 @@ function buildExportPayload() {
   }
 
   if (includeViewing) {
-    payload.poses = rawPoses.map(serializeExportPose);
-    payload.watches = watches.map(serializeExportWatch);
-    payload.logs = logs.map(serializeExportLog);
-    payload.waypoints = waypoints.map(serializeExportWaypoint);
+    const viewingExport = viewingMode.getExportData();
+    payload.poses = viewingExport.poses.map(serializeExportPose);
+    payload.watches = viewingExport.watches.map(serializeExportWatch);
+    payload.logs = viewingExport.logs.map(serializeExportLog);
+    payload.waypoints = viewingExport.waypoints.map(serializeExportWaypoint);
   }
 
   return payload;
@@ -8407,7 +8424,7 @@ function renderRouteInfoList() {
 }
 
 function setImportedRouteMeta(meta) {
-  importedRouteMeta = (meta && typeof meta === "object" && !Array.isArray(meta) && Object.keys(meta).length)
+  importedRouteMeta = viewingLegacy.meta = (meta && typeof meta === "object" && !Array.isArray(meta) && Object.keys(meta).length)
     ? meta
     : null;
   if (btnRouteInfo) {
@@ -9793,20 +9810,13 @@ const btnClearField = document.getElementById("btnClearField");
 function clearAllPosesAndWatches() {
   // Stop playback/hover/locks so UI doesn’t reference stale indices
   try { playing = false; } catch { }
-  try { hoverTimelineTime = null; } catch { }
-  try { trackHover = null; } catch { }
-  try { trackLockActive = false; } catch { }
+  try { hoverTimelineTime = viewingLegacy.hoverTimelineTime = null; } catch { }
+  try { trackHover = viewingLegacy.trackHover = null; } catch { }
+  try { trackLockActive = viewingLegacy.trackLockActive = false; } catch { }
 
   // Clear core data
-  rawPoses = createPoseStore();
-  watches = [];
-  logs = [];
-  waypoints = [];
-  waypointsById = new Map();
-  selectedWaypointId = null;
-  selectedWaypointEventTime = null;
-
-  try { watchMarkers = []; } catch { }
+  viewingMode.actions.clear();
+  syncViewingAliasesFromOwner();
   try { watchByLabel = {}; } catch { }
   try { lastPoseIndex = 0; } catch { }
   liveLastPoseT = null;
@@ -10091,12 +10101,12 @@ function handleGlobalKeydown(e) {
     pause();
     clearTrackHover(true);
     clearTrackLock();
-    selectedWatch = null;
-    selectedLogTime = null;
-    selectedWaypointId = null;
-    selectedWaypointEventTime = null;
+    selectedWatch = viewingLegacy.selectedWatch = null;
+    selectedLogTime = viewingLegacy.selectedLogTime = null;
+    selectedWaypointId = viewingLegacy.selectedWaypointId = null;
+    selectedWaypointEventTime = viewingLegacy.selectedWaypointEventTime = null;
     waypointListRenderer.highlight(null, null, false);
-    selectedIndex = Math.max(0, selectedIndex - 1);
+    selectedIndex = viewingLegacy.selectedIndex = Math.max(0, selectedIndex - 1);
     lastPoseIndex = selectedIndex;
     poseListRenderer.highlight();
     updatePoseReadout();
@@ -10107,52 +10117,18 @@ function handleGlobalKeydown(e) {
     pause();
     clearTrackHover(true);
     clearTrackLock();
-    selectedWatch = null;
-    selectedLogTime = null;
-    selectedWaypointId = null;
-    selectedWaypointEventTime = null;
+    selectedWatch = viewingLegacy.selectedWatch = null;
+    selectedLogTime = viewingLegacy.selectedLogTime = null;
+    selectedWaypointId = viewingLegacy.selectedWaypointId = null;
+    selectedWaypointEventTime = viewingLegacy.selectedWaypointEventTime = null;
     waypointListRenderer.highlight(null, null, false);
-    selectedIndex = Math.min(rawPoses.length - 1, selectedIndex + 1);
+    selectedIndex = viewingLegacy.selectedIndex = Math.min(rawPoses.length - 1, selectedIndex + 1);
     lastPoseIndex = selectedIndex;
     poseListRenderer.highlight();
     updatePoseReadout();
     requestDrawAll();
   }
 }
-
-const viewingMode = createViewingMode({
-  loadViewingData: applyImportedViewingData,
-  clear: clearAllPosesAndWatches,
-  renderLists: () => {
-    watchListRenderer.renderList();
-    logListRenderer.render();
-    waypointListRenderer.renderList();
-    poseListRenderer.render();
-  },
-  renderWatchList: () => watchListRenderer.renderList(),
-  renderLogList: () => logListRenderer.render(),
-  renderWaypointList: () => waypointListRenderer.renderList(),
-  renderPoseList: () => poseListRenderer.render(),
-  selectPose: (index) => {
-    selectedIndex = index;
-    poseListRenderer.highlight();
-    updatePoseReadout();
-    requestDrawAll();
-  },
-  selectWatch: (marker) => selectWatchMarker(marker, false, null),
-  selectWaypoint: (waypoint, event = null) => selectWaypointEvent(waypoint, event, false),
-  updatePoseReadout,
-  currentDisplayPose,
-  getExportData: () => ({
-    poses: rawPoses,
-    watches,
-    logs,
-    waypoints,
-    meta: importedRouteMeta,
-  }),
-  hasData: () => rawPoses.length > 0 || watches.length > 0 || logs.length > 0 || waypoints.length > 0,
-  bindEvents: () => {},
-});
 
 sanitizeExportFilename();
 // -------- init --------

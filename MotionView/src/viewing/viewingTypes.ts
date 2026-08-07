@@ -1,4 +1,5 @@
 import type { LogEntry, Pose, WatchEntry, Waypoint, WaypointEvent } from "../state/models";
+import type { PoseStore } from "../state/poseStore";
 
 export interface WatchMarker {
   watch: WatchEntry;
@@ -14,28 +15,78 @@ export interface WaypointVisibleEvent {
   event: WaypointEvent;
 }
 
-export interface ViewingData {
-  poses: Pose[];
-  watches: WatchEntry[];
-  logs: LogEntry[];
-  waypoints: Waypoint[];
+export interface ViewingExportData {
+  poses: Readonly<PoseStore>;
+  watches: readonly WatchEntry[];
+  logs: readonly LogEntry[];
+  waypoints: readonly Waypoint[];
   meta?: Record<string, unknown> | null;
 }
 
-export interface ViewingModeController {
+export interface ViewingData extends ViewingExportData {}
+
+export interface ParsedLiveViewingBatch {
+  poses?: readonly Partial<Pose>[];
+  watches?: readonly WatchEntry[];
+  logs?: readonly LogEntry[];
+  waypoints?: readonly Waypoint[];
+  waypointEvents?: readonly WaypointEvent[];
+  meta?: Record<string, unknown> | null;
+}
+
+export interface ViewingAppendResult {
+  posesAdded: number;
+  watchesAdded: number;
+  logsAdded: number;
+  waypointsAdded: number;
+  hasNewData: boolean;
+}
+
+export interface ViewingDataState {
+  getPoses(): Readonly<PoseStore>;
+  getWatches(): readonly WatchEntry[];
+  getLogs(): readonly LogEntry[];
+  getWaypoints(): readonly Waypoint[];
+  getWatchMarkers(): readonly WatchMarker[];
+  getSelectedIndex(): number;
+  getSelectedWatch(): Readonly<{ marker: WatchMarker }> | null;
+  getSelectedLogTime(): number | null;
+  getSelectedWaypointId(): string | number | null;
+  getSelectedWaypointEventTime(): number | null;
+  currentDisplayPose(): Readonly<Pose> | null;
+  hasData(): boolean;
+}
+
+export interface ViewingDataActions {
   loadViewingData(data: unknown): void;
   clear(): void;
+  appendLiveBatch(batch: ParsedLiveViewingBatch): ViewingAppendResult;
+  setSelectedPose(index: number): void;
+  selectWatch(marker: WatchMarker, fromUserClick?: boolean): void;
+  selectWaypoint(waypoint: Waypoint, event?: WaypointEvent | null, fromUserClick?: boolean): void;
+  clearTransientSelection(): void;
+}
+
+export interface ViewingRendering {
   renderLists(): void;
   renderWatchList(): void;
   renderLogList(): void;
   renderWaypointList(): void;
   renderPoseList(): void;
-  selectPose(index: number): void;
-  selectWatch(marker: WatchMarker): void;
-  selectWaypoint(waypoint: Waypoint, event?: WaypointEvent | null): void;
+  drawFieldOverlay(): void;
+  drawTimeline(): void;
   updatePoseReadout(): void;
-  currentDisplayPose(): Pose | null;
-  getExportData(): ViewingData;
-  hasData(): boolean;
+}
+
+export interface ViewingInput {
   bindEvents(): void;
+  handleKeydown(event: KeyboardEvent): boolean;
+}
+
+export interface ViewingModeController {
+  data: ViewingDataState;
+  actions: ViewingDataActions;
+  rendering: ViewingRendering;
+  input: ViewingInput;
+  getExportData(): Readonly<ViewingExportData>;
 }
