@@ -11,20 +11,15 @@ export interface ModeController {
 
 export interface CreateModeControllerOptions {
   initialMode?: AppMode;
-  onModeChange?: ModeListener;
 }
 
 export function normalizeAppMode(value: unknown): AppMode {
   return value === "planning" ? "planning" : "viewing";
 }
 
-export function createModeController(options: CreateModeControllerOptions = {}): ModeController {
-  let currentMode = options.initialMode ?? "viewing";
+export function createModeController(initialMode: AppMode): ModeController {
+  let currentMode = initialMode;
   const listeners = new Set<ModeListener>();
-
-  if (options.onModeChange) {
-    listeners.add(options.onModeChange);
-  }
 
   return {
     getMode() {

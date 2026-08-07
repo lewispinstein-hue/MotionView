@@ -3,9 +3,9 @@ export interface PlanningSidebarRendererDependencies {
   planCountEl: HTMLElement | null;
   planObjectListEl: HTMLElement | null;
   planEventsHintEl: HTMLElement | null;
-  getPlanWaypoints(): any[];
-  getPlanObjects(): any[];
-  getSelectedPlanSet(): Set<number>;
+  getPlanWaypoints(): ReadonlyArray<any>;
+  getPlanObjects(): ReadonlyArray<any>;
+  isPlanWaypointSelected(index: number): boolean;
   getSelectedNode(): any;
   getEditingObjectId(): string | null;
   getPlanOpenColorPickerObjectId(): string | null;
@@ -39,13 +39,12 @@ export function createPlanningSidebarRenderer(deps: PlanningSidebarRendererDepen
   function renderPlanList() {
     if (!deps.planListEl) return;
     const planWaypoints = deps.getPlanWaypoints();
-    const selectedSet = deps.getSelectedPlanSet();
     deps.planListEl.innerHTML = "";
     if (deps.planCountEl) deps.planCountEl.textContent = `${planWaypoints.length}`;
     for (let i = 0; i < planWaypoints.length; i += 1) {
       const point = planWaypoints[i];
       const item = document.createElement("div");
-      item.className = `planItem${selectedSet.has(i) ? " selected" : ""}`;
+      item.className = `planItem${deps.isPlanWaypointSelected(i) ? " selected" : ""}`;
       item.dataset.idx = String(i);
       const theta = deps.planThetaDegAt(i);
       item.innerHTML = `

@@ -28,7 +28,6 @@ import {
   getPlanMethodNumber,
   getPlanMethodTooltipName,
   getPlanNodeEffectiveMethod,
-  getPlanningTelemetryProperties,
   getPlanObjectById,
   getUtf8ByteLength,
   hasPlanNodeMethodOverride,
@@ -505,7 +504,6 @@ const WATCH_GRAPH_MARGIN = 16;
 let data = null;
 let showPreviousYearFields = true;
 let fieldCompetition = "all";
-let planExportTemplate = DEFAULT_PLAN_EXPORT_TEMPLATE;
 
 function readPlanSpeed(value, fallback = 127) {
   const num = Number(value);
@@ -624,56 +622,87 @@ let panDelta = 0;
 
 const modeController = createModeController({
   initialMode: "viewing",
-  onModeChange: (mode) => {
-    document.body.classList.toggle("mode-planning", mode === "planning");
-    if (mode === "planning" && playing) pause();
-    if (mode === "viewing" && planPlaying) planPause();
-    planSetSelection([]);
-    if (modeViewingBtn) {
-      const active = mode === "viewing";
-      modeViewingBtn.classList.toggle("isActive", active);
-      modeViewingBtn.setAttribute("aria-selected", active ? "true" : "false");
-    }
-    if (modePlanningBtn) {
-      const active = mode === "planning";
-      modePlanningBtn.classList.toggle("isActive", active);
-      modePlanningBtn.setAttribute("aria-selected", active ? "true" : "false");
-    }
-    updateFieldLayout(true);
-    resizeTimeline();
-    resizePlanningTimeline();
-    planningSidebarRenderer.renderPlanList();
-    updatePlanControls();
-    setPlanDist(planPlayDist);
-    void appTelemetry.modeChanged({
-      mode,
-    });
-  },
 });
 
-function getAppMode() {
-  return modeController.getMode();
-}
+const planningMode = createPlanningMode({
+  getAppMode: modeController.getMode,
+  requestDrawAll,
+  setStatus,
+  scheduleSavedPathsSave,
+  readPlanSpeed,
+  clampWaypointX: clampPlanCoordX,
+  clampWaypointY: clampPlanCoordY,
+  getPlanTotalLength: planTotalLength,
+  getPlanSpeedUnitsPerSecAtDistance: getPlanSpeedUnitsPerSecAtDist,
+  getPlaybackRate: () => playRate,
+  setPlayButtonLabel: (label) => {
+    if (btnPlay) btnPlay.textContent = label;
+  },
+  setPlanningDistanceUi: (distanceInches, totalInches, waypointCount) => {
+    if (planTimePill) {
+      planTimePill.textContent = `Plan: ${fmtNum(distanceInches, 2)} / ${fmtNum(totalInches, 2)} in`;
+    }
+    if (planPointPill) {
+      planPointPill.textContent = `Points: ${waypointCount}`;
+    }
+  },
+  setPlanningControlsAvailability: (waypointCount) => {
+    if (btnPlay) {
+      if (modeController.getMode() === "planning") btnPlay.disabled = waypointCount < 2;
+      else btnPlay.disabled = rawPoses.length < 2;
+    }
+    if (btnPlanCopyCode) btnPlanCopyCode.disabled = waypointCount === 0;
+  },
+  onPlanningDistanceChanged: () => {
+    syncPlanObjectLatestValues();
+  },
+  onPlanningCleared: () => {
+    planChanged();
+    planningSidebarRenderer.renderPlanObjects();
+    planningMode.rendering.renderTimelineDom();
+    normalizePlanningTimelineHeightForContent();
+  },
+  onPlanningDataLoaded: () => {
+    pruneInvalidPlanNodes();
+    planningSidebarRenderer.renderPlanObjects();
+    planningMode.rendering.renderTimelineDom();
+    normalizePlanningTimelineHeightForContent();
+  },
+  onPlanningChanged: (options) => {
+    planChanged(options);
+  },
+}, {
+  defaultExportTemplate: DEFAULT_PLAN_EXPORT_TEMPLATE,
+  maxUndoSteps: MAX_PLAN_UNDO,
+});
+
+modeController.subscribe((mode) => {
+  document.body.classList.toggle("mode-planning", mode === "planning");
+  if (mode === "planning" && playing) pause();
+  if (mode === "viewing" && planningMode.playback.isPlaying()) planningMode.playback.pause();
+  planningMode.actions.clearSelection();
+  if (modeViewingBtn) {
+    const active = mode === "viewing";
+    modeViewingBtn.classList.toggle("isActive", active);
+    modeViewingBtn.setAttribute("aria-selected", active ? "true" : "false");
+  }
+  if (modePlanningBtn) {
+    const active = mode === "planning";
+    modePlanningBtn.classList.toggle("isActive", active);
+    modePlanningBtn.setAttribute("aria-selected", active ? "true" : "false");
+  }
+  updateFieldLayout(true);
+  resizeTimeline();
+  resizePlanningTimeline();
+  planningSidebarRenderer.renderPlanList();
+  planningMode.playback.updateControls();
+  planningMode.playback.setDistance(planningMode.playback.getPlaybackDistance());
+  void appTelemetry.modeChanged({
+    mode,
+  });
+});
 
 // -------- planning --------
-let planWaypoints = []; // {x,y} in inches
-let planSelected = -1;
-let planDragging = false;
-let planPointerId = null;
-let planSelectedSet = new Set();
-let pendingPlanCanvasClick = null; // { world, clearMultiSelection }
-let planDragStart = { x: 0, y: 0 };
-let planDragOrig = [];
-let planSelecting = false;
-let planSelectRect = null; // {x0,y0,x1,y1} in screen px
-let planThetaDragging = false;
-let planThetaDragIdx = -1;
-let planThetaDragBase = null;
-let planThetaDragStart = 0;
-let planPlaying = false;
-let planRaf = null;
-let planPlayDist = 0;
-let planLastWall = null;
 const PLAN_POINT_R = 11; // Size of waypoint in planning mode
 const PLAN_OVERLAY_POINT_R = 7; // Size of waypoint in overlay (viewing) mode
 const PLAN_FIELD_NODE_TICK_LEN = 14; // Length of node tick
@@ -689,27 +718,7 @@ const PLAN_THETA_HANDLE_R = 6; // Radius of theta handle
 const PLAN_THETA_HANDLE_OFFSET = 25;
 let PLAN_MARKER_MAX_IN = 3; // Max size of waypoint marker
 let PLAN_MARKER_MAX_IN_VIEWING = 1; // Max size of waypoint marker in viewing mode
-let planScrubbing = false;
-let planOverlayVisible = false;
 let savedPathsSaveTimer = null;
-let planObjects = [];
-let planNodes = [];
-let planSelectedNodeId = null;
-let planFieldHoverNodeId = null;
-let planEditingObjectId = null;
-let planEditingObjectOriginalName = "";
-let planObjectEditSelectAll = false;
-let planTemplateModalState = null;
-let pendingPlanObjectRemovalId = null;
-let pendingPlanObjectDeleteAction = null;
-let pendingPlanObjectDeleteCancelAction = null;
-let planOpenColorPickerObjectId = null;
-let planTimelineLayout = null;
-let planTimelineDropTarget = null;
-let planPointerDragState = null;
-let planNodeTooltipTimer = null;
-let planNodeTooltipVisible = false;
-let planNodeTooltipPointer = null;
 
 const PLAN_NODE_TOOLTIP_DELAY_MS = 90;
 
@@ -728,15 +737,15 @@ const LEGACY_PLANNING_TIMELINE_H_PX = 156;
 const PLAN_POINTER_DRAG_THRESHOLD_PX = 4;
 
 function getPlanNodeById(nodeId) {
-  return planNodes.find((entry) => entry.id === nodeId) || null;
+  return planningMode.nodes.find((entry) => entry.id === nodeId) || null;
 }
 
 function clearPlanNodeSelection() {
-  planSelectedNodeId = null;
+  planningMode.selectedNodeId = null;
 }
 
 function getSortedPlanNodes() {
-  return [...planNodes].sort((a, b) => {
+  return [...planningMode.nodes].sort((a, b) => {
     if (a.beforeWaypoint !== b.beforeWaypoint) return a.beforeWaypoint - b.beforeWaypoint;
     if (a.index !== b.index) return a.index - b.index;
     return String(a.id).localeCompare(String(b.id));
@@ -744,9 +753,9 @@ function getSortedPlanNodes() {
 }
 
 function normalizePlanNodeOrdering() {
-  const maxBucket = Math.max(0, planWaypoints.length);
+  const maxBucket = Math.max(0, planningMode.waypoints.length);
   const buckets = Array.from({ length: maxBucket + 1 }, () => []);
-  for (const node of planNodes) {
+  for (const node of planningMode.nodes) {
     node.beforeWaypoint = clamp(Math.round(Number(node.beforeWaypoint) || 0), 0, maxBucket);
     node.index = Math.max(0, Math.round(Number(node.index) || 0));
     buckets[node.beforeWaypoint].push(node);
@@ -760,20 +769,20 @@ function normalizePlanNodeOrdering() {
 }
 
 function pruneInvalidPlanNodes() {
-  if (planWaypoints.length === 0) {
-    const hadNodes = planNodes.length > 0;
-    planNodes = [];
-    if (planSelectedNodeId) {
+  if (planningMode.waypoints.length === 0) {
+    const hadNodes = planningMode.nodes.length > 0;
+    planningMode.nodes = [];
+    if (planningMode.selectedNodeId) {
       clearPlanNodeSelection();
       return true;
     }
     return hadNodes;
   }
-  const objectIds = new Set(planObjects.map((entry) => entry.id));
-  const methodsByObject = new Map(planObjects.map((entry) => [entry.id, new Set(entry.methods.map((method) => method.id))]));
-  const maxBucket = Math.max(0, planWaypoints.length);
+  const objectIds = new Set(planningMode.objects.map((entry) => entry.id));
+  const methodsByObject = new Map(planningMode.objects.map((entry) => [entry.id, new Set(entry.methods.map((method) => method.id))]));
+  const maxBucket = Math.max(0, planningMode.waypoints.length);
   let changed = false;
-  planNodes = planNodes.filter((node) => {
+  planningMode.nodes = planningMode.nodes.filter((node) => {
     if (!objectIds.has(node.objectId)) {
       changed = true;
       return false;
@@ -792,7 +801,7 @@ function pruneInvalidPlanNodes() {
     return true;
   });
   normalizePlanNodeOrdering();
-  if (planSelectedNodeId && !getPlanNodeById(planSelectedNodeId)) {
+  if (planningMode.selectedNodeId && !getPlanNodeById(planningMode.selectedNodeId)) {
     clearPlanNodeSelection();
     changed = true;
   }
@@ -835,23 +844,23 @@ function clampPlanSpeed(v) {
 }
 
 function getPlanSegmentIndexAtDist(d) {
-  if (planWaypoints.length < 2) return -1;
+  if (planningMode.waypoints.length < 2) return -1;
   let rem = clamp(d, 0, planTotalLength());
-  for (let i = 0; i < planWaypoints.length - 1; i += 1) {
-    const a = planWaypoints[i];
-    const b = planWaypoints[i + 1];
+  for (let i = 0; i < planningMode.waypoints.length - 1; i += 1) {
+    const a = planningMode.waypoints[i];
+    const b = planningMode.waypoints[i + 1];
     const seg = Math.hypot(b.x - a.x, b.y - a.y);
     if (seg <= 0.0001) continue;
     if (rem <= seg) return i;
     rem -= seg;
   }
-  return Math.max(0, planWaypoints.length - 2);
+  return Math.max(0, planningMode.waypoints.length - 2);
 }
 
 function getPlanSpeedUnitsPerSecAtDist(d) {
   const segIdx = getPlanSegmentIndexAtDist(d);
-  if (segIdx < 0) return Math.abs(readPlanSpeed(planWaypoints[0]?.speed, 127));
-  return Math.abs(readPlanSpeed(planWaypoints[segIdx]?.speed, 127));
+  if (segIdx < 0) return Math.abs(readPlanSpeed(planningMode.waypoints[0]?.speed, 127));
+  return Math.abs(readPlanSpeed(planningMode.waypoints[segIdx]?.speed, 127));
 }
 
 function clampPlanCoordX(v) {
@@ -866,107 +875,19 @@ function clampPlanCoordY(v) {
   return clamp(next, FIELD_BOUNDS_IN.minY, FIELD_BOUNDS_IN.maxY);
 }
 
-let planUndoStack = [];
-let planRedoStack = [];
-let planUndoApplying = false;
-
-function clonePlanState() {
-  return {
-    waypoints: planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: readPlanSpeed(p.speed, 127) })),
-    selected: Array.from(planSelectedSet),
-    selectedIndex: planSelected,
-    playDist: planPlayDist,
-  };
-}
-
-function planStatesEqual(a, b) {
-  if (!a || !b) return false;
-  if ((a.playDist ?? 0) !== (b.playDist ?? 0)) return false;
-  if (a.selectedIndex !== b.selectedIndex) return false;
-  if ((a.selected?.length || 0) !== (b.selected?.length || 0)) return false;
-  for (let i = 0; i < (a.selected?.length || 0); i++) {
-    if (a.selected[i] !== b.selected[i]) return false;
-  }
-  if ((a.waypoints?.length || 0) !== (b.waypoints?.length || 0)) return false;
-  for (let i = 0; i < a.waypoints.length; i++) {
-    const ap = a.waypoints[i];
-    const bp = b.waypoints[i];
-    if (!bp) return false;
-    if (ap.x !== bp.x || ap.y !== bp.y || (ap.theta ?? 0) !== (bp.theta ?? 0) || readPlanSpeed(ap.speed, 127) !== readPlanSpeed(bp.speed, 127)) return false;
-  }
-  return true;
-}
-
-function pushPlanUndo() {
-  if (getAppMode() !== "planning" || planUndoApplying) return;
-  const snap = clonePlanState();
-  const last = planUndoStack[planUndoStack.length - 1];
-  if (last && planStatesEqual(last, snap)) return;
-  planUndoStack.push(snap);
-  if (planUndoStack.length > MAX_PLAN_UNDO) planUndoStack.shift();
-  planRedoStack.length = 0;
-}
-
-function applyPlanState(state) {
-  if (!state) return;
-  planUndoApplying = true;
-  planWaypoints = state.waypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: readPlanSpeed(p.speed, 127) }));
-  planSetSelection(state.selected || []);
-  planPlayDist = clamp(state.playDist ?? 0, 0, planTotalLength());
-  planPause();
-  planChanged();
-  requestDrawAll();
-  planUndoApplying = false;
-}
-
-function planUndo() {
-  if (getAppMode() !== "planning") return;
-  if (!planUndoStack.length) return;
-  planRedoStack.push(clonePlanState());
-  const prev = planUndoStack.pop();
-  applyPlanState(prev);
-}
-
-function planRedo() {
-  if (getAppMode() !== "planning") return;
-  if (!planRedoStack.length) return;
-  planUndoStack.push(clonePlanState());
-  const next = planRedoStack.pop();
-  applyPlanState(next);
-}
-
 function planSetSelection(indices) {
-  planSelectedSet = new Set(indices);
-  planSelected = indices.length ? indices[0] : -1;
-}
-
-function planSelectSingle(idx) {
-  if (idx < 0) {
-    planSetSelection([]);
-    return;
-  }
-  planSetSelection([idx]);
-}
-
-function planToggleSelection(idx) {
-  if (idx < 0) return;
-  const next = new Set(planSelectedSet);
-  if (next.has(idx)) next.delete(idx);
-  else next.add(idx);
-  const indices = Array.from(next).sort((a, b) => a - b);
-  planSetSelection(indices);
-  planSelected = next.has(idx) ? idx : (indices.length ? indices[0] : -1);
+  planningMode.actions.setWaypointSelection(indices);
 }
 
 function planRectSelect() {
-  if (!planSelectRect) return;
-  const x0 = Math.min(planSelectRect.x0, planSelectRect.x1);
-  const x1 = Math.max(planSelectRect.x0, planSelectRect.x1);
-  const y0 = Math.min(planSelectRect.y0, planSelectRect.y1);
-  const y1 = Math.max(planSelectRect.y0, planSelectRect.y1);
+  if (!planningMode.selectRect) return;
+  const x0 = Math.min(planningMode.selectRect.x0, planningMode.selectRect.x1);
+  const x1 = Math.max(planningMode.selectRect.x0, planningMode.selectRect.x1);
+  const y0 = Math.min(planningMode.selectRect.y0, planningMode.selectRect.y1);
+  const y1 = Math.max(planningMode.selectRect.y0, planningMode.selectRect.y1);
   const picked = [];
-  for (let i = 0; i < planWaypoints.length; i++) {
-    const p = planWaypoints[i];
+  for (let i = 0; i < planningMode.waypoints.length; i++) {
+    const p = planningMode.waypoints[i];
     const sp = worldToScreen(p.x, p.y);
     if (sp.x >= x0 && sp.x <= x1 && sp.y >= y0 && sp.y <= y1) {
       picked.push(i);
@@ -976,8 +897,8 @@ function planRectSelect() {
 }
 
 function planThetaDegAt(i) {
-  if (i < 0 || i >= planWaypoints.length) return 0;
-  const cur = planWaypoints[i];
+  if (i < 0 || i >= planningMode.waypoints.length) return 0;
+  const cur = planningMode.waypoints[i];
   const theta = (typeof cur.theta === "number") ? cur.theta : 0;
   return normalizeDeg(theta + offsetsIn.theta);
 }
@@ -996,8 +917,8 @@ function fieldHeadingToCanvasRotationDeg(thetaField) {
 
 function planTotalLength() {
   let total = 0;
-  for (let i = 0; i < planWaypoints.length - 1; i++) {
-    const a = planWaypoints[i], b = planWaypoints[i + 1];
+  for (let i = 0; i < planningMode.waypoints.length - 1; i++) {
+    const a = planningMode.waypoints[i], b = planningMode.waypoints[i + 1];
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     total += Math.hypot(dx, dy);
@@ -1034,15 +955,15 @@ function planDistFromX(x) {
 }
 
 function planSampleAtDist(d) {
-  if (planWaypoints.length === 0) return null;
-  if (planWaypoints.length === 1) {
-    const p = planWaypoints[0];
+  if (planningMode.waypoints.length === 0) return null;
+  if (planningMode.waypoints.length === 1) {
+    const p = planningMode.waypoints[0];
     const thetaPlan = planThetaDegAt(0);
     return { x: p.x, y: p.y, theta: thetaPlan };
   }
   let rem = d;
-  for (let i = 0; i < planWaypoints.length - 1; i++) {
-    const a = planWaypoints[i], b = planWaypoints[i + 1];
+  for (let i = 0; i < planningMode.waypoints.length - 1; i++) {
+    const a = planningMode.waypoints[i], b = planningMode.waypoints[i + 1];
     const seg = Math.hypot(b.x - a.x, b.y - a.y);
     if (seg <= 0.0001) continue;
     if (rem <= seg) {
@@ -1057,31 +978,9 @@ function planSampleAtDist(d) {
     }
     rem -= seg;
   }
-  const last = planWaypoints[planWaypoints.length - 1];
-  const thetaPlan = planThetaDegAt(planWaypoints.length - 1);
+  const last = planningMode.waypoints[planningMode.waypoints.length - 1];
+  const thetaPlan = planThetaDegAt(planningMode.waypoints.length - 1);
   return { x: last.x, y: last.y, theta: thetaPlan };
-}
-
-function setPlanDist(d) {
-  const total = planTotalLength();
-  planPlayDist = clamp(d, 0, total);
-  if (planTimePill) {
-    planTimePill.textContent = `Plan: ${fmtNum(planPlayDist, 2)} / ${fmtNum(total, 2)} in`;
-  }
-  if (planPointPill) {
-    planPointPill.textContent = `Points: ${planWaypoints.length}`;
-  }
-  planningTimelineRenderer.draw();
-  syncPlanObjectLatestValues();
-  requestDrawAll();
-}
-
-function updatePlanControls() {
-  if (btnPlay) {
-    if (getAppMode() === "planning") btnPlay.disabled = planWaypoints.length < 2;
-    else btnPlay.disabled = rawPoses.length < 2;
-  }
-  if (btnPlanCopyCode) btnPlanCopyCode.disabled = planWaypoints.length === 0;
 }
 
 async function copyTextToClipboard(text) {
@@ -1111,16 +1010,16 @@ function openPlanTemplateModal() {
     groupTitle: "Planning Export Template",
     description: "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, and ${speed}.",
     placeholder: "moveToPoint(${x}, ${y}, ${theta});",
-    codeValue: planExportTemplate,
+    codeValue: planningMode.state.getExportTemplate(),
     showName: false,
     confirmLabel: "Confirm",
     onConfirm: ({ codeValue }) => {
-      const previousTemplate = planExportTemplate;
-      planExportTemplate = codeValue.trim() ? codeValue : DEFAULT_PLAN_EXPORT_TEMPLATE;
+      const previousTemplate = planningMode.state.getExportTemplate();
+      planningMode.actions.setExportTemplate(codeValue);
       saveSettings();
-      void planningTelemetry.templateUpdated(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
-        template_changed: previousTemplate !== planExportTemplate,
-        template_bytes: getUtf8ByteLength(planExportTemplate),
+      void planningTelemetry.templateUpdated(planningMode.telemetry.getTelemetryProperties({
+        template_changed: previousTemplate !== planningMode.state.getExportTemplate(),
+        template_bytes: getUtf8ByteLength(planningMode.state.getExportTemplate()),
       }));
     },
   });
@@ -1130,20 +1029,20 @@ function closePlanTemplateModal() {
   if (!planTemplateModal) return;
   planTemplateModal.setAttribute("hidden", "");
   planTemplateModal.style.display = "none";
-  if (planTemplateInput) planTemplateInput.value = planExportTemplate;
+  if (planTemplateInput) planTemplateInput.value = planningMode.state.getExportTemplate();
   if (planTemplateNameInput) planTemplateNameInput.value = "";
   if (planTemplateValidationEl) {
     planTemplateValidationEl.hidden = true;
     planTemplateValidationEl.textContent = "";
   }
-  planTemplateModalState = null;
+  planningMode.templateModalState = null;
 }
 
 function confirmPlanTemplateModal() {
-  if (!planTemplateModalState) return;
+  if (!planningMode.templateModalState) return;
   const nameValue = String(planTemplateNameInput?.value || "").trim().slice(0, 25);
   const codeValue = String(planTemplateInput?.value || "");
-  if (planTemplateModalState.showName && !nameValue) {
+  if (planningMode.templateModalState.showName && !nameValue) {
     if (planTemplateValidationEl) {
       planTemplateValidationEl.textContent = "Enter a name to continue.";
       planTemplateValidationEl.hidden = false;
@@ -1151,7 +1050,7 @@ function confirmPlanTemplateModal() {
     planTemplateNameInput?.focus();
     return;
   }
-  planTemplateModalState.onConfirm?.({ nameValue, codeValue });
+  planningMode.templateModalState.onConfirm?.({ nameValue, codeValue });
   closePlanTemplateModal();
 }
 
@@ -1169,7 +1068,7 @@ function openSharedPlanTemplateModal({
   onConfirm = null,
 } = {}) {
   if (!planTemplateModal) return;
-  planTemplateModalState = {
+  planningMode.templateModalState = {
     showName,
     onConfirm,
   };
@@ -1206,7 +1105,7 @@ function openSharedPlanTemplateModal({
 }
 
 function openPlanMethodCreateModal(objectId) {
-  const object = planObjects.find((entry) => entry.id === objectId);
+  const object = planningMode.objects.find((entry) => entry.id === objectId);
   if (!object) return;
   cancelPlanObjectNameEdit();
   openSharedPlanTemplateModal({
@@ -1221,7 +1120,7 @@ function openPlanMethodCreateModal(objectId) {
     nameDescription: "Method name",
     confirmLabel: "Confirm",
     onConfirm: ({ nameValue, codeValue }) => {
-      const target = planObjects.find((entry) => entry.id === objectId);
+      const target = planningMode.objects.find((entry) => entry.id === objectId);
       if (!target) return;
       target.methods.push({
         id: createPlanMethodId(),
@@ -1229,7 +1128,7 @@ function openPlanMethodCreateModal(objectId) {
         code: codeValue,
       });
       savePlanObjectsUi();
-      void planningTelemetry.methodCreated(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
+      void planningTelemetry.methodCreated(planningMode.telemetry.getTelemetryProperties({
         method_code_chars: String(codeValue || "").length,
         method_code_bytes: getUtf8ByteLength(codeValue),
       }));
@@ -1238,7 +1137,7 @@ function openPlanMethodCreateModal(objectId) {
 }
 
 function openPlanMethodEditModal(objectId, methodId) {
-  const object = planObjects.find((entry) => entry.id === objectId);
+  const object = planningMode.objects.find((entry) => entry.id === objectId);
   const method = object?.methods?.find((entry) => entry.id === methodId);
   if (!object || !method) return;
   cancelPlanObjectNameEdit();
@@ -1254,7 +1153,7 @@ function openPlanMethodEditModal(objectId, methodId) {
     nameDescription: "Method name",
     confirmLabel: "Confirm",
     onConfirm: ({ nameValue, codeValue }) => {
-      const targetObject = planObjects.find((entry) => entry.id === objectId);
+      const targetObject = planningMode.objects.find((entry) => entry.id === objectId);
       const targetMethod = targetObject?.methods?.find((entry) => entry.id === methodId);
       if (!targetMethod) return;
       const previousName = targetMethod.name || "";
@@ -1262,7 +1161,7 @@ function openPlanMethodEditModal(objectId, methodId) {
       targetMethod.name = nameValue.slice(0, 25);
       targetMethod.code = codeValue;
       savePlanObjectsUi();
-      void planningTelemetry.methodUpdated(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
+      void planningTelemetry.methodUpdated(planningMode.telemetry.getTelemetryProperties({
         method_name_changed: previousName !== targetMethod.name,
         method_code_changed: previousCode !== targetMethod.code,
         method_code_chars: String(codeValue || "").length,
@@ -1274,8 +1173,8 @@ function openPlanMethodEditModal(objectId, methodId) {
 
 function openPlanNodeEditModal(nodeId) {
   const node = getPlanNodeById(nodeId);
-  const object = node ? getPlanObjectById(planObjects, node.objectId) : null;
-  const method = getPlanNodeEffectiveMethod(planObjects, node);
+  const object = node ? getPlanObjectById(planningMode.objects, node.objectId) : null;
+  const method = getPlanNodeEffectiveMethod(planningMode.objects, node);
   if (!node || !object || !method) return;
   cancelPlanObjectNameEdit();
   openSharedPlanTemplateModal({
@@ -1290,12 +1189,12 @@ function openPlanNodeEditModal(nodeId) {
     onConfirm: ({ codeValue }) => {
       const targetNode = getPlanNodeById(nodeId);
       const beforeOverride = hasPlanNodeMethodOverride(targetNode);
-      if (!setPlanNodeCodeOverride(planObjects, targetNode, codeValue)) return;
+      if (!setPlanNodeCodeOverride(planningMode.objects, targetNode, codeValue)) return;
       savePlanTimelineUi();
       planningSidebarRenderer.renderPlanObjects();
       requestDrawAll();
-      const effective = getPlanNodeEffectiveMethod(planObjects, targetNode);
-      void planningTelemetry.timelineNodeUpdated(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
+      const effective = getPlanNodeEffectiveMethod(planningMode.objects, targetNode);
+      void planningTelemetry.timelineNodeUpdated(planningMode.telemetry.getTelemetryProperties({
         node_override_created: !beforeOverride && !!effective?.hasOverride,
         node_override_cleared: beforeOverride && !effective?.hasOverride,
         node_code_chars: String(codeValue || "").length,
@@ -1308,10 +1207,10 @@ function openPlanNodeEditModal(nodeId) {
 function getPlanTimelineWaypointDistances() {
   const distances = [];
   let acc = 0;
-  for (let i = 0; i < planWaypoints.length; i += 1) {
+  for (let i = 0; i < planningMode.waypoints.length; i += 1) {
     if (i > 0) {
-      const prev = planWaypoints[i - 1];
-      const cur = planWaypoints[i];
+      const prev = planningMode.waypoints[i - 1];
+      const cur = planningMode.waypoints[i];
       acc += Math.hypot(cur.x - prev.x, cur.y - prev.y);
     }
     distances.push(acc);
@@ -1331,7 +1230,7 @@ function getPlanningTimelineTrackMetrics(width) {
 }
 
 function getCurrentPlanTimelineLayout() {
-  return planTimelineLayout || buildPlanTimelineLayout();
+  return planningMode.timelineLayout || buildPlanTimelineLayout();
 }
 
 function getPlanTimelineXFromDistance(distance) {
@@ -1360,7 +1259,7 @@ function getPlanTimelineXFromDistance(distance) {
 
 function buildPlanTimelineLayout() {
   if (!planningTimelineViewport || !planningEventTimelineInnerEl) return null;
-  const waypointCount = planWaypoints.length;
+  const waypointCount = planningMode.waypoints.length;
   const viewportWidth = Math.max(1, planningTimelineViewport.clientWidth || planningTimelineViewport.getBoundingClientRect().width || 1);
   const totalLength = planTotalLength();
   const baseContentWidth = Math.max(viewportWidth, PLAN_TIMELINE_PAD_X * 2 + 120);
@@ -1463,8 +1362,8 @@ function getPlanTimelinePointerContentX(clientX) {
 }
 
 function getPlanTimelineDropTargetFromClientX(clientX) {
-  const layout = planTimelineLayout || buildPlanTimelineLayout();
-  if (!layout || planWaypoints.length < 2) return null;
+  const layout = planningMode.timelineLayout || buildPlanTimelineLayout();
+  if (!layout || planningMode.waypoints.length < 2) return null;
   const x = clamp(getPlanTimelinePointerContentX(clientX), PLAN_TIMELINE_PAD_X, layout.contentWidth - PLAN_TIMELINE_PAD_X);
   let bucket = null;
   if (layout.waypointCount > 0 && x < layout.waypointX[0]) {
@@ -1501,9 +1400,9 @@ function getPlanTimelineDropTargetFromClientX(clientX) {
 }
 
 function getPlanNodeThresholdDistance(node, bucketNodes) {
-  const bucketIndex = clamp(node.beforeWaypoint, 0, planWaypoints.length);
+  const bucketIndex = clamp(node.beforeWaypoint, 0, planningMode.waypoints.length);
   if (bucketIndex <= 0) return 0;
-  if (bucketIndex >= planWaypoints.length) return planTotalLength();
+  if (bucketIndex >= planningMode.waypoints.length) return planTotalLength();
   const distances = getPlanTimelineWaypointDistances();
   const start = distances[bucketIndex - 1] ?? 0;
   const end = distances[bucketIndex] ?? start;
@@ -1513,7 +1412,7 @@ function getPlanNodeThresholdDistance(node, bucketNodes) {
 }
 
 function getLatestPlanMethodNameForObject(objectId) {
-  if (planWaypoints.length < 2) return "\u2014";
+  if (planningMode.waypoints.length < 2) return "\u2014";
   const nodes = getSortedPlanNodes().filter((node) => node.objectId === objectId);
   if (!nodes.length) return "\u2014";
   const buckets = new Map();
@@ -1527,10 +1426,10 @@ function getLatestPlanMethodNameForObject(objectId) {
   for (const node of nodes) {
     const bucketNodes = buckets.get(String(node.beforeWaypoint)) || [];
     const threshold = getPlanNodeThresholdDistance(node, bucketNodes);
-    if (threshold <= planPlayDist + 0.0001) latest = node;
+    if (threshold <= planningMode.playDist + 0.0001) latest = node;
   }
   if (!latest) return "\u2014";
-  return getPlanNodeEffectiveMethod(planObjects, latest)?.name || "\u2014";
+  return getPlanNodeEffectiveMethod(planningMode.objects, latest)?.name || "\u2014";
 }
 
 function syncPlanObjectLatestValues() {
@@ -1545,13 +1444,13 @@ function syncPlanObjectLatestValues() {
 
 function savePlanTimelineUi() {
   pruneInvalidPlanNodes();
-  renderPlanningEventTimeline();
+  planningMode.rendering.renderTimelineDom();
   syncPlanObjectLatestValues();
   scheduleSavedPathsSave();
 }
 
 function normalizePlanningTimelineHeightForContent() {
-  if (planNodes.length > 0) return;
+  if (planningMode.nodes.length > 0) return;
   const current = getPlanningTimelineH();
   if (current > DEFAULT_PLANNING_TIMELINE_H_PX) {
     root.style.setProperty("--planningTimelineH", `${DEFAULT_PLANNING_TIMELINE_H_PX}px`);
@@ -1570,8 +1469,8 @@ function scrollPlanMethodIntoView(objectId, methodId) {
 }
 
 function selectPlanNode(nodeId, { scrollSidebar = false } = {}) {
-  planSelectedNodeId = nodeId || null;
-  renderPlanningEventTimeline();
+  planningMode.selectedNodeId = nodeId || null;
+  planningMode.rendering.renderTimelineDom();
   planningSidebarRenderer.renderPlanObjects();
   syncPlanObjectLatestValues();
   requestDrawAll();
@@ -1582,7 +1481,7 @@ function selectPlanNode(nodeId, { scrollSidebar = false } = {}) {
 }
 
 function buildFieldPlanNodeMarkers() {
-  if (planWaypoints.length < 2 || !planNodes.length) return [];
+  if (planningMode.waypoints.length < 2 || !planningMode.nodes.length) return [];
 
   const markers = [];
   const sortedNodes = getSortedPlanNodes();
@@ -1595,10 +1494,10 @@ function buildFieldPlanNodeMarkers() {
 
   for (const [bucketIndex, bucketNodes] of nodesByBucket.entries()) {
     if (!Array.isArray(bucketNodes) || !bucketNodes.length) continue;
-    if (bucketIndex <= 0 || bucketIndex >= planWaypoints.length) continue;
+    if (bucketIndex <= 0 || bucketIndex >= planningMode.waypoints.length) continue;
 
-    const start = planWaypoints[bucketIndex - 1];
-    const end = planWaypoints[bucketIndex];
+    const start = planningMode.waypoints[bucketIndex - 1];
+    const end = planningMode.waypoints[bucketIndex];
     if (!start || !end) continue;
 
     const dx = end.x - start.x;
@@ -1611,21 +1510,21 @@ function buildFieldPlanNodeMarkers() {
     const nx = -ty;
     const ny = tx;
     const segStartDist = distances[bucketIndex - 1] ?? 0;
-    const markerLongPx = getAppMode() === "planning"
+    const markerLongPx = modeController.getMode() === "planning"
       ? Math.max(8, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_LONG, PLAN_FIELD_NODE_MARKER_LONG_MAX_IN))
       : Math.min(
         PLAN_FIELD_NODE_VIEWING_MAX_IN * scale,
         Math.max(8, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_LONG, PLAN_FIELD_NODE_MARKER_LONG_MAX_IN)),
       );
-    const waypointRadiusPx = getAppMode() === "planning"
+    const waypointRadiusPx = modeController.getMode() === "planning"
       ? Math.min(PLAN_POINT_R, PLAN_MARKER_MAX_IN * scale)
       : Math.min(PLAN_OVERLAY_POINT_R, PLAN_MARKER_MAX_IN_VIEWING * scale);
     const startClearanceDist = Math.min(len, (waypointRadiusPx + markerLongPx * 0.3 + 1.5) / Math.max(scale, 0.0001));
 
     for (const node of bucketNodes) {
-      const object = getPlanObjectById(planObjects, node.objectId);
+      const object = getPlanObjectById(planningMode.objects, node.objectId);
       if (!object) continue;
-      const method = getPlanNodeEffectiveMethod(planObjects, node);
+      const method = getPlanNodeEffectiveMethod(planningMode.objects, node);
       if (!method) continue;
       const threshold = getPlanNodeThresholdDistance(node, bucketNodes);
       const rawDist = clamp(threshold - segStartDist, 0, len);
@@ -1676,13 +1575,13 @@ function hitTestPlanFieldNodeAtClient(clientX, clientY) {
 }
 
 function createPlanMethodDragGhostCard({ objectId, methodId }) {
-  const object = getPlanObjectById(planObjects, objectId);
-  const method = getPlanMethodById(planObjects, objectId, methodId);
+  const object = getPlanObjectById(planningMode.objects, objectId);
+  const method = getPlanMethodById(planningMode.objects, objectId, methodId);
   const ghost = document.createElement("div");
   ghost.className = "planMethodCard planMethodDragGhost";
   ghost.innerHTML = `
     <div class="planMethodGrip" aria-hidden="true">⋮⋮</div>
-    <div class="planMethodIndex">${escapeHtml(String(getPlanMethodNumber(planObjects, objectId, methodId) || ""))}</div>
+    <div class="planMethodIndex">${escapeHtml(String(getPlanMethodNumber(planningMode.objects, objectId, methodId) || ""))}</div>
     <div class="planMethodContent">
       <div class="planMethodName">${escapeHtml(method?.name || "")}</div>
       <div class="planMethodCode">${escapeHtml(method?.code || "")}</div>
@@ -1701,14 +1600,14 @@ function createPlanMethodDragGhostCard({ objectId, methodId }) {
 }
 
 function clearPlanTimelineDropTarget() {
-  planTimelineDropTarget = null;
+  planningMode.timelineDropTarget = null;
   planningEventTimelineEl?.classList?.remove("isDropActive");
   if (planningTimelineDropLineEl) planningTimelineDropLineEl.hidden = true;
 }
 
 function updatePlanTimelineDropTarget(clientX) {
   const next = getPlanTimelineDropTargetFromClientX(clientX);
-  planTimelineDropTarget = next;
+  planningMode.timelineDropTarget = next;
   if (planningEventTimelineEl) planningEventTimelineEl.classList.toggle("isDropActive", !!next);
   if (!planningTimelineDropLineEl || !next) {
     if (planningTimelineDropLineEl) planningTimelineDropLineEl.hidden = true;
@@ -1719,9 +1618,9 @@ function updatePlanTimelineDropTarget(clientX) {
 }
 
 function clearPlanNodeTooltipTimer() {
-  if (planNodeTooltipTimer) {
-    clearTimeout(planNodeTooltipTimer);
-    planNodeTooltipTimer = null;
+  if (planningMode.nodeTooltipTimer) {
+    clearTimeout(planningMode.nodeTooltipTimer);
+    planningMode.nodeTooltipTimer = null;
   }
 }
 
@@ -1739,60 +1638,63 @@ function positionPlanNodeTooltip(clientX, clientY) {
 
 function hidePlanNodeTooltip({ immediate = false } = {}) {
   clearPlanNodeTooltipTimer();
-  planNodeTooltipPointer = null;
+  planningMode.nodeTooltipPointer = null;
   if (!planNodeTooltipEl) return;
-  planNodeTooltipVisible = false;
+  planningMode.nodeTooltipVisible = false;
   planNodeTooltipEl.classList.remove("isVisible");
+  planNodeTooltipEl.classList.remove("hasOverride");
   planNodeTooltipEl.setAttribute("aria-hidden", "true");
   if (immediate) {
     planNodeTooltipEl.hidden = true;
     return;
   }
   window.setTimeout(() => {
-    if (!planNodeTooltipVisible && planNodeTooltipEl) planNodeTooltipEl.hidden = true;
+    if (!planningMode.nodeTooltipVisible && planNodeTooltipEl) planNodeTooltipEl.hidden = true;
   }, 100);
 }
 
-function showPlanNodeTooltip(text, clientX, clientY) {
+function showPlanNodeTooltip(text, clientX, clientY, edited = false) {
   if (!planNodeTooltipEl || !text) return;
   clearPlanNodeTooltipTimer();
-  planNodeTooltipPointer = { clientX, clientY };
-  planNodeTooltipTimer = window.setTimeout(() => {
-    if (!planNodeTooltipEl || !planNodeTooltipPointer) return;
+  planningMode.nodeTooltipPointer = { clientX, clientY };
+  planningMode.nodeTooltipTimer = window.setTimeout(() => {
+    if (!planNodeTooltipEl || !planningMode.nodeTooltipPointer) return;
     planNodeTooltipEl.textContent = text;
+    planNodeTooltipEl.classList.toggle("hasOverride", !!edited);
     planNodeTooltipEl.hidden = false;
-    positionPlanNodeTooltip(planNodeTooltipPointer.clientX, planNodeTooltipPointer.clientY);
-    planNodeTooltipVisible = true;
+    positionPlanNodeTooltip(planningMode.nodeTooltipPointer.clientX, planningMode.nodeTooltipPointer.clientY);
+    planningMode.nodeTooltipVisible = true;
     planNodeTooltipEl.setAttribute("aria-hidden", "false");
     requestAnimationFrame(() => {
-      if (planNodeTooltipVisible) planNodeTooltipEl.classList.add("isVisible");
+      if (planningMode.nodeTooltipVisible) planNodeTooltipEl.classList.add("isVisible");
     });
   }, PLAN_NODE_TOOLTIP_DELAY_MS);
 }
 
-function updatePlanNodeTooltip(text, clientX, clientY) {
-  planNodeTooltipPointer = { clientX, clientY };
-  if (!planNodeTooltipVisible) {
-    showPlanNodeTooltip(text, clientX, clientY);
+function updatePlanNodeTooltip(text, clientX, clientY, edited = false) {
+  planningMode.nodeTooltipPointer = { clientX, clientY };
+  if (!planningMode.nodeTooltipVisible) {
+    showPlanNodeTooltip(text, clientX, clientY, edited);
     return;
   }
   if (!planNodeTooltipEl) return;
   if (planNodeTooltipEl.textContent !== text) planNodeTooltipEl.textContent = text;
+  planNodeTooltipEl.classList.toggle("hasOverride", !!edited);
   positionPlanNodeTooltip(clientX, clientY);
 }
 
-function renderPlanningEventTimeline() {
+planningMode.rendering.renderTimelineDom = function renderTimelineDom() {
   if (!planningEventTimelineInnerEl || !planningTimelineWaypointLayerEl || !planningTimelineNodeLayerEl || !planningTimelineContent) return;
   hidePlanNodeTooltip({ immediate: true });
   pruneInvalidPlanNodes();
-  planTimelineLayout = buildPlanTimelineLayout();
-  const layout = planTimelineLayout;
+  planningMode.timelineLayout = buildPlanTimelineLayout();
+  const layout = planningMode.timelineLayout;
   if (!layout) return;
 
   planningTimelineContent.style.width = `${Math.ceil(layout.contentWidth)}px`;
   planningEventTimelineInnerEl.style.width = `${Math.ceil(layout.contentWidth)}px`;
 
-  const canPlace = planWaypoints.length >= 2;
+  const canPlace = planningMode.waypoints.length >= 2;
   if (planningEventTimelineHintEl) {
     planningEventTimelineHintEl.hidden = canPlace;
   }
@@ -1802,7 +1704,7 @@ function renderPlanningEventTimeline() {
   if (!canPlace) {
     syncPlanningTimelineCanvasSize();
     clearPlanTimelineDropTarget();
-    planningTimelineRenderer.draw();
+    planningMode.rendering.drawTimeline();
     return;
   }
 
@@ -1814,23 +1716,23 @@ function renderPlanningEventTimeline() {
   }
 
   for (const node of getSortedPlanNodes()) {
-    const object = getPlanObjectById(planObjects, node.objectId);
-    const methodNumber = getPlanMethodNumber(planObjects, node.objectId, node.methodId);
-    const method = getPlanNodeEffectiveMethod(planObjects, node);
+    const object = getPlanObjectById(planningMode.objects, node.objectId);
+    const methodNumber = getPlanMethodNumber(planningMode.objects, node.objectId, node.methodId);
+    const method = getPlanNodeEffectiveMethod(planningMode.objects, node);
     const bucket = layout.buckets[node.beforeWaypoint];
     if (!object || !methodNumber || !method || !bucket) continue;
     const nodeEl = document.createElement("button");
     nodeEl.type = "button";
     nodeEl.className = "planningTimelineNode";
     if (method.hasOverride) nodeEl.classList.add("hasOverride");
-    if (planSelectedNodeId === node.id) nodeEl.classList.add("isSelected");
+    if (planningMode.selectedNodeId === node.id) nodeEl.classList.add("isSelected");
     nodeEl.draggable = false;
     nodeEl.dataset.nodeId = node.id;
     nodeEl.dataset.objectId = node.objectId;
     nodeEl.dataset.methodId = node.methodId;
     nodeEl.style.left = `${bucket.nodeStart + node.index * PLAN_TIMELINE_NODE_SLOT}px`;
-    nodeEl.style.background = object.color || getDefaultPlanObjectColor(planObjects.length);
-    nodeEl.style.color = getContrastTextColor(object.color || getDefaultPlanObjectColor(planObjects.length));
+    nodeEl.style.background = object.color || getDefaultPlanObjectColor(planningMode.objects.length);
+    nodeEl.style.color = getContrastTextColor(object.color || getDefaultPlanObjectColor(planningMode.objects.length));
     const tooltipText = `${object.name || "Object"} · ${getPlanMethodTooltipName(method.name)}`;
     nodeEl.setAttribute("aria-label", tooltipText);
     nodeEl.textContent = String(methodNumber);
@@ -1856,17 +1758,17 @@ function renderPlanningEventTimeline() {
       });
     });
     nodeEl.addEventListener("pointerenter", (e) => {
-      updatePlanNodeTooltip(tooltipText, e.clientX, e.clientY);
+      updatePlanNodeTooltip(tooltipText, e.clientX, e.clientY, method.hasOverride);
     });
     nodeEl.addEventListener("pointermove", (e) => {
-      updatePlanNodeTooltip(tooltipText, e.clientX, e.clientY);
+      updatePlanNodeTooltip(tooltipText, e.clientX, e.clientY, method.hasOverride);
     });
     nodeEl.addEventListener("pointerleave", () => {
       hidePlanNodeTooltip();
     });
     nodeEl.addEventListener("focus", () => {
       const rect = nodeEl.getBoundingClientRect();
-      updatePlanNodeTooltip(tooltipText, rect.left + rect.width / 2, rect.top + rect.height / 2);
+      updatePlanNodeTooltip(tooltipText, rect.left + rect.width / 2, rect.top + rect.height / 2, method.hasOverride);
     });
     nodeEl.addEventListener("blur", () => {
       hidePlanNodeTooltip({ immediate: true });
@@ -1874,33 +1776,33 @@ function renderPlanningEventTimeline() {
     planningTimelineNodeLayerEl.appendChild(nodeEl);
   }
 
-  if (planTimelineDropTarget) {
-    updatePlanTimelineDropTarget((planningEventTimelineInnerEl.getBoundingClientRect().left || 0) + planTimelineDropTarget.lineX);
+  if (planningMode.timelineDropTarget) {
+    updatePlanTimelineDropTarget((planningEventTimelineInnerEl.getBoundingClientRect().left || 0) + planningMode.timelineDropTarget.lineX);
   } else {
     clearPlanTimelineDropTarget();
   }
   syncPlanningTimelineCanvasSize();
-  planningTimelineRenderer.draw();
-}
+  planningMode.rendering.drawTimeline();
+};
 
 function startPlanObjectNameEdit(objectId, selectAll = false) {
-  const object = planObjects.find((entry) => entry.id === objectId);
+  const object = planningMode.objects.find((entry) => entry.id === objectId);
   if (!object) return;
-  planEditingObjectId = objectId;
-  planEditingObjectOriginalName = object.name || "";
-  planObjectEditSelectAll = !!selectAll;
+  planningMode.editingObjectId = objectId;
+  planningMode.editingObjectOriginalName = object.name || "";
+  planningMode.objectEditSelectAll = !!selectAll;
   planningSidebarRenderer.renderPlanObjects();
 }
 
 function clearPlanObjectEditState() {
-  planEditingObjectId = null;
-  planEditingObjectOriginalName = "";
-  planObjectEditSelectAll = false;
+  planningMode.editingObjectId = null;
+  planningMode.editingObjectOriginalName = "";
+  planningMode.objectEditSelectAll = false;
 }
 
 function savePlanObjectsUi() {
   planningSidebarRenderer.renderPlanObjects();
-  renderPlanningEventTimeline();
+  planningMode.rendering.renderTimelineDom();
   syncPlanObjectLatestValues();
   requestDrawAll();
   scheduleSavedPathsSave();
@@ -1912,21 +1814,21 @@ function cancelPlanObjectNameEdit() {
 }
 
 function commitActivePlanObjectEdit() {
-  if (!planEditingObjectId) return;
+  if (!planningMode.editingObjectId) return;
   const activeInput = planObjectListEl?.querySelector?.(".planObjectNameEditor");
-  const nextValue = activeInput ? activeInput.value : planEditingObjectOriginalName;
-  commitPlanObjectNameEdit(planEditingObjectId, nextValue);
+  const nextValue = activeInput ? activeInput.value : planningMode.editingObjectOriginalName;
+  commitPlanObjectNameEdit(planningMode.editingObjectId, nextValue);
 }
 
 function commitPlanObjectNameEdit(objectId, nextNameRaw) {
-  const object = planObjects.find((entry) => entry.id === objectId);
+  const object = planningMode.objects.find((entry) => entry.id === objectId);
   if (!object) {
     cancelPlanObjectNameEdit();
     return;
   }
   const nextName = String(nextNameRaw || "").trim();
-  const objectIndex = planObjects.findIndex((entry) => entry.id === objectId);
-  object.name = nextName || planEditingObjectOriginalName || getDefaultPlanObjectName(objectIndex);
+  const objectIndex = planningMode.objects.findIndex((entry) => entry.id === objectId);
+  object.name = nextName || planningMode.editingObjectOriginalName || getDefaultPlanObjectName(objectIndex);
   clearPlanObjectEditState();
   savePlanObjectsUi();
 }
@@ -1937,7 +1839,7 @@ function getPlanObjectLatestValue(object) {
 }
 
 function setPlanObjectColor(objectId, color) {
-  const object = planObjects.find((entry) => entry.id === objectId);
+  const object = planningMode.objects.find((entry) => entry.id === objectId);
   if (!object) return;
   const nextColor = String(color || "").trim();
   if (!/^#[0-9a-fA-F]{6}$/.test(nextColor)) return;
@@ -1949,53 +1851,39 @@ function addPlanObject() {
   const next = {
     id: createPlanObjectId(),
     name: "",
-    color: getDefaultPlanObjectColor(planObjects.length),
+    color: getDefaultPlanObjectColor(planningMode.objects.length),
     latestMethod: "",
     methods: [],
   };
-  planObjects.push(next);
-  planEditingObjectId = next.id;
-  planEditingObjectOriginalName = "";
-  planObjectEditSelectAll = false;
+  planningMode.objects.push(next);
+  planningMode.editingObjectId = next.id;
+  planningMode.editingObjectOriginalName = "";
+  planningMode.objectEditSelectAll = false;
   savePlanObjectsUi();
-  void planningTelemetry.objectCreated(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
+  void planningTelemetry.objectCreated(planningMode.telemetry.getTelemetryProperties({
     object_methods: next.methods.length,
   }));
 }
 
 function removePlanObject(objectId) {
-  const idx = planObjects.findIndex((entry) => entry.id === objectId);
+  const idx = planningMode.objects.findIndex((entry) => entry.id === objectId);
   if (idx < 0) return;
-  const removedObject = planObjects[idx];
+  const removedObject = planningMode.objects[idx];
   const removedMethodIds = new Set((removedObject.methods || []).map((method) => method.id));
-  const removedNodeCount = planNodes.filter((entry) => entry.objectId === objectId || removedMethodIds.has(entry.methodId)).length;
-  planObjects.splice(idx, 1);
-  planNodes = planNodes.filter((entry) => entry.objectId !== objectId);
-  if (planSelectedNodeId && !getPlanNodeById(planSelectedNodeId)) clearPlanNodeSelection();
-  if (planEditingObjectId === objectId) clearPlanObjectEditState();
+  const removedNodeCount = planningMode.nodes.filter((entry) => entry.objectId === objectId || removedMethodIds.has(entry.methodId)).length;
+  planningMode.objects.splice(idx, 1);
+  planningMode.nodes = planningMode.nodes.filter((entry) => entry.objectId !== objectId);
+  if (planningMode.selectedNodeId && !getPlanNodeById(planningMode.selectedNodeId)) clearPlanNodeSelection();
+  if (planningMode.editingObjectId === objectId) clearPlanObjectEditState();
   savePlanObjectsUi();
-  void planningTelemetry.objectRemoved(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
+  void planningTelemetry.objectRemoved(planningMode.telemetry.getTelemetryProperties({
     removed_methods: removedMethodIds.size,
     removed_nodes: removedNodeCount,
   }));
 }
 
 function hasAnyPlanMethods() {
-  return planObjects.some((entry) => Array.isArray(entry.methods) && entry.methods.length > 0);
-}
-
-function clearPlanningModeData() {
-  planWaypoints = [];
-  planObjects = [];
-  planNodes = [];
-  planSetSelection([]);
-  clearPlanNodeSelection();
-  planPlayDist = 0;
-  planPause();
-  planChanged();
-  planningSidebarRenderer.renderPlanObjects();
-  renderPlanningEventTimeline();
-  normalizePlanningTimelineHeightForContent();
+  return planningMode.state.hasAnyMethods();
 }
 
 function openPlanDangerConfirmModal(message, action) {
@@ -2011,9 +1899,9 @@ function openPlanDangerConfirmModalWithOptions({
   onCancel = null,
 } = {}) {
   cancelPlanObjectNameEdit();
-  pendingPlanObjectRemovalId = null;
-  pendingPlanObjectDeleteAction = typeof onConfirm === "function" ? onConfirm : null;
-  pendingPlanObjectDeleteCancelAction = typeof onCancel === "function" ? onCancel : null;
+  planningMode.pendingObjectRemovalId = null;
+  planningMode.pendingObjectDeleteAction = typeof onConfirm === "function" ? onConfirm : null;
+  planningMode.pendingObjectDeleteCancelAction = typeof onCancel === "function" ? onCancel : null;
   if (planObjectDeleteTitleEl) {
     planObjectDeleteTitleEl.textContent = title;
   }
@@ -2033,35 +1921,35 @@ function openPlanDangerConfirmModalWithOptions({
 }
 
 function requestPlanObjectRemoval(objectId) {
-  const object = planObjects.find((entry) => entry.id === objectId);
+  const object = planningMode.objects.find((entry) => entry.id === objectId);
   if (!object) return;
   cancelPlanObjectNameEdit();
   if (!object.methods.length) {
     removePlanObject(objectId);
     return;
   }
-  pendingPlanObjectRemovalId = objectId;
+  planningMode.pendingObjectRemovalId = objectId;
   openPlanDangerConfirmModal(`Are you sure you want to remove Object ${object.name}?`, () => removePlanObject(objectId));
 }
 
 function closePlanObjectDeleteModal() {
-  pendingPlanObjectRemovalId = null;
-  pendingPlanObjectDeleteAction = null;
-  pendingPlanObjectDeleteCancelAction = null;
+  planningMode.pendingObjectRemovalId = null;
+  planningMode.pendingObjectDeleteAction = null;
+  planningMode.pendingObjectDeleteCancelAction = null;
   if (!planObjectDeleteModal) return;
   planObjectDeleteModal.setAttribute("hidden", "");
   planObjectDeleteModal.style.display = "none";
 }
 
 function cancelPlanObjectDeleteModal() {
-  const cancelAction = pendingPlanObjectDeleteCancelAction;
+  const cancelAction = planningMode.pendingObjectDeleteCancelAction;
   closePlanObjectDeleteModal();
   if (cancelAction) cancelAction();
 }
 
 function confirmPlanObjectRemoval() {
-  if (pendingPlanObjectDeleteAction) pendingPlanObjectDeleteAction();
-  else if (pendingPlanObjectRemovalId) removePlanObject(pendingPlanObjectRemovalId);
+  if (planningMode.pendingObjectDeleteAction) planningMode.pendingObjectDeleteAction();
+  else if (planningMode.pendingObjectRemovalId) removePlanObject(planningMode.pendingObjectRemovalId);
   closePlanObjectDeleteModal();
 }
 
@@ -2074,32 +1962,6 @@ function hasImportedViewingData(obj) {
     || normalizeWatches(obj?.watches || obj?.watch || [], toNumMaybe).length > 0
     || normalizeLogs(obj?.logs || obj?.log || [], toNumMaybe, normalizeLogLevel).length > 0
     || normalizeWaypoints(obj?.waypoints || []).length > 0;
-}
-
-function applyImportedPlanningData(obj) {
-  if (Array.isArray(obj["planned-path"])) {
-    planWaypoints = obj["planned-path"].map((p) => ({
-      x: Number(p.x) || 0,
-      y: Number(p.y) || 0,
-      theta: Number(p.theta) || 0,
-      speed: readPlanSpeed(p.speed, 127),
-    }));
-  } else {
-    planWaypoints = [];
-  }
-  if (obj["planned-export-template"] !== undefined) {
-    const savedTemplate = String(obj["planned-export-template"] || "");
-    planExportTemplate = savedTemplate.trim() ? savedTemplate : DEFAULT_PLAN_EXPORT_TEMPLATE;
-  }
-  planSetSelection([]);
-  planPlayDist = 0;
-  planObjects = normalizePlanObjects(obj["planned-objects"] || []);
-  planNodes = normalizePlanNodes(obj["planned-nodes"] || []);
-  pruneInvalidPlanNodes();
-  clearPlanNodeSelection();
-  planningSidebarRenderer.renderPlanObjects();
-  renderPlanningEventTimeline();
-  normalizePlanningTimelineHeightForContent();
 }
 
 function applyImportedViewingData(obj) {
@@ -2124,38 +1986,38 @@ function confirmPlanningImportOverride() {
 }
 
 function removePlanMethod(objectId, methodId) {
-  const object = planObjects.find((entry) => entry.id === objectId);
+  const object = planningMode.objects.find((entry) => entry.id === objectId);
   if (!object) return;
   const idx = object.methods.findIndex((entry) => entry.id === methodId);
   if (idx < 0) return;
-  const removedNodeCount = planNodes.filter((entry) => entry.objectId === objectId && entry.methodId === methodId).length;
+  const removedNodeCount = planningMode.nodes.filter((entry) => entry.objectId === objectId && entry.methodId === methodId).length;
   object.methods.splice(idx, 1);
-  planNodes = planNodes.filter((entry) => !(entry.objectId === objectId && entry.methodId === methodId));
-  if (planSelectedNodeId && !getPlanNodeById(planSelectedNodeId)) clearPlanNodeSelection();
+  planningMode.nodes = planningMode.nodes.filter((entry) => !(entry.objectId === objectId && entry.methodId === methodId));
+  if (planningMode.selectedNodeId && !getPlanNodeById(planningMode.selectedNodeId)) clearPlanNodeSelection();
   savePlanObjectsUi();
-  void planningTelemetry.methodRemoved(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
+  void planningTelemetry.methodRemoved(planningMode.telemetry.getTelemetryProperties({
     removed_nodes: removedNodeCount,
   }));
 }
 
 function insertPlanNode(objectId, methodId, beforeWaypoint, index) {
-  const object = getPlanObjectById(planObjects, objectId);
-  const method = getPlanMethodById(planObjects, objectId, methodId);
-  if (!object || !method || planWaypoints.length < 2) return null;
+  const object = getPlanObjectById(planningMode.objects, objectId);
+  const method = getPlanMethodById(planningMode.objects, objectId, methodId);
+  if (!object || !method || planningMode.waypoints.length < 2) return null;
   const node = {
     id: createPlanNodeId(),
     objectId,
     methodId,
-    beforeWaypoint: clamp(Math.round(beforeWaypoint || 0), 0, planWaypoints.length),
+    beforeWaypoint: clamp(Math.round(beforeWaypoint || 0), 0, planningMode.waypoints.length),
     index: Math.max(0, Math.round(index || 0)),
   };
-  const bucketNodes = planNodes
+  const bucketNodes = planningMode.nodes
     .filter((entry) => entry.beforeWaypoint === node.beforeWaypoint)
     .sort((a, b) => a.index - b.index);
   for (const entry of bucketNodes) {
     if (entry.index >= node.index) entry.index += 1;
   }
-  planNodes.push(node);
+  planningMode.nodes.push(node);
   normalizePlanNodeOrdering();
   return node;
 }
@@ -2165,36 +2027,36 @@ function movePlanNode(nodeId, beforeWaypoint, index) {
   if (!node) return null;
   const originalBucket = node.beforeWaypoint;
   const originalIndex = node.index;
-  const targetBucket = clamp(Math.round(beforeWaypoint || 0), 0, planWaypoints.length);
+  const targetBucket = clamp(Math.round(beforeWaypoint || 0), 0, planningMode.waypoints.length);
   let targetIndex = Math.max(0, Math.round(index || 0));
 
   if (originalBucket === targetBucket && targetIndex > originalIndex) targetIndex -= 1;
-  planNodes = planNodes.filter((entry) => entry.id !== nodeId);
+  planningMode.nodes = planningMode.nodes.filter((entry) => entry.id !== nodeId);
   normalizePlanNodeOrdering();
   node.beforeWaypoint = targetBucket;
   node.index = targetIndex;
-  const bucketNodes = planNodes
+  const bucketNodes = planningMode.nodes
     .filter((entry) => entry.beforeWaypoint === targetBucket)
     .sort((a, b) => a.index - b.index);
   for (const entry of bucketNodes) {
     if (entry.index >= targetIndex) entry.index += 1;
   }
-  planNodes.push(node);
+  planningMode.nodes.push(node);
   normalizePlanNodeOrdering();
   return node;
 }
 
 function removePlanNode(nodeId) {
-  const idx = planNodes.findIndex((entry) => entry.id === nodeId);
+  const idx = planningMode.nodes.findIndex((entry) => entry.id === nodeId);
   if (idx < 0) return;
-  const removedNode = planNodes[idx];
-  planNodes.splice(idx, 1);
+  const removedNode = planningMode.nodes[idx];
+  planningMode.nodes.splice(idx, 1);
   normalizePlanNodeOrdering();
-  if (planSelectedNodeId === nodeId) clearPlanNodeSelection();
+  if (planningMode.selectedNodeId === nodeId) clearPlanNodeSelection();
   savePlanTimelineUi();
   normalizePlanningTimelineHeightForContent();
   planningSidebarRenderer.renderPlanObjects();
-  void planningTelemetry.timelineNodeRemoved(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
+  void planningTelemetry.timelineNodeRemoved(planningMode.telemetry.getTelemetryProperties({
     before_waypoint: removedNode.beforeWaypoint,
   }));
 }
@@ -2222,13 +2084,13 @@ const planningSidebarRenderer = createPlanningSidebarRenderer({
   planCountEl,
   planObjectListEl,
   planEventsHintEl,
-  getPlanWaypoints: () => planWaypoints,
-  getPlanObjects: () => planObjects,
-  getSelectedPlanSet: () => planSelectedSet,
-  getSelectedNode: () => getPlanNodeById(planSelectedNodeId),
-  getEditingObjectId: () => planEditingObjectId,
-  getPlanOpenColorPickerObjectId: () => planOpenColorPickerObjectId,
-  getPlanObjectEditSelectAll: () => planObjectEditSelectAll,
+  getPlanWaypoints: () => planningMode.state.getWaypoints(),
+  getPlanObjects: () => planningMode.state.getObjects(),
+  isPlanWaypointSelected: (index) => planningMode.state.isWaypointSelected(index),
+  getSelectedNode: () => getPlanNodeById(planningMode.state.getSelectedNodeId()),
+  getEditingObjectId: () => planningMode.state.getEditingObjectId(),
+  getPlanOpenColorPickerObjectId: () => planningMode.state.getOpenColorPickerObjectId(),
+  getPlanObjectEditSelectAll: () => planningMode.state.shouldSelectAllObjectEdit(),
   planThetaDegAt,
   readPlanSpeed,
   fmtNum,
@@ -2237,8 +2099,8 @@ const planningSidebarRenderer = createPlanningSidebarRenderer({
   getDefaultPlanObjectName,
   getDefaultPlanObjectColor,
   getPlanObjectLatestValue,
-  planToggleSelection,
-  planSelectSingle,
+  planToggleSelection: planningMode.actions.toggleWaypointSelection,
+  planSelectSingle: planningMode.actions.selectWaypoint,
   requestDrawAll,
   renderPlanList: () => planningSidebarRenderer.renderPlanList(),
   updatePlanSelectionPanel,
@@ -2252,13 +2114,27 @@ const planningSidebarRenderer = createPlanningSidebarRenderer({
 const planningTimelineRenderer = createPlanningTimelineRenderer({
   planningTimelineCanvas,
   context: pctx,
-  getAppMode,
+  getAppMode: modeController.getMode,
   getCurrentPlanTimelineLayout,
   getPlanTotalLength: planTotalLength,
-  getPlanPlayDistance: () => planPlayDist,
+  getPlanPlayDistance: () => planningMode.playback.getPlaybackDistance(),
   getPlanTimelineXFromDistance,
   timelinePadX: PLAN_TIMELINE_PAD_X,
 });
+
+planningMode.rendering.renderSidebar = function renderSidebar() {
+  planningSidebarRenderer.renderPlanList();
+  planningSidebarRenderer.renderPlanObjects();
+};
+
+planningMode.rendering.render = function renderPlanningMode() {
+  planningMode.rendering.renderSidebar();
+  planningMode.rendering.renderTimelineDom();
+};
+
+planningMode.rendering.drawTimeline = function drawTimeline() {
+  planningTimelineRenderer.draw();
+};
 
 const viewingFieldOverlayRenderer = createViewingFieldOverlayRenderer({
   context: ctx,
@@ -2387,9 +2263,9 @@ function centerOnWorld(x, y) {
 function planChanged(opts = {}) {
   pruneInvalidPlanNodes();
   planningSidebarRenderer.renderPlanList();
-  updatePlanControls();
-  setPlanDist(planPlayDist);
-  renderPlanningEventTimeline();
+  planningMode.playback.updateControls();
+  planningMode.playback.setDistance(planningMode.playback.getPlaybackDistance());
+  planningMode.rendering.renderTimelineDom();
   syncPlanObjectLatestValues();
   updateExportButtonAvailability();
   if (!opts.skipSelectionPanel) updatePlanSelectionPanel();
@@ -2401,30 +2277,7 @@ async function loadSavedPaths() {
     const saved = await invoke("read_saved_paths");
     if (!saved) return;
     const obj = JSON.parse(saved);
-    if (Array.isArray(obj?.["planned-path"])) {
-      planWaypoints = obj["planned-path"].map((p) => ({
-        x: Number(p.x) || 0,
-        y: Number(p.y) || 0,
-        theta: Number(p.theta) || 0,
-        speed: readPlanSpeed(p.speed, 127),
-      }));
-    } else {
-      planWaypoints = [];
-    }
-    if (obj?.["planned-export-template"] !== undefined) {
-      const savedTemplate = String(obj["planned-export-template"] || "");
-      planExportTemplate = savedTemplate.trim() ? savedTemplate : DEFAULT_PLAN_EXPORT_TEMPLATE;
-    }
-    planSetSelection([]);
-    planPlayDist = 0;
-    planChanged();
-    planObjects = normalizePlanObjects(obj?.["planned-objects"] || []);
-    planNodes = normalizePlanNodes(obj?.["planned-nodes"] || []);
-    pruneInvalidPlanNodes();
-    clearPlanNodeSelection();
-    planningSidebarRenderer.renderPlanObjects();
-    renderPlanningEventTimeline();
-    normalizePlanningTimelineHeightForContent();
+    planningMode.loadImportedData(obj);
     rawPoses = normalizePoseArray(obj?.["robot-path"] || []);
     watches = normalizeWatches(obj?.["watches"] || [], toNumMaybe);
     logs = normalizeLogs(obj?.["logs"] || [], toNumMaybe, normalizeLogLevel);
@@ -2432,7 +2285,7 @@ async function loadSavedPaths() {
     data = { poses: rawPoses, watches, logs, waypoints, meta: {} };
     if (hasLoadedData()) {
       finalizeLoadedData();
-      updatePlanControls();
+      planningMode.playback.updateControls();
       updateFieldLayout(true);
     }
   } catch (e) {
@@ -2454,10 +2307,11 @@ function scheduleSavedPathsSave() {
 
 function buildSavedPathsPayload() {
   pruneInvalidPlanNodes();
+  const planningExport = planningMode.getExportData();
   return JSON.stringify({
-    "planned-path": planWaypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: readPlanSpeed(p.speed, 127) })),
-    "planned-export-template": planExportTemplate,
-    "planned-objects": planObjects.map((obj) => ({
+    "planned-path": planningExport.waypoints.map((p) => ({ x: p.x, y: p.y, theta: p.theta ?? 0, speed: readPlanSpeed(p.speed, 127) })),
+    "planned-export-template": planningExport.template,
+    "planned-objects": planningExport.objects.map((obj) => ({
       id: obj.id,
       name: obj.name,
       color: obj.color || null,
@@ -2468,7 +2322,7 @@ function buildSavedPathsPayload() {
         code: method.code,
       })),
     })),
-    "planned-nodes": planNodes.map(serializePlanNode),
+    "planned-nodes": planningExport.nodes.map(serializePlanNode),
     "robot-path": rawPoses.map((p) => ({
       t: p.t ?? null,
       x: p.x, y: p.y,
@@ -2518,7 +2372,9 @@ async function saveSavedPathsNow() {
 function updatePlanSelectionPanel() {
   if (!planSelXEl || !planSelYEl || !planSelThetaEl || !planSelSpeedEl || !planSelIndexEl) return;
   const active = document.activeElement;
-  if (planSelected < 0 || planSelected >= planWaypoints.length) {
+  const selectedIndex = planningMode.state.getSelectedWaypointIndex();
+  const selectedWaypoint = planningMode.state.getSelectedWaypoint();
+  if (!selectedWaypoint) {
     planSelIndexEl.textContent = "—";
     planSelXEl.value = "";
     planSelYEl.value = "";
@@ -2530,8 +2386,8 @@ function updatePlanSelectionPanel() {
     planSelSpeedEl.disabled = true;
     return;
   }
-  const p = planWaypoints[planSelected];
-  planSelIndexEl.textContent = `#${planSelected + 1}`;
+  const p = selectedWaypoint;
+  planSelIndexEl.textContent = `#${selectedIndex + 1}`;
   planSelXEl.disabled = false;
   planSelYEl.disabled = false;
   planSelThetaEl.disabled = false;
@@ -2541,7 +2397,7 @@ function updatePlanSelectionPanel() {
   }
   const xVal = String(fmtNum(p.x, 2));
   const yVal = String(fmtNum(p.y, 2));
-  const tVal = String(fmtNum(planThetaDegAt(planSelected) ?? 0, 1));
+  const tVal = String(fmtNum(planThetaDegAt(selectedIndex) ?? 0, 1));
   const sVal = String(fmtNum(readPlanSpeed(p.speed, 127), 0));
   planSelXEl.value = xVal;
   planSelYEl.value = yVal;
@@ -2553,10 +2409,10 @@ function updatePlanSelectionPanel() {
   planSelSpeedEl.dataset.lastValid = sVal;
 }
 
-function planHitTest(mx, my) {
+planningMode.rendering.hitTestField = function hitTestField(mx, my) {
   let best = { idx: -1, dist2: Infinity };
-  for (let i = 0; i < planWaypoints.length; i++) {
-    const p = planWaypoints[i];
+  for (let i = 0; i < planningMode.waypoints.length; i++) {
+    const p = planningMode.waypoints[i];
     const sp = worldToScreen(p.x, p.y);
     const dx = sp.x - mx;
     const dy = sp.y - my;
@@ -2568,12 +2424,12 @@ function planHitTest(mx, my) {
 }
 
 function planThetaHandlePos(i) {
-  const p = planWaypoints[i];
+  const p = planningMode.waypoints[i];
   if (!p) return null;
   const sp = worldToScreen(p.x, p.y);
   const theta = fieldHeadingToScreenDeg(planThetaDegAt(i)) * Math.PI / 180;
-  const baseR = getAppMode() !== "planning" ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
-  const r = getAppMode() === "viewing"
+  const baseR = modeController.getMode() !== "planning" ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
+  const r = modeController.getMode() === "viewing"
     ? Math.min(baseR, PLAN_MARKER_MAX_IN_VIEWING * scale)
     : Math.min(baseR, PLAN_MARKER_MAX_IN * scale);
   const handleOffset = PLAN_THETA_HANDLE_OFFSET * Math.max(viewZoom, CANVAS_ZOOM_MIN);
@@ -2585,7 +2441,7 @@ function planThetaHandlePos(i) {
 }
 
 function planThetaHandleHit(mx, my) {
-  for (const i of planSelectedSet) {
+  for (const i of planningMode.selectedSet) {
     const hp = planThetaHandlePos(i);
     if (!hp) continue;
     const dx = hp.x - mx;
@@ -2596,7 +2452,7 @@ function planThetaHandleHit(mx, my) {
 }
 
 function updatePlanThetaFromPointer(idx, mx, my) {
-  const p = planWaypoints[idx];
+  const p = planningMode.waypoints[idx];
   if (!p) return;
   const sp = worldToScreen(p.x, p.y);
   const dx = mx - sp.x;
@@ -2604,11 +2460,11 @@ function updatePlanThetaFromPointer(idx, mx, my) {
   if (dx === 0 && dy === 0) return;
   const angle = Math.atan2(dx, -dy) * 180 / Math.PI;
   const thetaPlan = normalizeDeg(angle - fieldRotationDeg);
-  if (planThetaDragBase && planThetaDragBase.length) {
-    const delta = normalizeDeg(thetaPlan - planThetaDragStart);
-    for (const entry of planThetaDragBase) {
+  if (planningMode.thetaDragBase && planningMode.thetaDragBase.length) {
+    const delta = normalizeDeg(thetaPlan - planningMode.thetaDragStart);
+    for (const entry of planningMode.thetaDragBase) {
       const next = normalizeDeg(entry.theta + delta);
-      planWaypoints[entry.i].theta = planThetaDisplayToRaw(applyPlanThetaSnapDeg(next));
+      planningMode.waypoints[entry.i].theta = planThetaDisplayToRaw(applyPlanThetaSnapDeg(next));
     }
   } else {
     p.theta = planThetaDisplayToRaw(applyPlanThetaSnapDeg(thetaPlan));
@@ -2636,10 +2492,10 @@ function isPointInFieldBounds(point) {
   );
 }
 
-function drawPlanningOverlay(force = false) {
-  if (!force && getAppMode() !== "planning") return;
-  if (getAppMode() !== "planning" && !planOverlayVisible) return;
-  if (!planWaypoints.length) return;
+planningMode.rendering.drawFieldOverlay = function drawFieldOverlay(force = false) {
+  if (!force && modeController.getMode() !== "planning") return;
+  if (modeController.getMode() !== "planning" && !planningMode.overlayVisible) return;
+  if (!planningMode.waypoints.length) return;
 
   ctx.save();
   ctx.lineWidth = 2;
@@ -2648,15 +2504,15 @@ function drawPlanningOverlay(force = false) {
 
   // lines
   ctx.beginPath();
-  for (let i = 0; i < planWaypoints.length; i++) {
-    const p = planWaypoints[i];
+  for (let i = 0; i < planningMode.waypoints.length; i++) {
+    const p = planningMode.waypoints[i];
     const sp = worldToScreen(p.x, p.y);
     if (i === 0) ctx.moveTo(sp.x, sp.y);
     else ctx.lineTo(sp.x, sp.y);
   }
   ctx.stroke();
 
-  if (getAppMode() === "planning" || (getAppMode() !== "planning" && planOverlayVisible)) {
+  if (modeController.getMode() === "planning" || (modeController.getMode() !== "planning" && planningMode.overlayVisible)) {
     const markers = buildFieldPlanNodeMarkers();
     for (const marker of markers) {
       const sp = worldToScreen(marker.x, marker.y);
@@ -2668,12 +2524,12 @@ function drawPlanningOverlay(force = false) {
       const thickRaw = Math.max(3, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_THICK, PLAN_FIELD_NODE_MARKER_THICK_MAX_IN));
       const tickLenRaw = Math.max(10, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_TICK_LEN, PLAN_FIELD_NODE_TICK_MAX_IN));
       const viewingCapPx = PLAN_FIELD_NODE_VIEWING_MAX_IN * scale;
-      const longLen = getAppMode() === "planning" ? longLenRaw : Math.min(viewingCapPx, longLenRaw);
-      const thick = getAppMode() === "planning" ? thickRaw : Math.min(viewingCapPx, thickRaw);
-      const tickLen = getAppMode() === "planning" ? tickLenRaw : Math.min(viewingCapPx, tickLenRaw);
-      const color = marker.object.color || getDefaultPlanObjectColor(planObjects.length);
-      const isSelected = planSelectedNodeId === marker.node.id;
-      const isHover = planFieldHoverNodeId === marker.node.id;
+      const longLen = modeController.getMode() === "planning" ? longLenRaw : Math.min(viewingCapPx, longLenRaw);
+      const thick = modeController.getMode() === "planning" ? thickRaw : Math.min(viewingCapPx, thickRaw);
+      const tickLen = modeController.getMode() === "planning" ? tickLenRaw : Math.min(viewingCapPx, tickLenRaw);
+      const color = marker.object.color || getDefaultPlanObjectColor(planningMode.objects.length);
+      const isSelected = planningMode.selectedNodeId === marker.node.id;
+      const isHover = planningMode.fieldHoverNodeId === marker.node.id;
       const strokeColor = isSelected || isHover ? "rgba(255,255,255,0.98)" : "rgba(15,25,35,0.65)";
       const borderPad = PLAN_FIELD_NODE_BORDER_PX * Math.max(viewingFieldMarkerStyleScale(), 0.85);
 
@@ -2710,19 +2566,19 @@ function drawPlanningOverlay(force = false) {
   }
 
   // points
-  for (let i = 0; i < planWaypoints.length; i++) {
-    const p = planWaypoints[i];
+  for (let i = 0; i < planningMode.waypoints.length; i++) {
+    const p = planningMode.waypoints[i];
     const sp = worldToScreen(p.x, p.y);
-    const isSel = planSelectedSet.has(i);
-    const baseR = (getAppMode() !== "planning") ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
+    const isSel = planningMode.selectedSet.has(i);
+    const baseR = (modeController.getMode() !== "planning") ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
     
     let r = 0;
-    if (getAppMode() === "viewing") r = Math.min(baseR, PLAN_MARKER_MAX_IN_VIEWING * scale);
+    if (modeController.getMode() === "viewing") r = Math.min(baseR, PLAN_MARKER_MAX_IN_VIEWING * scale);
     else r = Math.min(baseR, PLAN_MARKER_MAX_IN * scale);
 
     ctx.beginPath();
     ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
-    ctx.fillStyle = (i === planSelected) ? "rgba(180,220,255,1)" : (isSel ? "rgba(150,200,255,0.95)" : "rgba(120,180,255,0.9)");
+    ctx.fillStyle = (i === planningMode.selected) ? "rgba(180,220,255,1)" : (isSel ? "rgba(150,200,255,0.95)" : "rgba(120,180,255,0.9)");
     ctx.fill();
     ctx.strokeStyle = "rgba(15,25,35,0.8)";
     ctx.stroke();
@@ -2742,7 +2598,7 @@ function drawPlanningOverlay(force = false) {
     ctx.restore();
 
     if (isSel) {
-      if (getAppMode() === "viewing") var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN_VIEWING * scale);
+      if (modeController.getMode() === "viewing") var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN_VIEWING * scale);
       else var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN * scale);
 
       const handleOffset = PLAN_THETA_HANDLE_OFFSET * Math.max(viewZoom, CANVAS_ZOOM_MIN);
@@ -2766,11 +2622,11 @@ function drawPlanningOverlay(force = false) {
     }
   }
 
-  if (planSelecting && planSelectRect) {
-    const x0 = Math.min(planSelectRect.x0, planSelectRect.x1);
-    const x1 = Math.max(planSelectRect.x0, planSelectRect.x1);
-    const y0 = Math.min(planSelectRect.y0, planSelectRect.y1);
-    const y1 = Math.max(planSelectRect.y0, planSelectRect.y1);
+  if (planningMode.selecting && planningMode.selectRect) {
+    const x0 = Math.min(planningMode.selectRect.x0, planningMode.selectRect.x1);
+    const x1 = Math.max(planningMode.selectRect.x0, planningMode.selectRect.x1);
+    const y0 = Math.min(planningMode.selectRect.y0, planningMode.selectRect.y1);
+    const y1 = Math.max(planningMode.selectRect.y0, planningMode.selectRect.y1);
     ctx.strokeStyle = "rgba(140,200,255,0.8)";
     ctx.fillStyle = "rgba(140,200,255,0.12)";
     ctx.lineWidth = 1;
@@ -2780,12 +2636,7 @@ function drawPlanningOverlay(force = false) {
     ctx.stroke();
   }
   ctx.restore();
-}
-
-function setMode(mode) {
-  modeController.setMode(mode === "planning" ? "planning" : "viewing");
-}
-
+};
 
 // offsets: entered in selected units, stored as inches for rendering
 const offsetsIn = { x: 0, y: 0, theta: 0 };
@@ -3194,8 +3045,6 @@ function poseToInches(p) {
   };
 }
 
-function getPosesInches() { return rawPoses.map(poseToInches); }
-
 function refreshBridgeOrigin() {
   const next = window.__BRIDGE_ORIGIN__ ?? null;
   if (next && next !== ORIGIN) {
@@ -3493,9 +3342,9 @@ function syncPlanningTimelineCanvasSize() {
 
 function resizePlanningTimeline() {
   if (!planningTimelineCanvas || !pctx) return;
-  renderPlanningEventTimeline();
+  planningMode.rendering.renderTimelineDom();
   syncPlanningTimelineCanvasSize();
-  planningTimelineRenderer.draw();
+  planningMode.rendering.drawTimeline();
 }
 
 // -------- field images --------
@@ -4952,7 +4801,7 @@ function requestDrawAll() {
     drawQueued = false;
     draw();
     drawTimeline();
-    planningTimelineRenderer.draw();
+    planningMode.rendering.drawTimeline();
   });
 }
 
@@ -4995,7 +4844,7 @@ function drawAxes() {
 }
 
 function drawPath() {
-  const poses = getPosesInches();
+  const poses = rawPoses.map(poseToInches);
   if (poses.length < 2) return;
   for (let i = 1; i < poses.length; i++) {
     const a = poses[i - 1], b = poses[i];
@@ -5067,7 +4916,7 @@ function waypointByIdLike(id) {
 }
 
 function selectedWaypointForOverlay() {
-  if (getAppMode() !== "viewing") return null;
+  if (modeController.getMode() !== "viewing") return null;
   const filter = waypointFilterValue();
   const overlayWaypointId = (filter !== "all" && filter !== "active")
     ? filter
@@ -5332,24 +5181,24 @@ function currentDisplayPose() {
   if (!playing && hoverTimelineTime != null) return interpolatePoseAtTime(hoverTimelineTime);
   if (!playing && trackHover?.pose) return trackHover.pose;
   if (!playing && trackLockActive && trackLockPose) return trackLockPose;
-  const poses = getPosesInches();
+  const poses = rawPoses.map(poseToInches);
   return poses[selectedIndex] || null;
 }
 
 function draw() {
   drawField();
   drawAxes();
-  if (getAppMode() === "viewing") {
+  if (modeController.getMode() === "viewing") {
     drawPath();
     viewingFieldOverlayRenderer.drawWaypointDots();
     viewingFieldOverlayRenderer.drawWatchDots();
-    if (planOverlayVisible) drawPlanningOverlay(true);
+    if (planningMode.state.isOverlayVisible()) planningMode.rendering.drawFieldOverlay(true);
     const p = currentDisplayPose();
     if (p) drawWaypointOffsetOverlay(p);
     if (p) drawRobot(p, 1.0);
   } else {
-    drawPlanningOverlay();
-    const pose = planSampleAtDist(planPlayDist);
+    planningMode.rendering.drawFieldOverlay();
+    const pose = planSampleAtDist(planningMode.playback.getPlaybackDistance());
     if (pose) {
       drawRobot(pose, 1.0);
     }
@@ -5865,21 +5714,21 @@ canvas.addEventListener("wheel", (e) => {
 }, { passive: false });
 
 canvas.addEventListener("pointerdown", (e) => {
-  if (getAppMode() === "planning") {
+  if (modeController.getMode() === "planning") {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
     if (e.button === 2) {
       // right-drag to select multiple waypoints
-      planSelecting = true;
-      planSelectRect = { x0: mx, y0: my, x1: mx, y1: my };
-      planPointerId = e.pointerId;
+      planningMode.selecting = true;
+      planningMode.selectRect = { x0: mx, y0: my, x1: mx, y1: my };
+      planningMode.pointerId = e.pointerId;
       canvas.setPointerCapture(e.pointerId);
       requestDrawAll();
       return;
     }
     if (e.button !== 0) return;
-    const hit = planHitTest(mx, my);
+    const hit = planningMode.rendering.hitTestField(mx, my);
     const thetaHit = planThetaHandleHit(mx, my);
     const nodeHit = (hit < 0 && thetaHit < 0) ? hitTestPlanFieldNodeAtClient(e.clientX, e.clientY) : null;
     if (nodeHit) {
@@ -5888,12 +5737,12 @@ canvas.addEventListener("pointerdown", (e) => {
       return;
     }
     if (thetaHit >= 0) {
-      pushPlanUndo();
-      planThetaDragging = true;
-      planThetaDragIdx = thetaHit;
-      planPointerId = e.pointerId;
-      planThetaDragBase = Array.from(planSelectedSet).map((i) => ({ i, theta: planThetaDegAt(i) }));
-      planThetaDragStart = planThetaDegAt(thetaHit);
+      planningMode.actions.pushUndo();
+      planningMode.thetaDragging = true;
+      planningMode.thetaDragIdx = thetaHit;
+      planningMode.pointerId = e.pointerId;
+      planningMode.thetaDragBase = Array.from(planningMode.selectedSet).map((i) => ({ i, theta: planThetaDegAt(i) }));
+      planningMode.thetaDragStart = planThetaDegAt(thetaHit);
       canvas.setPointerCapture(e.pointerId);
       updatePlanThetaFromPointer(thetaHit, mx, my);
       return;
@@ -5901,21 +5750,21 @@ canvas.addEventListener("pointerdown", (e) => {
     const w = screenToWorld(mx, my);
     if (hit >= 0) {
       if (e.shiftKey) {
-        planToggleSelection(hit);
+        planningMode.actions.toggleWaypointSelection(hit);
         planningSidebarRenderer.renderPlanList();
         updatePlanSelectionPanel();
         requestDrawAll();
         return;
       }
-      if (!planSelectedSet.has(hit) || planSelectedSet.size > 1) {
-        planSelectSingle(hit);
+      if (!planningMode.selectedSet.has(hit) || planningMode.selectedSet.size > 1) {
+        planningMode.actions.selectWaypoint(hit);
         planningSidebarRenderer.renderPlanList();
         updatePlanSelectionPanel();
         requestDrawAll();
       }
     } else {
-      pendingPlanCanvasClick = (isInField(w) && isPointInFieldBounds(w))
-        ? { world: w, clearMultiSelection: planSelectedSet.size > 1 }
+      planningMode.pendingCanvasClick = (isInField(w) && isPointInFieldBounds(w))
+        ? { world: w, clearMultiSelection: planningMode.selectedSet.size > 1 }
         : null;
       panArmed = true;
       isPanning = false;
@@ -5928,11 +5777,11 @@ canvas.addEventListener("pointerdown", (e) => {
       canvas.setPointerCapture(e.pointerId);
       return;
     }
-    planDragging = true;
-    planPointerId = e.pointerId;
-    planDragStart.x = w.x;
-    planDragStart.y = w.y;
-    planDragOrig = Array.from(planSelectedSet).map((i) => ({ i, x: planWaypoints[i].x, y: planWaypoints[i].y }));
+    planningMode.dragging = true;
+    planningMode.pointerId = e.pointerId;
+    planningMode.dragStart.x = w.x;
+    planningMode.dragStart.y = w.y;
+    planningMode.dragOrig = Array.from(planningMode.selectedSet).map((i) => ({ i, x: planningMode.waypoints[i].x, y: planningMode.waypoints[i].y }));
     canvas.setPointerCapture(e.pointerId);
     requestDrawAll();
     return;
@@ -5957,38 +5806,38 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 
 canvas.addEventListener("pointermove", (e) => {
-  if (getAppMode() === "planning") {
-    if (planThetaDragging && planPointerId === e.pointerId) {
+  if (modeController.getMode() === "planning") {
+    if (planningMode.thetaDragging && planningMode.pointerId === e.pointerId) {
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
-      updatePlanThetaFromPointer(planThetaDragIdx, mx, my);
+      updatePlanThetaFromPointer(planningMode.thetaDragIdx, mx, my);
       return;
     }
-    if (planSelecting && planPointerId === e.pointerId && planSelectRect) {
+    if (planningMode.selecting && planningMode.pointerId === e.pointerId && planningMode.selectRect) {
       const rect = canvas.getBoundingClientRect();
-      planSelectRect.x1 = e.clientX - rect.left;
-      planSelectRect.y1 = e.clientY - rect.top;
+      planningMode.selectRect.x1 = e.clientX - rect.left;
+      planningMode.selectRect.y1 = e.clientY - rect.top;
       planningSidebarRenderer.renderPlanList();
       updatePlanSelectionPanel();
       requestDrawAll();
       return;
     }
-    if (planDragging && planPointerId === e.pointerId) {
+    if (planningMode.dragging && planningMode.pointerId === e.pointerId) {
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
       const w = screenToWorld(mx, my);
-      const dx = w.x - planDragStart.x;
-      const dy = w.y - planDragStart.y;
-      for (const p of planDragOrig) {
+      const dx = w.x - planningMode.dragStart.x;
+      const dy = w.y - planningMode.dragStart.y;
+      for (const p of planningMode.dragOrig) {
         const nx = p.x + dx;
         const ny = p.y + dy;
-        planWaypoints[p.i].x = clampPlanCoordX(nx);
-        planWaypoints[p.i].y = clampPlanCoordY(ny);
+        planningMode.waypoints[p.i].x = clampPlanCoordX(nx);
+        planningMode.waypoints[p.i].y = clampPlanCoordY(ny);
       }
       planningSidebarRenderer.renderPlanList();
-      renderPlanningEventTimeline();
+      planningMode.rendering.renderTimelineDom();
       updatePlanSelectionPanel();
       requestDrawAll();
       return;
@@ -6027,30 +5876,30 @@ canvas.addEventListener("pointermove", (e) => {
 });
 
 function endPan(e) {
-  if (getAppMode() === "planning") {
-    if (planThetaDragging && (planPointerId === e.pointerId || planPointerId == null)) {
-      planThetaDragging = false;
-      planThetaDragIdx = -1;
-      planThetaDragBase = null;
-      try { canvas.releasePointerCapture(planPointerId ?? e.pointerId); } catch { }
-      planPointerId = null;
+  if (modeController.getMode() === "planning") {
+    if (planningMode.thetaDragging && (planningMode.pointerId === e.pointerId || planningMode.pointerId == null)) {
+      planningMode.thetaDragging = false;
+      planningMode.thetaDragIdx = -1;
+      planningMode.thetaDragBase = null;
+      try { canvas.releasePointerCapture(planningMode.pointerId ?? e.pointerId); } catch { }
+      planningMode.pointerId = null;
       planChanged();
       return;
     }
-    if (planSelecting && (planPointerId === e.pointerId || planPointerId == null)) {
-      planSelecting = false;
+    if (planningMode.selecting && (planningMode.pointerId === e.pointerId || planningMode.pointerId == null)) {
+      planningMode.selecting = false;
       planRectSelect();
       planChanged();
-      planSelectRect = null;
-      try { canvas.releasePointerCapture(planPointerId ?? e.pointerId); } catch { }
-      planPointerId = null;
+      planningMode.selectRect = null;
+      try { canvas.releasePointerCapture(planningMode.pointerId ?? e.pointerId); } catch { }
+      planningMode.pointerId = null;
       requestDrawAll();
       return;
     }
-    if (planDragging && (planPointerId === e.pointerId || planPointerId == null)) {
-      planDragging = false;
-      try { canvas.releasePointerCapture(planPointerId ?? e.pointerId); } catch { }
-      planPointerId = null;
+    if (planningMode.dragging && (planningMode.pointerId === e.pointerId || planningMode.pointerId == null)) {
+      planningMode.dragging = false;
+      try { canvas.releasePointerCapture(planningMode.pointerId ?? e.pointerId); } catch { }
+      planningMode.pointerId = null;
       planChanged();
       return;
     }
@@ -6063,27 +5912,27 @@ function endPan(e) {
   try { canvas.releasePointerCapture(panPointerId ?? e.pointerId); } catch { }
   panPointerId = null;
 
-  if (getAppMode() === "planning") {
-    const pending = pendingPlanCanvasClick;
-    pendingPlanCanvasClick = null;
+  if (modeController.getMode() === "planning") {
+    const pending = planningMode.pendingCanvasClick;
+    planningMode.pendingCanvasClick = null;
     if (e.type !== "pointercancel" && !wasPanning && pending) {
       if (pending.clearMultiSelection) {
-        planSetSelection([]);
+        planningMode.actions.clearSelection();
         planChanged();
         requestDrawAll();
         return;
       }
-      pushPlanUndo();
-      const previous = planWaypoints[planWaypoints.length - 1];
-      planWaypoints.push({
+      planningMode.actions.pushUndo();
+      const previous = planningMode.waypoints[planningMode.waypoints.length - 1];
+      planningMode.waypoints.push({
         x: clampPlanCoordX(pending.world.x),
         y: clampPlanCoordY(pending.world.y),
         theta: 0,
         speed: previous ? readPlanSpeed(previous.speed, 127) : 127,
       });
-      planSelectSingle(planWaypoints.length - 1);
+      planningMode.actions.selectWaypoint(planningMode.waypoints.length - 1);
       planChanged();
-      planDragging = false;
+      planningMode.dragging = false;
       planningSidebarRenderer.renderPlanList();
       updatePlanSelectionPanel();
       requestDrawAll();
@@ -6094,7 +5943,7 @@ function endPan(e) {
 canvas.addEventListener("pointerup", endPan);
 canvas.addEventListener("pointercancel", endPan);
 canvas.addEventListener("contextmenu", (e) => {
-  if (getAppMode() === "planning") e.preventDefault();
+  if (modeController.getMode() === "planning") e.preventDefault();
 });
 
 // -------- track hover/lock --------
@@ -6104,7 +5953,7 @@ function pickTrackPose(clientX, clientY) {
   const mx = clientX - rect.left;
   const my = clientY - rect.top;
 
-  const poses = getPosesInches();
+  const poses = rawPoses.map(poseToInches);
   if (poses.length < 2) return null;
 
   let best = { dist2: Infinity, i: -1, alpha: 0 };
@@ -6230,14 +6079,6 @@ function pause() {
   setStatus(`Paused at time ${formatNumberString((rawPoses[selectedIndex]?.t ?? 0) / 1000, 1, "0")}s`);
 }
 
-function planPause() {
-  planPlaying = false;
-  btnPlay.textContent = "▶";
-  if (planRaf) cancelAnimationFrame(planRaf);
-  planRaf = null;
-  planLastWall = null;
-}
-
 function play() {
   if (!rawPoses.length) return;
   if (window.__live && window.__live.streaming) { setStatus("Playback disabled while livestreaming."); return; }
@@ -6301,32 +6142,6 @@ function play() {
   raf = requestAnimationFrame(tick);
 }
 
-function planPlay() {
-  if (planWaypoints.length < 2) return;
-  const total = planTotalLength();
-  if (planPlayDist >= total) {
-    planPlayDist = 0;
-    setPlanDist(planPlayDist);
-  }
-  planPlaying = true;
-  btnPlay.textContent = "⏸";
-  planLastWall = performance.now();
-  const tick = (now) => {
-    if (!planPlaying) return;
-    const dtWall = (now - planLastWall) / 1000;
-    planLastWall = now;
-    const total = planTotalLength();
-    const planSpeed = getPlanSpeedUnitsPerSecAtDist(planPlayDist);
-    planPlayDist += dtWall * planSpeed * (playRate / 2);
-    if (planPlayDist >= total) {
-      planPlayDist = total;
-      planPause();
-    } else planRaf = requestAnimationFrame(tick);
-    setPlanDist(planPlayDist);
-  };
-  planRaf = requestAnimationFrame(tick);
-}
-
 // -------- timeline interactions --------
 function timelineMousePos(e) {
   const rect = timelineCanvas.getBoundingClientRect();
@@ -6339,7 +6154,7 @@ function isInsideTimelineC(cursor) {
   const y = (typeof cursor.clientY === "number") ? cursor.clientY : cursor.y;
   if (typeof x !== "number" || typeof y !== "number") return false;
 
-  const isPlanning = getAppMode() === "planning";
+  const isPlanning = modeController.getMode() === "planning";
   const canvasEl = isPlanning ? planningTimelineCanvas : timelineCanvas;
   if (!canvasEl) return false;
   if (!isPlanning && timelineBar?.classList.contains("isCollapsed")) return false;
@@ -6433,25 +6248,25 @@ if (planningTimelineCanvas) {
   const onPlanScrub = (e) => {
     const rect = planningTimelineCanvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    setPlanDist(planDistFromX(x));
+    planningMode.playback.setDistance(planDistFromX(x));
   };
   planningTimelineCanvas.addEventListener("pointerdown", (e) => {
-    if (getAppMode() !== "planning") return;
-    planScrubbing = true;
+    if (modeController.getMode() !== "planning") return;
+    planningMode.scrubbing = true;
     planningTimelineCanvas.setPointerCapture(e.pointerId);
     onPlanScrub(e);
   });
   planningTimelineCanvas.addEventListener("pointermove", (e) => {
-    if (!planScrubbing) return;
+    if (!planningMode.scrubbing) return;
     onPlanScrub(e);
   });
   planningTimelineCanvas.addEventListener("pointerup", (e) => {
-    if (!planScrubbing) return;
-    planScrubbing = false;
+    if (!planningMode.scrubbing) return;
+    planningMode.scrubbing = false;
     try { planningTimelineCanvas.releasePointerCapture(e.pointerId); } catch { }
   });
   planningTimelineCanvas.addEventListener("pointercancel", () => {
-    planScrubbing = false;
+    planningMode.scrubbing = false;
   });
 }
 
@@ -6461,23 +6276,23 @@ canvas.addEventListener("mousemove", (e) => {
 });
 
 canvas.addEventListener("mousemove", (e) => {
-  if (getAppMode() === "planning") {
+  if (modeController.getMode() === "planning") {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
-    const waypointHit = planHitTest(mx, my) >= 0;
+    const waypointHit = planningMode.rendering.hitTestField(mx, my) >= 0;
     const thetaHandleHit = planThetaHandleHit(mx, my) >= 0;
     const nodeHit = (!waypointHit && !thetaHandleHit) ? hitTestPlanFieldNodeAtClient(e.clientX, e.clientY) : null;
     if (nodeHit) {
-      if (planFieldHoverNodeId !== nodeHit.node.id) {
-        planFieldHoverNodeId = nodeHit.node.id;
+      if (planningMode.fieldHoverNodeId !== nodeHit.node.id) {
+        planningMode.fieldHoverNodeId = nodeHit.node.id;
         requestDrawAll();
       }
       canvas.style.cursor = "pointer";
-      updatePlanNodeTooltip(nodeHit.tooltipText, e.clientX, e.clientY);
+      updatePlanNodeTooltip(nodeHit.tooltipText, e.clientX, e.clientY, !!nodeHit.method?.hasOverride);
     } else {
-      const hadHover = planFieldHoverNodeId != null;
-      planFieldHoverNodeId = null;
+      const hadHover = planningMode.fieldHoverNodeId != null;
+      planningMode.fieldHoverNodeId = null;
       canvas.style.cursor = "";
       hidePlanNodeTooltip();
       if (hadHover) requestDrawAll();
@@ -6531,9 +6346,9 @@ canvas.addEventListener("mousemove", (e) => {
 
 canvas.addEventListener("mouseleave", () => {
   setCursorPills("Cursor: —");
-  if (getAppMode() === "planning") {
-    const hadHover = planFieldHoverNodeId != null;
-    planFieldHoverNodeId = null;
+  if (modeController.getMode() === "planning") {
+    const hadHover = planningMode.fieldHoverNodeId != null;
+    planningMode.fieldHoverNodeId = null;
     hidePlanNodeTooltip({ immediate: true });
     canvas.style.cursor = "";
     if (hadHover) requestDrawAll();
@@ -6553,7 +6368,7 @@ canvas.addEventListener("mouseleave", () => {
 });
 
 canvas.addEventListener("click", (e) => {
-  if (getAppMode() === "planning") return;
+  if (modeController.getMode() === "planning") return;
   if (!data) return;
   if (suppressNextClick) { suppressNextClick = false; return; }
 
@@ -6632,11 +6447,11 @@ canvas.addEventListener("click", (e) => {
 });
 
 canvas.addEventListener("dblclick", (e) => {
-  if (getAppMode() !== "planning") return;
+  if (modeController.getMode() !== "planning") return;
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
-  if (planHitTest(mx, my) >= 0 || planThetaHandleHit(mx, my) >= 0) return;
+  if (planningMode.rendering.hitTestField(mx, my) >= 0 || planThetaHandleHit(mx, my) >= 0) return;
   const nodeHit = hitTestPlanFieldNodeAtClient(e.clientX, e.clientY);
   if (!nodeHit) return;
   e.preventDefault();
@@ -7306,7 +7121,7 @@ if (btnFit) {
 // Initialize UI on load
 leftSetUI("");
 planningSidebarRenderer.renderPlanObjects();
-renderPlanningEventTimeline();
+planningMode.rendering.renderTimelineDom();
 
 
 function getTimelineH() {
@@ -7381,7 +7196,7 @@ function isPlanningTimelineCollapsed() {
   vSplit.addEventListener("mousedown", (e) => {
     draggingV = true;
     startX = e.clientX;
-    startW = (getAppMode() === "planning") ? getRightSidebarWPlanning() : getRightSidebarWViewing();
+    startW = (modeController.getMode() === "planning") ? getRightSidebarWPlanning() : getRightSidebarWViewing();
     document.body.style.cursor = "col-resize";
     e.preventDefault();
   });
@@ -7428,7 +7243,7 @@ function isPlanningTimelineCollapsed() {
 
   if (planningTimelineSplit) {
     planningTimelineSplit.addEventListener("mousedown", (e) => {
-      if (getAppMode() !== "planning") return;
+      if (modeController.getMode() !== "planning") return;
       draggingPlanningTimeline = true;
       startPlanningTimelineY = e.clientY;
       startPlanningTimelineH = getPlanningTimelineH();
@@ -7447,7 +7262,7 @@ function isPlanningTimelineCollapsed() {
 
   if (planSplit) {
     planSplit.addEventListener("mousedown", (e) => {
-      if (getAppMode() !== "planning") return;
+      if (modeController.getMode() !== "planning") return;
       draggingPlanList = true;
       startPlanY = e.clientY;
       startPlanH = getPlanListH();
@@ -7483,10 +7298,10 @@ function isPlanningTimelineCollapsed() {
 
       if (next <= COLLAPSE_PX_SIDEBAR) {
         next = 0;
-        if (getAppMode() === "planning") rightPlanningEl?.classList?.add("isCollapsed");
+        if (modeController.getMode() === "planning") rightPlanningEl?.classList?.add("isCollapsed");
         else rightViewingEl?.classList?.add("isCollapsed");
       } else {
-        if (getAppMode() === "planning") {
+        if (modeController.getMode() === "planning") {
           rightPlanningEl?.classList?.remove("isCollapsed");
           layoutState.lastRightSidebarWPlanning = next;
         } else {
@@ -7494,7 +7309,7 @@ function isPlanningTimelineCollapsed() {
           layoutState.lastRightSidebarW = next;
         }
       }
-      if (getAppMode() === "planning") setRightSidebarWPlanning(next);
+      if (modeController.getMode() === "planning") setRightSidebarWPlanning(next);
       else setRightSidebarWViewing(next);
       resizeCanvas();
       resizeTimeline();
@@ -7553,13 +7368,13 @@ function isPlanningTimelineCollapsed() {
       draggingPlanningTimeline = false;
       document.body.style.cursor = "";
       // If user re-expands from collapsed by dragging, restore visibility automatically
-      if (getAppMode() === "planning") {
+      if (modeController.getMode() === "planning") {
         if (getRightSidebarWPlanning() > COLLAPSE_PX_SIDEBAR) rightPlanningEl?.classList?.remove("isCollapsed");
       } else {
         if (getRightSidebarWViewing() > COLLAPSE_PX_SIDEBAR) rightViewingEl?.classList?.remove("isCollapsed");
       }
       if (getTimelineH() > COLLAPSE_PX_TIMELINE) timelineBar.classList.remove("isCollapsed");
-      if (getAppMode() === "planning" && !isPlanningTimelineCollapsed()) timelineBar?.classList?.remove("isCollapsed");
+      if (modeController.getMode() === "planning" && !isPlanningTimelineCollapsed()) timelineBar?.classList?.remove("isCollapsed");
       resizeCanvas();
       resizeTimeline();
       void saveSettings();
@@ -7584,7 +7399,7 @@ function isPlanningTimelineCollapsed() {
   });
 
   vSplit.addEventListener("dblclick", () => {
-    if (getAppMode() === "planning") {
+    if (modeController.getMode() === "planning") {
       const cur = getRightSidebarWPlanning();
       if (cur <= COLLAPSE_PX_SIDEBAR) {
         setRightSidebarWPlanning(Math.max(1, layoutState.lastRightSidebarWPlanning || 360));
@@ -7646,7 +7461,7 @@ function setData(obj, options = {}) {
   }
 
   if (replacePlanning) {
-    applyImportedPlanningData(obj);
+    planningMode.loadImportedData(obj);
   }
 
   if (replaceViewing) {
@@ -7662,15 +7477,7 @@ function setData(obj, options = {}) {
 }
 
 function setDataFromStreamText(text) {
-  planWaypoints = [];
-  planObjects = [];
-  planNodes = [];
-  clearPlanNodeSelection();
-  planningSidebarRenderer.renderPlanObjects();
-  renderPlanningEventTimeline();
-  normalizePlanningTimelineHeightForContent();
-  planSetSelection([]);
-  planPlayDist = 0;
+  planningMode.clear();
   rawPoses = createPoseStore();
   watches = [];
   logs = [];
@@ -7718,7 +7525,7 @@ function normalizePoseArray(arr) {
 }
 
 function hasLoadedData() {
-  return rawPoses.length > 0 || watches.length > 0 || logs.length > 0 || waypoints.length > 0 || planWaypoints.length > 0 || planObjects.length > 0;
+  return rawPoses.length > 0 || watches.length > 0 || logs.length > 0 || waypoints.length > 0 || planningMode.state.hasData();
 }
 
 function finalizeLoadedData() {
@@ -7975,8 +7782,7 @@ async function loadSettings() {
         settingsPlanLimitBounds.checked = !!settings.planLimitBounds;
       }
       if (settings.planExportTemplate !== undefined) {
-        const savedTemplate = String(settings.planExportTemplate || "");
-        planExportTemplate = savedTemplate.trim() ? savedTemplate : DEFAULT_PLAN_EXPORT_TEMPLATE;
+        planningMode.actions.setExportTemplate(settings.planExportTemplate);
       }
       if (settings.refreshIntervalMs !== undefined && leftRefreshIntervalEl) {
         leftRefreshIntervalEl.value = String(settings.refreshIntervalMs);
@@ -8113,7 +7919,7 @@ async function saveSettings() {
       planSnapStep: settingsPlanSnapStep ? settingsPlanSnapStep.value : "0",
       planThetaSnapStep: settingsPlanThetaSnapStep ? settingsPlanThetaSnapStep.value : "0",
       planLimitBounds: settingsPlanLimitBounds ? settingsPlanLimitBounds.checked : true,
-      planExportTemplate,
+      planExportTemplate: planningMode.state.getExportTemplate(),
       refreshIntervalMs: leftRefreshIntervalEl ? leftRefreshIntervalEl.value : "0",
       liveDebug: settingsLiveDebug ? settingsLiveDebug.checked : liveDebugEnabled,
       showPreviousYearFields,
@@ -8437,9 +8243,9 @@ function buildExportMetadata(PathName) {
       LogCount: logs.length,
       WaypointCount: waypoints.length,
       WaypointEvents: waypointEventCount(waypoints),
-      PlannedWaypointCount: planWaypoints.length,
-      PlannedObjectCount: planObjects.length,
-      PlannedNodeCount: planNodes.length,
+      PlannedWaypointCount: planningMode.state.getWaypointCount(),
+      PlannedObjectCount: planningMode.state.getObjectCount(),
+      PlannedNodeCount: planningMode.state.getNodeCount(),
     },
     Times: {
       StartTime: String(fmtNum(poseStart / 1000, 2)) + "s",
@@ -8476,7 +8282,7 @@ function hasViewingExportData() {
 }
 
 function hasPlanningExportData() {
-  return planWaypoints.length > 0 || planObjects.length > 0 || planNodes.length > 0;
+  return planningMode.state.hasData();
 }
 
 function hasAnyExportData() {
@@ -8496,20 +8302,21 @@ function buildExportPayload() {
   const includeViewing = exportType === "viewing" || exportType === "both";
   const includePlanning = exportType === "planning" || exportType === "both";
   if (includePlanning) pruneInvalidPlanNodes();
+  const planningExport = planningMode.getExportData();
 
   const payload = {
     meta: buildExportMetadata(pathName),
   };
 
   if (includePlanning) {
-    payload["planned-path"] = planWaypoints.map((p) => ({
+    payload["planned-path"] = planningExport.waypoints.map((p) => ({
       x: p.x,
       y: p.y,
       theta: p.theta ?? 0,
       speed: readPlanSpeed(p.speed, 127),
     }));
-    payload["planned-export-template"] = planExportTemplate;
-    payload["planned-objects"] = planObjects.map((obj) => ({
+    payload["planned-export-template"] = planningExport.template;
+    payload["planned-objects"] = planningExport.objects.map((obj) => ({
       id: obj.id,
       name: obj.name,
       color: obj.color || null,
@@ -8520,7 +8327,7 @@ function buildExportPayload() {
         code: method.code,
       })),
     }));
-    payload["planned-nodes"] = planNodes.map(serializePlanNode);
+    payload["planned-nodes"] = planningExport.nodes.map(serializePlanNode);
   }
 
   if (includeViewing) {
@@ -8892,14 +8699,14 @@ if (btnExportConfirm) {
       setStatus(`Exported ${pendingExportRequest.filename}.`);
       const includesPlanning = pendingExportRequest.exportType === "planning" || pendingExportRequest.exportType === "both";
       const includesViewing = pendingExportRequest.exportType === "viewing" || pendingExportRequest.exportType === "both";
-      void exportTelemetry.motionviewJsonExported(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
+      void exportTelemetry.motionviewJsonExported(planningMode.telemetry.getTelemetryProperties({
         export_type: pendingExportRequest.exportType,
         includes_planning: includesPlanning,
         includes_viewing: includesViewing,
         export_location: pendingExportRequest.destination.kind,
         exported_chars: pendingExportRequest.json.length,
         exported_bytes: getUtf8ByteLength(pendingExportRequest.json),
-        exported_planning_template_bytes: includesPlanning ? getUtf8ByteLength(planExportTemplate) : 0,
+        exported_planning_template_bytes: includesPlanning ? getUtf8ByteLength(planningMode.state.getExportTemplate()) : 0,
         exported_viewing_poses: includesViewing ? rawPoses.length : 0,
         exported_viewing_watches: includesViewing ? watches.length : 0,
         exported_viewing_logs: includesViewing ? logs.length : 0,
@@ -9007,9 +8814,9 @@ if (planObjectDeleteModal) {
   });
 }
 
-if (modeViewingBtn) modeViewingBtn.addEventListener("click", () => setMode("viewing"));
+if (modeViewingBtn) modeViewingBtn.addEventListener("click", () => modeController.setMode("viewing"));
 
-if (modePlanningBtn) modePlanningBtn.addEventListener("click", () => setMode("planning"));
+if (modePlanningBtn) modePlanningBtn.addEventListener("click", () => modeController.setMode("planning"));
 
 if (btnPlanEditTemplate) {
   btnPlanEditTemplate.addEventListener("click", () => {
@@ -9040,7 +8847,7 @@ if (planObjectListEl) {
       cancelPlanObjectNameEdit();
       const objectId = colorBtn.getAttribute("data-object-id") || "";
       if (!objectId) return;
-      planOpenColorPickerObjectId = planOpenColorPickerObjectId === objectId ? null : objectId;
+      planningMode.actions.toggleObjectColorPicker(objectId);
       planningSidebarRenderer.renderPlanObjects();
       return;
     }
@@ -9071,7 +8878,7 @@ if (planObjectListEl) {
     const objectId = e.target.getAttribute("data-object-id") || "";
     if (!objectId) return;
     setPlanObjectColor(objectId, e.target.value);
-    planOpenColorPickerObjectId = objectId;
+    planningMode.actions.openObjectColorPicker(objectId);
   };
 }
 
@@ -9088,7 +8895,7 @@ function isClientInsidePlanningSidebar(clientX, clientY) {
 }
 
 function hasValidPlanTimelineDropTarget() {
-  return !!planTimelineDropTarget && getAppMode() === "planning" && planWaypoints.length >= 2;
+  return planningMode.state.hasTimelineDropTarget() && modeController.getMode() === "planning" && planningMode.state.getWaypointCount() >= 2;
 }
 
 function commitPlanTimelineDragTarget(context, target) {
@@ -9102,7 +8909,7 @@ function commitPlanTimelineDragTarget(context, target) {
   if (!node) return null;
   savePlanTimelineUi();
   selectPlanNode(node.id, { scrollSidebar: true });
-  void (context.source === "sidebar" ? planningTelemetry.timelineNodeCreated : planningTelemetry.timelineNodeMoved).call(planningTelemetry, getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
+  void (context.source === "sidebar" ? planningTelemetry.timelineNodeCreated : planningTelemetry.timelineNodeMoved).call(planningTelemetry, planningMode.telemetry.getTelemetryProperties({
     before_waypoint: node.beforeWaypoint,
     node_index: node.index,
   }));
@@ -9126,7 +8933,7 @@ function beginPlanPointerDrag({
   startY,
 }) {
   hidePlanNodeTooltip({ immediate: true });
-  planPointerDragState = {
+  planningMode.pointerDragState = {
     mode: "pending",
     source,
     objectId,
@@ -9140,7 +8947,7 @@ function beginPlanPointerDrag({
 }
 
 function ensurePlanPointerDragStarted(clientX, clientY) {
-  const state = planPointerDragState;
+  const state = planningMode.pointerDragState;
   if (!state || state.mode === "dragging") return state;
   if (Math.hypot(clientX - state.startX, clientY - state.startY) < PLAN_POINTER_DRAG_THRESHOLD_PX) return state;
   state.mode = "dragging";
@@ -9153,12 +8960,12 @@ function ensurePlanPointerDragStarted(clientX, clientY) {
 }
 
 function updatePlanPointerDrag(clientX, clientY) {
-  const state = planPointerDragState;
+  const state = planningMode.pointerDragState;
   if (!state) return;
   ensurePlanPointerDragStarted(clientX, clientY);
   if (state.mode !== "dragging") return;
   positionPlanMethodDragGhost(state.ghost, clientX, clientY);
-  if (planWaypoints.length >= 2 && isClientInsidePlanningTimelineViewport(clientX, clientY)) {
+  if (planningMode.state.getWaypointCount() >= 2 && isClientInsidePlanningTimelineViewport(clientX, clientY)) {
     if (planningTimelineViewport) {
       const rect = planningTimelineViewport.getBoundingClientRect();
       if (clientX < rect.left + 40) planningTimelineViewport.scrollLeft -= 10;
@@ -9171,17 +8978,17 @@ function updatePlanPointerDrag(clientX, clientY) {
 }
 
 function finishPlanPointerDrag(clientX, clientY) {
-  const state = planPointerDragState;
+  const state = planningMode.pointerDragState;
   if (!state) return;
   hidePlanNodeTooltip({ immediate: true });
   if (state.mode === "dragging") {
-    if (planWaypoints.length >= 2 && hasValidPlanTimelineDropTarget()) {
+    if (planningMode.state.getWaypointCount() >= 2 && hasValidPlanTimelineDropTarget()) {
       commitPlanTimelineDragTarget({
         source: state.source,
         objectId: state.objectId,
         methodId: state.methodId,
         nodeId: state.nodeId,
-      }, planTimelineDropTarget);
+      }, planningMode.state.getTimelineDropTarget());
     } else if (state.source === "node" && isClientInsidePlanningSidebar(clientX, clientY) && state.nodeId) {
       removePlanNode(state.nodeId);
     }
@@ -9190,7 +8997,7 @@ function finishPlanPointerDrag(clientX, clientY) {
   state.sourceEl?.classList?.remove("isDragging");
   document.body.style.cursor = "";
   document.body.style.userSelect = "";
-  planPointerDragState = null;
+  planningMode.pointerDragState = null;
   clearPlanTimelineDropTarget();
 }
 
@@ -9198,7 +9005,7 @@ if (planningEventTimelineEl) {
   planningEventTimelineEl.addEventListener("click", (e) => {
     if (e.target instanceof Element && e.target.closest(".planningTimelineNode")) return;
     clearPlanNodeSelection();
-    renderPlanningEventTimeline();
+    planningMode.rendering.renderTimelineDom();
     planningSidebarRenderer.renderPlanObjects();
     syncPlanObjectLatestValues();
   });
@@ -9216,9 +9023,9 @@ if (window.__motionViewPlanColorMousedownHandler) {
   document.removeEventListener("mousedown", window.__motionViewPlanColorMousedownHandler, true);
 }
 window.__motionViewPlanColorMousedownHandler = (e) => {
-  if (!planOpenColorPickerObjectId) return;
+  if (!planningMode.state.hasOpenObjectColorPicker()) return;
   if (e.target instanceof Element && e.target.closest(".planObjectColorWrap")) return;
-  planOpenColorPickerObjectId = null;
+  planningMode.actions.closeObjectColorPicker();
   planningSidebarRenderer.renderPlanObjects();
 };
 document.addEventListener("mousedown", window.__motionViewPlanColorMousedownHandler, true);
@@ -9237,11 +9044,12 @@ if (btnPlanObjectDeleteConfirm) {
 
 if (btnPlanCopyCode) {
   btnPlanCopyCode.addEventListener("click", async () => {
+    const planningExport = planningMode.getExportData();
     const code = buildPlanExportCode({
-      template: planExportTemplate,
-      waypoints: planWaypoints,
-      nodes: planNodes,
-      objects: planObjects,
+      template: planningExport.template,
+      waypoints: planningExport.waypoints,
+      nodes: planningExport.nodes,
+      objects: planningExport.objects,
       readPlanSpeed,
       formatTemplateNumber,
       planThetaDegAt,
@@ -9253,8 +9061,9 @@ if (btnPlanCopyCode) {
     }
     try {
       await copyTextToClipboard(code);
-      setStatus(`Copied generated code for ${planWaypoints.length} waypoint${planWaypoints.length === 1 ? "" : "s"}.`);
-      void planningTelemetry.templateExported(getPlanningTelemetryProperties(planWaypoints, planObjects, planNodes, planExportTemplate, {
+      const waypointCount = planningMode.state.getWaypointCount();
+      setStatus(`Copied generated code for ${waypointCount} waypoint${waypointCount === 1 ? "" : "s"}.`);
+      void planningTelemetry.templateExported(planningMode.telemetry.getTelemetryProperties({
         export_surface: "clipboard",
         exported_chars: code.length,
         exported_bytes: getUtf8ByteLength(code),
@@ -9723,9 +9532,9 @@ document.addEventListener("pointercancel", () => {
 });
 
 btnPlay.addEventListener("click", () => {
-  if (getAppMode() === "planning") {
-    if (planPlaying) planPause();
-    else planPlay();
+  if (modeController.getMode() === "planning") {
+    if (planningMode.playback.isPlaying()) planningMode.playback.pause();
+    else planningMode.playback.play();
     requestDrawAll();
     return;
   }
@@ -9736,14 +9545,14 @@ btnPlay.addEventListener("click", () => {
 
 if (btnTogglePlanOverlay) {
   btnTogglePlanOverlay.addEventListener("click", () => {
-    planOverlayVisible = !planOverlayVisible;
-    btnTogglePlanOverlay.classList.toggle("isOn", planOverlayVisible);
+    const visible = planningMode.actions.toggleOverlay();
+    btnTogglePlanOverlay.classList.toggle("isOn", visible);
     requestDrawAll();
     viewingTelemetry.planOverlayToggled({
-      enabled: planOverlayVisible,
+      enabled: visible,
     }).catch(err => console.error(err));
   });
-  btnTogglePlanOverlay.classList.toggle("isOn", planOverlayVisible);
+  btnTogglePlanOverlay.classList.toggle("isOn", planningMode.state.isOverlayVisible());
 }
 
 speedSelect.addEventListener("change", () => {
@@ -9861,13 +9670,13 @@ function bindPlanField(el, getter, setter) {
   el.addEventListener("focus", () => {
     // capture last known good value before edits
     el.dataset.lastValid = el.dataset.lastValid ?? String(getter());
-    if (getAppMode() === "planning" && planSelected >= 0 && planSelected < planWaypoints.length && !el.dataset.undoSession) {
-      pushPlanUndo();
+    if (modeController.getMode() === "planning" && planningMode.state.getSelectedWaypoint() && !el.dataset.undoSession) {
+      planningMode.actions.pushUndo();
       el.dataset.undoSession = "1";
     }
   });
   el.addEventListener("input", () => {
-    if (planSelected < 0 || planSelected >= planWaypoints.length) return;
+    if (!planningMode.state.getSelectedWaypoint()) return;
     if (el.value.trim() === "") return; // allow clearing while typing
     const v = Number(el.value);
     if (!isFinite(v)) return;
@@ -9876,7 +9685,7 @@ function bindPlanField(el, getter, setter) {
     requestDrawAll();
   });
   el.addEventListener("blur", () => {
-    if (planSelected < 0 || planSelected >= planWaypoints.length) return;
+    if (!planningMode.state.getSelectedWaypoint()) return;
     const v = Number(el.value);
     if (!isFinite(v) || el.value.trim() === "") {
       const last = el.dataset.lastValid ?? String(getter());
@@ -9902,23 +9711,23 @@ function clampDigits(el, maxDigits) {
 
 bindPlanField(
   planSelXEl,
-  () => fmtNum(planWaypoints[planSelected]?.x ?? 0, 2),
-  (v) => { planWaypoints[planSelected].x = clampPlanCoordX(v); }
+  () => fmtNum(planningMode.state.getSelectedWaypoint()?.x ?? 0, 2),
+  (v) => { planningMode.actions.updateSelectedWaypointField("x", clampPlanCoordX(v)); }
 );
 bindPlanField(
   planSelYEl,
-  () => fmtNum(planWaypoints[planSelected]?.y ?? 0, 2),
-  (v) => { planWaypoints[planSelected].y = clampPlanCoordY(v); }
+  () => fmtNum(planningMode.state.getSelectedWaypoint()?.y ?? 0, 2),
+  (v) => { planningMode.actions.updateSelectedWaypointField("y", clampPlanCoordY(v)); }
 );
 bindPlanField(
   planSelThetaEl,
-  () => fmtNum(planThetaDegAt(planSelected), 1),
-  (v) => { planWaypoints[planSelected].theta = planThetaDisplayToRaw(v); }
+  () => fmtNum(planThetaDegAt(planningMode.state.getSelectedWaypointIndex()), 1),
+  (v) => { planningMode.actions.updateSelectedWaypointField("theta", planThetaDisplayToRaw(v)); }
 );
 bindPlanField(
   planSelSpeedEl,
-  () => fmtNum(readPlanSpeed(planWaypoints[planSelected]?.speed, 127), 0),
-  (v) => { planWaypoints[planSelected].speed = clampPlanSpeed(v); }
+  () => fmtNum(readPlanSpeed(planningMode.state.getSelectedWaypoint()?.speed, 127), 0),
+  (v) => { planningMode.actions.updateSelectedWaypointField("speed", clampPlanSpeed(v)); }
 );
 
 if (planSelXEl) {
@@ -9930,10 +9739,10 @@ if (planSelYEl) {
 if (planSelThetaEl) {
   planSelThetaEl.addEventListener("input", () => clampDigits(planSelThetaEl, 3));
   planSelThetaEl.addEventListener("blur", () => {
-    if (planSelected < 0 || planSelected >= planWaypoints.length) return;
+    if (!planningMode.state.getSelectedWaypoint()) return;
     const v = Number(planSelThetaEl.value);
     if (isFinite(v)) {
-      planWaypoints[planSelected].theta = planThetaDisplayToRaw(v);
+      planningMode.actions.updateSelectedWaypointField("theta", planThetaDisplayToRaw(v));
       updatePlanSelectionPanel();
       requestDrawAll();
     }
@@ -9942,10 +9751,10 @@ if (planSelThetaEl) {
 if (planSelSpeedEl) {
   planSelSpeedEl.addEventListener("input", () => clampDigits(planSelSpeedEl, 3));
   planSelSpeedEl.addEventListener("blur", () => {
-    if (planSelected < 0 || planSelected >= planWaypoints.length) return;
+    if (!planningMode.state.getSelectedWaypoint()) return;
     const v = Number(planSelSpeedEl.value);
     if (isFinite(v)) {
-      planWaypoints[planSelected].speed = clampPlanSpeed(v);
+      planningMode.actions.updateSelectedWaypointField("speed", clampPlanSpeed(v));
       updatePlanSelectionPanel();
       requestDrawAll();
     }
@@ -10031,12 +9840,12 @@ btnClearField?.addEventListener("click", (event) => {
     const clearAll = () => {
       clearAllPosesAndWatches();
       resetLiveWin();
-      if (getAppMode() === "planning") pushPlanUndo();
-      clearPlanningModeData();
+      if (modeController.getMode() === "planning") planningMode.actions.pushUndo();
+      planningMode.clear();
       requestDrawAll();
       setStatus("Cleared Field and Planned Path");
     };
-    if (getAppMode() === "planning" && hasAnyPlanMethods()) {
+    if (modeController.getMode() === "planning" && hasAnyPlanMethods()) {
       openPlanDangerConfirmModal("Are you sure you want to clear the field and Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearAll);
       return;
     }
@@ -10044,10 +9853,10 @@ btnClearField?.addEventListener("click", (event) => {
     return;
   }
 
-  if (getAppMode() === "planning") {
+  if (modeController.getMode() === "planning") {
     const clearPlanOnly = () => {
-      pushPlanUndo();
-      clearPlanningModeData();
+      planningMode.actions.pushUndo();
+      planningMode.clear();
       requestDrawAll();
       setStatus("Cleared Planned Path");
     };
@@ -10069,12 +9878,13 @@ function handleGlobalKeydown(e) {
   const isTypingTarget = (mouseTag === "input" || mouseTag === "textarea" || (e.target && e.target.isContentEditable));
   if (isTypingTarget && e.target !== liveWinEl) return;
 
-  if (getAppMode() === "planning" && planSelectedNodeId && (e.key === "Backspace" || e.key === "Delete")) {
+  const selectedPlanNodeId = planningMode.state.getSelectedNodeId();
+  if (modeController.getMode() === "planning" && selectedPlanNodeId && (e.key === "Backspace" || e.key === "Delete")) {
     const planTemplateOpen = planTemplateModal && planTemplateModal.style.display !== "none" && !planTemplateModal.hasAttribute("hidden");
     const planObjectDeleteOpen = planObjectDeleteModal && planObjectDeleteModal.style.display !== "none" && !planObjectDeleteModal.hasAttribute("hidden");
     if (!planTemplateOpen && !planObjectDeleteOpen) {
       e.preventDefault();
-      removePlanNode(planSelectedNodeId);
+      removePlanNode(selectedPlanNodeId);
       return;
     }
   }
@@ -10082,13 +9892,13 @@ function handleGlobalKeydown(e) {
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
     if (e.key === "1") {
       e.preventDefault();
-      setMode("viewing");
+      modeController.setMode("viewing");
       return;
     }
 
     if (e.key === "2") {
       e.preventDefault();
-      setMode("planning");
+      modeController.setMode("planning");
       return;
     }
 
@@ -10099,7 +9909,7 @@ function handleGlobalKeydown(e) {
     }
 
     if (e.key === "r" || e.key === "R") {
-      if (getAppMode() !== "viewing") return;
+      if (modeController.getMode() !== "viewing") return;
       e.preventDefault();
       btnLeftRefresh?.click();
       return;
@@ -10107,14 +9917,14 @@ function handleGlobalKeydown(e) {
 
     if (e.key === "c" || e.key === "C") {
       e.preventDefault();
-      if (getAppMode() !== "viewing") return;
+      if (modeController.getMode() !== "viewing") return;
       if (leftConnected) void disconnectLeft();
       else void connectLeft();
       return;
     }
     if (e.key === "s" || e.key === "S") {
       e.preventDefault();
-      if (getAppMode() !== "viewing") return;
+      if (modeController.getMode() !== "viewing") return;
 
       if (leftConnected) {
         if (!leftStreaming) void startStreaming();
@@ -10125,10 +9935,10 @@ function handleGlobalKeydown(e) {
 
     if (e.key === "k" || e.key === "K") {
       e.preventDefault();
-      if (getAppMode() === "planning") {
+      if (modeController.getMode() === "planning") {
         const clearPlanOnly = () => {
-          pushPlanUndo();
-          clearPlanningModeData();
+          planningMode.actions.pushUndo();
+          planningMode.clear();
           requestDrawAll();
           setStatus("Cleared Planned Path");
         };
@@ -10152,8 +9962,8 @@ function handleGlobalKeydown(e) {
     const clearAll = () => {
       clearAllPosesAndWatches();
       resetLiveWin();
-      if (getAppMode() === "planning") pushPlanUndo();
-      clearPlanningModeData();
+      if (modeController.getMode() === "planning") planningMode.actions.pushUndo();
+      planningMode.clear();
       requestDrawAll();
       setStatus("Cleared Field and Planned Path");
     };
@@ -10168,7 +9978,7 @@ function handleGlobalKeydown(e) {
   if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
     if (e.key === "p" || e.key === "P") {
       e.preventDefault();
-      if (getAppMode() === "viewing" && btnTogglePlanOverlay) btnTogglePlanOverlay.click();
+      if (modeController.getMode() === "viewing" && btnTogglePlanOverlay) btnTogglePlanOverlay.click();
       return;
     }
 
@@ -10179,7 +9989,7 @@ function handleGlobalKeydown(e) {
 
     if (e.key === "g" || e.key === "G") {
       e.preventDefault();
-      if (getAppMode() !== "viewing") return;
+      if (modeController.getMode() !== "viewing") return;
       toggleCurrentWatchGraphPanel();
       return;
     }
@@ -10197,40 +10007,36 @@ function handleGlobalKeydown(e) {
     return;
   }
 
-  if (getAppMode() === "planning") {
+  if (modeController.getMode() === "planning") {
     if ((e.metaKey || e.ctrlKey) && !e.altKey) {
       if (!e.shiftKey && (e.key === "z" || e.key === "Z")) {
         e.preventDefault();
-        planUndo();
+        planningMode.actions.undo();
         return;
       }
       if (e.shiftKey && (e.key === "z" || e.key === "Z")) {
         e.preventDefault();
-        planRedo();
+        planningMode.actions.redo();
         return;
       }
     }
     if (e.code === "Space") {
       e.preventDefault();
-      if (planPlaying) planPause();
-      else planPlay();
+      if (planningMode.playback.isPlaying()) planningMode.playback.pause();
+      else planningMode.playback.play();
       requestDrawAll();
       return;
     }
-    if ((e.key === "Delete" || e.key === "Backspace") && planSelectedSet.size) {
+    if ((e.key === "Delete" || e.key === "Backspace") && planningMode.state.getSelectedWaypointCount() > 0) {
       e.preventDefault();
-      pushPlanUndo();
-      const toRemove = Array.from(planSelectedSet).sort((a, b) => b - a);
-      for (const idx of toRemove) {
-        if (idx >= 0 && idx < planWaypoints.length) planWaypoints.splice(idx, 1);
-      }
-      planSetSelection([]);
+      planningMode.actions.pushUndo();
+      planningMode.actions.deleteSelectedWaypoints();
       planChanged();
       requestDrawAll();
       return;
     }
     const step = getPlanMoveStepIn();
-    if (planSelectedSet.size) {
+    if (planningMode.state.getSelectedWaypointCount() > 0) {
       let dx = 0, dy = 0;
       if (e.key === "ArrowLeft" && e.shiftKey) dx = -step * 5;
       else if (e.key === "ArrowLeft") dx = -step;
@@ -10246,18 +10052,13 @@ function handleGlobalKeydown(e) {
 
       if (dx !== 0 || dy !== 0) {
         e.preventDefault();
-        pushPlanUndo();
+        planningMode.actions.pushUndo();
         // Adjust movement for field rotation so arrows follow screen directions.
         const c = fieldRotationCos;
         const s = fieldRotationSin;
         const rdx = dx * c + dy * s;
         const rdy = -dx * s + dy * c;
-        for (const idx of planSelectedSet) {
-          if (idx >= 0 && idx < planWaypoints.length) {
-            planWaypoints[idx].x = clampPlanCoordX(planWaypoints[idx].x + rdx);
-            planWaypoints[idx].y = clampPlanCoordY(planWaypoints[idx].y + rdy);
-          }
-        }
+        planningMode.actions.moveSelectedWaypointsBy(rdx, rdy);
         planChanged();
         requestDrawAll();
         sanitizeOffsetInputs();
@@ -10319,47 +10120,6 @@ function handleGlobalKeydown(e) {
   }
 }
 
-const planningMode = createPlanningMode({
-  getAppMode,
-  requestDrawAll,
-  setStatus,
-  scheduleSavedPathsSave,
-}, {
-  loadImportedData: applyImportedPlanningData,
-  clear: clearPlanningModeData,
-  render: () => {
-    planningSidebarRenderer.renderPlanList();
-    planningSidebarRenderer.renderPlanObjects();
-    renderPlanningEventTimeline();
-  },
-  pause: planPause,
-  play: planPlay,
-  togglePlayback: () => {
-    if (planPlaying) planPause();
-    else planPlay();
-  },
-  setDistance: setPlanDist,
-  getExportData: () => ({
-    waypoints: planWaypoints,
-    objects: planObjects,
-    nodes: planNodes,
-    template: planExportTemplate,
-  }),
-  hasData: () => planWaypoints.length > 0 || planObjects.length > 0 || planNodes.length > 0,
-  bindEvents: () => {},
-  handleKeydown: () => false,
-  drawOverlay: drawPlanningOverlay,
-  drawTimeline: () => planningTimelineRenderer.draw(),
-  hitTestField: planHitTest,
-  getTelemetryProperties: (extra = {}) => getPlanningTelemetryProperties(
-    planWaypoints,
-    planObjects,
-    planNodes,
-    planExportTemplate,
-    extra,
-  ),
-});
-
 const viewingMode = createViewingMode({
   loadViewingData: applyImportedViewingData,
   clear: clearAllPosesAndWatches,
@@ -10397,14 +10157,14 @@ const viewingMode = createViewingMode({
 sanitizeExportFilename();
 // -------- init --------
 await appTelemetry.loaded({
-  plan_saved: planWaypoints.length > 0,
-  plan_points: planWaypoints.length,
+  plan_saved: planningMode.state.getWaypointCount() > 0,
+  plan_points: planningMode.state.getWaypointCount(),
 });
 loadFieldOptions();
 await loadSettings();
 await loadSavedPaths();
 await loadDemoRouteIfUpgraded();
-setMode("viewing");
+modeController.setMode("viewing");
 
 async function appExit() {
   try {
@@ -10549,5 +10309,5 @@ if (settingsRobotImgControls) settingsRobotImgControls.hidden = true;
 syncRobotImgTxFromInputs();
 loadRobotImage();
 drawFirstField();
-updatePlanControls();
+planningMode.playback.updateControls();
 void setupExitHandler();

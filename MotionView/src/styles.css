@@ -846,6 +846,7 @@ label {
 }
 
 .planningTimelineNode.hasOverride::after {
+  --planning-node-override-blue: rgb(0, 120, 212);
   content: "";
   position: absolute;
   right: 2px;
@@ -853,7 +854,7 @@ label {
   width: 4px;
   height: 4px;
   border-radius: 999px;
-  background: rgb(0, 120, 212);
+  background: var(--planning-node-override-blue);
   opacity: 0.8;
 }
 
@@ -880,6 +881,7 @@ label {
 }
 
 .planNodeTooltip {
+  --planning-node-override-blue: rgb(0, 120, 212);
   position: fixed;
   left: 0;
   top: 0;
@@ -898,6 +900,10 @@ label {
   transform: translateY(4px);
   transition: opacity 90ms ease, transform 90ms ease;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34);
+}
+
+.planNodeTooltip.hasOverride {
+  border-color: var(--planning-node-override-blue);
 }
 
 .planNodeTooltip.isVisible {
