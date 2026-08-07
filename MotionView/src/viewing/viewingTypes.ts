@@ -49,12 +49,6 @@ export interface ViewingDataState {
   getWaypoints(): readonly Waypoint[];
   getWaypointMap(): ReadonlyMap<number, Waypoint>;
   getWatchMarkers(): readonly WatchMarker[];
-  getSelectedIndex(): number;
-  getSelectedWatch(): Readonly<{ marker: WatchMarker }> | null;
-  getSelectedLogTime(): number | null;
-  getSelectedWaypointId(): string | number | null;
-  getSelectedWaypointEventTime(): number | null;
-  currentDisplayPose(): Readonly<Pose> | null;
   hasData(): boolean;
 }
 
@@ -62,10 +56,6 @@ export interface ViewingDataActions {
   loadViewingData(data: unknown): void;
   clear(): void;
   appendLiveBatch(batch: ParsedLiveViewingBatch): ViewingAppendResult;
-  setSelectedPose(index: number): void;
-  selectWatch(marker: WatchMarker, fromUserClick?: boolean): void;
-  selectWaypoint(waypoint: Waypoint, event?: WaypointEvent | null, fromUserClick?: boolean): void;
-  clearTransientSelection(): void;
 }
 
 export interface ViewingRendering {

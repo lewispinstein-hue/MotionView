@@ -2,7 +2,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { resolveResource } from "@tauri-apps/api/path";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import Chart from "chart.js/auto";
 import fitIconUrl from "./assets/svg/common/fit.svg?url";
 import demoRouteUrl from "./assets/demo/getting-started-route.json?url";
 import changeObjectColorIconUrl from "./assets/svg/planning/changeObjectColor.svg?url";
@@ -46,11 +45,18 @@ import {
   createPoseListRenderer,
   createVirtualList,
   createWatchListRenderer,
+  createWatchGraph,
   createWaypointListRenderer,
   createViewingFieldOverlayRenderer,
+  createViewingFieldInteraction,
+  createFloatingInfo,
   createViewingInput,
   createViewingMode,
+  createViewingPlayback,
   createViewingRendering,
+  createViewingSelection,
+  createViewingTimeline,
+  createWatchVisibility,
   lastWatchAtTime,
   normalizeLogs,
   normalizeSystemLogMessage,
@@ -60,6 +66,7 @@ import {
   parseWaypointParams,
   scrollIntoViewIfNeeded,
   sortWatchMarkersByTime,
+  watchGraphKeyForWatch,
   waypointEventCount,
 } from "./viewing";
 
@@ -499,10 +506,6 @@ const floatingWindowBounds = {
   maxHeight: 600
 }
 
-const WATCH_GRAPH_MIN_W = 420;
-const WATCH_GRAPH_MAX_W = 1600;
-const WATCH_GRAPH_MIN_H = 170;
-const WATCH_GRAPH_MARGIN = 16;
 let data = null;
 let showPreviousYearFields = true;
 let fieldCompetition = "all";
@@ -542,6 +545,11 @@ function getValidFieldKey(fieldKey) {
 
 // Raw poses are stored in FILE units; we convert to inches for rendering.
 // Fields: t, x, y, theta, l_vel, r_vel, speed_raw, speed_norm
+let viewingWatchVisibility = null;
+function currentVisibilityForWatch(watch) {
+  return viewingWatchVisibility?.currentVisibilityForWatch(watch) ?? true;
+}
+
 const viewingMode = createViewingMode({
   createPoseStore,
   toNumMaybe,
@@ -557,22 +565,23 @@ const waypoints = viewingMode.data.getWaypoints();
 const waypointsById = viewingMode.data.getWaypointMap();
 const watchMarkers = viewingMode.data.getWatchMarkers(); // {watch, t, pose(in), ok, idx, dt}
 
-let selectedWatch = null; // { marker }
-let selectedLogTime = null;
-let selectedWaypointId = null;
-let selectedWaypointEventTime = null;
-let selectedIndex = 0;          // nearest pose index for "locked" selection
-let hoverTimelineTime = null;   // preview time on timeline (ms)
-let timelineHoverSaved = null;  // { index, lockActive, lockPose, lockIndex }
+const viewingSelection = createViewingSelection();
+viewingWatchVisibility = createWatchVisibility({
+  getWatches: () => watches,
+  getFilterValue: () => watchFilterValue(),
+  graphKeyForWatch: (watch) => watchGraphKeyForWatch(watch),
+  updateButtons: (key, iconId, title) => {
+    const buttons = watchList?.querySelectorAll(`.watchVisibilityBtn[data-watch-visibility-key="${key}"]`) ?? [];
+    for (const button of buttons) {
+      button.dataset.iconId = iconId;
+      button.dataset.title = title;
+    }
+    updateWatchVisibilityButtons(key);
+  },
+});
 
-let hoverWatch = null;
-
-// Track preview + lock
-let trackHover = null;          // { pose, idxNearest }
-let trackHoverSavedIndex = null;
-let trackLockActive = false;
-let trackLockPose = null;       // pose in inches
-let trackLockIndex = null;
+let viewingFieldInteraction = null;
+let watchGraph = null;
 
 const telemetryMetrics = {
   totalPosesReceived: 0,
@@ -583,11 +592,6 @@ const telemetryMetrics = {
 let pendingExportRequest = null;
 let importedRouteMeta = null;
 
-// playback
-let playing = false;
-let raf = null;
-let playTimeMs = null;
-let lastWall = null;
 let playRate = 1;
 
 // world->screen
@@ -686,7 +690,7 @@ const planningMode = createPlanningMode({
 
 modeController.subscribe((mode) => {
   document.body.classList.toggle("mode-planning", mode === "planning");
-  if (mode === "planning" && playing) pause();
+  if (mode === "planning" && viewingPlayback.isPlaying()) viewingPlayback.pause();
   if (mode === "viewing" && planningMode.playback.isPlaying()) planningMode.playback.pause();
   planningMode.actions.clearSelection();
   if (modeViewingBtn) {
@@ -1712,7 +1716,7 @@ planningMode.rendering.renderTimelineDom = function renderTimelineDom() {
   if (!canPlace) {
     syncPlanningTimelineCanvasSize();
     clearPlanTimelineDropTarget();
-    planningMode.rendering.drawTimeline();
+    planningMode.rendering.viewingTimeline.draw();
     return;
   }
 
@@ -1790,7 +1794,7 @@ planningMode.rendering.renderTimelineDom = function renderTimelineDom() {
     clearPlanTimelineDropTarget();
   }
   syncPlanningTimelineCanvasSize();
-  planningMode.rendering.drawTimeline();
+  planningMode.rendering.viewingTimeline.draw();
 };
 
 function startPlanObjectNameEdit(objectId, selectAll = false) {
@@ -2145,9 +2149,9 @@ const viewingFieldOverlayRenderer = createViewingFieldOverlayRenderer({
   context: ctx,
   getWatchMarkers: () => watchMarkers,
   getWaypoints: () => waypoints,
-  getSelectedWatch: () => selectedWatch,
-  getSelectedWaypointId: () => selectedWaypointId,
-  getHoverWatch: () => hoverWatch,
+  getSelectedWatch: () => viewingSelection.selectedWatch,
+  getSelectedWaypointId: () => viewingSelection.selectedWaypointId,
+  getHoverWatch: () => viewingFieldInteraction?.getHoverWatch(),
   isWatchMarkerVisible,
   waypointFilterMatches,
   worldToScreen,
@@ -2373,7 +2377,7 @@ async function saveSavedPathsNow() {
 function updatePlanSelectionPanel() {
   if (!planSelXEl || !planSelYEl || !planSelThetaEl || !planSelSpeedEl || !planSelIndexEl) return;
   const active = document.activeElement;
-  const selectedIndex = planningMode.state.getSelectedWaypointIndex();
+  const selectedPlanIndex = planningMode.state.getSelectedWaypointIndex();
   const selectedWaypoint = planningMode.state.getSelectedWaypoint();
   if (!selectedWaypoint) {
     planSelIndexEl.textContent = "—";
@@ -2388,7 +2392,7 @@ function updatePlanSelectionPanel() {
     return;
   }
   const p = selectedWaypoint;
-  planSelIndexEl.textContent = `#${selectedIndex + 1}`;
+  planSelIndexEl.textContent = `#${selectedPlanIndex + 1}`;
   planSelXEl.disabled = false;
   planSelYEl.disabled = false;
   planSelThetaEl.disabled = false;
@@ -2398,7 +2402,7 @@ function updatePlanSelectionPanel() {
   }
   const xVal = String(fmtNum(p.x, 2));
   const yVal = String(fmtNum(p.y, 2));
-  const tVal = String(fmtNum(planThetaDegAt(selectedIndex) ?? 0, 1));
+  const tVal = String(fmtNum(planThetaDegAt(selectedPlanIndex) ?? 0, 1));
   const sVal = String(fmtNum(readPlanSpeed(p.speed, 127), 0));
   planSelXEl.value = xVal;
   planSelYEl.value = yVal;
@@ -2767,130 +2771,14 @@ function normalizeLogLevel(levelRaw) {
   return "INFO";
 }
 
-let pinnedWatchPanelCount = 0;
-let pinnedWatchDragTarget = null;
-let pinnedWatchDragStart = { x: 0, y: 0 };
-
-function findLatestWatchById(watchId) {
-  if (watchId == null || !Array.isArray(watches) || !watches.length) return null;
-  const normalizedId = String(watchId);
-  for (let i = watches.length - 1; i >= 0; i -= 1) {
-    const watch = watches[i];
-    const candidateId = watch?.id ?? watch?.watchId;
-    if (candidateId != null && String(candidateId) === normalizedId) return watch;
-  }
-  return null;
-}
-
-function findWatchByIdAtOrBeforeTime(watchId, tMs) {
-  if (watchId == null || tMs == null || !Array.isArray(watches) || !watches.length) return null;
-  const normalizedId = String(watchId);
-  for (let i = watches.length - 1; i >= 0; i -= 1) {
-    const watch = watches[i];
-    const candidateId = watch?.id ?? watch?.watchId;
-    if (candidateId == null || String(candidateId) !== normalizedId) continue;
-    if ((watch.t ?? Infinity) <= tMs) return watch;
-  }
-  return null;
-}
-
 function getPinnedWatchReferenceTimeMs() {
-  if (playing) return playTimeMs ?? null;
-  if (hoverTimelineTime != null) return hoverTimelineTime;
-  if (!playing && trackHover?.pose?.t != null) return trackHover.pose.t;
-  if (!playing && trackLockActive && trackLockPose?.t != null) return trackLockPose.t;
+  if (viewingPlayback.isPlaying()) return viewingPlayback.getPlayTimeMs() ?? null;
+  if (viewingSelection.hoverTimelineTime != null) return viewingSelection.hoverTimelineTime;
+  if (!viewingPlayback.isPlaying() && viewingSelection.trackHover?.pose?.t != null) return viewingSelection.trackHover.pose.t;
+  if (!viewingPlayback.isPlaying() && viewingSelection.trackLockActive && viewingSelection.trackLockPose?.t != null) return viewingSelection.trackLockPose.t;
   if (!rawPoses.length) return null;
-  const idx = clamp(selectedIndex, 0, Math.max(0, rawPoses.length - 1));
+  const idx = clamp(viewingSelection.selectedIndex, 0, Math.max(0, rawPoses.length - 1));
   return rawPoses[idx]?.t ?? null;
-}
-
-function applyPinnedWatchLevel(el, levelRaw) {
-  if (!el) return;
-  const level = normalizeLogLevel(levelRaw);
-  const st = levelStyle(level);
-  el.style.background = st.fill;
-  el.style.color = st.text;
-  el.style.borderColor = "rgba(255, 255, 255, 0.10)";
-}
-
-function getPinnedWatchPanelById(watchId) {
-  if (!pinnedWatchHost || watchId == null) return null;
-  return pinnedWatchHost.querySelector(`.pinnedWatchPanel[data-watch-id="${CSS.escape(String(watchId))}"]`);
-}
-
-function closePinnedWatchPanel(panel) {
-  if (!panel) return;
-  if (pinnedWatchDragTarget === panel) pinnedWatchDragTarget = null;
-  panel.remove();
-}
-
-function updatePinnedWatchPanel(panel, watchId) {
-  if (!panel) return;
-  const tMs = getPinnedWatchReferenceTimeMs();
-  const latest = findWatchByIdAtOrBeforeTime(watchId, tMs);
-  const nameEl = panel.querySelector(".pinnedWatchName");
-  const valueEl = panel.querySelector(".pinnedWatchValue");
-  const latestOverall = findLatestWatchById(watchId);
-  const label = latest?.label || latestOverall?.label || (watchId == null ? "No watch selected" : `Watch ${watchId}`);
-  if (nameEl) nameEl.textContent = label;
-  if (valueEl) valueEl.textContent = latest?.value != null ? String(latest.value) : "—";
-  applyPinnedWatchLevel(valueEl, latest?.level ?? "INFO");
-}
-
-function refreshPinnedWatchPanels() {
-  if (!pinnedWatchHost) return;
-  const panels = pinnedWatchHost.querySelectorAll(".pinnedWatchPanel");
-  for (const panel of panels) {
-    const watchId = panel.dataset.watchId || null;
-    updatePinnedWatchPanel(panel, watchId);
-  }
-}
-
-function toggleFloatingWatch(watchId) {
-  if (watchId == null) return openFloatingWatch(null);
-  const existing = getPinnedWatchPanelById(watchId);
-  if (existing) {
-    closePinnedWatchPanel(existing);
-    return null;
-  }
-  return openFloatingWatch(watchId);
-}
-
-function openFloatingWatch(watchId) {
-  if (!pinnedWatchHost || !pinnedWatchTemplate) return null;
-
-  const root = pinnedWatchTemplate.content.firstElementChild?.cloneNode(true);
-  if (!root) return null;
-
-  const headerEl = root.querySelector(".pinnedWatchHeader");
-  const closeEl = root.querySelector(".pinnedWatchClose");
-
-  root.dataset.watchId = watchId == null ? "" : String(watchId);
-  root.style.top = `${128 + pinnedWatchPanelCount * 26}px`;
-  root.style.right = `${16 + pinnedWatchPanelCount * 18}px`;
-  pinnedWatchPanelCount += 1;
-
-  updatePinnedWatchPanel(root, watchId);
-
-  headerEl?.addEventListener("mousedown", (ev) => {
-    if (ev.button !== 0) return;
-    pinnedWatchDragTarget = root;
-    pinnedWatchDragStart = {
-      x: ev.clientX - root.offsetLeft,
-      y: ev.clientY - root.offsetTop,
-    };
-    root.style.left = `${root.offsetLeft}px`;
-    root.style.top = `${root.offsetTop}px`;
-    root.style.right = "auto";
-    ev.preventDefault();
-  });
-
-  closeEl?.addEventListener("click", () => {
-    closePinnedWatchPanel(root);
-  });
-
-  pinnedWatchHost.appendChild(root);
-  return root;
 }
 
 function levelSortRank(levelRaw) {
@@ -2943,7 +2831,7 @@ function updateOffsetsFromInputs() {
   recomputeWatchMarkers();
   draw();
   updatePoseReadout();
-  drawTimeline();
+  viewingTimeline.draw();
 }
 
 // -------- speed normalization (single source of truth) --------
@@ -3325,7 +3213,7 @@ function resizeTimeline() {
   timelineCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
   timelineCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
   tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  drawTimeline();
+  viewingTimeline.draw();
 }
 
 function syncPlanningTimelineCanvasSize() {
@@ -3345,7 +3233,7 @@ function resizePlanningTimeline() {
   if (!planningTimelineCanvas || !pctx) return;
   planningMode.rendering.renderTimelineDom();
   syncPlanningTimelineCanvasSize();
-  planningMode.rendering.drawTimeline();
+  planningMode.rendering.viewingTimeline.draw();
 }
 
 // -------- field images --------
@@ -3623,6 +3511,45 @@ function rebuildWatchMarkersByTime() {
 let renderedWatchIndexByTime = new Map();
 
 let watchListVirtual = null;
+watchGraph = createWatchGraph({
+  selection: viewingSelection,
+  panel: watchGraphPanel,
+  header: watchGraphHeader,
+  resizer: watchGraphResizer,
+  closeButton: btnCloseWatchGraph,
+  subtitle: watchGraphSubtitle,
+  title: watchGraphTitle,
+  compareSelect: watchGraphCompareSelect,
+  latest: watchGraphLatest,
+  compareLatest: watchGraphCompareLatest,
+  count: watchGraphCount,
+  avg: watchGraphAvg,
+  min: watchGraphMin,
+  max: watchGraphMax,
+  compareCount: watchGraphCompareCount,
+  compareAvg: watchGraphCompareAvg,
+  compareMin: watchGraphCompareMin,
+  compareMax: watchGraphCompareMax,
+  canvas: watchGraphCanvas,
+  empty: watchGraphEmpty,
+  getData: () => data,
+  getWatches: () => watches,
+  getWatchMarkers: () => watchMarkers,
+  getWatchMarkersByTime: () => watchMarkersByTime,
+  getReferenceTimeMs: () => getPinnedWatchReferenceTimeMs(),
+  getCurrentPoseTimeMs: () => currentDisplayPose()?.t ?? null,
+  getLatestRobotTimeMs: () => rawPoses[rawPoses.length - 1]?.t ?? null,
+  isPlaying: () => viewingPlayback.isPlaying(),
+  isLivestreaming: () => !!(window.__live && window.__live.streaming),
+  lastWatchAtTime,
+  formatNumber: formatNumberString,
+  clamp,
+  selectWatchMarker,
+  updatePoseReadout,
+  requestDrawAll,
+});
+watchGraph.bindEvents();
+
 const watchListRenderer = createWatchListRenderer({
   watchList,
   watchFilter,
@@ -3631,9 +3558,9 @@ const watchListRenderer = createWatchListRenderer({
   get watchListVirtual() { return watchListVirtual; },
   getWatchMarkers: () => watchMarkers,
   getWatches: () => watches,
-  getSelectedWatch: () => selectedWatch,
+  getSelectedWatch: () => viewingSelection.selectedWatch,
   setRenderedWatchIndexByTime: (indexByTime) => { renderedWatchIndexByTime = indexByTime; },
-  refreshWatchGraphPanelData,
+  refreshWatchGraphPanelData: () => watchGraph.refreshPanelData(),
   requestDrawAll,
   levelStyle,
   levelSortRank,
@@ -3644,15 +3571,15 @@ const watchListRenderer = createWatchListRenderer({
   watchVisibilityKeyForWatch,
   watchVisibilityIconId,
   watchVisibilityTitle,
-  isGraphableWatchValue,
+  isGraphableWatchValue: (value) => watchGraph.isGraphableValue(value),
   svgIconHref,
   setSvgUseHref,
   escapeHtml,
   fmtNum,
   selectWatchMarker,
-  toggleFloatingWatch,
+  toggleFloatingWatch: (watchId) => floatingInfo.toggleWatch(watchId),
   toggleWatchVisibilityForWatch,
-  openOrToggleWatchGraphPanel,
+  openOrToggleWatchGraphPanel: (marker) => watchGraph.openOrTogglePanel(marker),
 });
 
 watchListVirtual = createVirtualList(watchList, {
@@ -3670,23 +3597,23 @@ const poseListRenderer = createPoseListRenderer({
   get poseListVirtual() { return poseListVirtual; },
   getPoseCount: () => rawPoses.length,
   getPose: (index) => rawPoses[index],
-  getSelectedIndex: () => selectedIndex,
+  getSelectedIndex: () => viewingSelection.selectedIndex,
   poseToInches,
   formatNumberString,
   fmtNum,
   escapeHtml,
   onPoseSelected: (index) => {
-    pause();
-    clearTrackHover(true);
-    clearTrackLock();
-    selectedWatch = null;
-    selectedLogTime = null;
-    selectedWaypointId = null;
-    selectedWaypointEventTime = null;
+    viewingPlayback.pause();
+    viewingSelection.clearTrackHover(true);
+    viewingSelection.clearTrackLock();
+    viewingSelection.selectedWatch = null;
+    viewingSelection.selectedLogTime = null;
+    viewingSelection.selectedWaypointId = null;
+    viewingSelection.selectedWaypointEventTime = null;
     waypointListRenderer.highlight(null, null, false);
-    selectedIndex = index;
+    viewingSelection.selectedIndex = index;
     if (leftConnected && leftStreaming) liveAutoFollowHead = false;
-    lastPoseIndex = selectedIndex;
+    lastPoseIndex = viewingSelection.selectedIndex;
     setStatus(`Jumped to pose #${index + 1}.`);
     poseListRenderer.highlight();
     updatePoseReadout();
@@ -3707,8 +3634,8 @@ const waypointListRenderer = createWaypointListRenderer({
   waypointFilter,
   getWaypoints: () => waypoints,
   getVisibleEvents: waypointVisibleEvents,
-  getSelectedWaypointId: () => selectedWaypointId,
-  getSelectedWaypointEventTime: () => selectedWaypointEventTime,
+  getSelectedWaypointId: () => viewingSelection.selectedWaypointId,
+  getSelectedWaypointEventTime: () => viewingSelection.selectedWaypointEventTime,
   waypointTypeStyle,
   waypointEventLines,
   fmtSecondsToString,
@@ -3723,11 +3650,11 @@ const logListRenderer = createLogListRenderer({
   logSort,
   watchToleranceMs: WATCH_TOL_MS,
   getLogs: () => logs,
-  getSelectedLogTime: () => selectedLogTime,
-  setSelectedLogTime: (time) => { selectedLogTime = time; },
+  getSelectedLogTime: () => viewingSelection.selectedLogTime,
+  setSelectedLogTime: (time) => { viewingSelection.selectedLogTime = time; },
   clearWaypointSelectionState: () => {
-    selectedWaypointId = null;
-    selectedWaypointEventTime = null;
+    viewingSelection.selectedWaypointId = null;
+    viewingSelection.selectedWaypointEventTime = null;
   },
   highlightWaypointInList: (waypointId, eventTime, doScroll) => waypointListRenderer.highlight(waypointId, eventTime, doScroll),
   jumpToEventTime,
@@ -3748,31 +3675,144 @@ const viewingRendering = createViewingRendering({
   updatePoseReadout,
 });
 
+const viewingPlayback = createViewingPlayback({
+  selection: viewingSelection,
+  getPoses: () => rawPoses,
+  getPlayRate: () => playRate,
+  isLivestreaming: () => !!(window.__live && window.__live.streaming),
+  setPlayButtonLabel: (label) => {
+    if (btnPlay) btnPlay.textContent = label;
+  },
+  setStatus,
+  formatTimeSeconds: (ms) => formatNumberString((ms ?? 0) / 1000, 1, "0"),
+  interpolatePoseAtTime,
+  findFloorIndexByTime,
+  lastWatchAtTime: (timeMs) => lastWatchAtTime(watchMarkersByTime, timeMs),
+  highlightWatch: (timeMs, doScroll) => watchListRenderer.highlight(timeMs, doScroll),
+  updatePoseReadout,
+  requestDrawAll,
+});
+
 const viewingInput = createViewingInput({
   hasData: () => !!data,
   isLiveConnected: () => leftConnected,
   getLiveAutoFollowHead: () => liveAutoFollowHead,
   setLiveAutoFollowHead: (enabled) => { liveAutoFollowHead = enabled; },
-  getSelectedIndex: () => selectedIndex,
+  getSelectedIndex: () => viewingSelection.selectedIndex,
   getPoseCount: () => rawPoses.length,
   setSelectedIndex: (index) => {
-    viewingMode.actions.setSelectedPose(index);
-      },
+    viewingSelection.selectedIndex = clamp(index, 0, Math.max(0, rawPoses.length - 1));
+  },
   setLastPoseIndex: (index) => { lastPoseIndex = index; },
   clearTransientSelection: () => {
-    viewingMode.actions.clearTransientSelection();
-        waypointListRenderer.highlight(null, null, false);
+    viewingSelection.clearSelectedDetail();
+    viewingSelection.clearTimelineHover(false);
+    viewingSelection.clearTrackHover(false);
+    viewingSelection.clearTrackLock();
+    waypointListRenderer.highlight(null, null, false);
   },
-  clearTrackHover: () => clearTrackHover(true),
-  clearTrackLock,
-  isPlaying: () => playing,
-  play,
-  pause,
+  clearTrackHover: () => viewingSelection.clearTrackHover(true),
+  clearTrackLock: () => viewingSelection.clearTrackLock(),
+  isPlaying: () => viewingPlayback.isPlaying(),
+  play: viewingPlayback.play,
+  pause: viewingPlayback.pause,
   highlightPoseList: () => poseListRenderer.highlight(),
   updatePoseReadout,
   requestDrawAll,
   setStatus,
 });
+
+const viewingTimeline = createViewingTimeline({
+  canvas: timelineCanvas,
+  context: tctx,
+  timelineBar,
+  selection: viewingSelection,
+  hasData: () => !!data,
+  getPoses: () => rawPoses,
+  getWatchMarkers: () => watchMarkers,
+  isPlaying: () => viewingPlayback.isPlaying(),
+  getPlayTimeMs: () => viewingPlayback.getPlayTimeMs(),
+  isLivestreaming: () => !!(window.__live && window.__live.streaming),
+  findFloorIndexByTime,
+  isWatchMarkerVisible,
+  selectWatchMarker,
+  clearTrackHover: (restore) => viewingSelection.clearTrackHover(restore),
+  clearTrackLock: () => viewingSelection.clearTrackLock(),
+  clearWaypointHighlight: () => waypointListRenderer.highlight(null, null, false),
+  setLastPoseIndex: (index) => { lastPoseIndex = index; },
+  highlightPoseList: () => poseListRenderer.highlight(),
+  updatePoseReadout,
+  requestDrawAll,
+  clamp,
+  heatColorFromNorm,
+  levelFillWithAlpha,
+});
+viewingTimeline.bindEvents();
+
+viewingFieldInteraction = createViewingFieldInteraction({
+  canvas,
+  selection: viewingSelection,
+  getData: () => data,
+  isPlaying: () => viewingPlayback.isPlaying(),
+  isPanning: () => isPanning,
+  isLivestreaming: () => !!(window.__live && window.__live.streaming),
+  getPoses: () => rawPoses,
+  getWatchMarkers: () => watchMarkers,
+  getWaypoints: () => waypoints,
+  worldToScreen,
+  poseToInches,
+  angLerpDeg,
+  trackHoverTolerancePx: HOVER_PIXEL_TOL + TRACK_HOVER_PAD_PX,
+  scaledViewingFieldRadius,
+  isWatchMarkerVisible,
+  waypointFilterMatches,
+  updateCursorPillsFromClient,
+  setCursorPills,
+  getAppMode: () => modeController.getMode(),
+  handlePlanningMouseMove: (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = event.clientX - rect.left;
+    const my = event.clientY - rect.top;
+    const waypointHit = planningMode.rendering.hitTestField(mx, my) >= 0;
+    const thetaHandleHit = planThetaHandleHit(mx, my) >= 0;
+    const nodeHit = (!waypointHit && !thetaHandleHit) ? hitTestPlanFieldNodeAtClient(event.clientX, event.clientY) : null;
+    if (nodeHit) {
+      if (planningMode.fieldHoverNodeId !== nodeHit.node.id) {
+        planningMode.fieldHoverNodeId = nodeHit.node.id;
+        requestDrawAll();
+      }
+      canvas.style.cursor = "pointer";
+      updatePlanNodeTooltip(nodeHit.tooltipText, event.clientX, event.clientY, !!nodeHit.method?.hasOverride);
+    } else {
+      const hadHover = planningMode.fieldHoverNodeId != null;
+      planningMode.fieldHoverNodeId = null;
+      canvas.style.cursor = "";
+      hidePlanNodeTooltip();
+      if (hadHover) requestDrawAll();
+    }
+  },
+  handlePlanningMouseLeave: () => {
+    const hadHover = planningMode.fieldHoverNodeId != null;
+    planningMode.fieldHoverNodeId = null;
+    hidePlanNodeTooltip({ immediate: true });
+    canvas.style.cursor = "";
+    if (hadHover) requestDrawAll();
+  },
+  selectWatchMarker,
+  selectWaypointEvent,
+  clearWaypointSelection,
+  renderWaypointList: () => viewingRendering.renderWaypointList(),
+  clearWaypointHighlight: () => waypointListRenderer.highlight(null, null, false),
+  pausePlayback: () => viewingPlayback.pause(),
+  setLastPoseIndex: (index) => { lastPoseIndex = index; },
+  highlightPoseList: () => poseListRenderer.highlight(),
+  updatePoseReadout,
+  requestDrawAll,
+  setStatus,
+  getSuppressNextClick: () => suppressNextClick,
+  consumeSuppressNextClick: () => { suppressNextClick = false; },
+});
+viewingFieldInteraction.bindEvents();
 
 document.addEventListener("pointerdown", (ev) => {
   const target = ev.target instanceof Element ? ev.target : null;
@@ -3809,21 +3849,21 @@ function jumpToEventTime(tMs, {
   clearWatchSelection = false,
 } = {}) {
   // Clicking an event should override track lock/hover to avoid confusion.
-  clearTrackHover(true);
-  clearTrackLock();
+  viewingSelection.clearTrackHover(true);
+  viewingSelection.clearTrackLock();
 
   if (leftConnected && leftStreaming) liveAutoFollowHead = false;
 
   if (!rawPoses.length) {
-    selectedIndex = 0;
+    viewingSelection.selectedIndex = 0;
     lastPoseIndex = 0;
 
-    pause();
-    hoverTimelineTime = null;
-    timelineHoverSaved = null;
+    viewingPlayback.pause();
+    viewingSelection.hoverTimelineTime = null;
+    viewingSelection.timelineHoverSaved = null;
 
     if (clearWatchSelection) {
-      selectedWatch = null;
+      viewingSelection.selectedWatch = null;
       watchListRenderer.highlight(null, false);
       hideWatchPopup();
     }
@@ -3838,20 +3878,20 @@ function jumpToEventTime(tMs, {
 
   const near = nearestIndexWithinTol(tMs, WATCH_TOL_MS);
   if (near) {
-    selectedIndex = near.idx;
+    viewingSelection.selectedIndex = near.idx;
     if (typeof exactStatus === "function") exactStatus(near);
   } else {
-    selectedIndex = findFloorIndexByTime(tMs);
+    viewingSelection.selectedIndex = findFloorIndexByTime(tMs);
     if (typeof interpolatedStatus === "function") interpolatedStatus();
   }
-  lastPoseIndex = selectedIndex;
+  lastPoseIndex = viewingSelection.selectedIndex;
 
-  pause();
-  hoverTimelineTime = null;
-  timelineHoverSaved = null;
+  viewingPlayback.pause();
+  viewingSelection.hoverTimelineTime = null;
+  viewingSelection.timelineHoverSaved = null;
 
   if (clearWatchSelection) {
-    selectedWatch = null;
+    viewingSelection.selectedWatch = null;
     watchListRenderer.highlight(null, false);
     hideWatchPopup();
   }
@@ -3864,19 +3904,6 @@ function jumpToEventTime(tMs, {
 // --- Watch popup (tiny, click to show, click elsewhere to dismiss) ---
 const watchPopup = document.getElementById("watchPopup");
 let watchPopupOpen = false;
-let watchGraphPanelOpen = false;
-let watchGraphPanelKey = null;
-let watchGraphCompareKey = "";
-let watchGraphChart = null;
-let watchGraphMarkersForKey = [];
-let watchGraphCompareMarkersForKey = [];
-let watchGraphZoomRange = null;
-let watchGraphFollowLatest = false;
-const WATCH_GRAPH_FOLLOW_HEAD_TOLERANCE_S = 2.5;
-let isWatchGraphDragging = false;
-let isWatchGraphResizing = false;
-let watchGraphDragStart = { x: 0, y: 0 };
-let watchGraphHoverSaved = null;
 
 function hideWatchPopup() {
   if (!watchPopup) return;
@@ -3884,124 +3911,38 @@ function hideWatchPopup() {
   watchPopupOpen = false;
 }
 
-function watchGraphKeyForWatch(w) {
-  const idNum = Number(w?.id);
-  if (Number.isInteger(idNum)) return `id:${idNum}`;
-  return `label:${String(w?.label ?? "").trim()}`;
-}
-
-function watchVisibilityKeyForWatch(w) {
-  const idNum = Number(w?.id);
-  if (Number.isInteger(idNum)) return `id:${idNum}`;
-  return `entry:${Number(w?.t)}`;
-}
-
 function watchFilterValue() {
   return watchFilter?.value || "all";
 }
 
+function watchVisibilityKeyForWatch(w) {
+  return viewingWatchVisibility.keyForWatch(w);
+}
+
 function watchFilterKeyForWatch(w) {
-  return watchGraphKeyForWatch(w);
+  return viewingWatchVisibility.filterKeyForWatch(w);
 }
 
 function watchFilterMatches(watch) {
-  const filter = watchFilterValue();
-  if (filter === "all") return true;
-  return watchFilterKeyForWatch(watch) === filter;
+  return viewingWatchVisibility.filterMatches(watch);
 }
 
 function watchFilterLabelForWatch(watch) {
-  const idNum = Number(watch?.id);
-  const hasId = Number.isInteger(idNum);
-  const label = String(watch?.label ?? "").trim();
-  if (hasId && label) return `${label}`;
-  if (hasId) return `Watch ${idNum}`;
-  return label || "Unnamed Watch";
-}
-
-function isWatchVisible(w) {
-  return w?.visible !== false;
+  return viewingWatchVisibility.filterLabelForWatch(watch);
 }
 
 function isWatchMarkerVisible(marker) {
-  return isWatchVisible(marker?.watch) && watchFilterMatches(marker?.watch);
+  return viewingWatchVisibility.isMarkerVisible(marker);
 }
 
 function watchVisibilityIconId(w) {
-  return isWatchVisible(w) ? "icon-visibleWatch" : "icon-invisibleWatch";
+  return viewingWatchVisibility.iconId(w);
 }
 
 function watchVisibilityTitle(w) {
-  return isWatchVisible(w) ? "Hide watch" : "Show watch";
+  return viewingWatchVisibility.title(w);
 }
 
-function isGraphableWatchValue(value) {
-  if (typeof value === "boolean") return true;
-  if (typeof value === "number") return Number.isFinite(value);
-
-  const text = String(value ?? "").trim().toLowerCase();
-  if (!text) return false;
-  if (text === "true" || text === "false") return true;
-  return Number.isFinite(Number(text));
-}
-
-function graphableWatchOptions(currentKey = "") {
-  const seen = new Set();
-  const options = [];
-  const source = Array.isArray(watches) ? watches : [];
-
-  for (let i = source.length - 1; i >= 0; i -= 1) {
-    const watch = source[i];
-    if (!watch || !isGraphableWatchValue(watch.value)) continue;
-    const key = watchGraphKeyForWatch(watch);
-    if (!key || key === currentKey || seen.has(key)) continue;
-    seen.add(key);
-    options.push({
-      key,
-      label: watchFilterLabelForWatch(watch),
-      id: Number(watch?.id),
-    });
-  }
-
-  options.sort((a, b) => {
-    const labelCmp = a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" });
-    if (labelCmp !== 0) return labelCmp;
-
-    const aHasId = Number.isInteger(a.id);
-    const bHasId = Number.isInteger(b.id);
-    if (aHasId && bHasId) return a.id - b.id;
-    if (aHasId) return -1;
-    if (bHasId) return 1;
-    return a.key.localeCompare(b.key, undefined, { numeric: true, sensitivity: "base" });
-  });
-
-  return options;
-}
-
-function refreshWatchGraphCompareSelect() {
-  if (!watchGraphCompareSelect) return;
-
-  const options = graphableWatchOptions(watchGraphPanelKey);
-  const previousValue = options.some((option) => option.key === watchGraphCompareKey) ? watchGraphCompareKey : "";
-  watchGraphCompareKey = previousValue;
-
-  watchGraphCompareSelect.innerHTML = "";
-
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = options.length > 0 ? "No comparison" : "No comparison watches";
-  watchGraphCompareSelect.appendChild(placeholder);
-
-  for (let i = 0; i < options.length; i += 1) {
-    const option = document.createElement("option");
-    option.value = options[i].key;
-    option.textContent = options[i].label;
-    watchGraphCompareSelect.appendChild(option);
-  }
-
-  watchGraphCompareSelect.value = previousValue;
-  watchGraphCompareSelect.disabled = options.length === 0;
-}
 
 function setSvgUseHref(useEl, href) {
   if (!useEl || !href) return;
@@ -4037,526 +3978,8 @@ function updateWatchVisibilityButtons(key) {
   requestDrawAll();
 }
 
-function currentVisibilityForWatch(watch) {
-  const key = watchVisibilityKeyForWatch(watch);
-  for (let i = watches.length - 1; i >= 0; i -= 1) {
-    const candidate = watches[i];
-    if (watchVisibilityKeyForWatch(candidate) !== key) continue;
-    return isWatchVisible(candidate);
-  }
-  return true;
-}
-
 function toggleWatchVisibilityForWatch(watch) {
-  const key = watchVisibilityKeyForWatch(watch);
-  const nextVisible = !isWatchVisible(watch);
-
-  for (let i = 0; i < watches.length; i += 1) {
-    const candidate = watches[i];
-    if (watchVisibilityKeyForWatch(candidate) !== key) continue;
-    candidate.visible = nextVisible;
-  }
-
-  const nextTitle = watchVisibilityTitle({ visible: nextVisible });
-  const nextIconId = watchVisibilityIconId({ visible: nextVisible });
-  const buttons = watchList?.querySelectorAll(`.watchVisibilityBtn[data-watch-visibility-key="${key}"]`) ?? [];
-  for (const button of buttons) {
-    button.dataset.iconId = nextIconId;
-    button.dataset.title = nextTitle;
-  }
-  updateWatchVisibilityButtons(key);
-}
-
-function watchGraphStatsByKey(key) {
-  if (!key) return { latest: null, count: 0, avg: null, min: null, max: null };
-  let latest = null;
-  let count = 0;
-  let sum = 0;
-  let numericCount = 0;
-  let min = Infinity;
-  let max = -Infinity;
-  for (let i = 0; i < watches.length; i += 1) {
-    const entry = watches[i];
-    if (watchGraphKeyForWatch(entry) !== key) continue;
-    count += 1;
-    if (!latest || (entry.t ?? 0) >= (latest.t ?? 0)) latest = entry;
-    const numericValue = numericWatchValue(entry.value);
-    if (numericValue == null) continue;
-    sum += numericValue;
-    numericCount += 1;
-    min = Math.min(min, numericValue);
-    max = Math.max(max, numericValue);
-  }
-  return {
-    latest,
-    count,
-    avg: numericCount > 0 ? (sum / numericCount) : null,
-    min: numericCount > 0 ? min : null,
-    max: numericCount > 0 ? max : null,
-  };
-}
-
-function findWatchByKeyAtOrBeforeTime(key, tMs) {
-  if (!key || tMs == null || !Array.isArray(watches) || !watches.length) return null;
-  for (let i = watches.length - 1; i >= 0; i -= 1) {
-    const entry = watches[i];
-    if (watchGraphKeyForWatch(entry) !== key) continue;
-    if ((entry.t ?? Infinity) <= tMs) return entry;
-  }
-  return null;
-}
-
-function formatWatchGraphNumericStat(value) {
-  if (!Number.isFinite(value)) return "—";
-  if (Number.isInteger(value)) return String(value);
-  return formatNumberString(value, 3);
-}
-
-function formatWatchGraphCountStat(value) {
-  return Number.isFinite(value) ? String(Math.trunc(value)) : "—";
-}
-
-function numericWatchValue(value) {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value === "boolean") return value ? 1 : 0;
-
-  const text = String(value ?? "").trim().toLowerCase();
-  if (!text) return null;
-  if (text === "true") return 1;
-  if (text === "false") return 0;
-  const n = Number(text);
-  return Number.isFinite(n) ? n : null;
-}
-
-function isBooleanWatchValue(value) {
-  if (typeof value === "boolean") return true;
-  const text = String(value ?? "").trim().toLowerCase();
-  return text === "true" || text === "false";
-}
-
-function collectWatchGraphSeries(key) {
-  const points = [];
-  const markers = [];
-  let hasBooleanSeries = false;
-
-  for (let i = 0; i < watchMarkers.length; i += 1) {
-    const marker = watchMarkers[i];
-    const entry = marker?.watch;
-    if (watchGraphKeyForWatch(entry) !== key) continue;
-    const y = numericWatchValue(entry?.value);
-    const tMs = Number(marker?.t);
-    if (y == null || !Number.isFinite(tMs)) continue;
-    hasBooleanSeries = hasBooleanSeries || isBooleanWatchValue(entry?.value);
-    markers.push(marker);
-    points.push({ x: tMs / 1000, y, isBoolean: isBooleanWatchValue(entry?.value) });
-  }
-
-  return {
-    points,
-    markers,
-    hasBooleanSeries,
-  };
-}
-
-function seriesRange(points) {
-  let min = Infinity;
-  let max = -Infinity;
-  for (let i = 0; i < points.length; i += 1) {
-    const y = Number(points[i]?.y);
-    if (!Number.isFinite(y)) continue;
-    min = Math.min(min, y);
-    max = Math.max(max, y);
-  }
-  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
-  return { min, max };
-}
-
-function normalizeBooleanSeriesPoints(points, referenceRange = null) {
-  if (!Array.isArray(points) || !points.length) return [];
-
-  let minValue = 0;
-  let maxValue = 1;
-  if (referenceRange && Number.isFinite(referenceRange.min) && Number.isFinite(referenceRange.max)) {
-    minValue = referenceRange.min;
-    maxValue = referenceRange.max;
-  }
-
-  if (minValue === maxValue) {
-    if (minValue === 0) maxValue = 1;
-    else minValue = 0;
-  }
-
-  return points.map((point) => ({
-    x: point.x,
-    y: point.y > 0 ? maxValue : minValue,
-  }));
-}
-
-function buildWatchGraphDatasets(key, compareKey = "") {
-  const primarySeries = collectWatchGraphSeries(key);
-  const compareSeries = compareKey ? collectWatchGraphSeries(compareKey) : { points: [], markers: [], hasBooleanSeries: false };
-
-  const primaryRange = seriesRange(primarySeries.points);
-  const compareRange = seriesRange(compareSeries.points);
-
-  const primaryPoints = primarySeries.hasBooleanSeries
-    ? normalizeBooleanSeriesPoints(primarySeries.points, compareRange)
-    : primarySeries.points.map((point) => ({ x: point.x, y: point.y }));
-  const comparePoints = compareSeries.hasBooleanSeries
-    ? normalizeBooleanSeriesPoints(compareSeries.points, primaryRange)
-    : compareSeries.points.map((point) => ({ x: point.x, y: point.y }));
-
-  const combinedRange = seriesRange(primaryPoints.concat(comparePoints));
-  const yMin = combinedRange?.min ?? 0;
-  const yMaxBase = combinedRange?.max ?? 1;
-  const yMax = yMin === yMaxBase ? (yMin === 0 ? 1 : yMin + 1) : yMaxBase;
-
-  return {
-    primarySeries,
-    compareSeries,
-    primaryPoints,
-    comparePoints,
-    yRange: { min: yMin, max: yMax },
-  };
-}
-
-function watchGraphTimeRange(primaryPoints, comparePoints) {
-  const allPoints = primaryPoints.concat(comparePoints);
-  let min = Infinity;
-  let max = -Infinity;
-  for (let i = 0; i < allPoints.length; i += 1) {
-    const x = Number(allPoints[i]?.x);
-    if (!Number.isFinite(x)) continue;
-    min = Math.min(min, x);
-    max = Math.max(max, x);
-  }
-  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
-  if (min === max) return { min, max: min + 1 };
-  return { min, max };
-}
-
-function normalizeWatchGraphZoomRange(range, fullRange) {
-  if (!range || !fullRange) return null;
-  const fullMin = Number(fullRange.min);
-  const fullMax = Number(fullRange.max);
-  if (!Number.isFinite(fullMin) || !Number.isFinite(fullMax) || fullMax <= fullMin) return null;
-
-  let min = clamp(Number(range.min), fullMin, fullMax);
-  let max = clamp(Number(range.max), fullMin, fullMax);
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return null;
-
-  const minSpan = Math.min(0.1, fullMax - fullMin);
-  if ((max - min) < minSpan) {
-    const center = (min + max) / 2;
-    min = center - minSpan / 2;
-    max = center + minSpan / 2;
-  }
-
-  if (min < fullMin) {
-    max += fullMin - min;
-    min = fullMin;
-  }
-  if (max > fullMax) {
-    min -= max - fullMax;
-    max = fullMax;
-  }
-
-  min = clamp(min, fullMin, fullMax);
-  max = clamp(max, fullMin, fullMax);
-  if ((max - min) >= (fullMax - fullMin) - 1e-6) return null;
-  return { min, max };
-}
-
-function getLatestRobotTimeSeconds() {
-  const tMs = rawPoses[rawPoses.length - 1]?.t;
-  return Number.isFinite(tMs) ? tMs / 1000 : null;
-}
-
-function isWatchGraphRangeNearRobotHead(range) {
-  if (!range) return false;
-  const robotTime = getLatestRobotTimeSeconds();
-  const rightEdge = Number(range.max);
-  return Number.isFinite(robotTime)
-    && Number.isFinite(rightEdge)
-    && rightEdge >= robotTime - WATCH_GRAPH_FOLLOW_HEAD_TOLERANCE_S;
-}
-
-function setWatchGraphZoomRange(nextRange, fullRange) {
-  watchGraphZoomRange = normalizeWatchGraphZoomRange(nextRange, fullRange);
-  watchGraphFollowLatest = isWatchGraphRangeNearRobotHead(watchGraphZoomRange);
-}
-
-function renderWatchGraphForKey(key) {
-  if (!watchGraphCanvas) return;
-
-  const { primarySeries, compareSeries, primaryPoints, comparePoints, yRange } = buildWatchGraphDatasets(key, watchGraphCompareKey);
-  watchGraphMarkersForKey = primarySeries.markers;
-  watchGraphCompareMarkersForKey = compareSeries.markers;
-  const hasPrimaryPoints = primaryPoints.length > 0;
-  const hasComparePoints = comparePoints.length > 0;
-  const fullTimeRange = watchGraphTimeRange(primaryPoints, comparePoints);
-  let zoomRange = normalizeWatchGraphZoomRange(watchGraphZoomRange, fullTimeRange);
-  if (!watchGraphFollowLatest && isWatchGraphRangeNearRobotHead(zoomRange)) {
-    watchGraphFollowLatest = true;
-  }
-  if (watchGraphFollowLatest && zoomRange && fullTimeRange) {
-    const span = zoomRange.max - zoomRange.min;
-    zoomRange = normalizeWatchGraphZoomRange({
-      min: fullTimeRange.max - span,
-      max: fullTimeRange.max,
-    }, fullTimeRange);
-  }
-  watchGraphZoomRange = zoomRange;
-  if (!watchGraphZoomRange) watchGraphFollowLatest = false;
-
-  if (watchGraphEmpty) watchGraphEmpty.hidden = hasPrimaryPoints || hasComparePoints;
-
-  if (!hasPrimaryPoints) {
-    if (watchGraphChart) {
-      watchGraphChart.destroy();
-      watchGraphChart = null;
-    }
-    return;
-  }
-
-  const yMin = yRange.min;
-  const yMax = yRange.max;
-  const datasets = [{
-    label: "Value",
-    data: primaryPoints,
-    borderColor: "#6ea8fff2",
-    backgroundColor: "rgba(110, 168, 255, 0.25)",
-    borderWidth: 2,
-    pointRadius: 0,
-    tension: primarySeries.hasBooleanSeries ? 0 : 0.1,
-    stepped: primarySeries.hasBooleanSeries ? "after" : false,
-  }];
-
-  if (hasComparePoints) {
-    datasets.push({
-      label: "Comparison",
-      data: comparePoints,
-      borderColor: "#ff810c",
-      backgroundColor: "rgba(255, 129, 12, 0.2)",
-      borderWidth: 2,
-      pointRadius: 0,
-      tension: compareSeries.hasBooleanSeries ? 0 : 0.1,
-      stepped: compareSeries.hasBooleanSeries ? "after" : false,
-    });
-  }
-
-  if (!watchGraphChart) {
-    watchGraphChart = new Chart(watchGraphCanvas, {
-      type: "line",
-      data: {
-        datasets,
-      },
-      options: {
-        animation: false,
-        maintainAspectRatio: false,
-        parsing: false,
-        normalized: true,
-        scales: {
-          x: {
-            type: "linear",
-            min: zoomRange?.min,
-            max: zoomRange?.max,
-            title: { display: true, text: "Time (s)", color: "rgba(255,255,255,0.75)" },
-            ticks: { color: "rgba(255,255,255,0.72)" },
-            grid: { color: "rgba(255,255,255,0.1)" },
-          },
-          y: {
-            type: "linear",
-            min: yMin,
-            max: yMax,
-            title: { display: true, text: "Value", color: "rgba(255,255,255,0.75)" },
-            ticks: { color: "rgba(255,255,255,0.72)" },
-            grid: { color: "rgba(255,255,255,0.1)" },
-          },
-        },
-        plugins: {
-          legend: { display: false },
-        },
-      },
-    });
-    return;
-  }
-
-  watchGraphChart.data.datasets = datasets;
-  if (watchGraphChart.options?.scales?.x) {
-    watchGraphChart.options.scales.x.min = zoomRange?.min;
-    watchGraphChart.options.scales.x.max = zoomRange?.max;
-  }
-  if (watchGraphChart.options?.scales?.y) {
-    watchGraphChart.options.scales.y.min = yMin;
-    watchGraphChart.options.scales.y.max = yMax;
-  }
-  watchGraphChart.update("none");
-}
-
-function resizeWatchGraphChart() {
-  if (!watchGraphChart) return;
-  watchGraphChart.resize();
-  watchGraphChart.update("none");
-}
-
-function saveWatchGraphHoverState() {
-  if (watchGraphHoverSaved != null) return;
-  watchGraphHoverSaved = {
-    index: selectedIndex,
-    lockActive: trackLockActive,
-    lockPose: trackLockPose,
-    lockIndex: trackLockIndex,
-  };
-}
-
-function clearWatchGraphHoverPreview({ restore = true } = {}) {
-  hoverTimelineTime = null;
-
-  if (restore && watchGraphHoverSaved != null) {
-    selectedIndex = watchGraphHoverSaved.index;
-    trackLockActive = watchGraphHoverSaved.lockActive;
-    trackLockPose = watchGraphHoverSaved.lockPose;
-    trackLockIndex = watchGraphHoverSaved.lockIndex;
-  }
-
-  watchGraphHoverSaved = null;
-  updatePoseReadout();
-  requestDrawAll();
-}
-
-function watchGraphMarkerFromEvent(event) {
-  if (!watchGraphChart) return null;
-  const hits = watchGraphChart.getElementsAtEventForMode(event, "nearest", { intersect: false }, false);
-  if (!Array.isArray(hits) || !hits.length) return null;
-  const datasetIndex = hits[0]?.datasetIndex;
-  const pointIndex = hits[0]?.index;
-  if (!Number.isInteger(pointIndex)) return null;
-  if (datasetIndex === 1) return watchGraphCompareMarkersForKey[pointIndex] ?? null;
-  return watchGraphMarkersForKey[pointIndex] ?? null;
-}
-
-function refreshWatchGraphPanelData() {
-  refreshWatchGraphCompareSelect();
-  if (!watchGraphPanelOpen || !watchGraphPanelKey) return;
-  const { latest, count, avg, min, max } = watchGraphStatsByKey(watchGraphPanelKey);
-  const compareStats = watchGraphCompareKey ? watchGraphStatsByKey(watchGraphCompareKey) : null;
-  if (!latest || count <= 0) {
-    hideWatchGraphPanel();
-    return;
-  }
-
-  const currentLatest = findWatchByKeyAtOrBeforeTime(watchGraphPanelKey, getPinnedWatchReferenceTimeMs());
-  const currentCompareLatest = watchGraphCompareKey
-    ? findWatchByKeyAtOrBeforeTime(watchGraphCompareKey, getPinnedWatchReferenceTimeMs())
-    : null;
-
-  const idNum = Number(latest.id);
-  const hasId = Number.isInteger(idNum);
-  const idText = hasId ? String(idNum) : "—";
-  const labelText = String(latest.label ?? "");
-  const latestValue = (currentLatest?.value == null) ? "—" : String(currentLatest.value);
-  const compareLatestValue = (currentCompareLatest?.value == null) ? "—" : String(currentCompareLatest.value);
-
-  if (watchGraphSubtitle) watchGraphSubtitle.textContent = hasId ? `Id: ${idText}` : "Id: —";
-  if (watchGraphTitle) watchGraphTitle.textContent = labelText || "—";
-  if (watchGraphLatest) watchGraphLatest.textContent = latestValue;
-  if (watchGraphCompareLatest) watchGraphCompareLatest.textContent = compareLatestValue;
-  if (watchGraphCount) watchGraphCount.textContent = formatWatchGraphCountStat(count);
-  if (watchGraphAvg) watchGraphAvg.textContent = formatWatchGraphNumericStat(avg);
-  if (watchGraphMin) watchGraphMin.textContent = formatWatchGraphNumericStat(min);
-  if (watchGraphMax) watchGraphMax.textContent = formatWatchGraphNumericStat(max);
-  if (watchGraphCompareCount) watchGraphCompareCount.textContent = formatWatchGraphCountStat(compareStats?.count);
-  if (watchGraphCompareAvg) watchGraphCompareAvg.textContent = formatWatchGraphNumericStat(compareStats?.avg);
-  if (watchGraphCompareMin) watchGraphCompareMin.textContent = formatWatchGraphNumericStat(compareStats?.min);
-  if (watchGraphCompareMax) watchGraphCompareMax.textContent = formatWatchGraphNumericStat(compareStats?.max);
-  renderWatchGraphForKey(watchGraphPanelKey);
-}
-
-function showWatchGraphPanelForKey(key) {
-  if (!key) return false;
-  const { latest, count } = watchGraphStatsByKey(key);
-  if (!latest || count <= 0) return false;
-  if (!watchGraphPanel) return false;
-  if (watchGraphPanelKey !== key) {
-    watchGraphZoomRange = null;
-    watchGraphFollowLatest = false;
-  }
-  watchGraphPanel.classList.remove("hidden");
-  watchGraphPanel.classList.add("isOn");
-  watchGraphPanelOpen = true;
-  watchGraphPanelKey = key;
-  refreshWatchGraphPanelData();
-  resizeWatchGraphChart();
-  return true;
-}
-
-function hideWatchGraphPanel({ preserveKey = false } = {}) {
-  if (!watchGraphPanel) return;
-  watchGraphPanel.classList.add("hidden");
-  watchGraphPanel.classList.remove("isOn");
-  watchGraphPanelOpen = false;
-  if (!preserveKey) {
-    watchGraphPanelKey = null;
-    watchGraphCompareKey = "";
-    watchGraphZoomRange = null;
-    watchGraphFollowLatest = false;
-  }
-  watchGraphMarkersForKey = [];
-  watchGraphCompareMarkersForKey = [];
-  clearWatchGraphHoverPreview({ restore: true });
-  if (!preserveKey && watchGraphChart) {
-    watchGraphChart.destroy();
-    watchGraphChart = null;
-  }
-  if (!preserveKey && watchGraphEmpty) watchGraphEmpty.hidden = false;
-  refreshWatchGraphCompareSelect();
-}
-
-function openOrToggleWatchGraphPanel(marker) {
-  const w = marker?.watch || {};
-  const nextKey = watchGraphKeyForWatch(w);
-  if (!nextKey) return;
-  if (watchGraphPanelOpen && watchGraphPanelKey === nextKey) {
-    hideWatchGraphPanel();
-    return;
-  }
-  showWatchGraphPanelForKey(nextKey);
-}
-
-function findClosestWatchMarker(targetMs) {
-  if (!watchMarkers.length || !Number.isFinite(targetMs)) return null;
-
-  let closest = null;
-  let minDiff = Infinity;
-  for (let i = 0; i < watchMarkers.length; i += 1) {
-    const marker = watchMarkers[i];
-    const diff = Math.abs((marker?.t ?? 0) - targetMs);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = marker;
-    }
-  }
-  return closest;
-}
-
-function toggleCurrentWatchGraphPanel() {
-  if (watchGraphPanelOpen) {
-    hideWatchGraphPanel({ preserveKey: true });
-    return;
-  }
-
-  if (watchGraphPanelKey && showWatchGraphPanelForKey(watchGraphPanelKey)) return;
-
-  const selectedMarker = selectedWatch?.marker ?? null;
-  const poseTime = Number(currentDisplayPose()?.t);
-  const fallbackMarker = Number.isFinite(poseTime)
-    ? (lastWatchAtTime(watchMarkersByTime, poseTime) ?? findClosestWatchMarker(poseTime))
-    : (watchMarkers[watchMarkers.length - 1] ?? null);
-  const marker = selectedMarker || fallbackMarker;
-  if (!marker) return;
-
-  openOrToggleWatchGraphPanel(marker);
+  viewingWatchVisibility.toggleWatchVisibilityForWatch(watch);
 }
 
 function fmtPose(p) {
@@ -4614,123 +4037,6 @@ document.addEventListener("mousedown", (e) => {
   hideWatchPopup();
 }, { capture: true });
 
-if (btnCloseWatchGraph) {
-  btnCloseWatchGraph.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    hideWatchGraphPanel();
-  });
-}
-
-if (watchGraphHeader && watchGraphPanel) {
-  watchGraphHeader.addEventListener("mousedown", (e) => {
-    if (e.button !== 0) return;
-    if (e.target && e.target.closest("#btnCloseWatchGraph, #watchGraphCompareSelect")) return;
-    isWatchGraphDragging = true;
-    watchGraphDragStart = {
-      x: e.clientX - watchGraphPanel.offsetLeft,
-      y: e.clientY - watchGraphPanel.offsetTop,
-    };
-    e.preventDefault();
-  });
-}
-
-if (watchGraphCompareSelect) {
-  watchGraphCompareSelect.addEventListener("change", () => {
-    watchGraphCompareKey = watchGraphCompareSelect.value || "";
-    watchGraphZoomRange = null;
-    watchGraphFollowLatest = false;
-    renderWatchGraphForKey(watchGraphPanelKey);
-  });
-  watchGraphCompareSelect.addEventListener("mousedown", (e) => {
-    e.stopPropagation();
-  });
-  watchGraphCompareSelect.addEventListener("pointerdown", (e) => {
-    e.stopPropagation();
-  });
-}
-
-if (watchGraphResizer) {
-  watchGraphResizer.addEventListener("mousedown", (e) => {
-    if (e.button !== 0) return;
-    isWatchGraphResizing = true;
-    e.preventDefault();
-    e.stopPropagation();
-  });
-}
-
-if (watchGraphCanvas) {
-  watchGraphCanvas.addEventListener("mousemove", (e) => {
-    if (!data || playing || !watchGraphPanelOpen) return;
-    const marker = watchGraphMarkerFromEvent(e);
-    watchGraphCanvas.style.cursor = marker ? "pointer" : "crosshair";
-    if (!marker) {
-      clearWatchGraphHoverPreview({ restore: true });
-      return;
-    }
-
-    saveWatchGraphHoverState();
-    hoverTimelineTime = marker.t ?? null;
-    updatePoseReadout();
-    requestDrawAll();
-  });
-
-  watchGraphCanvas.addEventListener("mouseleave", () => {
-    if (!data || playing) return;
-    watchGraphCanvas.style.cursor = "default";
-    clearWatchGraphHoverPreview({ restore: true });
-  });
-
-  watchGraphCanvas.addEventListener("mousedown", (e) => {
-    if (!data || playing || !watchGraphPanelOpen) return;
-    if (window.__live && window.__live.streaming) return;
-    if (e.button !== 0) return;
-
-    const marker = watchGraphMarkerFromEvent(e);
-    if (!marker) return;
-
-    e.preventDefault();
-    clearWatchGraphHoverPreview({ restore: false });
-    selectWatchMarker(marker, false, null);
-  });
-
-  watchGraphCanvas.addEventListener("wheel", (e) => {
-    if (!watchGraphPanelOpen || !watchGraphChart) return;
-    const chartArea = watchGraphChart.chartArea;
-    const xScale = watchGraphChart.scales?.x;
-    if (!chartArea || !xScale) return;
-
-    const rect = watchGraphCanvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    if (x < chartArea.left || x > chartArea.right || y < chartArea.top || y > chartArea.bottom) return;
-
-    const datasets = watchGraphChart.data?.datasets ?? [];
-    const fullRange = watchGraphTimeRange(datasets[0]?.data ?? [], datasets[1]?.data ?? []);
-    if (!fullRange) return;
-
-    e.preventDefault();
-
-    const currentMin = Number.isFinite(xScale.min) ? xScale.min : fullRange.min;
-    const currentMax = Number.isFinite(xScale.max) ? xScale.max : fullRange.max;
-    const currentSpan = currentMax - currentMin;
-    if (!Number.isFinite(currentSpan) || currentSpan <= 0) return;
-
-    const anchor = xScale.getValueForPixel(x);
-    if (!Number.isFinite(anchor)) return;
-
-    const zoomFactor = Math.exp((e.deltaY || 0) * 0.0012);
-    let nextSpan = currentSpan * zoomFactor;
-    nextSpan = clamp(nextSpan, Math.min(0.1, fullRange.max - fullRange.min), fullRange.max - fullRange.min);
-
-    const ratio = (anchor - currentMin) / currentSpan;
-    const nextMin = anchor - nextSpan * ratio;
-    const nextMax = nextMin + nextSpan;
-    setWatchGraphZoomRange({ min: nextMin, max: nextMax }, fullRange);
-    renderWatchGraphForKey(watchGraphPanelKey);
-  }, { passive: false });
-}
-
 function watchSortValueKey(value) {
   if (value == null) return { t: 2, n: 0, s: "" };
   if (typeof value === "boolean") return { t: 0, n: value ? 1 : 0, s: String(value) };
@@ -4739,8 +4045,8 @@ function watchSortValueKey(value) {
 }
 
 function clearWaypointSelection() {
-  selectedWaypointId = null;
-  selectedWaypointEventTime = null;
+  viewingSelection.selectedWaypointId = null;
+  viewingSelection.selectedWaypointEventTime = null;
   waypointListRenderer.highlight(null, null, false);
 }
 
@@ -4770,10 +4076,10 @@ function waypointPoseIndexForSelection(waypoint, eventTime = null) {
 
 function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
   if (!waypoint) return;
-  selectedWaypointId = waypoint.id;
-  selectedWaypointEventTime = event?.t ?? waypoint.latestActiveEvent?.t ?? waypoint.createdTime ?? null;
-  selectedWatch = null;
-  selectedLogTime = null;
+  viewingSelection.selectedWaypointId = waypoint.id;
+  viewingSelection.selectedWaypointEventTime = event?.t ?? waypoint.latestActiveEvent?.t ?? waypoint.createdTime ?? null;
+  viewingSelection.selectedWatch = null;
+  viewingSelection.selectedLogTime = null;
   watchListRenderer.highlight(null, false);
   logListRenderer.highlight(null, false);
   hideWatchPopup();
@@ -4781,19 +4087,19 @@ function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
   if (leftConnected && leftStreaming) {
     requestDrawAll();
     setStatus(`Waypoint: ${waypoint.name || waypoint.id} selected.`);
-    waypointListRenderer.highlight(waypoint.id, selectedWaypointEventTime, fromUserClick);
+    waypointListRenderer.highlight(waypoint.id, viewingSelection.selectedWaypointEventTime, fromUserClick);
     return;
   }
 
-  const poseIdx = waypointPoseIndexForSelection(waypoint, selectedWaypointEventTime);
+  const poseIdx = waypointPoseIndexForSelection(waypoint, viewingSelection.selectedWaypointEventTime);
   if (poseIdx != null) {
-    clearTrackHover(true);
-    clearTrackLock();
-    pause();
-    hoverTimelineTime = null;
-    timelineHoverSaved = null;
-    selectedIndex = poseIdx;
-    lastPoseIndex = selectedIndex;
+    viewingSelection.clearTrackHover(true);
+    viewingSelection.clearTrackLock();
+    viewingPlayback.pause();
+    viewingSelection.hoverTimelineTime = null;
+    viewingSelection.timelineHoverSaved = null;
+    viewingSelection.selectedIndex = poseIdx;
+    lastPoseIndex = viewingSelection.selectedIndex;
     poseListRenderer.highlight();
     updatePoseReadout();
     requestDrawAll();
@@ -4803,14 +4109,14 @@ function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
     requestDrawAll();
   }
 
-  waypointListRenderer.highlight(waypoint.id, selectedWaypointEventTime, fromUserClick);
+  waypointListRenderer.highlight(waypoint.id, viewingSelection.selectedWaypointEventTime, fromUserClick);
 }
 
 function selectWatchMarker(marker, fromUserClick = false, clickPos = null) {
-  selectedWatch = { marker };
-  selectedLogTime = null;
-  selectedWaypointId = null;
-  selectedWaypointEventTime = null;
+  viewingSelection.selectedWatch = { marker };
+  viewingSelection.selectedLogTime = null;
+  viewingSelection.selectedWaypointId = null;
+  viewingSelection.selectedWaypointEventTime = null;
 
   const timeStr = (marker.t != null) ? `${fmtNum(marker.t / 1000)}s` : "—";;
 
@@ -4837,8 +4143,8 @@ function requestDrawAll() {
   requestAnimationFrame(() => {
     drawQueued = false;
     draw();
-    drawTimeline();
-    planningMode.rendering.drawTimeline();
+    viewingTimeline.draw();
+    planningMode.rendering.viewingTimeline.draw();
   });
 }
 
@@ -4957,7 +4263,7 @@ function selectedWaypointForOverlay() {
   const filter = waypointFilterValue();
   const overlayWaypointId = (filter !== "all" && filter !== "active")
     ? filter
-    : selectedWaypointId;
+    : viewingSelection.selectedWaypointId;
   if (overlayWaypointId == null) return null;
   const waypoint = waypointByIdLike(overlayWaypointId);
   return waypoint && waypointFilterMatches(waypoint) ? waypoint : null;
@@ -5213,13 +4519,13 @@ function loadRobotImageFromDataUrl(dataUrl) {
 
 function currentDisplayPose() {
   // priority:
-  // playing > timeline hover > track hover > track lock > selectedIndex
-  if (playing) return playPose || interpolatePoseAtTime(playTimeMs);
-  if (!playing && hoverTimelineTime != null) return interpolatePoseAtTime(hoverTimelineTime);
-  if (!playing && trackHover?.pose) return trackHover.pose;
-  if (!playing && trackLockActive && trackLockPose) return trackLockPose;
+  // viewingPlayback.isPlaying() > timeline hover > track hover > track lock > viewingSelection.selectedIndex
+  if (viewingPlayback.isPlaying()) return viewingPlayback.getPlayPose() || interpolatePoseAtTime(viewingPlayback.getPlayTimeMs());
+  if (!viewingPlayback.isPlaying() && viewingSelection.hoverTimelineTime != null) return interpolatePoseAtTime(viewingSelection.hoverTimelineTime);
+  if (!viewingPlayback.isPlaying() && viewingSelection.trackHover?.pose) return viewingSelection.trackHover.pose;
+  if (!viewingPlayback.isPlaying() && viewingSelection.trackLockActive && viewingSelection.trackLockPose) return viewingSelection.trackLockPose;
   const poses = rawPoses.map(poseToInches);
-  return poses[selectedIndex] || null;
+  return poses[viewingSelection.selectedIndex] || null;
 }
 
 function draw() {
@@ -5242,179 +4548,13 @@ function draw() {
   }
 }
 
-// -------- timeline --------
-function indexToX(i) {
-  const rect = timelineCanvas.getBoundingClientRect();
-  const W = rect.width || 1;
-  const n = Math.max(1, rawPoses.length - 1);
-  return (clamp(i, 0, n) / n) * W;
-}
-
-function indexToTime(i) {
-  i = clamp(i, 0, rawPoses.length - 1);
-  return rawPoses[i]?.t ?? 0;
-}
-
-// Map a time to a *fractional pose index*, then to X.
-// This makes consecutive poses evenly spaced on the timeline.
-function timeToX(t) {
-  if (!rawPoses.length) return 0;
-
-  // binary search for floor index by time
-  let lo = 0, hi = rawPoses.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    const tm = rawPoses[mid]?.t ?? 0;
-    if (tm <= t) lo = mid;
-    else hi = mid - 1;
-  }
-
-  const i0 = lo;
-  const i1 = Math.min(rawPoses.length - 1, i0 + 1);
-  const t0 = rawPoses[i0]?.t ?? 0;
-  const t1 = rawPoses[i1]?.t ?? t0;
-
-  const frac = (t1 === t0) ? 0 : clamp((t - t0) / (t1 - t0), 0, 1);
-  return indexToX(i0 + frac);
-}
-
-// Inverse: X -> fractional pose index -> interpolated time
-function xToTime(x) {
-  if (!rawPoses.length) return 0;
-
-  const rect = timelineCanvas.getBoundingClientRect();
-  const W = rect.width || 1;
-
-  const a = clamp(x / W, 0, 1);
-  const f = a * (rawPoses.length - 1);
-
-  const i0 = Math.floor(f);
-  const i1 = Math.min(rawPoses.length - 1, i0 + 1);
-  const frac = f - i0;
-
-  const t0 = rawPoses[i0]?.t ?? 0;
-  const t1 = rawPoses[i1]?.t ?? t0;
-  return t0 + frac * (t1 - t0);
-}
-
-function timelinePickWatchDot(mx, my) {
-  const r = 8;
-  for (const m of watchMarkers) {
-    if (!isWatchMarkerVisible(m)) continue;
-    const dx = mx - timeToX(m.t);
-    const dy = my - 10;
-    if ((dx * dx + dy * dy) <= r * r) return m;
-  }
-  return null;
-}
-
-function drawTimeline() {
-  if (timelineBar.classList.contains("isCollapsed")) return;
-
-  const rect = timelineCanvas.getBoundingClientRect();
-  const W = rect.width, H = rect.height;
-  tctx.clearRect(0, 0, W, H);
-
-  tctx.fillStyle = "rgba(16,23,32,0.55)";
-  tctx.fillRect(0, 0, W, H);
-
-  if (!rawPoses.length) return;
-  const range = timeRange();
-  if (!range) return;
-
-  tctx.strokeStyle = "rgba(255,255,255,0.08)";
-  tctx.lineWidth = 1;
-  const major = 10;
-  for (let i = 0; i <= major; i++) {
-    const x = (W * i) / major;
-    tctx.beginPath(); tctx.moveTo(x, 0); tctx.lineTo(x, H); tctx.stroke();
-  }
-
-  // speed trace using norm
-  tctx.lineWidth = 2;
-  for (let i = 1; i < rawPoses.length; i++) {
-    const a = rawPoses[i - 1], b = rawPoses[i];
-    if (typeof a.t !== "number" || typeof b.t !== "number") continue;
-
-    const xa = timeToX(a.t);
-    const xb = timeToX(b.t);
-
-    const ya = H - 6 - (clamp(a.speed_norm ?? 0, 0, 1) * (H - 12));
-    const yb = H - 6 - (clamp(b.speed_norm ?? 0, 0, 1) * (H - 12));
-
-    const grad = tctx.createLinearGradient(xa, ya, xb, yb);
-    grad.addColorStop(0, heatColorFromNorm(a.speed_norm ?? 0));
-    grad.addColorStop(1, heatColorFromNorm(b.speed_norm ?? 0));
-
-    tctx.strokeStyle = grad;
-    tctx.beginPath();
-    tctx.moveTo(xa, ya);
-    tctx.lineTo(xb, yb);
-    tctx.stroke();
-  }
-
-  // watch dots
-  for (const m of watchMarkers) {
-    if (!isWatchMarkerVisible(m)) continue;
-    const x = timeToX(m.t);
-    const y = 10;
-    tctx.save();
-    tctx.fillStyle = levelFillWithAlpha(m.watch.level, 0.25);
-    tctx.strokeStyle = "rgba(255,255,255,0.95)";
-    tctx.lineWidth = 2;
-    tctx.beginPath();
-    tctx.arc(x, y, 4.2, 0, Math.PI * 2);
-    tctx.fill();
-    tctx.stroke();
-    tctx.restore();
-  }
-
-  // selected marker: depends on current state
-  let selT = null;
-  if (playing) selT = playTimeMs;
-  else if (trackLockActive && trackLockIndex != null) selT = rawPoses[trackLockIndex]?.t ?? null;
-  else selT = rawPoses[selectedIndex]?.t ?? null;
-
-  if (selT != null) {
-    const x = timeToX(selT);
-    tctx.strokeStyle = "rgba(255,255,255,0.95)";
-    tctx.lineWidth = 2;
-    tctx.beginPath();
-    tctx.moveTo(x, 0);
-    tctx.lineTo(x, H);
-    tctx.stroke();
-  }
-
-  if (hoverTimelineTime != null) {
-    const x = timeToX(hoverTimelineTime);
-    tctx.strokeStyle = "rgba(255,255,255,0.5)";
-    tctx.lineWidth = 1.5;
-    tctx.beginPath();
-    tctx.moveTo(x, 0);
-    tctx.lineTo(x, H);
-    tctx.stroke();
-  }
-
-  if (selectedWatch?.marker?.t != null && isWatchMarkerVisible(selectedWatch.marker)) {
-    const x = timeToX(selectedWatch.marker.t);
-    const y = 10;
-    tctx.save();
-    tctx.strokeStyle = "rgba(255,255,255,0.95)";
-    tctx.lineWidth = 2;
-    tctx.beginPath();
-    tctx.arc(x, y, 9.0, 0, Math.PI * 2);
-    tctx.stroke();
-    tctx.restore();
-  }
-}
-
 // Timeline time readout
 function updateDeltaReadout() {
   if (!data || !rawPoses.length) return;
-  const lockedTime = rawPoses[selectedIndex]?.t || 0;
+  const lockedTime = rawPoses[viewingSelection.selectedIndex]?.t || 0;
 
-  // hoverTimelineTime is the time currently under the cursor
-  const hoveredTime = hoverTimelineTime !== null ? hoverTimelineTime : lockedTime;
+  // viewingSelection.hoverTimelineTime is the time currently under the cursor
+  const hoveredTime = viewingSelection.hoverTimelineTime !== null ? viewingSelection.hoverTimelineTime : lockedTime;
   const delta = Math.abs(hoveredTime - lockedTime) / 1000;
   if (deltaPill) {
     deltaPill.textContent = `Δ: ${formatFixedNumberString(delta, 2, "0.00")}s`;
@@ -5427,197 +4567,47 @@ const btnToggleFloat = document.getElementById("btnToggleFloat");
 const btnCloseFloat = document.getElementById("btnCloseFloat");
 const floatHeader = document.getElementById("floatHeader");
 const floatResizer = document.getElementById("floatResizer");
-
-// Toggle Visibility
-btnToggleFloat.onclick = (e) => {
-  e.stopPropagation(); // Prevents event bubbling
-  toggleFloatingInfo();
-};
-
-btnCloseFloat.onclick = (e) => {
-  e.stopPropagation();
-  floatWin.classList.add("hidden");
-  btnToggleFloat.classList.remove("isOn");
-  floatWin.classList.remove("isOn");
-};
-
-// Dragging Logic
-let isDragging = false, dragStart = { x: 0, y: 0 };
-floatHeader.onmousedown = (e) => {
-  isDragging = true;
-  dragStart = { x: e.clientX - floatWin.offsetLeft, y: e.clientY - floatWin.offsetTop };
-};
-
-// Resizing Logic
-let isResizing = false;
-floatResizer.onmousedown = (e) => {
-  isResizing = true;
-  e.preventDefault();
-};
+const floatingInfo = createFloatingInfo({
+  floatWindow: floatWin,
+  toggleButton: btnToggleFloat,
+  closeButton: btnCloseFloat,
+  header: floatHeader,
+  resizer: floatResizer,
+  pinnedHost: pinnedWatchHost,
+  pinnedTemplate: pinnedWatchTemplate,
+  bounds: floatingWindowBounds,
+  getWatches: () => watches,
+  getReferenceTimeMs: () => getPinnedWatchReferenceTimeMs(),
+  getLockedTimeMs: () => rawPoses[viewingSelection.selectedIndex]?.t ?? null,
+  getHoverTimeMs: () => viewingSelection.hoverTimelineTime,
+  hasData: () => !!data,
+  hasPoses: () => rawPoses.length > 0,
+  isWatchMarkerVisibleForClosestWatch: () => true,
+  speedFromNorm,
+  normFromSpeedRaw,
+  formatNumber: formatNumberString,
+  setPlayTimeMs: (timeMs) => viewingPlayback.setPlayTimeMs(timeMs),
+  pausePlayback: () => viewingPlayback.pause(),
+  setSelectedIndex: (index) => { viewingSelection.selectedIndex = index; },
+  findFloorIndexByTime,
+  updatePoseReadout,
+  requestDrawAll,
+  levelStyle,
+  normalizeLogLevel,
+  onToggle: (enabled) => {
+    viewingTelemetry.floatingInfoToggled({ enabled }).catch(err => console.error(err));
+  },
+});
 
 window.addEventListener("mousemove", (e) => {
-  if (isDragging) {
-    floatWin.style.left = `${e.clientX - dragStart.x}px`;
-    floatWin.style.top = `${e.clientY - dragStart.y}px`;
-  }
-  if (isWatchGraphDragging && watchGraphPanel) {
-    const nextLeft = e.clientX - watchGraphDragStart.x;
-    const nextTop = e.clientY - watchGraphDragStart.y;
-    const rect = watchGraphPanel.getBoundingClientRect();
-    const clampedLeft = clamp(nextLeft, 0, Math.max(0, window.innerWidth - rect.width));
-    const clampedTop = clamp(nextTop, 0, Math.max(0, window.innerHeight - rect.height));
-    watchGraphPanel.style.left = `${clampedLeft}px`;
-    watchGraphPanel.style.top = `${clampedTop}px`;
-    watchGraphPanel.style.right = "auto";
-  }
-  if (pinnedWatchDragTarget) {
-    const nextLeft = e.clientX - pinnedWatchDragStart.x;
-    const nextTop = e.clientY - pinnedWatchDragStart.y;
-    const rect = pinnedWatchDragTarget.getBoundingClientRect();
-    const clampedLeft = clamp(nextLeft, 0, Math.max(0, window.innerWidth - rect.width));
-    const clampedTop = clamp(nextTop, 0, Math.max(0, window.innerHeight - rect.height));
-    pinnedWatchDragTarget.style.left = `${clampedLeft}px`;
-    pinnedWatchDragTarget.style.top = `${clampedTop}px`;
-    pinnedWatchDragTarget.style.right = "auto";
-  }
-
-  if (isResizing) {
-    // Calculate the intended new size
-    let newWidth = e.clientX - floatWin.offsetLeft;
-    let newHeight = e.clientY - floatWin.offsetTop;
-
-    // Clamp the values
-    newWidth = Math.max(floatingWindowBounds.minWidth, Math.min(newWidth, floatingWindowBounds.maxWidth));
-    newHeight = Math.max(floatingWindowBounds.minHeight, Math.min(newHeight, floatingWindowBounds.maxHeight));
-
-    // Apply to the element
-    floatWin.style.width = `${newWidth}px`;
-    floatWin.style.height = `${newHeight}px`;
-  }
-  if (isWatchGraphResizing && watchGraphPanel) {
-    let newWidth = e.clientX - watchGraphPanel.offsetLeft;
-    let newHeight = e.clientY - watchGraphPanel.offsetTop;
-    const maxWidth = Math.max(WATCH_GRAPH_MIN_W, window.innerWidth - watchGraphPanel.offsetLeft - WATCH_GRAPH_MARGIN);
-    const maxHeight = Math.max(WATCH_GRAPH_MIN_H, window.innerHeight - watchGraphPanel.offsetTop - WATCH_GRAPH_MARGIN);
-    newWidth = clamp(newWidth, WATCH_GRAPH_MIN_W, Math.min(WATCH_GRAPH_MAX_W, maxWidth));
-    newHeight = clamp(newHeight, WATCH_GRAPH_MIN_H, maxHeight);
-    watchGraphPanel.style.width = `${newWidth}px`;
-    watchGraphPanel.style.height = `${newHeight}px`;
-    resizeWatchGraphChart();
-  }
+  floatingInfo.handleWindowMouseMove(e);
+  watchGraph?.handleWindowMouseMove(e);
 });
 
 window.addEventListener("mouseup", () => {
-  isDragging = false;
-  isResizing = false;
-  isWatchGraphDragging = false;
-  isWatchGraphResizing = false;
-  pinnedWatchDragTarget = null;
+  floatingInfo.handleWindowMouseUp();
+  watchGraph?.handleWindowMouseUp();
 });
-
-function findTemporallyClosestWatch(targetMs) {
-  if (!watches || !watches.length) return null;
-
-  let closest = null;
-  let minDiff = Infinity;
-
-  for (const w of watches) {
-    const diff = Math.abs(w.t - targetMs);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = w;
-    }
-  }
-  return { watch: closest, diffMs: minDiff };
-}
-
-// Data Update Function
-function updateFloatingInfo(pose, idx) {
-  if (floatWin.hidden || !pose) {
-    document.getElementById("fx").textContent = "—";
-    document.getElementById("fy").textContent = "—";
-    document.getElementById("ft").textContent = "—";
-    document.getElementById("ftime").textContent = "—";
-    document.getElementById("favg").textContent = "—";
-    document.getElementById("flv").textContent = "—";
-    document.getElementById("frv").textContent = "—";
-    document.getElementById("fdeltat").textContent = "—";
-    document.getElementById("fcount").textContent = "Point: —/—";
-    return;
-  }
-
-  document.getElementById("fx").textContent = fmtNum(pose.x, 2);
-  document.getElementById("fy").textContent = fmtNum(pose.y, 2);
-  document.getElementById("ft").textContent = fmtNum(pose.theta, 2) + "°";
-  document.getElementById("ftime").textContent = fmtNum(pose.t / 1000, 2) + "s";
-
-  const l = pose.l_vel || 0;
-  const r = pose.r_vel || 0;
-  const n = (pose.speed_norm != null) ? pose.speed_norm : 0;
-  const disp = speedFromNorm(n);
-  const lDisp = speedFromNorm(normFromSpeedRaw(l));
-  const rDisp = speedFromNorm(normFromSpeedRaw(r));
-
-  document.getElementById("favg").textContent = disp == null ? "—" : fmtNum(disp, 2);
-  document.getElementById("flv").textContent = lDisp == null ? "—" : fmtNum(lDisp, 2);
-  document.getElementById("frv").textContent = rDisp == null ? "—" : fmtNum(rDisp, 2);
-
-  document.getElementById("fcount").textContent = `Point: ${idx + 1}/${rawPoses.length}`;
-
-  // Waypoint info
-  const result = findTemporallyClosestWatch(pose.t);
-  const waypointTime = document.getElementById("fwatchtime");
-  const waypointLabel = document.getElementById("fwatchlabel");
-  const waypointValue = document.getElementById("fwatchvalue");
-  const clickable = document.getElementById("fwatchclickable");
-  const deltaTime = document.getElementById("fdeltat");
-
-  if (result) {
-    const { watch, diffMs } = result;
-    const direction = (watch.t > pose.t) ? "ahead" : "ago";
-    const seconds = formatNumberString(diffMs / 1000, 1, "0");
-
-    // Display the label and the time offset
-    waypointLabel.textContent = ` ${watch.label}`;
-    waypointValue.textContent = ` ${watch.value}`;
-    waypointTime.textContent = ` ${seconds}s ${direction}`;
-
-    // Clicking the readout jumps exactly to that waypoint
-    clickable.style.cursor = "pointer";
-    clickable.onclick = () => {
-      pause();
-      playTimeMs = watch.t;
-      selectedIndex = findFloorIndexByTime(watch.t);
-      updatePoseReadout();
-      requestDrawAll();
-    };
-
-    if (!data || !rawPoses.length) temp.textContent = "—";
-    const lockedTime = rawPoses[selectedIndex]?.t || 0;
-
-    // hoverTimelineTime is the time currently under the cursor
-    const hoveredTime = hoverTimelineTime !== null ? hoverTimelineTime : lockedTime;
-    const delta = Math.abs(hoveredTime - lockedTime) / 1000;
-    deltaTime.textContent = `${formatNumberString(delta, 2, "0")}s`;
-  } else {
-    waypointLabel.textContent = " —";
-    waypointValue.textContent = " —";
-    waypointTime.textContent = " —";
-    deltaTime.textContent = "—";
-    clickable.style.cursor = "default";
-    clickable.onclick = null;
-  }
-}
-
-function toggleFloatingInfo() {
-  floatWin.classList.toggle("hidden");
-  btnToggleFloat.classList.toggle("isOn", !floatWin.classList.contains("hidden"));
-  floatWin.classList.toggle("isOn", !floatWin.classList.contains("hidden"));
-
-  viewingTelemetry.floatingInfoToggled({
-    enabled: !floatWin.classList.contains("hidden"),
-  }).catch(err => console.error(err));
-}
 
 // -------- pose readout --------
 function updatePoseReadout() {
@@ -5625,27 +4615,27 @@ function updatePoseReadout() {
     timePill.textContent = "Time: —";
     pointPill.textContent = "Point: —/—";
     posePill.textContent = "X: —  Y: — θ: —  Speed: —";
-    refreshPinnedWatchPanels();
+    floatingInfo.refreshPinnedPanels();
     return;
   }
-  if (selectedIndex < 0) selectedIndex = 0;
-  if (selectedIndex >= rawPoses.length) selectedIndex = Math.max(0, rawPoses.length - 1);
-  let idx = selectedIndex;
+  if (viewingSelection.selectedIndex < 0) viewingSelection.selectedIndex = 0;
+  if (viewingSelection.selectedIndex >= rawPoses.length) viewingSelection.selectedIndex = Math.max(0, rawPoses.length - 1);
+  let idx = viewingSelection.selectedIndex;
   let t = rawPoses[idx]?.t ?? null;
   let p = null;
-  if (playing) {
-    t = playTimeMs;
-    idx = findFloorIndexByTime(playTimeMs);
-    p = interpolatePoseAtTime(playTimeMs);
+  if (viewingPlayback.isPlaying()) {
+    t = viewingPlayback.getPlayTimeMs();
+    idx = findFloorIndexByTime(viewingPlayback.getPlayTimeMs());
+    p = interpolatePoseAtTime(viewingPlayback.getPlayTimeMs());
 
-  } else if (hoverTimelineTime != null) {
-    t = hoverTimelineTime;
-    idx = findFloorIndexByTime(hoverTimelineTime);
-    p = interpolatePoseAtTime(hoverTimelineTime);
+  } else if (viewingSelection.hoverTimelineTime != null) {
+    t = viewingSelection.hoverTimelineTime;
+    idx = findFloorIndexByTime(viewingSelection.hoverTimelineTime);
+    p = interpolatePoseAtTime(viewingSelection.hoverTimelineTime);
 
-  } else if (!playing && trackHover?.pose) {
+  } else if (!viewingPlayback.isPlaying() && viewingSelection.trackHover?.pose) {
     // if hover pose has a time, use interpolation (smooth) instead of the raw cached pose (snappy)
-    const ht = trackHover.pose.t ?? null;
+    const ht = viewingSelection.trackHover.pose.t ?? null;
 
     if (ht != null) {
       t = ht;
@@ -5653,14 +4643,14 @@ function updatePoseReadout() {
       p = interpolatePoseAtTime(ht);
     } else {
       // fallback to old behavior if hover time isn"t available
-      p = trackHover.pose;
-      idx = trackHover.idxNearest ?? selectedIndex;
+      p = viewingSelection.trackHover.pose;
+      idx = viewingSelection.trackHover.idxNearest ?? viewingSelection.selectedIndex;
       t = rawPoses[idx]?.t ?? null;
     }
 
-  } else if (!playing && trackLockActive && trackLockPose) {
-    p = trackLockPose;
-    idx = trackLockIndex ?? selectedIndex;
+  } else if (!viewingPlayback.isPlaying() && viewingSelection.trackLockActive && viewingSelection.trackLockPose) {
+    p = viewingSelection.trackLockPose;
+    idx = viewingSelection.trackLockIndex ?? viewingSelection.selectedIndex;
     t = rawPoses[idx]?.t ?? null;
 
   } else {
@@ -5678,9 +4668,9 @@ function updatePoseReadout() {
     ? `X: ${fmtNum(p.x, 1)}  Y: ${fmtNum(p.y, 1)}  θ: ${fmtNum(p.theta, 1)}°  Speed: ${spDisp == null ? "—" : fmtNum(spDisp, 2)}`
     : "X: —  Y: —  θ: —  Speed: —";
   updateDeltaReadout();
-  updateFloatingInfo(p, idx);
-  refreshWatchGraphPanelData();
-  refreshPinnedWatchPanels();
+  floatingInfo.updateInfo(p, idx);
+  watchGraph.refreshPanelData();
+  floatingInfo.refreshPinnedPanels();
 }
 
 // -------- view controls (square maximize + pan/zoom) --------
@@ -5897,8 +4887,8 @@ canvas.addEventListener("pointermove", (e) => {
     canvas.style.cursor = "grabbing";
 
     // If a hover-preview was active, clear it so the view feels stable while panning.
-    if (trackHover) {
-      clearTrackHover(!trackLockActive);
+    if (viewingSelection.trackHover) {
+      viewingSelection.clearTrackHover(!viewingSelection.trackLockActive);
       poseListRenderer.highlight();
       updatePoseReadout();
     }
@@ -5983,208 +4973,7 @@ canvas.addEventListener("contextmenu", (e) => {
   if (modeController.getMode() === "planning") e.preventDefault();
 });
 
-// -------- track hover/lock --------
-function pickTrackPose(clientX, clientY) {
-  if (!rawPoses.length) return null;
-  const rect = canvas.getBoundingClientRect();
-  const mx = clientX - rect.left;
-  const my = clientY - rect.top;
-
-  const poses = rawPoses.map(poseToInches);
-  if (poses.length < 2) return null;
-
-  let best = { dist2: Infinity, i: -1, alpha: 0 };
-
-  for (let i = 0; i < poses.length - 1; i++) {
-    const a = poses[i], b = poses[i + 1];
-    const pa = worldToScreen(a.x, a.y);
-    const pb = worldToScreen(b.x, b.y);
-
-    const vx = pb.x - pa.x, vy = pb.y - pa.y;
-    const wx = mx - pa.x, wy = my - pa.y;
-    const vv = vx * vx + vy * vy || 1;
-    let alpha = (wx * vx + wy * vy) / vv;
-    alpha = clamp(alpha, 0, 1);
-
-    const px = pa.x + alpha * vx;
-    const py = pa.y + alpha * vy;
-    const dx = mx - px, dy = my - py;
-    const d2 = dx * dx + dy * dy;
-
-    if (d2 < best.dist2) best = { dist2: d2, i, alpha };
-  }
-
-  const dist = Math.sqrt(best.dist2);
-  if (dist > HOVER_PIXEL_TOL + TRACK_HOVER_PAD_PX) return null;
-
-  const i0 = best.i, i1 = best.i + 1;
-  const p0 = poses[i0], p1 = poses[i1];
-  const a = best.alpha;
-
-  // NEW: compute interpolated time from rawPoses (not the inches-converted array)
-  const rt0 = rawPoses[i0]?.t ?? 0;
-  const rt1 = rawPoses[i1]?.t ?? rt0;
-  const tMs = rt0 + a * (rt1 - rt0);
-
-  const pose = {
-    t: tMs, // <-- was null
-    x: p0.x + (p1.x - p0.x) * a,
-    y: p0.y + (p1.y - p0.y) * a,
-    theta: angLerpDeg(p0.theta ?? 0, p1.theta ?? 0, a),
-    l_vel: (p0.l_vel ?? 0) + ((p1.l_vel ?? 0) - (p0.l_vel ?? 0)) * a,
-    r_vel: (p0.r_vel ?? 0) + ((p1.r_vel ?? 0) - (p0.r_vel ?? 0)) * a,
-    speed_raw: (p0.speed_raw ?? 0) + ((p1.speed_raw ?? 0) - (p0.speed_raw ?? 0)) * a,
-    speed_norm: (p0.speed_norm ?? 0) + ((p1.speed_norm ?? 0) - (p0.speed_norm ?? 0)) * a,
-  };
-
-  const nearestIdx = (a < 0.5) ? i0 : i1;
-  return { pose, nearestIdx };
-}
-
-function clearTrackHover(restore) {
-  trackHover = null;
-  if (restore && trackHoverSavedIndex != null) {
-    selectedIndex = trackHoverSavedIndex;
-    trackHoverSavedIndex = null;
-  }
-}
-
-function clearTrackLock() {
-  trackLockActive = false;
-  trackLockPose = null;
-  trackLockIndex = null;
-}
-
-// -------- watch hit test on field --------
-function hitTestWatchAtClient(clientX, clientY) {
-  if (!watchMarkers.length) return null;
-  const rect = canvas.getBoundingClientRect();
-  const x = clientX - rect.left;
-  const y = clientY - rect.top;
-  let best = null;
-  let bestD2 = Infinity;
-  for (const m of watchMarkers) {
-    if (!isWatchMarkerVisible(m)) continue;
-    if (!m.pose) continue;
-    const p = worldToScreen(m.pose.x, m.pose.y);
-    const baseDiameter = hoverWatch === m ? 11.2 : 8.4;
-    const tol = Math.max(8, scaledViewingFieldRadius(baseDiameter) + 5);
-    const dx = p.x - x;
-    const dy = p.y - y;
-    const d2 = dx * dx + dy * dy;
-    if (d2 <= tol * tol && d2 <= bestD2) { bestD2 = d2; best = m; }
-  }
-  return best;
-}
-
-function hitTestWaypointAtClient(clientX, clientY) {
-  if (!waypoints.length) return null;
-  const rect = canvas.getBoundingClientRect();
-  const x = clientX - rect.left;
-  const y = clientY - rect.top;
-  let best = null;
-  let bestD2 = Infinity;
-
-  for (const waypoint of waypoints) {
-    if (!waypointFilterMatches(waypoint)) continue;
-    const p = worldToScreen(waypoint.target.x, waypoint.target.y);
-    const isSelected = selectedWaypointId === waypoint.id;
-    const baseDiameter = isSelected ? 15 : 12;
-    const tol = Math.max(9, scaledViewingFieldRadius(baseDiameter) + 6);
-    const dx = p.x - x;
-    const dy = p.y - y;
-    const d2 = dx * dx + dy * dy;
-    if (d2 <= tol * tol && d2 <= bestD2) {
-      bestD2 = d2;
-      best = waypoint;
-    }
-  }
-  return best;
-}
-
-// -------- playback --------
-let playPose = null;
-
-function pause() {
-  if (!playing) return;
-  playing = false;
-  btnPlay.textContent = "▶";
-  if (raf) cancelAnimationFrame(raf);
-  raf = null;
-  playPose = null;
-  lastWall = null;
-  setStatus(`Paused at time ${formatNumberString((rawPoses[selectedIndex]?.t ?? 0) / 1000, 1, "0")}s`);
-}
-
-function play() {
-  if (!rawPoses.length) return;
-  if (window.__live && window.__live.streaming) { setStatus("Playback disabled while livestreaming."); return; }
-
-  const tMin = rawPoses[0]?.t ?? 0;
-  const tMax = rawPoses[rawPoses.length - 1]?.t ?? tMin;
-  if (selectedIndex >= rawPoses.length - 1 || (typeof playTimeMs === "number" && playTimeMs >= tMax)) {
-    selectedIndex = 0;
-    playTimeMs = tMin;
-    playPose = null;
-  }
-
-  // starting playback clears track lock to avoid confusing states
-  clearTrackHover(true);
-  clearTrackLock();
-  selectedWatch = null;
-  selectedLogTime = null;
-  timelineHoverSaved = null;
-  setStatus(`Playing from time ${formatNumberString((rawPoses[selectedIndex]?.t ?? 0) / 1000, 1, "0")}s`);
-
-  const tStart = rawPoses[selectedIndex]?.t;
-  playTimeMs = (typeof tStart === "number") ? tStart : (rawPoses[0]?.t ?? 0);
-
-  playing = true;
-  btnPlay.textContent = "⏸";
-  lastWall = performance.now();
-
-  const tick = (now) => {
-    if (!playing) return;
-    const dtWall = now - lastWall;
-    lastWall = now;
-    // Constant-time playback (1x base, scaled only by playRate)
-    playTimeMs += dtWall * playRate;
-
-    if (playTimeMs >= tMax) {
-      playTimeMs = tMax;
-      playPose = interpolatePoseAtTime(playTimeMs);
-      selectedIndex = rawPoses.length - 1;
-      updatePoseReadout();
-      requestDrawAll();
-      pause();
-      return;
-    }
-
-    playPose = interpolatePoseAtTime(playTimeMs);
-    selectedIndex = findFloorIndexByTime(playTimeMs);
-
-    // Highlight the most recent watch hit without overriding the user"s
-    // collapsed/expanded state for the Watches panel.
-    const last = lastWatchAtTime(watchMarkersByTime, playTimeMs);
-    if (last && (!selectedWatch || selectedWatch.marker?.t !== last.t)) {
-      selectedWatch = { marker: last };
-      watchListRenderer.highlight(last.t, false);
-    }
-
-    updatePoseReadout();
-    requestDrawAll();
-    raf = requestAnimationFrame(tick);
-  };
-
-  raf = requestAnimationFrame(tick);
-}
-
 // -------- timeline interactions --------
-function timelineMousePos(e) {
-  const rect = timelineCanvas.getBoundingClientRect();
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-}
-
 function isInsideTimelineC(cursor) {
   if (!cursor) return false;
   const x = (typeof cursor.clientX === "number") ? cursor.clientX : cursor.x;
@@ -6211,76 +5000,6 @@ function isInsideFieldC(cursor) {
   return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
 
-timelineCanvas.addEventListener("mousemove", (e) => {
-  if (!data || playing || !rawPoses.length) return;
-
-  const { x, y } = timelineMousePos(e);
-  const hit = timelinePickWatchDot(x, y);
-  timelineCanvas.style.cursor = hit ? "pointer" : "crosshair";
-
-  if (timelineHoverSaved == null) {
-    timelineHoverSaved = {
-      index: selectedIndex,
-      lockActive: trackLockActive,
-      lockPose: trackLockPose,
-      lockIndex: trackLockIndex
-    };
-  }
-
-  // timeline hover always previews, even if track lock is active
-  hoverTimelineTime = xToTime(x);
-  updatePoseReadout();
-  requestDrawAll();
-});
-
-timelineCanvas.addEventListener("mouseleave", () => {
-  if (!data || playing) return;
-  hoverTimelineTime = null;
-  timelineCanvas.style.cursor = "default";
-
-  if (timelineHoverSaved != null) {
-    selectedIndex = timelineHoverSaved.index;
-    trackLockActive = timelineHoverSaved.lockActive;
-    trackLockPose = timelineHoverSaved.lockPose;
-    trackLockIndex = timelineHoverSaved.lockIndex;
-    timelineHoverSaved = null;
-  }
-
-  updatePoseReadout();
-  requestDrawAll();
-});
-
-timelineCanvas.addEventListener("mousedown", (e) => {
-  if (!data || playing || !rawPoses.length) return;
-  if (window.__live && window.__live.streaming) return;
-  const { x, y } = timelineMousePos(e);
-
-  const hit = timelinePickWatchDot(x, y);
-  if (hit) {
-    selectWatchMarker(hit, true, { x: e.clientX, y: e.clientY });
-    return;
-  }
-
-  // lock selection at time (clears track lock)
-  clearTrackHover(true);
-  clearTrackLock();
-  selectedWatch = null;
-  selectedLogTime = null;
-  selectedWaypointId = null;
-  selectedWaypointEventTime = null;
-  waypointListRenderer.highlight(null, null, false);
-
-  const t = xToTime(x);
-  selectedIndex = findFloorIndexByTime(t);
-  lastPoseIndex = selectedIndex;
-  hoverTimelineTime = null;
-  timelineHoverSaved = null;
-
-  poseListRenderer.highlight();
-  updatePoseReadout();
-  requestDrawAll();
-});
-
 if (planningTimelineCanvas) {
   const onPlanScrub = (e) => {
     const rect = planningTimelineCanvas.getBoundingClientRect();
@@ -6306,182 +5025,6 @@ if (planningTimelineCanvas) {
     planningMode.scrubbing = false;
   });
 }
-
-// -------- field interactions --------
-canvas.addEventListener("mousemove", (e) => {
-  updateCursorPillsFromClient(e.clientX, e.clientY);
-});
-
-canvas.addEventListener("mousemove", (e) => {
-  if (modeController.getMode() === "planning") {
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const waypointHit = planningMode.rendering.hitTestField(mx, my) >= 0;
-    const thetaHandleHit = planThetaHandleHit(mx, my) >= 0;
-    const nodeHit = (!waypointHit && !thetaHandleHit) ? hitTestPlanFieldNodeAtClient(e.clientX, e.clientY) : null;
-    if (nodeHit) {
-      if (planningMode.fieldHoverNodeId !== nodeHit.node.id) {
-        planningMode.fieldHoverNodeId = nodeHit.node.id;
-        requestDrawAll();
-      }
-      canvas.style.cursor = "pointer";
-      updatePlanNodeTooltip(nodeHit.tooltipText, e.clientX, e.clientY, !!nodeHit.method?.hasOverride);
-    } else {
-      const hadHover = planningMode.fieldHoverNodeId != null;
-      planningMode.fieldHoverNodeId = null;
-      canvas.style.cursor = "";
-      hidePlanNodeTooltip();
-      if (hadHover) requestDrawAll();
-    }
-    return;
-  }
-  if (!data || playing || isPanning) return;
-
-  // watch hover has priority
-  const hw = hitTestWatchAtClient(e.clientX, e.clientY);
-  if (hw) {
-    hoverWatch = hw;
-    canvas.style.cursor = "pointer";
-    requestDrawAll();
-    return;
-  } else {
-    if (hoverWatch) { hoverWatch = null; requestDrawAll(); }
-    canvas.style.cursor = "";
-  }
-
-  const waypointHit = hitTestWaypointAtClient(e.clientX, e.clientY);
-  if (waypointHit) {
-    canvas.style.cursor = "pointer";
-    return;
-  }
-
-  const hit = pickTrackPose(e.clientX, e.clientY);
-
-  if (!hit) {
-    // no field hit => remove timeline hover preview too
-    hoverTimelineTime = null;
-
-    if (trackHover) {
-      clearTrackHover(!trackLockActive);
-      poseListRenderer.highlight();
-      updatePoseReadout();
-      requestDrawAll();
-    }
-    return;
-  }
-
-  if (trackHoverSavedIndex == null) trackHoverSavedIndex = selectedIndex;
-  trackHover = { t: hit.pose.t, idxNearest: hit.nearestIdx };
-
-  // Drive the timeline grey line from the hovered field pose
-  hoverTimelineTime = hit.pose.t ?? null;
-
-  updatePoseReadout();
-  requestDrawAll();
-});
-
-canvas.addEventListener("mouseleave", () => {
-  setCursorPills("Cursor: —");
-  if (modeController.getMode() === "planning") {
-    const hadHover = planningMode.fieldHoverNodeId != null;
-    planningMode.fieldHoverNodeId = null;
-    hidePlanNodeTooltip({ immediate: true });
-    canvas.style.cursor = "";
-    if (hadHover) requestDrawAll();
-    return;
-  }
-  hoverWatch = null;
-  // ensure timeline hover preview can"t "stick"
-  hoverTimelineTime = null;
-  timelineHoverSaved = null;
-  canvas.style.cursor = "";
-  if (trackHover) {
-    clearTrackHover(!trackLockActive);
-    poseListRenderer.highlight();
-    updatePoseReadout();
-    requestDrawAll();
-  }
-});
-
-canvas.addEventListener("click", (e) => {
-  if (modeController.getMode() === "planning") return;
-  if (!data) return;
-  if (suppressNextClick) { suppressNextClick = false; return; }
-
-  const isLiveStreaming = window.__live && window.__live.streaming;
-  if (!isLiveStreaming) {
-    const hw = hitTestWatchAtClient(e.clientX, e.clientY);
-    if (hw) {
-      selectWatchMarker(hw, true, { x: e.clientX, y: e.clientY });
-      return;
-    }
-  }
-
-  const waypointHit = hitTestWaypointAtClient(e.clientX, e.clientY);
-  if (waypointHit) {
-    if (selectedWaypointId === waypointHit.id) {
-      clearWaypointSelection();
-      requestDrawAll();
-      return;
-    }
-    if (waypointFilter && waypointFilter.value === "all") {
-      viewingRendering.renderWaypointList();
-    }
-    selectWaypointEvent(waypointHit, waypointHit.latestActiveEvent, true);
-    return;
-  }
-
-  if (playing) return;
-  if (isLiveStreaming) return;
-
-  const hit = pickTrackPose(e.clientX, e.clientY);
-  if (hit) {
-    // lock to clicked position
-    pause();
-    selectedWatch = null;
-    selectedLogTime = null;
-    selectedWaypointId = null;
-    selectedWaypointEventTime = null;
-    waypointListRenderer.highlight(null, null, false);
-
-    trackLockActive = true;
-    trackLockPose = hit.pose;
-    trackLockIndex = hit.nearestIdx;
-
-    selectedIndex = hit.nearestIdx;
-    lastPoseIndex = selectedIndex;
-    clearTrackHover(false);
-    trackHoverSavedIndex = null;
-
-    // Show locked pos on timeline
-    if (timelineHoverSaved == null) {
-      timelineHoverSaved = {
-        index: selectedIndex,
-        lockActive: trackLockActive,
-        lockPose: hit.pose,
-        lockIndex: trackLockIndex
-      };
-    }
-
-    poseListRenderer.highlight();
-    updatePoseReadout();
-    requestDrawAll();
-    return;
-  }
-
-  // click off-track unlocks
-  if (trackLockActive) {
-    clearTrackLock();
-    clearWaypointSelection();
-    setStatus(`Unlocked track lock.`);
-    updatePoseReadout();
-    requestDrawAll();
-  } else if (selectedWaypointId != null) {
-    clearWaypointSelection();
-    requestDrawAll();
-  }
-});
 
 canvas.addEventListener("dblclick", (e) => {
   if (modeController.getMode() !== "planning") return;
@@ -6829,7 +5372,7 @@ async function connectLeft() {
     leftSetUI("Backend is still starting. Please try again in a moment.");
     return;
   }
-  pause();
+  viewingPlayback.pause();
   if (leftStreaming) {
     await stopStreaming(false, false);
   }
@@ -6932,12 +5475,12 @@ async function doLeftRefresh() {
   const batch = livePendingBuffer.batch();
   if (!batch) {
     // Nothing new; still ensure we snap to latest if appropriate
-    if (liveAutoFollowHead && rawPoses.length && hoverTimelineTime == null && !playing && !trackLockActive && !(trackHover && (trackHover.pose || trackHover.t))) {
-      selectedIndex = rawPoses.length - 1;
-      lastPoseIndex = selectedIndex;
+    if (liveAutoFollowHead && rawPoses.length && viewingSelection.hoverTimelineTime == null && !viewingPlayback.isPlaying() && !viewingSelection.trackLockActive && !(viewingSelection.trackHover && (viewingSelection.trackHover.pose || viewingSelection.trackHover.t))) {
+      viewingSelection.selectedIndex = rawPoses.length - 1;
+      lastPoseIndex = viewingSelection.selectedIndex;
       updatePoseReadout();
-    } else if (!liveAutoFollowHead && rawPoses.length && hoverTimelineTime == null && !playing && !trackLockActive && !(trackHover && (trackHover.pose || trackHover.t))) {
-      selectedIndex = lastPoseIndex;
+    } else if (!liveAutoFollowHead && rawPoses.length && viewingSelection.hoverTimelineTime == null && !viewingPlayback.isPlaying() && !viewingSelection.trackLockActive && !(viewingSelection.trackHover && (viewingSelection.trackHover.pose || viewingSelection.trackHover.t))) {
+      viewingSelection.selectedIndex = lastPoseIndex;
     }
     return;
   }
@@ -6976,7 +5519,7 @@ async function doLeftRefresh() {
     rebuildWatchMarkersByTime();
     viewingRendering.renderWatchFilter();
     viewingRendering.renderWatchList();
-    refreshPinnedWatchPanels();
+    floatingInfo.refreshPinnedPanels();
   }
 
   if (logsAdded > 0) {
@@ -6990,10 +5533,10 @@ async function doLeftRefresh() {
   if (posesAdded > 0) {
     viewingRendering.renderPoseList();
     // If not hovering timeline/track, keep the robot on the most recent pose.
-    if (liveAutoFollowHead && hoverTimelineTime == null && !playing && !trackLockActive && !(trackHover && (trackHover.pose || trackHover.t))) {
-      selectedIndex = rawPoses.length - 1;
-    } else if (!liveAutoFollowHead && rawPoses.length && hoverTimelineTime == null && !playing && !trackLockActive && !(trackHover && (trackHover.pose || trackHover.t))) {
-      selectedIndex = lastPoseIndex;
+    if (liveAutoFollowHead && viewingSelection.hoverTimelineTime == null && !viewingPlayback.isPlaying() && !viewingSelection.trackLockActive && !(viewingSelection.trackHover && (viewingSelection.trackHover.pose || viewingSelection.trackHover.t))) {
+      viewingSelection.selectedIndex = rawPoses.length - 1;
+    } else if (!liveAutoFollowHead && rawPoses.length && viewingSelection.hoverTimelineTime == null && !viewingPlayback.isPlaying() && !viewingSelection.trackLockActive && !(viewingSelection.trackHover && (viewingSelection.trackHover.pose || viewingSelection.trackHover.t))) {
+      viewingSelection.selectedIndex = lastPoseIndex;
     }
     poseListRenderer.highlight();
   }
@@ -7565,25 +6108,25 @@ function finalizeLoadedData() {
   syncMainToSettings();
   saveSettings();
 
-  selectedWatch = null;
-  hideWatchGraphPanel();
-  selectedLogTime = null;
-  selectedWaypointId = null;
-  selectedWaypointEventTime = null;
-  selectedIndex = 0;
-  hoverTimelineTime = null;
-  timelineHoverSaved = null;
-  hoverWatch = null;
+  viewingSelection.selectedWatch = null;
+  watchGraph.hidePanel();
+  viewingSelection.selectedLogTime = null;
+  viewingSelection.selectedWaypointId = null;
+  viewingSelection.selectedWaypointEventTime = null;
+  viewingSelection.selectedIndex = 0;
+  viewingSelection.hoverTimelineTime = null;
+  viewingSelection.timelineHoverSaved = null;
+  viewingFieldInteraction?.clearHoverWatch();
 
-  clearTrackHover(true);
-  clearTrackLock();
-  pause();
+  viewingSelection.clearTrackHover(true);
+  viewingSelection.clearTrackLock();
+  viewingPlayback.pause();
 
   recomputeWatchMarkers();
   rebuildWatchMarkersByTime();
   viewingRendering.renderWatchFilter();
   viewingRendering.renderWatchList();
-  refreshPinnedWatchPanels();
+  floatingInfo.refreshPinnedPanels();
   viewingRendering.renderLogList();
   viewingRendering.renderWaypointFilter();
   viewingRendering.renderWaypointList();
@@ -7836,6 +6379,7 @@ async function loadSettings() {
       if (settings.playbackSpeed !== undefined && speedSelect) {
         speedSelect.value = String(settings.playbackSpeed);
         playRate = Number(speedSelect.value) || 1;
+        viewingPlayback.setPlayRate(playRate);
       }
       if (settings.selectedField !== undefined && fieldSelect) {
         const nextField = getValidFieldKey(settings.selectedField);
@@ -9134,7 +7678,7 @@ window.addEventListener("keydown", (e) => {
   else if (routeInfoOpen) closeRouteInfoModal();
   else if (planTemplateOpen) closePlanTemplateModal();
   else if (planObjectDeleteOpen) closePlanObjectDeleteModal();
-  else if (selectedWaypointId != null) {
+  else if (viewingSelection.selectedWaypointId != null) {
     clearWaypointSelection();
     requestDrawAll();
   }
@@ -9565,8 +8109,8 @@ btnPlay.addEventListener("click", () => {
     return;
   }
   if (!data) return;
-  if (playing) { pause(); updatePoseReadout(); requestDrawAll(); }
-  else play();
+  if (viewingPlayback.isPlaying()) { viewingPlayback.pause(); updatePoseReadout(); requestDrawAll(); }
+  else viewingPlayback.play();
 });
 
 if (btnTogglePlanOverlay) {
@@ -9583,6 +8127,7 @@ if (btnTogglePlanOverlay) {
 
 speedSelect.addEventListener("change", () => {
   playRate = Number(speedSelect.value) || 1;
+  viewingPlayback.setPlayRate(playRate);
   saveSettings();
 });
 
@@ -9818,10 +8363,10 @@ const btnClearField = document.getElementById("btnClearField");
 
 function clearAllPosesAndWatches() {
   // Stop playback/hover/locks so UI doesn’t reference stale indices
-  try { playing = false; } catch { }
-  try { hoverTimelineTime = null; } catch { }
-  try { trackHover = null; } catch { }
-  try { trackLockActive = false; } catch { }
+  try { viewingPlayback.pause(); } catch { }
+  try { viewingSelection.hoverTimelineTime = null; } catch { }
+  try { viewingSelection.trackHover = null; } catch { }
+  try { viewingSelection.trackLockActive = false; } catch { }
 
   // Clear core data
   viewingMode.actions.clear();
@@ -9843,12 +8388,12 @@ function clearAllPosesAndWatches() {
 
   try { viewingRendering.renderPoseList(); } catch { }
   try { viewingRendering.renderWatchList(); } catch { }
-  try { refreshPinnedWatchPanels?.(); } catch { }
+  try { floatingInfo.refreshPinnedPanels(); } catch { }
   try { viewingRendering.renderLogList(); } catch { }
   try { viewingRendering.renderWaypointFilter(); } catch { }
   try { viewingRendering.renderWaypointList(); } catch { }
   try { viewingRendering.updatePoseReadout(); } catch { }
-  try { updateFloatingInfo?.(null, 0); } catch { }
+  try { floatingInfo.updateInfo(null, 0); } catch { }
   try { requestDrawAll?.(); } catch { }
 }
 
@@ -10001,21 +8546,21 @@ function handleGlobalKeydown(e) {
     }
 
     if (e.key === "t" || e.key === "T") {
-      toggleFloatingInfo();
+      floatingInfo.toggleInfo();
       return;
     }
 
     if (e.key === "g" || e.key === "G") {
       e.preventDefault();
       if (modeController.getMode() !== "viewing") return;
-      toggleCurrentWatchGraphPanel();
+      watchGraph.toggleCurrentPanel();
       return;
     }
   }
 
   if (!e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && (e.key === "N" || e.key === "n")) {
     e.preventDefault();
-    openFloatingWatch(null);
+    floatingInfo.openWatch(null);
     return;
   }
 
@@ -10212,7 +8757,7 @@ window.addEventListener("resize", () => {
   updateFieldLayout(true); // keep bounds, recompute square sizing
   resizeTimeline();
   resizePlanningTimeline();
-  resizeWatchGraphChart();
+  watchGraph.resizeChart();
   scheduleTopBarStatusLayout();
 });
 

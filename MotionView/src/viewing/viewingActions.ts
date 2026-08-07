@@ -119,19 +119,6 @@ export function createViewingActions(
   state: ViewingInternalState,
   deps: ViewingActionDependencies,
 ): ViewingDataActions {
-  const clearTransientSelection = () => {
-    state.selectedWatch = null;
-    state.selectedLogTime = null;
-    state.selectedWaypointId = null;
-    state.selectedWaypointEventTime = null;
-    state.hoverTimelineTime = null;
-    state.trackHover = null;
-    state.trackHoverSavedIndex = null;
-    state.trackLockActive = false;
-    state.trackLockPose = null;
-    state.trackLockIndex = null;
-  };
-
   return {
     loadViewingData(data: unknown) {
       const obj = (data && typeof data === "object") ? data as Record<string, any> : {};
@@ -146,9 +133,7 @@ export function createViewingActions(
       state.waypointsById.clear();
       for (const [id, waypoint] of normalizedWaypoints.waypointsById) state.waypointsById.set(id, waypoint);
       state.watchMarkers.length = 0;
-      state.selectedIndex = 0;
       state.meta = obj.meta ?? null;
-      clearTransientSelection();
     },
 
     clear() {
@@ -158,9 +143,7 @@ export function createViewingActions(
       state.waypoints.length = 0;
       state.waypointsById.clear();
       state.watchMarkers.length = 0;
-      state.selectedIndex = 0;
       state.meta = null;
-      clearTransientSelection();
     },
 
     appendLiveBatch(batch: ParsedLiveViewingBatch): ViewingAppendResult {
@@ -189,29 +172,6 @@ export function createViewingActions(
         waypointsAdded,
         hasNewData: poses.length > 0 || watchesAdded > 0 || logsAdded > 0 || waypointsAdded > 0,
       };
-    },
-
-    setSelectedPose(index: number) {
-      const maxIndex = Math.max(0, state.poses.length - 1);
-      state.selectedIndex = Math.max(0, Math.min(Math.trunc(index) || 0, maxIndex));
-    },
-
-    selectWatch(marker) {
-      state.selectedWatch = { marker };
-      state.selectedLogTime = null;
-      state.selectedWaypointId = null;
-      state.selectedWaypointEventTime = null;
-    },
-
-    selectWaypoint(waypoint, event = null) {
-      state.selectedWatch = null;
-      state.selectedLogTime = null;
-      state.selectedWaypointId = waypoint?.id ?? null;
-      state.selectedWaypointEventTime = event?.t ?? null;
-    },
-
-    clearTransientSelection() {
-      clearTransientSelection();
     },
   };
 }
