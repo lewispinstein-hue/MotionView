@@ -35,6 +35,10 @@ export function attachPlanningLegacyBridge(target: object, state: PlanningModeIn
       get: () => state.dragOrig,
       set: (next) => { state.dragOrig = Array.isArray(next) ? next : []; },
     },
+    dragUndoCaptured: {
+      get: () => state.dragUndoCaptured,
+      set: (next: boolean) => { state.dragUndoCaptured = !!next; },
+    },
     selecting: {
       get: () => state.selecting,
       set: (next: boolean) => { state.selecting = !!next; },

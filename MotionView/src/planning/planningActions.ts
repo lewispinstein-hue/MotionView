@@ -1,4 +1,11 @@
-import type { PlanningActions, PlanningModeDependencies } from "./planningTypes";
+import type {
+  PlanningActions,
+  PlanningMethod,
+  PlanningModeDependencies,
+  PlanningNode,
+  PlanningObject,
+  PlanningWaypoint,
+} from "./planningTypes";
 import type { PlanningModeInternalState } from "./planningInternalState";
 import type { PlanningPlayback } from "./planningTypes";
 
@@ -14,17 +21,46 @@ export function createPlanningActions(
   dependencies: PlanningModeDependencies,
   options: CreatePlanningActionsOptions,
 ): PlanningActions {
+  function cloneMethod(method: PlanningMethod): PlanningMethod {
+    return {
+      ...method,
+      code: method.code,
+    };
+  }
+
+  function cloneObject(object: PlanningObject): PlanningObject {
+    return {
+      ...object,
+      methods: Array.isArray(object.methods) ? object.methods.map(cloneMethod) : [],
+    };
+  }
+
+  function cloneNode(node: PlanningNode): PlanningNode {
+    return {
+      ...node,
+    };
+  }
+
+  function cloneWaypoint(point: PlanningWaypoint): PlanningWaypoint {
+    return {
+      ...point,
+      x: point.x,
+      y: point.y,
+      theta: point.theta ?? 0,
+      speed: options.readPlanSpeed(point.speed, 127),
+    };
+  }
+
   function cloneStateSnapshot() {
     return {
-      waypoints: state.waypoints.map((point) => ({
-        x: point.x,
-        y: point.y,
-        theta: point.theta ?? 0,
-        speed: options.readPlanSpeed(point.speed, 127),
-      })),
+      waypoints: state.waypoints.map(cloneWaypoint),
+      objects: state.objects.map(cloneObject),
+      nodes: state.nodes.map(cloneNode),
       selected: Array.from(state.selectedSet),
       selectedIndex: state.selected,
+      selectedNodeId: state.selectedNodeId,
       playDist: state.playDist,
+      exportTemplate: state.exportTemplate,
     };
   }
 
@@ -50,6 +86,12 @@ export function createPlanningActions(
         return false;
       }
     }
+    if ((a.objects?.length || 0) !== (b.objects?.length || 0)) return false;
+    if ((a.nodes?.length || 0) !== (b.nodes?.length || 0)) return false;
+    if (JSON.stringify(a.objects || []) !== JSON.stringify(b.objects || [])) return false;
+    if (JSON.stringify(a.nodes || []) !== JSON.stringify(b.nodes || [])) return false;
+    if ((a.selectedNodeId || null) !== (b.selectedNodeId || null)) return false;
+    if ((a.exportTemplate || "") !== (b.exportTemplate || "")) return false;
     return true;
   }
 
@@ -64,14 +106,18 @@ export function createPlanningActions(
   function applyStateSnapshot(snapshot: any) {
     if (!snapshot) return;
     state.undoApplying = true;
-    state.waypoints = snapshot.waypoints.map((point: any) => ({
-      x: point.x,
-      y: point.y,
-      theta: point.theta ?? 0,
-      speed: options.readPlanSpeed(point.speed, 127),
-    }));
+    state.waypoints = (snapshot.waypoints || []).map(cloneWaypoint);
+    state.objects = (snapshot.objects || []).map(cloneObject);
+    state.nodes = (snapshot.nodes || []).map(cloneNode);
     setWaypointSelection(snapshot.selected || []);
+    state.selectedNodeId = state.nodes.some((node) => node.id === snapshot.selectedNodeId)
+      ? snapshot.selectedNodeId
+      : null;
+    state.fieldHoverNodeId = null;
+    state.editingObjectId = null;
+    state.openColorPickerObjectId = null;
     state.playDist = Number.isFinite(snapshot.playDist) ? snapshot.playDist : 0;
+    state.exportTemplate = String(snapshot.exportTemplate || options.defaultExportTemplate);
     playback.pause();
     dependencies.onPlanningChanged?.();
     dependencies.requestDrawAll();

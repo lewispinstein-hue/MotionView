@@ -44,6 +44,9 @@ export function createPlanningLifecycle(
       state.objects = normalizePlanObjects(obj["planned-objects"] || []);
       state.nodes = normalizePlanNodes(obj["planned-nodes"] || []);
       state.selectedNodeId = null;
+      state.undoStack = [];
+      state.redoStack = [];
+      state.undoApplying = false;
       dependencies.onPlanningDataLoaded?.();
     },
     clear() {
@@ -64,10 +67,9 @@ export function createPlanningLifecycle(
       state.timelineLayout = null;
       state.timelineDropTarget = null;
       state.pointerDragState = null;
+      state.dragUndoCaptured = false;
       state.nodeTooltipVisible = false;
       state.nodeTooltipPointer = null;
-      state.undoStack = [];
-      state.redoStack = [];
       state.undoApplying = false;
       state.playDist = 0;
       state.scrubbing = false;

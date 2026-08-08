@@ -9,6 +9,7 @@ export interface PlanningModeInternalState {
   pendingCanvasClick: { world: { x: number; y: number }; clearMultiSelection?: boolean } | null;
   dragStart: { x: number; y: number };
   dragOrig: Array<{ i: number; x: number; y: number }>;
+  dragUndoCaptured: boolean;
   selecting: boolean;
   selectRect: { x0: number; y0: number; x1: number; y1: number } | null;
   thetaDragging: boolean;
@@ -55,6 +56,7 @@ export function createPlanningInternalState(defaultExportTemplate: string): Plan
     pendingCanvasClick: null,
     dragStart: { x: 0, y: 0 },
     dragOrig: [],
+    dragUndoCaptured: false,
     selecting: false,
     selectRect: null,
     thetaDragging: false,
