@@ -16,7 +16,7 @@ try {
 
 function getSidebarItemLabel(item) {
   let labelElement = Array.prototype.find.call(item.children, function (child) {
-    return ['A', 'P', 'STRONG'].indexOf(child.tagName) !== -1;
+    return child.classList.contains('sidebar-tree-label') || ['A', 'P', 'STRONG'].indexOf(child.tagName) !== -1;
   });
 
   if (labelElement) {
@@ -32,6 +32,32 @@ function getSidebarItemLabel(item) {
 
 function getDirectSidebarLink(item) {
   return item.querySelector(':scope > a, :scope > p > a');
+}
+
+function ensureSidebarTreeLabel(item) {
+  if (item.querySelector(':scope > .sidebar-tree-label, :scope > p, :scope > strong')) {
+    return;
+  }
+
+  let labelNodes = Array.prototype.filter.call(item.childNodes, function (node) {
+    return node.nodeType === Node.TEXT_NODE && node.textContent.trim();
+  });
+
+  if (!labelNodes.length) {
+    return;
+  }
+
+  let label = document.createElement('span');
+  label.className = 'sidebar-tree-label';
+  label.textContent = labelNodes.map(function (node) {
+    return node.textContent.trim();
+  }).join(' ');
+
+  item.insertBefore(label, labelNodes[0]);
+
+  labelNodes.forEach(function (node) {
+    item.removeChild(node);
+  });
 }
 
 function normalizeDocsPath(path) {
@@ -224,6 +250,7 @@ function enhanceSidebarTree() {
     }
 
     item.classList.add('sidebar-tree-item');
+    ensureSidebarTreeLabel(item);
 
     let toggle = document.createElement('button');
     toggle.className = 'sidebar-tree-toggle';

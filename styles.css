@@ -25,7 +25,7 @@ body {
 
 .sidebar > h1 {
   background: rgb(15, 20, 29);
-  font-size: 1.6125rem;
+  font-size: 1.45rem;
   font-weight: 700;
 }
 
@@ -64,7 +64,7 @@ body {
 
 .sidebar-nav ul,
 .sidebar-nav li {
-  font-size: 21px;
+  font-size: 22px;
   line-height: 40px;
   list-style: none;
 }
@@ -72,9 +72,23 @@ body {
 .sidebar .sidebar-nav li > a,
 .sidebar .sidebar-nav li > p,
 .sidebar .sidebar-nav li > p > a,
+.sidebar .sidebar-nav li > .sidebar-tree-label,
 .sidebar .sidebar-nav li > strong {
   font-size: inherit;
   line-height: inherit;
+  transition: color 160ms ease;
+}
+
+.sidebar .sidebar-nav li > a,
+.sidebar .sidebar-nav li > p > a {
+  font-size: 18px;
+}
+
+.sidebar .sidebar-nav li > a:hover,
+.sidebar .sidebar-nav li > p > a:hover,
+.sidebar-nav li.sidebar-tree-item > p:hover,
+.sidebar-nav li.sidebar-tree-item > .sidebar-tree-label:hover {
+  color: #fbfcff;
 }
 
 .sidebar-nav li > p {
@@ -94,13 +108,14 @@ body {
   cursor: pointer;
   display: inline-flex;
   font-size: 0.9rem;
-  height: 1.4rem;
+  height: 40px;
   justify-content: center;
   line-height: 1;
   left: 0;
   padding: 0;
   position: absolute;
-  top: 0.05rem;
+  top: 0;
+  transition: color 160ms ease;
   width: 1rem;
 }
 

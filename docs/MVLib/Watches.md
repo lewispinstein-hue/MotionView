@@ -247,6 +247,8 @@ Important:
 - when the rendered string changes, MVLib waits for the debounce interval before emitting
 - `0` disables the debounce delay and emits on the next changed sample
 
+**Important Note**: Always have a debounce interval for watches to prevent other tasks from being starved of resources. Too many watches printing too fast can overwhelm the serial buffer and CPU.
+
 ## `LevelOverride`
 
 `LevelOverride<T>` lets a watch promote itself to a higher severity when a predicate trips.
