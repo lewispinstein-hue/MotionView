@@ -45,7 +45,7 @@ WatchMode WatchHandle::type() const {
 
   const Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);
   if (!watch) return WatchMode::onInterval;
-  
+
   return watch->onChange ? WatchMode::onChange : WatchMode::onInterval;
 }
 

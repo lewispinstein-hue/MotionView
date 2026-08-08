@@ -46,7 +46,7 @@ struct __attribute__((packed)) PosePacket {
   float x;
   float y;
   uint16_t theta;
-  int8_t leftVel; 
+  int8_t leftVel;
   int8_t rightVel;
 };
 

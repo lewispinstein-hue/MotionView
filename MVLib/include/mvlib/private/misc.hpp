@@ -13,7 +13,7 @@ namespace detail {
 #if defined(__GNUC__) || defined(__clang__)
   #define _MVLIB_FORMAT_CHECK(fmt_idx, arg_idx) __attribute__((format(printf, fmt_idx, arg_idx)))
 #else
-  #define _MVLIB_FORMAT_CHECK(fmt_idx, arg_idx) 
+  #define _MVLIB_FORMAT_CHECK(fmt_idx, arg_idx)
 #endif
 } // namespace detail
 } // namespace mvlib

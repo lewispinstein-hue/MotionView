@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file watches.hpp
- * @brief Contains user-facing information relating 
+ * @brief Contains user-facing information relating
  *       to handling and creating watches
  */
 
@@ -80,8 +80,8 @@ enum class WatchMode : uint8_t {
 class WatchHandle {
 private:
   /// Id of the handled watch
-  WatchId m_id; 
-  friend class Logger; 
+  WatchId m_id;
+  friend class Logger;
   explicit WatchHandle(WatchId id) : m_id(id) {}
 
 public:

@@ -15,7 +15,7 @@ namespace mvlib {
  * \return The rendered string.
  */
 static std::string renderValue(const std::string& v) {
-  return v; 
+  return v;
 }
 
 /**
@@ -27,7 +27,7 @@ static std::string renderValue(const char *v) {
 }
 
 /**
- * @brief Render a boolean as "t"/"f". 
+ * @brief Render a boolean as "t"/"f".
  * \return Rendered boolean string.
  */
 static std::string renderValue(bool v) {
@@ -42,7 +42,7 @@ static std::string renderValue(const T* v) {
 /**
  * @brief Render arithmetic types.
  *
- * @tparam T Value type. 
+ * @tparam T Value type.
  * @param v Value to render.
  * \return Rendered value string.
  *

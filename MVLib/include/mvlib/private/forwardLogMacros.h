@@ -1,7 +1,7 @@
 /**
  * @file forwardLogMacros.h
- * @brief Forward log macros to the logger. These macros 
- *        should not be used by the user. Instead use 
+ * @brief Forward log macros to the logger. These macros
+ *        should not be used by the user. Instead use
  *        mvlib::Logger::getInstance().info/warn/etc
  */
 

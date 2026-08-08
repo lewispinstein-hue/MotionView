@@ -58,7 +58,7 @@ namespace mvlib {
  * }
  * @endcode
  */
-inline void setOdom(okapi::OdomChassisController *chassis, 
+inline void setOdom(okapi::OdomChassisController *chassis,
                     okapi::QLength units = okapi::inch) {
   mvlib::Logger::getInstance().setPoseGetter([chassis, units]() -> std::optional<Pose> {
     if (!chassis) return std::nullopt;
@@ -72,5 +72,5 @@ inline void setOdom(okapi::OdomChassisController *chassis,
     return Pose{xIn, yIn, thDeg};
   });
 }
-} // 
+} //
 #endif // _MVLIB_OPTIONAL_USED

@@ -11,7 +11,7 @@ uint32_t Logger::status() const {
 void Logger::pause() {
   uint32_t st = status();
   bool isPauseable =
-    st != pros::E_TASK_STATE_DELETED && 
+    st != pros::E_TASK_STATE_DELETED &&
     st != pros::E_TASK_STATE_INVALID &&
     st != pros::E_TASK_STATE_SUSPENDED;
 
@@ -29,8 +29,8 @@ void Logger::resume() {
 
   if (m_pauseRequested.exchange(false)) wasPaused = true;
 
-  if (st != pros::E_TASK_STATE_DELETED && 
-      st != pros::E_TASK_STATE_INVALID && 
+  if (st != pros::E_TASK_STATE_DELETED &&
+      st != pros::E_TASK_STATE_INVALID &&
       st == pros::E_TASK_STATE_SUSPENDED) {
     m_task->resume();
     wasPaused = true;

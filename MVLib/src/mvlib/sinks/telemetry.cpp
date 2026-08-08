@@ -12,10 +12,10 @@ namespace mvlib {
 namespace detail {
 namespace {
 constexpr size_t kTelemetryMaxPayloadBytes = std::max(
-                 sizeof(LogPacketHeader), 
+                 sizeof(LogPacketHeader),
                  sizeof(WatchTextPacketHeader)) + kTelemetryMaxTextBytes;
 constexpr size_t kTelemetryMaxRawFrameBytes = kTelemetryMaxPayloadBytes + 1;
-constexpr size_t kTelemetryMaxEncodedFrameBytes = kTelemetryMaxRawFrameBytes + 
+constexpr size_t kTelemetryMaxEncodedFrameBytes = kTelemetryMaxRawFrameBytes +
                  (kTelemetryMaxRawFrameBytes / 254) + 2;
 
 constexpr size_t kTelemetryQueueCapacity = 64;
@@ -134,7 +134,7 @@ void Telemetry::sendPose(const PosePacket& pkt) {
 
 void Telemetry::sendWaypointCreated(const WaypointCreatedPacket& pkt) {
   // SubType 1 = Created
-  transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::WPOINT, 1), 
+  transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::WPOINT, 1),
            reinterpret_cast<const uint8_t*>(&pkt), sizeof(WaypointCreatedPacket));
 }
 
@@ -146,7 +146,7 @@ void Telemetry::sendWaypointStatus(WPId id, uint8_t subType) {
   pkt.timestamp = static_cast<uint16_t>(pros::millis());
   pkt.id = id;
 
-  transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::WPOINT, subType), 
+  transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::WPOINT, subType),
            reinterpret_cast<const uint8_t*>(&pkt), sizeof(WaypointStatusPacket));
 }
 
@@ -159,7 +159,7 @@ void Telemetry::sendWatch(WatchId id, LogLevel lvl, float val, bool tripped) {
   pkt.value = val;
 
   // SubType 1 indicates the watch predicate was tripped (elevated)
-  transmit(encodeMsgAll(lvl, MsgType::WATCH, tripped ? 1 : 0), 
+  transmit(encodeMsgAll(lvl, MsgType::WATCH, tripped ? 1 : 0),
            reinterpret_cast<const uint8_t*>(&pkt), sizeof(WatchPacket));
 }
 
@@ -188,7 +188,7 @@ void Telemetry::sendRoster(uint16_t id, const std::string& name, bool isElevated
   strncpy(pkt.name, name.c_str(), sizeof(pkt.name) - 1);
 
   // SubType 1 indicates this is the secondary/elevated label for the ID
-  transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::ROSTER, isElevated ? 1 : 0), 
+  transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::ROSTER, isElevated ? 1 : 0),
            reinterpret_cast<const uint8_t*>(&pkt), sizeof(RosterPacket));
 }
 
@@ -249,7 +249,7 @@ void telemetryIoTask(void *ignore) {
       batchLen += frame.len;
     }
 
-    // Flush if we timed out (no recent data arriving) 
+    // Flush if we timed out (no recent data arriving)
     // OR if the batch is getting large enough to be efficient over the radio
     if (!notified || batchLen >= 128) {
       flushBatch();

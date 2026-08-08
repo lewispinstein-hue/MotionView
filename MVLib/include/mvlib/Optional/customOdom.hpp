@@ -46,11 +46,11 @@ namespace mvlib {
  * \b Example
  * @code{.cpp}
  * #include "mvlib/api.hpp"
- * #include "mvlib/Optional/customOdom.hpp"  
- * 
+ * #include "mvlib/Optional/customOdom.hpp" 
+ *
  * // Custom / Unsupported odom
  * #include "mylib.hpp"
- * 
+ *
  * void initialize() {
  *   mvlib::setOdom([]() -> std::optional<mvlib::Pose> {
  *     if (!customOdomReady()) {
@@ -69,7 +69,7 @@ namespace mvlib {
  * @endcode
  */
 template <class Fn>
-  requires std::is_same_v<std::invoke_result_t<Fn&>, std::optional<Pose>> 
+  requires std::is_same_v<std::invoke_result_t<Fn&>, std::optional<Pose>>
 inline void setOdom(Fn&& poseGetter) {
   auto getter = std::forward<Fn>(poseGetter);
   mvlib::Logger::getInstance().setPoseGetter([getter = std::move(getter)]() mutable -> std::optional<Pose> {
@@ -78,7 +78,7 @@ inline void setOdom(Fn&& poseGetter) {
 }
 
 template <class Fn>
-  requires (!std::is_same_v<std::invoke_result_t<Fn&>, std::optional<Pose>>) 
+  requires (!std::is_same_v<std::invoke_result_t<Fn&>, std::optional<Pose>>)
 inline void setOdom(Fn&&) {
   static_assert(!std::is_same_v<Fn, Fn>,
               "\n\n\n------------------------------------------------------------------------"

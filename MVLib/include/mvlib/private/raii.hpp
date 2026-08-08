@@ -14,7 +14,7 @@ struct uniqueLock {
   explicit inline uniqueLock(pros::Mutex& m, uint32_t timeout = 0) : m(m) {
     locked = m.take(timeout);
   }
-  
+ 
   ~uniqueLock() {
     if (locked) m.give();
   }
@@ -28,7 +28,7 @@ struct uniqueLock {
     locked = false;
     return m.give();
   }
-  
+ 
   bool lock(uint32_t timeout = 0) {
     if (locked) return false;
     return (locked = m.take(timeout));

@@ -145,7 +145,7 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
 
         bool currBad = (info.currVal < (int16_t)MIN_BAT_VOLT || info.currVal > (int16_t)MAX_BAT_VOLT);
         bool prevBad = (info.prevVal < (int16_t)MIN_BAT_VOLT || info.prevVal > (int16_t)MAX_BAT_VOLT);
-        
+
         if (currBad && !prevBad) {
           info.displayValue = info.currVal;
           info.lastPrintTime = now;

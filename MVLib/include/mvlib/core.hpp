@@ -59,11 +59,11 @@ namespace mvlib {
  *       toggles and handle accessors are intended for use after start().
  *
  * @warning After creating the logger instance (Logger::getInstance()), the
- *          standard PROS terminal multiplexers (sout/serr) and native COBS 
- *          encoding are deactivated to optimize VEXnet bandwidth. Do not 
- *          use standard print functions (e.g., printf, std::cout) after 
- *          instantiating the logger. Raw text will collide with the high-speed 
- *          binary telemetry stream, resulting in corrupted packets and undefined 
+ *          standard PROS terminal multiplexers (sout/serr) and native COBS
+ *          encoding are deactivated to optimize VEXnet bandwidth. Do not
+ *          use standard print functions (e.g., printf, std::cout) after
+ *          instantiating the logger. Raw text will collide with the high-speed
+ *          binary telemetry stream, resulting in corrupted packets and undefined
  *          behavior during decoding. Use Logger::info(), warn(), etc. for
  *          safe logging. Standard print functions may work in some cases, but
  *          it is not guaranteed.
@@ -78,9 +78,9 @@ public:
     /// @brief Left drivetrain motors for velocity.
     pros::MotorGroup* leftDrivetrain;
 
-    /// @brief Right drivetrain motors for velocity. 
+    /// @brief Right drivetrain motors for velocity.
     pros::MotorGroup* rightDrivetrain;
-  }; 
+  };
 
   /**
    * @brief Access the singleton logger instance.
@@ -145,14 +145,14 @@ public:
    * @brief Enable/disable printing of registered watches.
    */
   void setPrintWatches(bool v);
-  
+
   /**
    * @brief Enable/disable printing of waypoints.
    */
   void setPrintWaypoints(bool v);
 
   /**
-   * @brief Enable/disable printing of system messages. Recommended to 
+   * @brief Enable/disable printing of system messages. Recommended to
    *        be left on for debugging. Disable if you want your MotionView
    *        GUI to be void of system messages.
    */
@@ -209,7 +209,7 @@ public:
    * lemlib::Chassis chassis (...);
    * void initialize() {
    *   logger.setPoseGetter([&]() -> std::optional<mvlib::Pose> {
-   *     lemlib::Pose pose = chassis.getPose(); 
+   *     lemlib::Pose pose = chassis.getPose();
    *     if (!std::isfinite(pose.x) || !std::isfinite(pose.y)) return std::nullopt;
    *     return mvlib::Pose{pose.x, pose.y, pose.theta};
    *   });
@@ -227,7 +227,7 @@ public:
    * \return True if refs were accepted (e.g., non-null and consistent), false
    *         otherwise.
    *
-   * @note If you do not call this, drivetrain speed will be approximated from 
+   * @note If you do not call this, drivetrain speed will be approximated from
    *       pose. This is not recommended.
    */
   bool setRobot(Drivetrain drivetrain, bool useSpeedEstimation = false);
@@ -312,8 +312,8 @@ public:
   /**
    * @brief Emit a computer-formatted log message to MotionView. Unlike the LOG_
    *        macros, these functions produce logs MotionView can parse and
-   *        display. These functions only differ in the severity level that they 
-   *        log at. 
+   *        display. These functions only differ in the severity level that they
+   *        log at.
    *
    * @param fmt printf-style format string.
    * @param ... Format arguments.
@@ -330,29 +330,29 @@ public:
   _MVLIB_FORMAT_CHECK(2, 3)
   void debug(const char *fmt, ...);
 
-  /** 
+  /**
    * @copydoc debug
    * @brief Emit info level log message.
    */
   _MVLIB_FORMAT_CHECK(2, 3)
   void info(const char *fmt, ...);
 
-  /** 
+  /**
    * @copydoc debug
    * @brief Emit warning level log message.
    */
   _MVLIB_FORMAT_CHECK(2, 3)
   void warn(const char *fmt, ...);
 
-  /** 
+  /**
    * @copydoc debug
    * @brief Emit error level log message.
    */
   _MVLIB_FORMAT_CHECK(2, 3)
   void error(const char *fmt, ...);
 
-  /** 
-   * @copydoc debug 
+  /**
+   * @copydoc debug
    * @brief Emit fatal level log message.
    */
   _MVLIB_FORMAT_CHECK(2, 3)
@@ -361,14 +361,14 @@ public:
   // ------------------------------------------------------------------------
   // Waypoints
   // ------------------------------------------------------------------------
-  
+
   /**
    * @brief Add a waypoint to the logger.
    * @param name Name of the waypoint.
    * @param details Waypoint target and tolerance settings.
    * @return A handle to the waypoint.
    *
-   * @note To access value of the waypoint, use the handle returned by this 
+   * @note To access value of the waypoint, use the handle returned by this
    *       function.
    *
    * @note String literal names longer than 24 characters are rejected at
@@ -389,8 +389,8 @@ public:
    * logger.info("Waypoint offset: %.1f, %.1f, %.1f",
    *             off.offX, off.offY, off.offT.value_or(0.0));
    * @endcode
-   * This example creates a waypoint named "Blue left matchloader" with a 
-   * target position of (70, -47), XY tolerance of 2, theta tolerance of 
+   * This example creates a waypoint named "Blue left matchloader" with a
+   * target position of (70, -47), XY tolerance of 2, theta tolerance of
    * 10 degrees, and a timeout of 5 seconds.
    */
   template <size_t len>
@@ -403,14 +403,14 @@ public:
   }
 
   /**
-   * @brief Re-send roster entries for all active waypoints. Use this to fix issues 
+   * @brief Re-send roster entries for all active waypoints. Use this to fix issues
    *        of waypoints not appearing in MotionView.
    *
    * @note Inactive waypoints are intentionally omitted so they stay dropped
    *       from the viewer roster.
    */
   void resyncAllWaypointsRoster();
-  
+
   // ------------------------------------------------------------------------
   // Watches
   // ------------------------------------------------------------------------
@@ -449,7 +449,7 @@ public:
   bool setDefaultWatches(const DefaultWatches watches);
 
   /**
-   * @brief Re-send roster entries for all watches. Use this to fix issues 
+   * @brief Re-send roster entries for all watches. Use this to fix issues
    *        of watches not appearing in MotionView.
    *
    * @note Watches with an elevated/predicate label will send both the default
@@ -496,7 +496,7 @@ public:
    * @endcode
    */
   template <class Getter, size_t len>
-  WatchHandle watch(const char (&label)[len], LogLevel baseLevel, WatchMode type, 
+  WatchHandle watch(const char (&label)[len], LogLevel baseLevel, WatchMode type,
                     uint32_t intervalMs, Getter&& getter,
                     LevelOverride<std::decay_t<std::invoke_result_t<
                       Getter&>>> ov = {}) {
@@ -612,8 +612,8 @@ private:
    * @note If the watch failed to add, it will return (WatchId)-1.
    */
   template <class T, class Getter>
-  WatchId addWatch(std::string label, const LogLevel baseLevel, 
-                   const uint32_t intervalMs, Getter&& getter, 
+  WatchId addWatch(std::string label, const LogLevel baseLevel,
+                   const uint32_t intervalMs, Getter&& getter,
                    LevelOverride<T> ov,
                    bool onChange = false) {
     detail::uniqueLock lock(m_mutex);
@@ -720,7 +720,7 @@ private:
   void printTelemetry();
 
   /**
-   * @brief Emit a formatted log message. Automatically handles 
+   * @brief Emit a formatted log message. Automatically handles
    *        terminal/SD logging.
    */
   void logMessage(const LogLevel level, const char *fmt, va_list args);
@@ -730,7 +730,7 @@ private:
    */
   _MVLIB_FORMAT_CHECK(3, 4)
   void logToSD(const LogLevel level, const char *fmt, ...);
-  
+
   // ------------------------------------------------------------------------
   // Internal state
   // ------------------------------------------------------------------------
@@ -753,18 +753,18 @@ private:
   std::atomic<bool> m_configSet{false}; // Has setRobot() been called?
   bool m_forceSpeedEstimation = false;
 
-  std::atomic<bool> m_pauseRequested{false}; 
-  
+  std::atomic<bool> m_pauseRequested{false};
+
   // Robot refs
-  pros::MotorGroup* m_pLeftDrivetrain = nullptr; 
-  pros::MotorGroup* m_pRightDrivetrain = nullptr; 
+  pros::MotorGroup* m_pLeftDrivetrain = nullptr;
+  pros::MotorGroup* m_pRightDrivetrain = nullptr;
 
   std::unique_ptr<pros::Task> m_task;
 
   // Position getters
   std::shared_ptr<std::function<std::optional<Pose>()>> m_getPose = nullptr;
   std::shared_ptr<pros::Mutex> m_poseGetterMutex = nullptr;
-  
+
   uint32_t m_lastRosterFlush{0};
   uint32_t m_lastTerminalFlush{0};
   uint32_t m_lastTelemetryPrint{0};

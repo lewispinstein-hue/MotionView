@@ -4,7 +4,7 @@
 #include "mvlib/private/raii.hpp"
 #include <limits>
 #include <cmath>
-#include <cstdio> 
+#include <cstdio>
 #include <string>
 #include <algorithm>
 
@@ -18,7 +18,7 @@ std::string formatParams(const WaypointParams& params) {
            params.timeoutMs.has_value() ? std::to_string(params.timeoutMs.value()).c_str() : "NA",
            params.linearTol,
            params.thetaTol.has_value() ? std::to_string(params.thetaTol.value()).c_str() : "NA",
-           params.retriggerable ? 1 : 0); 
+           params.retriggerable ? 1 : 0);
   return std::string(buf);
 }
 } // namespace
@@ -155,7 +155,7 @@ WaypointHandle Logger::internalRegisterWaypoint(std::string name, WaypointParams
   wp.active = true;
   wp.timedOut = false;
 
-  if (details.tarT.has_value() && !details.thetaTol.has_value()) 
+  if (details.tarT.has_value() && !details.thetaTol.has_value())
     details.thetaTol = details.linearTol;
 
   if (!details.tarT.has_value() && details.thetaTol.has_value())
@@ -186,7 +186,7 @@ WaypointHandle Logger::internalRegisterWaypoint(std::string name, WaypointParams
 
   if (m_config.logToSD.load()) {
     logToSD(LogLevel::OVERRIDE, "[WPOINT],%d,CREATED,%d,%s,%s",
-            pros::millis(), id, m_waypoints.back().name.c_str(), 
+            pros::millis(), id, m_waypoints.back().name.c_str(),
             formatParams(details).c_str());
   }
   return WaypointHandle(id);

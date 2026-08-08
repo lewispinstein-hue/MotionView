@@ -27,7 +27,7 @@ enum class FolderCheckResult : uint8_t {
 
 uint32_t getrandInt(const uint32_t min, const uint32_t max) {
   /**
-   * @note This method of generation is needed because the v5 brain is 
+   * @note This method of generation is needed because the v5 brain is
    *       completely deterministic. Using std::rand or std::random_device
    *       results in the same number every time.
    */
@@ -217,7 +217,7 @@ void Logger::getTimestampedFilename(char *buffer, size_t len) {
 
     char timeBuf[128];
     // Format the date/time string
-    snprintf(timeBuf, sizeof(timeBuf), "MVLIB_%s", formattedTime.c_str()); 
+    snprintf(timeBuf, sizeof(timeBuf), "MVLIB_%s", formattedTime.c_str());
 
     // Combine pathPrefix, formatted time, and random ID
     snprintf(buffer, len, "%s%s%s_%05d.log",

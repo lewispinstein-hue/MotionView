@@ -66,7 +66,7 @@ void Logger::printWatches() {
 
     if (m_config.logToTerminal.load()) {
       bool sentAsBinary = false;
-      
+
       // Prefer the compact binary watch packet when the rendered value is a pure float.
       if (!valueStr.empty()) {
         char* end = nullptr;
@@ -91,7 +91,7 @@ void Logger::printWatches() {
       if (valueStr == "f") valueStr = "false";
       if (valueStr == "t") valueStr = "true";
 
-      logToSD(lvl, "[WATCH],%u,%s,%u,%s,%s", nowMs, 
+      logToSD(lvl, "[WATCH],%u,%s,%u,%s,%s", nowMs,
               levelToString(lvl), watchId, label.c_str(), valueStr.c_str());
     }
   }

@@ -8,7 +8,7 @@
 namespace mvlib {
 namespace literals {
 /**
- * @brief Operator for .watch() intervalMs. Allows number_mvMs 
+ * @brief Operator for .watch() intervalMs. Allows number_mvMs
  *        instead of uint32_t{number}
  *
  * \return Explicit uint32_t casted version of the input number
@@ -23,10 +23,10 @@ constexpr uint32_t operator""_mvMs(const unsigned long long int ms) {
 }
 
 /**
- * @brief Operator for .watch() intervalMs. Allows number_mvS 
+ * @brief Operator for .watch() intervalMs. Allows number_mvS
  *        instead of uint32_t{number}, in seconds form
  *
- * \return Explicit uint32_t casted version of the input number, 
+ * \return Explicit uint32_t casted version of the input number,
  *         times 1000.
  *
  * \b Example
@@ -38,7 +38,7 @@ constexpr uint32_t operator""_mvS(const long double s) {
   return static_cast<uint32_t>(s * 1000);
 }
 
-/** 
+/**
  * @brief Overload for integer type. Same as mvlib::operator""_mvS, used for
  *        non-float literals.
  *

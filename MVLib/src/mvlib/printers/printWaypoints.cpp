@@ -61,7 +61,7 @@ void Logger::printWaypoints() {
       off.remainingTimeout = std::nullopt;
       off.timedOut = false;
     }
-    
+
     uint8_t subType = 0;
     bool shouldTrigger = false;
     const char* statusStr = nullptr;

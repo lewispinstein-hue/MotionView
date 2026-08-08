@@ -63,7 +63,7 @@ Logger::Logger() {
   m_waypoints.reserve(16);
 
   // Begin IO Handle for user logs by constructing singleton
-  (void) detail::Telemetry::getInstance(); 
+  (void) detail::Telemetry::getInstance();
 
   // Disable PROS COBS; we do it ourselves
   pros::c::serctl(SERCTL_DISABLE_COBS, nullptr);

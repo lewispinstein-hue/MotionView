@@ -17,7 +17,7 @@ WaypointParams WaypointHandle::getParams() const {
 }
 
 bool WaypointHandle::reached() const {
-  return Logger::getInstance().isWaypointReached(this->m_id); 
+  return Logger::getInstance().isWaypointReached(this->m_id);
 }
 
 std::string WaypointHandle::getLabel() const {
