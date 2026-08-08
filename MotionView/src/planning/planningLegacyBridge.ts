@@ -1,4 +1,4 @@
-import type { PlanningObject, PlanningWaypoint } from "./planningTypes";
+import type { PlanningHistorySnapshot, PlanningNode, PlanningObject, PlanningWaypoint } from "./planningTypes";
 import type { PlanningModeInternalState } from "./planningInternalState";
 
 export function attachPlanningLegacyBridge(target: object, state: PlanningModeInternalState, defaultExportTemplate: string): void {
@@ -93,7 +93,7 @@ export function attachPlanningLegacyBridge(target: object, state: PlanningModeIn
     },
     nodes: {
       get: () => state.nodes,
-      set: (next) => { state.nodes = Array.isArray(next) ? next : []; },
+      set: (next: PlanningNode[]) => { state.nodes = Array.isArray(next) ? next : []; },
     },
     selectedNodeId: {
       get: () => state.selectedNodeId,
@@ -161,11 +161,11 @@ export function attachPlanningLegacyBridge(target: object, state: PlanningModeIn
     },
     undoStack: {
       get: () => state.undoStack,
-      set: (next: unknown[]) => { state.undoStack = Array.isArray(next) ? next : []; },
+      set: (next: PlanningHistorySnapshot[]) => { state.undoStack = Array.isArray(next) ? next : []; },
     },
     redoStack: {
       get: () => state.redoStack,
-      set: (next: unknown[]) => { state.redoStack = Array.isArray(next) ? next : []; },
+      set: (next: PlanningHistorySnapshot[]) => { state.redoStack = Array.isArray(next) ? next : []; },
     },
     undoApplying: {
       get: () => state.undoApplying,

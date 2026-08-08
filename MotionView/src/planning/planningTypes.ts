@@ -39,6 +39,17 @@ export interface PlanningExportData {
   template: string;
 }
 
+export interface PlanningHistorySnapshot {
+  waypoints: PlanningWaypoint[];
+  objects: PlanningObject[];
+  nodes: PlanningNode[];
+  selected: number[];
+  selectedIndex: number;
+  selectedNodeId: string | null;
+  playDist: number;
+  exportTemplate: string;
+}
+
 export interface PlanningState {
   /** Read planning waypoints without copying. Treat the returned array as immutable. */
   getWaypoints(): ReadonlyArray<PlanningWaypoint>;
@@ -146,5 +157,5 @@ export interface PlanningModeDependencies {
   onPlanningDistanceChanged?(): void;
   onPlanningCleared?(): void;
   onPlanningDataLoaded?(): void;
-  onPlanningChanged?(options?: { skipSelectionPanel?: boolean }): void;
+  onPlanningChanged?(options?: { renderPlanObjects?: boolean; skipSelectionPanel?: boolean }): void;
 }

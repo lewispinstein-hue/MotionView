@@ -2298,6 +2298,7 @@ function planChanged(opts = {}) {
   planningMode.playback.setDistance(planningMode.playback.getPlaybackDistance());
   planningMode.rendering.renderTimelineDom();
   syncPlanObjectLatestValues();
+  if (opts.renderPlanObjects) planningSidebarRenderer.renderPlanObjects();
   updateExportButtonAvailability();
   if (!opts.skipSelectionPanel) updatePlanSelectionPanel();
   scheduleSavedPathsSave();

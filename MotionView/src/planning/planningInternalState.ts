@@ -1,4 +1,4 @@
-import type { PlanningObject, PlanningWaypoint } from "./planningTypes";
+import type { PlanningHistorySnapshot, PlanningNode, PlanningObject, PlanningWaypoint } from "./planningTypes";
 
 export interface PlanningModeInternalState {
   waypoints: PlanningWaypoint[];
@@ -23,7 +23,7 @@ export interface PlanningModeInternalState {
   scrubbing: boolean;
   overlayVisible: boolean;
   objects: PlanningObject[];
-  nodes: any[];
+  nodes: PlanningNode[];
   selectedNodeId: string | null;
   fieldHoverNodeId: string | null;
   editingObjectId: string | null;
@@ -40,8 +40,8 @@ export interface PlanningModeInternalState {
   nodeTooltipTimer: number | null;
   nodeTooltipVisible: boolean;
   nodeTooltipPointer: { x: number; y: number } | null;
-  undoStack: any[];
-  redoStack: any[];
+  undoStack: PlanningHistorySnapshot[];
+  redoStack: PlanningHistorySnapshot[];
   undoApplying: boolean;
   exportTemplate: string;
 }

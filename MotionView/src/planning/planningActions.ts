@@ -1,5 +1,6 @@
 import type {
   PlanningActions,
+  PlanningHistorySnapshot,
   PlanningMethod,
   PlanningModeDependencies,
   PlanningNode,
@@ -51,7 +52,7 @@ export function createPlanningActions(
     };
   }
 
-  function cloneStateSnapshot() {
+  function cloneStateSnapshot(): PlanningHistorySnapshot {
     return {
       waypoints: state.waypoints.map(cloneWaypoint),
       objects: state.objects.map(cloneObject),
@@ -64,7 +65,7 @@ export function createPlanningActions(
     };
   }
 
-  function stateSnapshotsEqual(a: any, b: any) {
+  function stateSnapshotsEqual(a: PlanningHistorySnapshot | undefined, b: PlanningHistorySnapshot | undefined) {
     if (!a || !b) return false;
     if ((a.playDist ?? 0) !== (b.playDist ?? 0)) return false;
     if (a.selectedIndex !== b.selectedIndex) return false;
@@ -103,7 +104,7 @@ export function createPlanningActions(
     state.selected = sorted[0] ?? -1;
   }
 
-  function applyStateSnapshot(snapshot: any) {
+  function applyStateSnapshot(snapshot: PlanningHistorySnapshot | undefined) {
     if (!snapshot) return;
     state.undoApplying = true;
     state.waypoints = (snapshot.waypoints || []).map(cloneWaypoint);
@@ -119,7 +120,7 @@ export function createPlanningActions(
     state.playDist = Number.isFinite(snapshot.playDist) ? snapshot.playDist : 0;
     state.exportTemplate = String(snapshot.exportTemplate || options.defaultExportTemplate);
     playback.pause();
-    dependencies.onPlanningChanged?.();
+    dependencies.onPlanningChanged?.({ renderPlanObjects: true });
     dependencies.requestDrawAll();
     state.undoApplying = false;
   }
