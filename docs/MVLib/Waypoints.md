@@ -108,6 +108,7 @@ Behavior:
 - a non-retriggerable waypoint deactivates after the first `REACHED`
 - a retriggerable waypoint stays active after `REACHED`
 - a retriggerable waypoint still deactivates on timeout if `timeoutMs` is set
+- a retriggerable waypoint's `reached()` and `getOffset().reached` state is latched; once it has been reached at least once, those APIs continue returning `true`
 
 Note:
 
@@ -140,7 +141,7 @@ Behavior:
 - if pose data is available, the offset is computed from the robot's current pose to this waypoint's target
 - if the waypoint tracks heading, `offT` is included
 - if the waypoint has a timeout, timeout-related fields are included
-- if pose data is unavailable, the returned offset is effectively empty/defaulted
+- if pose data is unavailable, geometric offsets are defaulted, but stored lifecycle fields such as `reached`, `timedOut`, and `remainingTimeout` are still reported when available
 
 Use this when you want the raw positional error and timeout state:
 
@@ -161,15 +162,15 @@ Returns the waypoint's label exactly as it was registered.
 
 ### `reached()`
 
-Returns whether the waypoint is currently within tolerance.
+Returns whether the waypoint is currently within tolerance or has already been reached before.
 
 Behavior:
 
 - position must be within `linearTol`
 - if the waypoint has a target heading, heading must also be within `thetaTol`
-- this is the current geometric state, not "has this ever been reached"
+- once MVLib observes a waypoint as reached, this value is latched true for that waypoint
 
-For retriggerable waypoints, `reached()` can become true more than once over the waypoint's lifetime.
+For retriggerable waypoints, `reached()` remains true after the first reach even if the robot later leaves the tolerance window. Repeated `REACHED` events can still occur when the robot leaves and re-enters tolerance, but the handle-level reached state answers "has this waypoint ever been reached?"
 
 ### `timedOut()`
 
@@ -233,7 +234,7 @@ struct WaypointOffset {
 - `offY`: target Y minus current Y
 - `offT`: wrapped heading error in degrees, if heading is tracked
 - `remainingTimeout`: milliseconds left before timeout, if one exists
-- `reached`: whether the waypoint is currently within tolerance
+- `reached`: whether the waypoint is currently within tolerance or has already been reached before. For retriggerable waypoints, this remains true after the first reach.
 - `timedOut`: whether timeout has already occurred
 
 ## What MVLib Emits
@@ -299,4 +300,5 @@ auto matchload = logger.addWaypoint("Matchload Corner", {
 - Using waypoints without any pose source configured.
 - Forgetting that timeouts start at creation time.
 - Assuming a waypoint stays active after `REACHED` when `retriggerable` is `false`.
+- Assuming `reached()` means "currently inside tolerance" for retriggerable waypoints. It is a latched "has ever reached" state.
 - Using waypoint names longer than 23 visible characters when exact live MotionView display names matter.
