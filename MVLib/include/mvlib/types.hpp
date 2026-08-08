@@ -50,9 +50,9 @@ struct LoggerTimings {
   uint32_t sdBufferFlushInterval = 1000;
   
   /**
-   * @brief Terminal output flush interval. At 1s (default), 
+   * @brief Terminal output flush interval. At 400ms (default), 
    *        terminal output flushes out of its buffer
-   *        every 1 second. 
+   *        every 400ms second. 
    *
    * @note This interval is used to flush the stdout buffer. 
    *       It uses the standard fflush(stdout) function for flushing.
@@ -62,7 +62,7 @@ struct LoggerTimings {
    *          be flushed more frequently, while higher values
    *          force flush the buffer less frequently.
    */
-  uint32_t stdoutBufferFlushInterval = 1000;
+  uint32_t stdoutBufferFlushInterval = 400;
 
   /**
    * @brief Controls how often mvlib polls for new data and logs it. Default: 100ms
