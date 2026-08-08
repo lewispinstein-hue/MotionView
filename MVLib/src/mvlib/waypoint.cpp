@@ -38,6 +38,7 @@ const Logger::InternalWaypoint* Logger::m_findWaypointUnlocked(WPId id) const {
 WaypointOffset Logger::getWaypointOffset(WPId id) {
   WaypointParams params{};
   uint32_t startTimeMs = 0;
+  bool waypointReached = false;
   bool waypointTimedOut = false;
   std::shared_ptr<std::function<std::optional<Pose>()>> poseGetter;
   std::shared_ptr<pros::Mutex> poseGetterMutex;
@@ -50,12 +51,14 @@ WaypointOffset Logger::getWaypointOffset(WPId id) {
     if (!waypoint) return {};
     params = waypoint->params;
     startTimeMs = waypoint->startTimeMs;
+    waypointReached = waypoint->reached;
     waypointTimedOut = waypoint->timedOut;
     poseGetter = m_getPose;
     poseGetterMutex = m_poseGetterMutex;
   }
 
   WaypointOffset offset{};
+  offset.reached = waypointReached;
   // Timeout state is owned by printWaypoints(); this accessor only reports it.
   if (params.timeoutMs.has_value()) {
     uint32_t elapsed = pros::millis() - startTimeMs;
@@ -74,7 +77,7 @@ WaypointOffset Logger::getWaypointOffset(WPId id) {
       pose = (*poseGetter)();
     }
   }
-  if (!pose) return {};
+  if (!pose) return offset;
 
   // Linear Offsets
   offset.offX = params.tarX - pose->x;
@@ -89,57 +92,7 @@ WaypointOffset Logger::getWaypointOffset(WPId id) {
     offset.offT = error - 180.0;
   }
 
-  // Reached Logic
-  bool linearReached = offset.totalOffset <= params.linearTol;
-  bool angularReached = !params.thetaTol.has_value() ||
-                        (offset.offT.has_value() &&
-                        std::abs(offset.offT.value()) <= params.thetaTol.value());
-
-  offset.reached = (linearReached && angularReached);
-
   return offset;
-}
-
-bool Logger::isWaypointReached(WPId id) {
-  WaypointParams params{};
-  std::shared_ptr<std::function<std::optional<Pose>()>> poseGetter;
-  std::shared_ptr<pros::Mutex> poseGetterMutex;
-
-  {
-    detail::uniqueLock lock(m_mutex);
-    if (!lock.isLocked()) return false;
-
-    const InternalWaypoint* waypoint = m_findWaypointUnlocked(id);
-    if (!waypoint || !waypoint->active) return {};
-    params = waypoint->params;
-    poseGetter = m_getPose;
-    poseGetterMutex = m_poseGetterMutex;
-  }
-
-  std::optional<Pose> pose = std::nullopt;
-  if (poseGetter && poseGetterMutex) {
-    detail::uniqueLock callbackLock(*poseGetterMutex, TIMEOUT_MAX);
-    if (callbackLock.isLocked()) {
-      pose = (*poseGetter)();
-    }
-  }
-  if (!pose) return false;
-
-  // Linear Offsets
-  float linOffset = sqrt(pow(params.tarX - pose->x, 2) +
-                         pow(params.tarY - pose->y, 2));
-  bool linearReached = linOffset <= params.linearTol;
-
-  bool angularReached = !params.thetaTol.has_value();
-  // Angular Offset (Wrapped to [-180, 180])
-  if (params.tarT.has_value()) {
-    double error = params.tarT.value() - pose->theta;
-    error = fmod(error + 180.0, 360.0);
-    if (error < 0) error += 360.0;
-    angularReached = std::abs(error - 180.0) <= params.thetaTol.value();
-  }
-
-  return linearReached && angularReached;
 }
 
 WaypointHandle Logger::internalRegisterWaypoint(std::string name, WaypointParams details) {
@@ -177,9 +130,7 @@ WaypointHandle Logger::internalRegisterWaypoint(std::string name, WaypointParams
     pkt.tarY = static_cast<float>(details.tarY);
     pkt.tarT = detail::packTelemetryTheta(details.tarT.value_or(0.0));
     pkt.linTol = details.linearTol;
-    pkt.thetaTol = details.thetaTol.has_value()
-      ? details.thetaTol.value()
-      : std::numeric_limits<float>::quiet_NaN();
+    pkt.thetaTol = details.thetaTol.value_or(std::numeric_limits<float>::quiet_NaN());
     pkt.timeout = details.timeoutMs.value_or(0);
     detail::Telemetry::getInstance().sendWaypointCreated(pkt);
   }

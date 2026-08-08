@@ -679,11 +679,16 @@ private:
     /// @brief Creation time of the waypoint
     uint32_t startTimeMs;
 
+    /// @brief Used for limiting .retriggerable waypoint edge triggers.
+    bool prevReached = false;
+
     /// @brief Is the waypoint active (not yet reached or timed out)?
     bool active = true;
 
-    /// @brief Used for limiting .retriggerable waypoints
-    bool prevReached = false;
+    /// @brief Latched true after this waypoint has ever been reached.
+    bool reached = false;
+
+    /// @brief Latched true after this waypoint has timed out.
     bool timedOut = false;
   };
 
@@ -709,9 +714,6 @@ private:
 
   /// @brief Re-send the roster entry for a single waypoint.
   bool resyncWaypointRoster(WPId id);
-
-  /// @brief Returns true if the robot has reached the WPId
-  bool isWaypointReached(WPId id);
 
   /// @brief Print all waypoints that are due
   void printWaypoints();

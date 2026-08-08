@@ -78,6 +78,7 @@ void Logger::printWaypoints() {
       shouldTrigger = true;
       wp.prevReached = true;
       wp.timedOut = false;
+      wp.reached = true;
       wp.active = wp.params.retriggerable;
     } else if (!off.reached && wp.prevReached) {
       wp.prevReached = false;

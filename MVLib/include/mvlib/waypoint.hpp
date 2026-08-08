@@ -41,8 +41,12 @@ struct WaypointParams {
   /// @brief Tolerance to be considered at the point for theta
   std::optional<float> thetaTol = std::nullopt;
 
-  /// @brief Make waypoint retriggerable. It will always log when reached,
-  ///        and deactivate only on timeout (if provided)
+  /// @brief Make waypoint retriggerable. It logs each new reach edge,
+  ///        remains active after being reached, and deactivates only on timeout.
+  ///
+  /// @note A retriggerable waypoint's reached state is latched. Once it has
+  ///       been reached at least once, WaypointHandle::reached() and
+  ///       WaypointOffset::reached continue returning true.
   bool retriggerable = false;
 };
 
@@ -74,7 +78,11 @@ struct WaypointOffset {
   /// @brief Time remaining before the waypoint times out
   std::optional<uint32_t> remainingTimeout = std::nullopt;
 
-  /// @brief True if the waypoint has been reached within tolerances
+  /// @brief True if the waypoint is currently within tolerance or has been
+  ///        reached before.
+  ///
+  /// @note For retriggerable waypoints, this remains true after the first reach
+  ///       even if the robot later leaves the tolerance window.
   bool reached;
 
   /// @brief True if the waypoint has timed out
@@ -112,8 +120,13 @@ public:
   std::string getLabel() const;
 
   /**
-   * @brief Check if the robot has reached the waypoint
-   * \return Returns true if the robot has reached the waypoint
+   * @brief Check if the robot has reached the waypoint.
+   *
+   * \return Returns true if the robot is currently within tolerance or this
+   *         waypoint has been reached before.
+   *
+   * @note For retriggerable waypoints, this returns true after the first reach
+   *       and stays true even if the robot later leaves the tolerance window.
    */
   bool reached() const;
 

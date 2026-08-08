@@ -32,7 +32,7 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
   constexpr uint32_t DEBOUNCE_MS = 5000; // How often to force emit if tripped
 
   if (w.leftDrivetrainWatchdog) {
-    Logger::getInstance().watch("Left Drivetrain OK", LogLevel::INFO, WatchMode::onChange, uint32_t{0},
+    Logger::getInstance().watch("Left Drivetrain OK", LogLevel::INFO, WatchMode::onChange, 750,
       [info = WatchInfo{
         .displayValue = m_pLeftDrivetrain ? m_pLeftDrivetrain->get_temperature() : 0,
         .prevVal = (int16_t)(m_pLeftDrivetrain ? m_pLeftDrivetrain->get_temperature() : 0)
@@ -65,7 +65,7 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
   }
 
   if (w.rightDrivetrainWatchdog) {
-    Logger::getInstance().watch("Right Drivetrain OK", LogLevel::INFO, WatchMode::onChange, uint32_t{0},
+    Logger::getInstance().watch("Right Drivetrain OK", LogLevel::INFO, WatchMode::onChange, 750,
       [info = WatchInfo{
         .displayValue = m_pRightDrivetrain ? m_pRightDrivetrain->get_temperature() : 0,
         .prevVal = (int16_t)(m_pRightDrivetrain ? m_pRightDrivetrain->get_temperature() : 0)
@@ -101,7 +101,7 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
     constexpr int16_t BAT_TEMP_THRESHOLD = 45;
 
     // Battery Temperature Watch
-    Logger::getInstance().watch("Battery Temp OK", LogLevel::INFO, WatchMode::onChange, uint32_t{0},
+    Logger::getInstance().watch("Battery Temp OK", LogLevel::INFO, WatchMode::onChange, 750,
       [info = WatchInfo{
         .displayValue = pros::battery::get_temperature(),
         .prevVal = (int16_t)pros::battery::get_temperature()
@@ -135,7 +135,7 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
     constexpr uint MIN_BAT_VOLT = 11700;
     constexpr uint MAX_BAT_VOLT = 13250;
 
-    Logger::getInstance().watch("Battery Voltage OK", LogLevel::INFO, WatchMode::onChange, uint32_t{0},
+    Logger::getInstance().watch("Battery Voltage OK", LogLevel::INFO, WatchMode::onChange, 750,
       [info = WatchInfo{
         .displayValue = (double)pros::battery::get_voltage(),
         .prevVal = (int16_t)pros::battery::get_voltage()

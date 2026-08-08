@@ -17,7 +17,7 @@ WaypointParams WaypointHandle::getParams() const {
 }
 
 bool WaypointHandle::reached() const {
-  return Logger::getInstance().isWaypointReached(this->m_id);
+  return Logger::getInstance().getWaypointOffset(this->m_id).reached;
 }
 
 std::string WaypointHandle::getLabel() const {
@@ -30,14 +30,7 @@ std::string WaypointHandle::getLabel() const {
 }
 
 bool WaypointHandle::timedOut() const {
-  Logger& logger = Logger::getInstance();
-  detail::uniqueLock lock(logger.m_mutex);
-  if (!lock.isLocked() || logger.m_waypoints.empty()) return false;
-
-  const Logger::InternalWaypoint* waypoint = logger.m_findWaypointUnlocked(this->m_id);
-  if (!waypoint) return false;
-
-  return waypoint->timedOut;
+  return Logger::getInstance().getWaypointOffset(this->m_id).timedOut;
 }
 
 bool WaypointHandle::active() const {
