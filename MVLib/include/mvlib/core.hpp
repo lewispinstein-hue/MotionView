@@ -716,6 +716,9 @@ private:
   /// @brief Print all waypoints that are due
   void printWaypoints();
 
+  /// @brief Print pose data
+  void printTelemetry();
+
   /**
    * @brief Emit a formatted log message. Automatically handles 
    *        terminal/SD logging.
@@ -764,6 +767,7 @@ private:
   
   uint32_t m_lastRosterFlush{0};
   uint32_t m_lastTerminalFlush{0};
+  uint32_t m_lastTelemetryPrint{0};
 
   // Friend classes
   friend class WaypointHandle;

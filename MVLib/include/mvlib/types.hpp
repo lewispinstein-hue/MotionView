@@ -62,7 +62,7 @@ struct LoggerTimings {
    *          be flushed more frequently, while higher values
    *          force flush the buffer less frequently.
    */
-  uint32_t stdoutBufferFlushInterval = 400;
+  uint32_t stdoutBufferFlushInterval = 1000;
 
   /**
    * @brief Controls how often mvlib polls for new data and logs it. Default: 100ms
