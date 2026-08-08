@@ -21,7 +21,6 @@ body {
 
 .sidebar {
   border-right: 1px solid #233244;
-  font-size: 25px;
 }
 
 .sidebar > h1 {
@@ -35,6 +34,12 @@ body {
 .sidebar-nav strong,
 .sidebar ul li a {
   color: #d8dee9;
+}
+
+.sidebar-nav a,
+.sidebar-nav strong,
+.sidebar ul li a {
+  font-size: 25px;
 }
 
 .sidebar-nav li.sidebar-tree-item {
