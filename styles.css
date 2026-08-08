@@ -7,7 +7,7 @@
 body {
   background: rgb(15, 20, 29);
   color: #d8dee9;
-  font-size: 17px;
+  font-size: 20px;
 }
 
 .sidebar,
@@ -25,7 +25,7 @@ body {
 
 .sidebar > h1 {
   background: rgb(15, 20, 29);
-  font-size: 1.25rem;
+  font-size: 1.45rem;
   font-weight: 700;
 }
 
