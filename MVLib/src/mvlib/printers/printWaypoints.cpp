@@ -50,26 +50,29 @@ void Logger::printWaypoints() {
       off.reached = (linearReached && angularReached);
     }
 
-    if (wp.params.timeoutMs.has_value()) {
-      uint32_t elapsed = nowMs - wp.startTimeMs;
-      if (elapsed >= wp.params.timeoutMs.value()) {
-        off.timedOut = true;
-        off.remainingTimeout = 0;
-        wp.timedOut = true;
-      } else {
-        off.remainingTimeout = wp.params.timeoutMs.value() - elapsed;
-        off.timedOut = false;
-        wp.timedOut = false;
-      }
+    const bool hasTimeout = wp.params.timeoutMs.has_value();
+    const uint32_t elapsed = nowMs - wp.startTimeMs;
+    const bool expired = hasTimeout && elapsed >= wp.params.timeoutMs.value();
+
+    if (hasTimeout) {
+      off.remainingTimeout = expired ? 0 : wp.params.timeoutMs.value() - elapsed;
+      off.timedOut = expired;
     } else {
-      wp.timedOut = false;
+      off.remainingTimeout = std::nullopt;
+      off.timedOut = false;
     }
     
     uint8_t subType = 0;
     bool shouldTrigger = false;
     const char* statusStr = nullptr;
 
-    if (off.reached && (!wp.prevReached || !wp.params.retriggerable)) {
+    if (expired) {
+      subType = 3; // TIMEDOUT
+      statusStr = "TIMEDOUT";
+      shouldTrigger = true;
+      wp.timedOut = true;
+      wp.active = false;
+    } else if (off.reached && (!wp.prevReached || !wp.params.retriggerable)) {
       subType = 2; // REACHED
       statusStr = "REACHED";
       shouldTrigger = true;
@@ -78,12 +81,9 @@ void Logger::printWaypoints() {
       wp.active = wp.params.retriggerable;
     } else if (!off.reached && wp.prevReached) {
       wp.prevReached = false;
-    } else if (off.timedOut) {
-      subType = 3; // TIMEDOUT
-      statusStr = "TIMEDOUT";
-      shouldTrigger = true;
-      wp.timedOut = true;
-      wp.active = false;
+      wp.timedOut = false;
+    } else {
+      wp.timedOut = false;
     }
 
     if (!shouldTrigger) continue;

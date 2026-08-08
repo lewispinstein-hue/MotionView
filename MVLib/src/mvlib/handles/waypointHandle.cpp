@@ -37,15 +37,7 @@ bool WaypointHandle::timedOut() const {
   const Logger::InternalWaypoint* waypoint = logger.m_findWaypointUnlocked(this->m_id);
   if (!waypoint) return false;
 
-  auto* mutableWaypoint = const_cast<Logger::InternalWaypoint*>(waypoint);
-
-  // Do timeout check
-  if (mutableWaypoint->params.timeoutMs.has_value() &&
-      (pros::millis() - mutableWaypoint->startTimeMs >=
-       mutableWaypoint->params.timeoutMs.value())) {
-    return true;
-  }
-  return false;
+  return waypoint->timedOut;
 }
 
 bool WaypointHandle::active() const {

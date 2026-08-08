@@ -54,7 +54,9 @@ namespace mvlib {
  * @class Logger
  * @brief Singleton logging + telemetry manager.
  *
- * @note All methods are thread-safe and can be used from any thread.
+ * @note Configure drivetrain references, odometry, timings, SD behavior,
+ *       watches, and waypoints before start() whenever possible. Runtime output
+ *       toggles and handle accessors are intended for use after start().
  *
  * @warning After creating the logger instance (Logger::getInstance()), the
  *          standard PROS terminal multiplexers (sout/serr) and native COBS 
@@ -369,7 +371,9 @@ public:
    * @note To access value of the waypoint, use the handle returned by this 
    *       function.
    *
-   * @note For performance reasons, names are truncated to 24 characters long.
+   * @note String literal names longer than 24 characters are rejected at
+   *       compile time. Live MotionView roster packets preserve 23 visible
+   *       characters because the telemetry name field is null-terminated.
    *
    * \b Example
    * @code
@@ -468,7 +472,9 @@ public:
    *               rendered with two decimal places.
    * @param ov Optional LevelOverride (type inferred from getter).
    *
-   * @note For performance reasons, names are truncated to 24 characters long.
+   * @note String literal labels longer than 24 characters are rejected at
+   *       compile time. Live MotionView roster packets preserve 23 visible
+   *       characters because the telemetry label field is null-terminated.
    * @note Adding a watch is computationally expensive. Don't call logger.watch()
    *       repeatedly. Additionally, if the same .watch() is called
    *       multiple times, each watch will be separate and logged independently.

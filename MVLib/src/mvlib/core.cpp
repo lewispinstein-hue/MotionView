@@ -30,6 +30,12 @@ bool Logger::setRobot(Drivetrain drivetrain, bool useSpeedEstimation) {
     _MVLIB_FORWARD_WARN("setRobot(Drivetrain) called after successfully being set!");
     return false;
   }
+
+  if (m_started) {
+    _MVLIB_FORWARD_WARN("setRobot(Drivetrain) called after logger start!");
+    return false;
+  }
+
   m_forceSpeedEstimation = useSpeedEstimation;
 
   if (!drivetrain.leftDrivetrain || !drivetrain.rightDrivetrain) {

@@ -38,6 +38,7 @@ const Logger::InternalWaypoint* Logger::m_findWaypointUnlocked(WPId id) const {
 WaypointOffset Logger::getWaypointOffset(WPId id) {
   WaypointParams params{};
   uint32_t startTimeMs = 0;
+  bool waypointTimedOut = false;
   std::shared_ptr<std::function<std::optional<Pose>()>> poseGetter;
   std::shared_ptr<pros::Mutex> poseGetterMutex;
 
@@ -49,11 +50,23 @@ WaypointOffset Logger::getWaypointOffset(WPId id) {
     if (!waypoint) return {};
     params = waypoint->params;
     startTimeMs = waypoint->startTimeMs;
+    waypointTimedOut = waypoint->timedOut;
     poseGetter = m_getPose;
     poseGetterMutex = m_poseGetterMutex;
   }
 
-  WaypointOffset offset;
+  WaypointOffset offset{};
+  // Timeout state is owned by printWaypoints(); this accessor only reports it.
+  if (params.timeoutMs.has_value()) {
+    uint32_t elapsed = pros::millis() - startTimeMs;
+    const bool expired = elapsed >= params.timeoutMs.value();
+    offset.remainingTimeout = expired ? 0 : params.timeoutMs.value() - elapsed;
+    offset.timedOut = waypointTimedOut;
+  } else {
+    offset.remainingTimeout = std::nullopt;
+    offset.timedOut = false;
+  }
+
   std::optional<Pose> pose = std::nullopt;
   if (poseGetter && poseGetterMutex) {
     detail::uniqueLock callbackLock(*poseGetterMutex, TIMEOUT_MAX);
@@ -76,28 +89,14 @@ WaypointOffset Logger::getWaypointOffset(WPId id) {
     offset.offT = error - 180.0;
   }
 
-  // Timeout Evaluation
-  if (params.timeoutMs.has_value()) {
-    uint32_t elapsed = pros::millis() - startTimeMs;
-    if (elapsed >= params.timeoutMs.value()) {
-      offset.timedOut = true;
-      offset.remainingTimeout = 0;
-    } else {
-      offset.remainingTimeout = params.timeoutMs.value() - elapsed;
-      offset.timedOut = false;
-    }
-  } else {
-    offset.remainingTimeout = std::nullopt;
-    offset.timedOut = false;
-  }
-
   // Reached Logic
   bool linearReached = offset.totalOffset <= params.linearTol;
   bool angularReached = !params.thetaTol.has_value() ||
-                        (offset.offT.has_value() && 
+                        (offset.offT.has_value() &&
                         std::abs(offset.offT.value()) <= params.thetaTol.value());
 
   offset.reached = (linearReached && angularReached);
+
   return offset;
 }
 
