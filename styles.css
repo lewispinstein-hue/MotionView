@@ -25,7 +25,7 @@ body {
 
 .sidebar > h1 {
   background: rgb(15, 20, 29);
-  font-size: 1.8125rem;
+  font-size: 1.7125rem;
   font-weight: 700;
 }
 
@@ -34,12 +34,6 @@ body {
 .sidebar-nav strong,
 .sidebar ul li a {
   color: #d8dee9;
-}
-
-.sidebar-nav a,
-.sidebar-nav strong,
-.sidebar ul li a {
-  font-size: 25px;
 }
 
 .sidebar-nav li.sidebar-tree-item {
@@ -70,7 +64,21 @@ body {
 
 .sidebar-nav ul,
 .sidebar-nav li {
+  font-size: 25px;
+  line-height: 40px;
   list-style: none;
+}
+
+.sidebar .sidebar-nav li > a,
+.sidebar .sidebar-nav li > p,
+.sidebar .sidebar-nav li > p > a,
+.sidebar .sidebar-nav li > strong {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.sidebar-nav li > p {
+  margin: 0;
 }
 
 .sidebar-nav li::before {
