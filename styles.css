@@ -25,7 +25,7 @@ body {
 
 .sidebar > h1 {
   background: rgb(15, 20, 29);
-  font-size: 1.7125rem;
+  font-size: 1.6125rem;
   font-weight: 700;
 }
 
@@ -64,7 +64,7 @@ body {
 
 .sidebar-nav ul,
 .sidebar-nav li {
-  font-size: 25px;
+  font-size: 21px;
   line-height: 40px;
   list-style: none;
 }
