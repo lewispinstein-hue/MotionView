@@ -1,6 +1,6 @@
-# MotionView Schema v2
+# MotionView Schema v3
 
-This document describes the canonical JSON schema that MotionView v2 exports and is expected to consume for `.json` route files.
+This document describes the canonical JSON schema that MotionView v3 exports and is expected to consume for `.json` route files.
 
 MotionView's importer is somewhat permissive, but if you are generating files for MotionView you should target the canonical shape below.
 
@@ -25,7 +25,7 @@ MotionView's importer is somewhat permissive, but if you are generating files fo
 - The file must be valid JSON.
 - At least one valid entry must exist in one of: `planned-path`, `planned-objects`, `poses`, `watches`, `logs`, or `waypoints`.
 - `meta` is optional.
-- MotionView does not currently reject files if `meta.SchemaVersion` is missing, but v2 files should set it to `2`.
+- MotionView does not currently reject files if `meta.SchemaVersion` is missing, but v3 files should set it to `3`.
 
 Planning-mode notes:
 
@@ -411,11 +411,11 @@ Notes:
 
 ### `meta`
 
-`meta` is optional, but MotionView v2 exports the following structure:
+`meta` is optional, but MotionView v3 exports the following structure:
 
 ```json
 {
-  "SchemaVersion": 2,
+  "SchemaVersion": 3,
   "CreationDate": "30/04/2026, 14:15:16",
   "AppVersion": "0.1.0",
   "Creator": "MotionView",
@@ -495,7 +495,7 @@ Other `meta` fields are currently informational.
   "logs": [],
   "waypoints": [],
   "meta": {
-    "SchemaVersion": 2,
+    "SchemaVersion": 3,
     "Creator": "MotionView"
   }
 }
@@ -509,4 +509,4 @@ Other `meta` fields are currently informational.
 - Canonical export uses `poses`, but import also accepts `robot-path`.
 - Canonical export uses `watches`, but import also accepts `watch`.
 - Canonical export uses `logs`, but import also accepts `log`.
-- Import is tolerant of several field aliases for watches and logs, but these are compatibility paths, not the v2 canonical schema.
+- Import is tolerant of several field aliases for watches and logs, but these are compatibility paths, not the v3 canonical schema.

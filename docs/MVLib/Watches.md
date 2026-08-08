@@ -205,7 +205,7 @@ Behavior:
 - also re-sends the elevated label if this watch has one
 - only affects this specific watch, unlike `logger.resyncAllWatchesRoster()`
 - returns `true` if this watch's roster entry was actually re-sent
-- returns `false` if this watch is not valid
+- returns `false` if this watch is not valid, inactive, missing, or terminal output is disabled
 
 ## Interval-Based Watches
 
@@ -342,6 +342,12 @@ When SD logging is enabled:
 
 - watches are also written as readable `[WATCH],...` lines
 
+## Label Length
+
+The C++ `watch(...)` literal overload rejects labels longer than 24 characters.
+
+Live MotionView roster packets reserve 24 bytes for the label including the trailing null byte, so only 23 visible characters are guaranteed to survive unchanged in live telemetry. Use 23 characters or fewer for labels and elevated labels that must display exactly in MotionView.
+
 ## Resync Helpers
 
 If MotionView joins late and a watch name is missing, re-send watch roster metadata with:
@@ -405,4 +411,4 @@ logger.watch("Mode", LogLevel::INFO, WatchMode::onChange, 250_mvMs,
 - Using `PREDICATE(...)` for non-`int32_t` watch types.
 - Expecting watch calls to accept a printf-style format specifier.
 - Forgetting that `WatchMode::onChange` uses `intervalMs` as a debounce window.
-- Assuming long labels will always survive intact in live telemetry; MotionView roster names are limited by the telemetry packet format.
+- Using labels longer than 23 visible characters when exact live MotionView display names matter.

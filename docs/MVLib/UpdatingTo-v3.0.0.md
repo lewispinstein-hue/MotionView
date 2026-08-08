@@ -14,7 +14,7 @@ Full `v3.0.0` references:
 - if you stored watch return values, change `WatchId` to `WatchHandle`
 - remove watch format strings; floating-point watch values now render with two decimal places
 - replace dynamic watch and waypoint labels with fixed string literals
-- shorten all watch and waypoint labels to 24 characters max
+- shorten all watch and waypoint labels to 23 characters or fewer for exact live MotionView roster display
 - rename `setLoggerMinLevel(...)` to `setMinLogLevel(...)`
 
 ## Watches
@@ -78,6 +78,8 @@ logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval,
   500_mvMs, getter);
 ```
 
+- The C++ literal overload rejects labels longer than 24 characters, but the live roster packet stores a 23-character null-terminated display name. Use 23 characters or fewer if the label must appear untruncated in MotionView.
+
 Full watch reference:
 [Watches.md](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Watches)
 
@@ -95,6 +97,8 @@ with a fixed name:
 ```cpp
 auto wp = logger.addWaypoint("Goal Pickup", params);
 ```
+
+- The C++ literal overload rejects waypoint names longer than 24 characters, but the live roster packet stores a 23-character null-terminated display name. Use 23 characters or fewer if the name must appear untruncated in MotionView.
 
 - If you need extra context, log it separately:
 

@@ -109,6 +109,11 @@ Behavior:
 - a retriggerable waypoint stays active after `REACHED`
 - a retriggerable waypoint still deactivates on timeout if `timeoutMs` is set
 
+Note:
+
+- SD `[WPOINT]` creation lines include the retriggerable flag.
+- The current binary live waypoint-created packet does not carry the retriggerable flag, so live MotionView may initially treat a retriggerable waypoint as non-retriggerable. Use SD log import when exact retriggerable state needs to be preserved in exported run data.
+
 ## `WaypointHandle`
 
 `addWaypoint(...)` returns a `WaypointHandle`:
@@ -201,6 +206,12 @@ Behavior:
 - returns `true` if this waypoint's roster entry was actually re-sent
 - returns `false` if the waypoint is no longer active, does not exist, or roster output is not currently available
 
+## Name Length
+
+The C++ `addWaypoint(...)` literal overload rejects waypoint names longer than 24 characters.
+
+Live MotionView roster packets reserve 24 bytes for the name including the trailing null byte, so only 23 visible characters are guaranteed to survive unchanged in live telemetry. Use 23 characters or fewer for waypoint names that must display exactly in MotionView.
+
 ## `WaypointOffset`
 
 ```cpp
@@ -288,3 +299,4 @@ auto matchload = logger.addWaypoint("Matchload Corner", {
 - Using waypoints without any pose source configured.
 - Forgetting that timeouts start at creation time.
 - Assuming a waypoint stays active after `REACHED` when `retriggerable` is `false`.
+- Using waypoint names longer than 23 visible characters when exact live MotionView display names matter.

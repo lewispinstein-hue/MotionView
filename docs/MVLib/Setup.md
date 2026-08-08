@@ -51,15 +51,15 @@ That enables:
 - `100_mvMs`
 - `LogLevel::INFO`
 
-Without it, use the fully qualified names:
+Without it, use the fully qualified names and import the literal namespace when you want `_mvS` or `_mvMs`:
 
 ```cpp
 mvlib::LogLevel::INFO
 mvlib::WatchMode::onChange
-mvlib::literals::operator"" _mvS(...)
+using namespace mvlib::literals;
 ```
 
-## 3. Important `v2.0.x` Terminal Note
+## 3. Important Terminal Note
 
 As soon as you create the logger instance:
 

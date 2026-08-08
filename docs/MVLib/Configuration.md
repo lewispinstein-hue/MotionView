@@ -1,6 +1,6 @@
 # MVLib Configuration
 
-This page covers the runtime configuration surface in MVLib.
+This page covers the configuration surface in MVLib.
 
 There are 2 main groups:
 
@@ -8,6 +8,8 @@ There are 2 main groups:
 - `LoggerTimings`: polling, flushing, and roster-sync timing
 
 All configuration is done through `mvlib::Logger`.
+
+Configure timings, SD behavior, logging location, build date, odometry, drivetrain references, watches, and waypoints before `logger.start()` whenever possible. The output toggles are intended for runtime use, but timing changes are not synchronized with the background logger task in the current implementation.
 
 ## `LoggerConfig`
 
@@ -120,7 +122,7 @@ Turn it off if you want MotionView to stay focused on your own logs and telemetr
 
 ## `LoggerTimings`
 
-`LoggerTimings` is the runtime timing struct:
+`LoggerTimings` is the timing configuration struct:
 
 ```cpp
 struct LoggerTimings {
@@ -143,6 +145,8 @@ logger.setTimings({
   .rosterSyncAllInterval = 8000
 });
 ```
+
+Set timings before `logger.start()` for deterministic behavior.
 
 ## Timing Fields
 
@@ -252,3 +256,5 @@ And still allows:
 - `FATAL`
 
 This affects MVLib's standard log methods such as `logger.info(...)` and watch output levels.
+
+Set the minimum level before `logger.start()` when possible so the telemetry task and user tasks begin with the same filter state.

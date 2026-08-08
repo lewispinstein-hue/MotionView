@@ -117,7 +117,7 @@ Expected format:
 ```
 
 - `uptime`: The time since the robot booted in milliseconds
-- `eventType`: One of `CREATED`, `OFFSET`, `REACHED`, or `TIMEDOUT`
+- `eventType`: One of `CREATED`, `REACHED`, or `TIMEDOUT`
 - `id`: The integer waypoint ID
 - `wpointName`: The human-readable waypoint name. This must not contain commas.
 - `params...`: Event-specific parameters described below
@@ -129,7 +129,7 @@ If the line does not contain the required comma structure, MotionView treats it 
 Expected format:
 
 ```log
-[WPOINT],uptime,CREATED,id,wpointName,targetX,targetY,targetT|NA,timeoutMs|NA,linearTolerance,thetaTolerance|NA,retriggerable
+[WPOINT],uptime,CREATED,id,wpointName,targetX,targetY,targetT|NA,timeoutMs|NA,linearTolerance,thetaTolerance|NA[,retriggerable]
 ```
 
 - `targetX`: Target x position
@@ -138,7 +138,9 @@ Expected format:
 - `timeoutMs`: Timeout in milliseconds, or `NA`
 - `linearTolerance`: Linear tolerance
 - `thetaTolerance`: Angular tolerance in degrees, or `NA`
-- `retriggerable`: `0` or `1`
+- `retriggerable`: Optional `0` or `1`. If omitted, MotionView treats the waypoint as non-retriggerable.
+
+Current MVLib SD log lines include `retriggerable`. Current MVLib binary live waypoint-created packets omit it, so live decoded waypoint lines may use the shorter form and default to non-retriggerable.
 
 Example:
 
@@ -173,20 +175,33 @@ MotionView uses `CREATED` to create or replace the waypoint with that `id`. The 
 Expected format:
 
 ```log
+[WPOINT],uptime,REACHED,id,wpointName
+```
+
+MotionView also accepts a compatibility form with either `remainingTime` or the older offset fields:
+
+```log
+[WPOINT],uptime,REACHED,id,wpointName,remainingTime
 [WPOINT],uptime,REACHED,id,wpointName,offsetX,offsetY,offsetT|NA,remainingTime|NA
 ```
 
 Example:
 
 ```log
-[16.59] [INFO]: [WPOINT],16585,REACHED,4,Park Zone,0.10,0.00,1.0,150
+[16.59] [INFO]: [WPOINT],16585,REACHED,4,Park Zone
 ```
 
-MotionView stores the event and marks the waypoint as reached. For normal waypoints, `REACHED` is terminal and deactivates the waypoint. For retriggerable waypoints (`retriggerable = 1`), `REACHED` does not deactivate the waypoint, so it can continue receiving future `OFFSET` or `REACHED` events.
+MotionView stores the event and marks the waypoint as reached. For normal waypoints, `REACHED` is terminal and deactivates the waypoint. For retriggerable waypoints (`retriggerable = 1`), `REACHED` does not deactivate the waypoint, so it can continue receiving future `REACHED` events.
 
 #### `TIMEDOUT`
 
 Expected format:
+
+```log
+[WPOINT],uptime,TIMEDOUT,id,wpointName
+```
+
+MotionView also accepts the older offset-field form:
 
 ```log
 [WPOINT],uptime,TIMEDOUT,id,wpointName,offsetX,offsetY,offsetT|NA,remainingTime|NA
@@ -195,7 +210,7 @@ Expected format:
 Example:
 
 ```log
-[19.25] [INFO]: [WPOINT],19250,TIMEDOUT,4,Park Zone,4.40,1.20,NA,0
+[19.25] [INFO]: [WPOINT],19250,TIMEDOUT,4,Park Zone
 ```
 
 MotionView stores the event and always treats `TIMEDOUT` as terminal. This deactivates the waypoint even if it was retriggerable.
