@@ -21,11 +21,12 @@ body {
 
 .sidebar {
   border-right: 1px solid #233244;
+  font-size: 25px;
 }
 
 .sidebar > h1 {
   background: rgb(15, 20, 29);
-  font-size: 1.45rem;
+  font-size: 1.8125rem;
   font-weight: 700;
 }
 
