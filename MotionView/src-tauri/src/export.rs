@@ -21,7 +21,11 @@ fn sanitize_filename_base(value: &str) -> String {
     trimmed.to_string()
 }
 
-fn resolve_export_dir(app: &AppHandle, location: &str, custom_path: Option<&str>) -> Result<PathBuf, String> {
+fn resolve_export_dir(
+    app: &AppHandle,
+    location: &str,
+    custom_path: Option<&str>,
+) -> Result<PathBuf, String> {
     let path_api = app.path();
     let location_normalized = location.trim().to_lowercase();
 
@@ -41,6 +45,20 @@ fn resolve_export_dir(app: &AppHandle, location: &str, custom_path: Option<&str>
                 .filter(|value| !value.is_empty())
                 .ok_or_else(|| "custom export path is required".to_string())?;
             PathBuf::from(raw)
+        }
+        "project" => {
+            let raw = custom_path
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| "project export path is required".to_string())?;
+            let dir = PathBuf::from(raw);
+            std::fs::create_dir_all(&dir).map_err(|e| {
+                format!(
+                    "failed to create project export folder {}: {e}",
+                    dir.display()
+                )
+            })?;
+            dir
         }
         other => {
             return Err(format!("unsupported export location: {other}"));
@@ -80,12 +98,8 @@ pub fn export_motionview_json(
     let dir = resolve_export_dir(&app, &location, custom_path.as_deref())?;
     let export_path = build_export_path(&dir, &filename_base)?;
 
-    std::fs::write(&export_path, json_contents).map_err(|e| {
-        format!(
-            "failed to write export file {}: {e}",
-            export_path.display()
-        )
-    })?;
+    std::fs::write(&export_path, json_contents)
+        .map_err(|e| format!("failed to write export file {}: {e}", export_path.display()))?;
 
     Ok(ExportResult {
         path: export_path.to_string_lossy().to_string(),

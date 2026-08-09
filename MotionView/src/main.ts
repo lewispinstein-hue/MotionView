@@ -6746,17 +6746,45 @@ function sanitizeExportPathName(value) {
 function exportLocationLabel(value) {
   if (value === "desktop") return "Desktop";
   if (value === "documents") return "Documents";
+  if (value === "project") return "Project Folder";
   if (value === "custom") return "Custom Folder";
   return "Downloads";
 }
 
+function prosProjectExportDir() {
+  if (!prosDirValid) return "";
+  const rawDir = prosDirInput ? prosDirInput.value.trim() : "";
+  if (!rawDir || rawDir === "None") return "";
+  const separator = rawDir.includes("\\") && !rawDir.includes("/") ? "\\" : "/";
+  return `${rawDir.replace(/[\\/]+$/, "")}${separator}MotionView-Routes`;
+}
+
+function syncProjectExportLocationOption() {
+  if (!exportLocationSelect) return;
+  const existing = exportLocationSelect.querySelector('option[value="project"]');
+  const projectDir = prosProjectExportDir();
+  if (!projectDir) {
+    if (exportLocationSelect.value === "project") exportLocationSelect.value = "downloads";
+    existing?.remove();
+    return;
+  }
+  if (existing) return;
+  const option = document.createElement("option");
+  option.value = "project";
+  option.textContent = "Project Folder";
+  const customOption = exportLocationSelect.querySelector('option[value="custom"]');
+  exportLocationSelect.insertBefore(option, customOption);
+}
+
 function getExportLocationPath() {
+  syncProjectExportLocationOption();
   const location = exportLocationSelect ? exportLocationSelect.value : "downloads";
   const customPath = exportCustomPathInput ? exportCustomPathInput.value.trim() : "";
+  const projectPath = prosProjectExportDir();
   return {
     kind: location,
     label: exportLocationLabel(location),
-    customPath: location === "custom" ? customPath : null,
+    customPath: location === "custom" ? customPath : (location === "project" ? projectPath : null),
   };
 }
 
@@ -7092,6 +7120,7 @@ function closeRouteInfoModal() {
 }
 
 function updateExportUiState() {
+  syncProjectExportLocationOption();
   const exportLocation = exportLocationSelect ? exportLocationSelect.value : "downloads";
   const exportType = getSelectedExportType();
   const isCustomLocation = exportLocation === "custom";
@@ -7118,9 +7147,9 @@ function updateExportUiState() {
   }
 
   if (exportCustomPathHint) {
-    exportCustomPathHint.textContent = isCustomLocation
-      ? "Enter a folder path. Folder existence will be checked when export logic is added."
-      : "Folder validation will be enforced when export logic is added.";
+    exportCustomPathHint.textContent = exportLocation === "project"
+      ? `Exports to ${prosProjectExportDir() || "the PROS project MotionView-Routes folder"}.`
+      : "Enter a folder path."
   }
 
   if (exportValidationMessage) {
@@ -7934,6 +7963,7 @@ async function updateProsDir(dir) {
     setProsDirStatus("PROS directory not set. Live viewing disabled.", "error");
     saveSettings();
     updateConnectButtonState();
+    updateExportUiState();
     return;
   }
 
@@ -7944,6 +7974,7 @@ async function updateProsDir(dir) {
       prosDirValid = false;
       setProsDirStatus("Bridge not ready yet. Retrying...", "error");
       updateConnectButtonState();
+      updateExportUiState();
       if (prosDirRetryTimer) clearTimeout(prosDirRetryTimer);
       if (prosDirRetryAttempts < 5) {
         prosDirRetryAttempts += 1;
@@ -7966,11 +7997,13 @@ async function updateProsDir(dir) {
       setProsDirStatus(`Using PROS project: ${result.dir}`, "ok");
       saveSettings();
       updateConnectButtonState();
+      updateExportUiState();
     } else {
       prosDirValid = false;
       setStatus(`Failed to set PROS directory: ${result.status}`);
       setProsDirStatus(`Invalid PROS directory: ${result.status}`, "error");
       updateConnectButtonState();
+      updateExportUiState();
     }
   } catch (e) {
     prosDirValid = false;
@@ -7978,12 +8011,16 @@ async function updateProsDir(dir) {
     setStatus(`Error updating PROS directory: ${e.message || e}`);
     setProsDirStatus(`Error validating PROS directory: ${e.message || e}`, "error");
     updateConnectButtonState();
+    updateExportUiState();
   }
 }
 
 if (prosDirInput) {
   let prosDirTimeout = null;
   prosDirInput.addEventListener("input", () => {
+    prosDirValid = false;
+    updateConnectButtonState();
+    updateExportUiState();
     // Debounce API calls
     if (prosDirTimeout) clearTimeout(prosDirTimeout);
     prosDirTimeout = setTimeout(() => {
@@ -8034,12 +8071,15 @@ async function loadProsDirFromAPI() {
       setProsDirStatus(`Using PROS project: ${result.dir}`, "ok");
       saveSettings();
       if (btnLeftConnect) btnLeftConnect.disabled = false;
+      updateExportUiState();
     } else {
       prosDirValid = false;
+      updateExportUiState();
     }
   } catch (e) {
     prosDirValid = false;
     console.error("Error loading PROS directory from API:", e);
+    updateExportUiState();
   }
 }
 
