@@ -1,4 +1,3 @@
-import type { AppMode } from "../app/modeController";
 import type { PlanMethod, PlanNode, PlanObject, PlanWaypoint } from "../state/models";
 
 export interface PlanningMethod extends PlanMethod {
@@ -141,9 +140,6 @@ export interface PlanningModeController {
 }
 
 export interface PlanningModeDependencies {
-  getAppMode(): AppMode;
-  requestDrawAll(): void;
-  setStatus(message: string, log?: boolean): void;
   scheduleSavedPathsSave(): void;
   readPlanSpeed?(value: unknown, fallback?: number): number;
   clampWaypointX?(value: number): number;

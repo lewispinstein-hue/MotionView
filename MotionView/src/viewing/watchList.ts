@@ -1,3 +1,4 @@
+import { requestDrawAll } from "../render/renderScheduler";
 import type { VirtualList } from "./virtualList";
 
 export interface WatchListRendererDependencies {
@@ -11,7 +12,6 @@ export interface WatchListRendererDependencies {
   getSelectedWatch(): any;
   setRenderedWatchIndexByTime(indexByTime: Map<unknown, number>): void;
   refreshWatchGraphPanelData(): void;
-  requestDrawAll(): void;
   levelStyle(level: unknown): { fill: string; text: string; name: string };
   levelSortRank(level: unknown): number;
   watchSortValueKey(value: unknown): { t: number; n: number; s: string };
@@ -113,7 +113,7 @@ export function createWatchListRenderer(deps: WatchListRendererDependencies): Wa
       button.title = button.dataset.title || "Toggle watch visibility";
       button.setAttribute("aria-label", button.dataset.title || "Toggle watch visibility");
     }
-    deps.requestDrawAll();
+    requestDrawAll();
   }
 
   function createItem(marker: any) {

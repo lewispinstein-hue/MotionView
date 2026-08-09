@@ -1,3 +1,4 @@
+import { requestDrawAll } from "../render/renderScheduler";
 import type { Pose } from "../state/models";
 import type { ViewingSelectionController } from "./viewingSelection";
 import type { WatchMarker } from "./viewingTypes";
@@ -30,7 +31,6 @@ export interface CreateViewingTimelineOptions {
   setLastPoseIndex(index: number): void;
   highlightPoseList(): void;
   updatePoseReadout(): void;
-  requestDrawAll(): void;
   clamp(value: number, min: number, max: number): number;
   heatColorFromNorm(value: number): string;
   levelFillWithAlpha(level: unknown, alpha: number): string;
@@ -222,7 +222,7 @@ export function createViewingTimeline(options: CreateViewingTimelineOptions): Vi
       options.selection.saveTimelineHoverIfNeeded();
       options.selection.hoverTimelineTime = xToTime(x);
       options.updatePoseReadout();
-      options.requestDrawAll();
+      requestDrawAll();
     });
 
     canvas.addEventListener("mouseleave", () => {
@@ -230,7 +230,7 @@ export function createViewingTimeline(options: CreateViewingTimelineOptions): Vi
       options.selection.clearTimelineHover(true);
       canvas.style.cursor = "default";
       options.updatePoseReadout();
-      options.requestDrawAll();
+      requestDrawAll();
     });
 
     canvas.addEventListener("mousedown", (event) => {
@@ -252,7 +252,7 @@ export function createViewingTimeline(options: CreateViewingTimelineOptions): Vi
       options.selection.clearTimelineHover(false);
       options.highlightPoseList();
       options.updatePoseReadout();
-      options.requestDrawAll();
+      requestDrawAll();
     });
   };
 

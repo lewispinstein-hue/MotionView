@@ -1,6 +1,5 @@
 // @ts-nocheck
 import { invoke } from "@tauri-apps/api/core";
-import { resolveResource } from "@tauri-apps/api/path";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import fitIconUrl from "./assets/svg/common/fit.svg?url";
 import demoRouteUrl from "./assets/demo/getting-started-route.json?url";
@@ -11,11 +10,22 @@ import pinWatchIconUrl from "./assets/svg/viewing/pinWatch.svg?url";
 import visibleWatchIconUrl from "./assets/svg/viewing/visibleWatch.svg?url";
 import watchGraphIconUrl from "./assets/svg/viewing/watchGraph.svg?url";
 import { createTopBar } from "./app/createTopBar";
-import { createModeController } from "./app/modeController";
+import { getMode, setMode, subscribeMode } from "./app/modeController";
+import { setStatus } from "./app/status";
 import { applyLiveButtonState } from "./live/liveDomAdapter";
 import { LiveActionGate, LivePendingBuffer, LiveWebSocketClient, stripToTag } from "./live/liveCore";
 import { LiveConsoleBuffer } from "./live/liveConsole";
 import { createFieldRenderer, FIELD_BOUNDS_IN, CANVAS_ZOOM_MIN } from "./render/createFieldRenderer";
+import { configureRenderScheduler, requestDrawAll } from "./render/renderScheduler";
+import {
+  currentUnitsToInches,
+  formatDistanceFromInches,
+  getCurrentUnits,
+  getUnitsToInchesFactor,
+  inchesToCurrentUnits,
+  setCurrentUnits,
+  subscribeUnits,
+} from "./shared/units";
 import {
   DEFAULT_FIELD_KEY,
   getValidFieldKey as getValidFieldKeyForOptions,
@@ -75,7 +85,6 @@ import {
 } from "./viewing";
 
 const isWindowsPlatform = typeof navigator === "object" && /Windows/.test(navigator.userAgent);
-const isTauriRuntime = typeof window === "object" && !!window.__TAURI_INTERNALS__;
 
 let windowsFullscreenState = false;
 async function refreshWindowsFullscreenState() {
@@ -457,8 +466,6 @@ let pendingExportRequest = null;
 let importedRouteMeta = null;
 
 let playRate = 1;
-
-const modeController = createModeController("viewing");
 let playButtonLabel = "▶";
 
 const topBar = createTopBar({
@@ -468,7 +475,6 @@ const topBar = createTopBar({
   onClearField: (event) => handleClearFieldClick(event),
   onOpenSettings: () => openSettings(),
   onOpenHelp: () => openHelp(),
-  onSetMode: (mode) => modeController.setMode(mode),
   onTogglePlayback: () => togglePlaybackForCurrentMode(),
   onPlaybackSpeedChanged: (speed) => {
     playRate = speed;
@@ -484,7 +490,7 @@ const topBar = createTopBar({
 function syncTopBarPlayback(label = playButtonLabel) {
   playButtonLabel = label;
   const liveConnected = !!window.__live?.connected;
-  const mode = modeController.getMode();
+  const mode = getMode();
   const planningWaypointCount = planningMode?.state?.getWaypointCount?.() ?? 0;
   const enabled = !liveConnected && (mode === "planning" ? planningWaypointCount >= 2 : rawPoses.length >= 2);
   const playing = label === "⏸";
@@ -494,10 +500,6 @@ function syncTopBarPlayback(label = playButtonLabel) {
 const fieldRenderer = createFieldRenderer({
   canvas,
   ctx,
-  isTauriRuntime,
-  resolveResource,
-  invokeCommand: (command, args) => invoke(command, args),
-  getMode: modeController.getMode,
   getViewingPathPoses: () => rawPoses.map(poseToInches),
   getViewingPose: () => currentDisplayPose(),
   getPlanningPose: () => planSampleAtDist(planningMode.playback.getPlaybackDistance()),
@@ -510,10 +512,7 @@ const fieldRenderer = createFieldRenderer({
   },
   drawPlanningOverlay: (force = false) => planningMode.rendering.drawFieldOverlay(force),
   isPlanningOverlayVisible: () => planningMode.state.isOverlayVisible(),
-  drawViewingTimeline: () => viewingTimeline.draw(),
-  drawPlanningTimeline: () => planningMode.rendering.drawTimeline(),
   drawWaypointOffsetOverlay: (pose) => drawWaypointOffsetOverlay(pose),
-  setStatus: (message) => topBar.setStatus(message),
   onRobotImageAvailabilityChanged: (available) => {
     if (robotImgControlsEl) robotImgControlsEl.hidden = !available;
     if (settingsRobotImgControls) settingsRobotImgControls.hidden = !(fieldRenderer.isRobotImageEnabled() && available);
@@ -522,9 +521,6 @@ const fieldRenderer = createFieldRenderer({
 });
 
 let planningMode = createPlanningMode({
-  getAppMode: modeController.getMode,
-  requestDrawAll: fieldRenderer.requestDrawAll,
-  setStatus: topBar.setStatus,
   scheduleSavedPathsSave,
   readPlanSpeed,
   clampWaypointX: clampPlanCoordX,
@@ -535,7 +531,7 @@ let planningMode = createPlanningMode({
   setPlayButtonLabel: syncTopBarPlayback,
   setPlanningDistanceUi: (distanceInches, totalInches, waypointCount) => {
     if (planTimePill) {
-      planTimePill.textContent = `Plan: ${formatDistanceFromInches(distanceInches, 2)} / ${formatDistanceFromInches(totalInches, 2)} ${currentUnits}`;
+      planTimePill.textContent = `Plan: ${formatDistanceFromInches(distanceInches, 2)} / ${formatDistanceFromInches(totalInches, 2)} ${getCurrentUnits()}`;
     }
     if (planPointPill) {
       planPointPill.textContent = `Points: ${waypointCount}`;
@@ -568,7 +564,7 @@ let planningMode = createPlanningMode({
   maxUndoSteps: MAX_PLAN_UNDO,
 });
 
-modeController.subscribe((mode) => {
+subscribeMode((mode) => {
   document.body.classList.toggle("mode-planning", mode === "planning");
   syncTimelineBarCollapsedForMode(mode);
   if (mode === "planning" && viewingPlayback.isPlaying()) viewingPlayback.pause();
@@ -1094,7 +1090,7 @@ function openPlanNodeEditModal(nodeId) {
       if (!setPlanNodeCodeOverride(planningMode.objects, targetNode, codeValue)) return;
       savePlanTimelineUi();
       planningSidebarRenderer.renderPlanObjects();
-      fieldRenderer.requestDrawAll();
+      requestDrawAll();
       const effective = getPlanNodeEffectiveMethod(planningMode.objects, targetNode);
       void planningTelemetry.timelineNodeUpdated(planningMode.telemetry.getTelemetryProperties({
         node_override_created: !beforeOverride && !!effective?.hasOverride,
@@ -1375,7 +1371,7 @@ function selectPlanNode(nodeId, { scrollSidebar = false } = {}) {
   planningMode.rendering.renderTimelineDom();
   planningSidebarRenderer.renderPlanObjects();
   syncPlanObjectLatestValues();
-  fieldRenderer.requestDrawAll();
+  requestDrawAll();
   if (scrollSidebar && nodeId) {
     const node = getPlanNodeById(nodeId);
     if (node) scrollPlanMethodIntoView(node.objectId, node.methodId);
@@ -1412,13 +1408,13 @@ function buildFieldPlanNodeMarkers() {
     const nx = -ty;
     const ny = tx;
     const segStartDist = distances[bucketIndex - 1] ?? 0;
-    const markerLongPx = modeController.getMode() === "planning"
+    const markerLongPx = getMode() === "planning"
       ? Math.max(8, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_LONG, PLAN_FIELD_NODE_MARKER_LONG_MAX_IN))
       : Math.min(
         PLAN_FIELD_NODE_VIEWING_MAX_IN * fieldRenderer.getScale(),
         Math.max(8, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_LONG, PLAN_FIELD_NODE_MARKER_LONG_MAX_IN)),
       );
-    const waypointRadiusPx = modeController.getMode() === "planning"
+    const waypointRadiusPx = getMode() === "planning"
       ? Math.min(PLAN_POINT_R, PLAN_MARKER_MAX_IN * fieldRenderer.getScale())
       : Math.min(PLAN_OVERLAY_POINT_R, PLAN_MARKER_MAX_IN_VIEWING * fieldRenderer.getScale());
     const startClearanceDist = Math.min(len, (waypointRadiusPx + markerLongPx * 0.3 + 1.5) / Math.max(fieldRenderer.getScale(), 0.0001));
@@ -1706,7 +1702,7 @@ function savePlanObjectsUi() {
   planningSidebarRenderer.renderPlanObjects();
   planningMode.rendering.renderTimelineDom();
   syncPlanObjectLatestValues();
-  fieldRenderer.requestDrawAll();
+  requestDrawAll();
   scheduleSavedPathsSave();
 }
 
@@ -2001,7 +1997,6 @@ const planningSidebarRenderer = createPlanningSidebarRenderer({
   planThetaDegAt,
   readPlanSpeed,
   fmtNum,
-  formatDistanceFromInches,
   escapeHtml,
   svgIconHref,
   getDefaultPlanObjectName,
@@ -2009,7 +2004,6 @@ const planningSidebarRenderer = createPlanningSidebarRenderer({
   getPlanObjectLatestValue,
   planToggleSelection: planningMode.actions.toggleWaypointSelection,
   planSelectSingle: planningMode.actions.selectWaypoint,
-  requestDrawAll: fieldRenderer.requestDrawAll,
   renderPlanList: () => planningSidebarRenderer.renderPlanList(),
   updatePlanSelectionPanel,
   commitPlanObjectNameEdit,
@@ -2022,7 +2016,6 @@ const planningSidebarRenderer = createPlanningSidebarRenderer({
 const planningTimelineRenderer = createPlanningTimelineRenderer({
   planningTimelineCanvas,
   context: pctx,
-  getAppMode: modeController.getMode,
   getCurrentPlanTimelineLayout,
   getPlanTotalLength: planTotalLength,
   getPlanPlayDistance: () => planningMode.playback.getPlaybackDistance(),
@@ -2053,7 +2046,6 @@ const viewingFieldOverlayRenderer = createViewingFieldOverlayRenderer({
   getHoverWatch: () => viewingFieldInteraction?.getHoverWatch(),
   isWatchMarkerVisible,
   waypointFilterMatches,
-  worldToScreen: fieldRenderer.worldToScreen,
   levelFillWithAlpha,
   scaledViewingFieldRadius,
   viewingFieldMarkerStyleScale,
@@ -2321,8 +2313,8 @@ function planThetaHandlePos(i) {
   if (!p) return null;
   const sp = fieldRenderer.worldToScreen(p.x, p.y);
   const theta = fieldHeadingToScreenDeg(planThetaDegAt(i)) * Math.PI / 180;
-  const baseR = modeController.getMode() !== "planning" ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
-  const r = modeController.getMode() === "viewing"
+  const baseR = getMode() !== "planning" ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
+  const r = getMode() === "viewing"
     ? Math.min(baseR, PLAN_MARKER_MAX_IN_VIEWING * fieldRenderer.getScale())
     : Math.min(baseR, PLAN_MARKER_MAX_IN * fieldRenderer.getScale());
   const handleOffset = PLAN_THETA_HANDLE_OFFSET * Math.max(fieldRenderer.getViewZoom(), CANVAS_ZOOM_MIN);
@@ -2364,7 +2356,7 @@ function updatePlanThetaFromPointer(idx, mx, my) {
   }
   planningSidebarRenderer.renderPlanList();
   updatePlanSelectionPanel();
-  fieldRenderer.requestDrawAll();
+  requestDrawAll();
 }
 
 function isInField(w) {
@@ -2387,8 +2379,8 @@ function isPointInFieldBounds(point) {
 }
 
 planningMode.rendering.drawFieldOverlay = function drawFieldOverlay(force = false) {
-  if (!force && modeController.getMode() !== "planning") return;
-  if (modeController.getMode() !== "planning" && !planningMode.overlayVisible) return;
+  if (!force && getMode() !== "planning") return;
+  if (getMode() !== "planning" && !planningMode.overlayVisible) return;
   if (!planningMode.waypoints.length) return;
 
   ctx.save();
@@ -2406,7 +2398,7 @@ planningMode.rendering.drawFieldOverlay = function drawFieldOverlay(force = fals
   }
   ctx.stroke();
 
-  if (modeController.getMode() === "planning" || (modeController.getMode() !== "planning" && planningMode.overlayVisible)) {
+  if (getMode() === "planning" || (getMode() !== "planning" && planningMode.overlayVisible)) {
     const markers = buildFieldPlanNodeMarkers();
     for (const marker of markers) {
       const sp = fieldRenderer.worldToScreen(marker.x, marker.y);
@@ -2418,9 +2410,9 @@ planningMode.rendering.drawFieldOverlay = function drawFieldOverlay(force = fals
       const thickRaw = Math.max(3, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_MARKER_THICK, PLAN_FIELD_NODE_MARKER_THICK_MAX_IN));
       const tickLenRaw = Math.max(10, scaledPlanFieldNodeSize(PLAN_FIELD_NODE_TICK_LEN, PLAN_FIELD_NODE_TICK_MAX_IN));
       const viewingCapPx = PLAN_FIELD_NODE_VIEWING_MAX_IN * fieldRenderer.getScale();
-      const longLen = modeController.getMode() === "planning" ? longLenRaw : Math.min(viewingCapPx, longLenRaw);
-      const thick = modeController.getMode() === "planning" ? thickRaw : Math.min(viewingCapPx, thickRaw);
-      const tickLen = modeController.getMode() === "planning" ? tickLenRaw : Math.min(viewingCapPx, tickLenRaw);
+      const longLen = getMode() === "planning" ? longLenRaw : Math.min(viewingCapPx, longLenRaw);
+      const thick = getMode() === "planning" ? thickRaw : Math.min(viewingCapPx, thickRaw);
+      const tickLen = getMode() === "planning" ? tickLenRaw : Math.min(viewingCapPx, tickLenRaw);
       const color = marker.object.color || getDefaultPlanObjectColor(planningMode.objects.length);
       const isSelected = planningMode.selectedNodeId === marker.node.id;
       const isHover = planningMode.fieldHoverNodeId === marker.node.id;
@@ -2464,10 +2456,10 @@ planningMode.rendering.drawFieldOverlay = function drawFieldOverlay(force = fals
     const p = planningMode.waypoints[i];
     const sp = fieldRenderer.worldToScreen(p.x, p.y);
     const isSel = planningMode.selectedSet.has(i);
-    const baseR = (modeController.getMode() !== "planning") ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
+    const baseR = (getMode() !== "planning") ? PLAN_OVERLAY_POINT_R : PLAN_POINT_R;
     
     let r = 0;
-    if (modeController.getMode() === "viewing") r = Math.min(baseR, PLAN_MARKER_MAX_IN_VIEWING * fieldRenderer.getScale());
+    if (getMode() === "viewing") r = Math.min(baseR, PLAN_MARKER_MAX_IN_VIEWING * fieldRenderer.getScale());
     else r = Math.min(baseR, PLAN_MARKER_MAX_IN * fieldRenderer.getScale());
 
     ctx.beginPath();
@@ -2492,7 +2484,7 @@ planningMode.rendering.drawFieldOverlay = function drawFieldOverlay(force = fals
     ctx.restore();
 
     if (isSel) {
-      if (modeController.getMode() === "viewing") var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN_VIEWING * fieldRenderer.getScale());
+      if (getMode() === "viewing") var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN_VIEWING * fieldRenderer.getScale());
       else var handleR = Math.min(PLAN_THETA_HANDLE_R, PLAN_MARKER_MAX_IN * fieldRenderer.getScale());
 
       const handleOffset = PLAN_THETA_HANDLE_OFFSET * Math.max(fieldRenderer.getViewZoom(), CANVAS_ZOOM_MIN);
@@ -2534,8 +2526,6 @@ planningMode.rendering.drawFieldOverlay = function drawFieldOverlay(force = fals
 
 // offsets: entered in selected units, stored as inches for rendering
 const offsetsIn = { x: 0, y: 0, theta: 0 };
-let unitsToInFactor = 1;
-let currentUnits = "in";
 
 // -------- utilities --------
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -2680,35 +2670,8 @@ function robotDimsInches() {
   return { w: Math.max(1, w), h: Math.max(1, h) };
 }
 
-// -------- units/offsets --------
-function setUnitsFactorFromSelect(value) {
-  const v = String(value || "in");
-  if (v === "cm") unitsToInFactor = 1 / 2.54;
-  else if (v === "ft") unitsToInFactor = 12;
-  else if (v === "tiles") unitsToInFactor = 24;
-  else unitsToInFactor = 1;
-  currentUnits = v;
-}
-
-function inchesToCurrentUnits(inches) {
-  const numericValue = Number(inches);
-  if (!Number.isFinite(numericValue)) return null;
-  return numericValue / (unitsToInFactor || 1);
-}
-
-function currentUnitsToInches(value) {
-  const numericValue = Number(value);
-  if (!Number.isFinite(numericValue)) return 0;
-  return numericValue * (unitsToInFactor || 1);
-}
-
 function distanceSettingToInches(value) {
   return currentUnitsToInches(value);
-}
-
-function formatDistanceFromInches(inches, decimals = 2) {
-  const converted = inchesToCurrentUnits(inches);
-  return converted == null ? "—" : fmtNum(converted, decimals);
 }
 
 function refreshUnitSensitiveRendering() {
@@ -2716,8 +2679,10 @@ function refreshUnitSensitiveRendering() {
   updatePlanSelectionPanel();
   planningMode?.playback?.setDistance?.(planningMode.playback.getPlaybackDistance());
   updatePoseReadout();
-  fieldRenderer?.requestDrawAll?.();
+  requestDrawAll();
 }
+
+subscribeUnits(refreshUnitSensitiveRendering);
 
 function inferUnitsFromMeta(metaUnits) {
   const u = String(metaUnits || "").toLowerCase().trim();
@@ -2735,8 +2700,8 @@ function updateOffsetsFromInputs() {
   const uy = Number((offYEl ? offYEl.value : settingsOffY ? settingsOffY.value : 0) || 0);
   const ut = Number((offThetaEl ? offThetaEl.value : settingsOffTheta ? settingsOffTheta.value : 0) || 0);
 
-  offsetsIn.x = ux * unitsToInFactor;
-  offsetsIn.y = uy * unitsToInFactor;
+  offsetsIn.x = ux * getUnitsToInchesFactor();
+  offsetsIn.y = uy * getUnitsToInchesFactor();
   offsetsIn.theta = ut;
 
   recomputeWatchMarkers();
@@ -2835,8 +2800,8 @@ function poseToInches(p) {
   }
   return {
     t: (typeof p.t === "number") ? p.t : null,
-    x: (p.x ?? 0) * unitsToInFactor + offsetsIn.x,
-    y: (p.y ?? 0) * unitsToInFactor + offsetsIn.y,
+    x: (p.x ?? 0) * getUnitsToInchesFactor() + offsetsIn.x,
+    y: (p.y ?? 0) * getUnitsToInchesFactor() + offsetsIn.y,
     theta: normalizeDeg((p.theta ?? 0) + offsetsIn.theta),
     l_vel: (typeof p.l_vel === "number") ? p.l_vel : null,
     r_vel: (typeof p.r_vel === "number") ? p.r_vel : null,
@@ -3214,7 +3179,7 @@ watchGraph = createWatchGraph({
   clamp,
   selectWatchMarker,
   updatePoseReadout,
-  requestDrawAll: fieldRenderer.requestDrawAll,
+  requestDrawAll,
 });
 watchGraph.bindEvents();
 
@@ -3262,10 +3227,10 @@ const viewingLists = createViewingLists({
     viewingSelection.selectedIndex = index;
     if (leftConnected && leftStreaming) liveAutoFollowHead = false;
     lastPoseIndex = viewingSelection.selectedIndex;
-    topBar.setStatus(`Jumped to pose #${index + 1}.`);
+    setStatus(`Jumped to pose #${index + 1}.`);
     viewingLists.highlightPose();
     updatePoseReadout();
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
   },
   onWaypointEventSelected: (waypoint, event) => selectWaypointEvent(waypoint, event, true),
   selectWatchMarker,
@@ -3273,9 +3238,7 @@ const viewingLists = createViewingLists({
   toggleWatchVisibilityForWatch,
   openOrToggleWatchGraphPanel: (marker) => watchGraph.openOrTogglePanel(marker),
   refreshWatchGraphPanelData: () => watchGraph.refreshPanelData(),
-  requestDrawAll: fieldRenderer.requestDrawAll,
   jumpToEventTime,
-  setStatus: topBar.setStatus,
   getRawPoseTime: (index) => rawPoses[index]?.t,
   poseToInches,
   formatNumberString,
@@ -3321,14 +3284,12 @@ const viewingPlayback = createViewingPlayback({
   getPlayRate: () => playRate,
   isLivestreaming: () => !!(window.__live && window.__live.streaming),
   setPlayButtonLabel: syncTopBarPlayback,
-  setStatus: topBar.setStatus,
   formatTimeSeconds: (ms) => formatNumberString((ms ?? 0) / 1000, 1, "0"),
   interpolatePoseAtTime,
   findFloorIndexByTime,
   lastWatchAtTime: (timeMs) => lastWatchAtTime(watchMarkersByTime, timeMs),
   highlightWatch: (timeMs, doScroll) => watchListRenderer.highlight(timeMs, doScroll),
   updatePoseReadout,
-  requestDrawAll: fieldRenderer.requestDrawAll,
 });
 
 const viewingInput = createViewingInput({
@@ -3356,8 +3317,6 @@ const viewingInput = createViewingInput({
   pause: viewingPlayback.pause,
   highlightPoseList: () => poseListRenderer.highlight(),
   updatePoseReadout,
-  requestDrawAll: fieldRenderer.requestDrawAll,
-  setStatus: topBar.setStatus,
 });
 
 const viewingTimeline = createViewingTimeline({
@@ -3380,12 +3339,17 @@ const viewingTimeline = createViewingTimeline({
   setLastPoseIndex: (index) => { lastPoseIndex = index; },
   highlightPoseList: () => poseListRenderer.highlight(),
   updatePoseReadout,
-  requestDrawAll: fieldRenderer.requestDrawAll,
   clamp,
   heatColorFromNorm,
   levelFillWithAlpha,
 });
 viewingTimeline.bindEvents();
+
+configureRenderScheduler({
+  drawField: () => fieldRenderer.draw(),
+  drawViewingTimeline: () => viewingTimeline.draw(),
+  drawPlanningTimeline: () => planningMode.rendering.drawTimeline(),
+});
 
 viewingFieldInteraction = createViewingFieldInteraction({
   canvas,
@@ -3397,7 +3361,6 @@ viewingFieldInteraction = createViewingFieldInteraction({
   getPoses: () => rawPoses,
   getWatchMarkers: () => watchMarkers,
   getWaypoints: () => waypoints,
-  worldToScreen: fieldRenderer.worldToScreen,
   poseToInches,
   angLerpDeg,
   trackHoverTolerancePx: HOVER_PIXEL_TOL + TRACK_HOVER_PAD_PX,
@@ -3406,7 +3369,6 @@ viewingFieldInteraction = createViewingFieldInteraction({
   waypointFilterMatches,
   updateCursorPillsFromClient,
   setCursorPills,
-  getAppMode: () => modeController.getMode(),
   handlePlanningMouseMove: (event) => {
     const rect = canvas.getBoundingClientRect();
     const mx = event.clientX - rect.left;
@@ -3417,7 +3379,7 @@ viewingFieldInteraction = createViewingFieldInteraction({
     if (nodeHit) {
       if (planningMode.fieldHoverNodeId !== nodeHit.node.id) {
         planningMode.fieldHoverNodeId = nodeHit.node.id;
-        fieldRenderer.requestDrawAll();
+        requestDrawAll();
       }
       canvas.style.cursor = "pointer";
       updatePlanNodeTooltip(nodeHit.tooltipText, event.clientX, event.clientY, !!nodeHit.method?.hasOverride);
@@ -3426,7 +3388,7 @@ viewingFieldInteraction = createViewingFieldInteraction({
       planningMode.fieldHoverNodeId = null;
       canvas.style.cursor = "";
       hidePlanNodeTooltip();
-      if (hadHover) fieldRenderer.requestDrawAll();
+      if (hadHover) requestDrawAll();
     }
   },
   handlePlanningMouseLeave: () => {
@@ -3434,7 +3396,7 @@ viewingFieldInteraction = createViewingFieldInteraction({
     planningMode.fieldHoverNodeId = null;
     hidePlanNodeTooltip({ immediate: true });
     canvas.style.cursor = "";
-    if (hadHover) fieldRenderer.requestDrawAll();
+    if (hadHover) requestDrawAll();
   },
   selectWatchMarker,
   selectWaypointEvent,
@@ -3445,8 +3407,6 @@ viewingFieldInteraction = createViewingFieldInteraction({
   setLastPoseIndex: (index) => { lastPoseIndex = index; },
   highlightPoseList: () => poseListRenderer.highlight(),
   updatePoseReadout,
-  requestDrawAll: fieldRenderer.requestDrawAll,
-  setStatus: topBar.setStatus,
   getSuppressNextClick: () => fieldRenderer.getSuppressNextClick(),
   consumeSuppressNextClick: () => fieldRenderer.consumeSuppressNextClick(),
 });
@@ -3482,7 +3442,7 @@ function jumpToEventTime(tMs, {
 
     poseListRenderer.highlight();
     updatePoseReadout();
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
     return;
   }
 
@@ -3508,7 +3468,7 @@ function jumpToEventTime(tMs, {
 
   poseListRenderer.highlight();
   updatePoseReadout();
-  fieldRenderer.requestDrawAll();
+  requestDrawAll();
 }
 
 // --- Watch popup (tiny, click to show, click elsewhere to dismiss) ---
@@ -3585,7 +3545,7 @@ function updateWatchVisibilityButtons(key) {
     button.title = button.dataset.title || "Toggle watch visibility";
     button.setAttribute("aria-label", button.dataset.title || "Toggle watch visibility");
   }
-  fieldRenderer.requestDrawAll();
+  requestDrawAll();
 }
 
 function toggleWatchVisibilityForWatch(watch) {
@@ -3695,8 +3655,8 @@ function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
   hideWatchPopup();
 
   if (leftConnected && leftStreaming) {
-    fieldRenderer.requestDrawAll();
-    topBar.setStatus(`Waypoint: ${waypoint.name || waypoint.id} selected.`);
+    requestDrawAll();
+    setStatus(`Waypoint: ${waypoint.name || waypoint.id} selected.`);
     waypointListRenderer.highlight(waypoint.id, viewingSelection.selectedWaypointEventTime, fromUserClick);
     return;
   }
@@ -3712,11 +3672,11 @@ function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
     lastPoseIndex = viewingSelection.selectedIndex;
     poseListRenderer.highlight();
     updatePoseReadout();
-    fieldRenderer.requestDrawAll();
-    topBar.setStatus(`Waypoint: ${waypoint.name || waypoint.id} mapped to pose @${rawPoses[poseIdx].t}ms.`);
+    requestDrawAll();
+    setStatus(`Waypoint: ${waypoint.name || waypoint.id} mapped to pose @${rawPoses[poseIdx].t}ms.`);
   } else {
-    topBar.setStatus(`Waypoint: ${waypoint.name || waypoint.id} has no poses while active.`);
-    fieldRenderer.requestDrawAll();
+    setStatus(`Waypoint: ${waypoint.name || waypoint.id} has no poses while active.`);
+    requestDrawAll();
   }
 
   waypointListRenderer.highlight(waypoint.id, viewingSelection.selectedWaypointEventTime, fromUserClick);
@@ -3731,10 +3691,10 @@ function selectWatchMarker(marker, fromUserClick = false, clickPos = null) {
   const timeStr = (marker.t != null) ? `${fmtNum(marker.t / 1000)}s` : "—";;
 
   jumpToEventTime(marker.t, {
-    exactStatus: (near) => topBar.setStatus(`Watch @${timeStr} mapped to pose `
+    exactStatus: (near) => setStatus(`Watch @${timeStr} mapped to pose `
       + `@${((rawPoses[near.idx].t != null) ? `${fmtNum(rawPoses[near.idx].t / 1000)}s` : "—")} (Δ=${fmtNum(near.dt / 1000, 2)}s).`),
-    interpolatedStatus: () => topBar.setStatus(`Watch @${timeStr} shown via interpolation (no pose within ±${WATCH_TOL_MS}ms).`),
-    noPoseStatus: () => topBar.setStatus(`Watch @${timeStr} selected (no poses loaded).`),
+    interpolatedStatus: () => setStatus(`Watch @${timeStr} shown via interpolation (no pose within ±${WATCH_TOL_MS}ms).`),
+    noPoseStatus: () => setStatus(`Watch @${timeStr} selected (no poses loaded).`),
   });
 
   watchListRenderer.highlight(marker.t, fromUserClick);
@@ -3755,7 +3715,7 @@ function formatUnitsParts(inches, decimals = 1) {
   if (typeof inches !== "number" || !isFinite(inches)) return [{ text: "—", kind: "value" }];
   return [
     { text: formatDistanceFromInches(inches, decimals), kind: "value" },
-    { text: currentUnits, kind: "unit" },
+    { text: getCurrentUnits(), kind: "unit" },
   ];
 }
 
@@ -3799,7 +3759,7 @@ function waypointByIdLike(id) {
 }
 
 function selectedWaypointForOverlay() {
-  if (modeController.getMode() !== "viewing") return null;
+  if (getMode() !== "viewing") return null;
   const filter = waypointFilterValue();
   const overlayWaypointId = (filter !== "all" && filter !== "active")
     ? filter
@@ -4001,7 +3961,7 @@ const floatingInfo = createFloatingInfo({
   setSelectedIndex: (index) => { viewingSelection.selectedIndex = index; },
   findFloorIndexByTime,
   updatePoseReadout,
-  requestDrawAll: fieldRenderer.requestDrawAll,
+  requestDrawAll,
   levelStyle,
   normalizeLogLevel,
   onToggle: (enabled) => {
@@ -4092,7 +4052,7 @@ let planningEmptyFieldPress = null;
 let planningWaypointDragState = null;
 
 canvas.addEventListener("pointerdown", (e) => {
-  if (modeController.getMode() === "planning") {
+  if (getMode() === "planning") {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
@@ -4104,7 +4064,7 @@ canvas.addEventListener("pointerdown", (e) => {
       planningMode.selectRect = { x0: mx, y0: my, x1: mx, y1: my };
       planningMode.pointerId = e.pointerId;
       canvas.setPointerCapture(e.pointerId);
-      fieldRenderer.requestDrawAll();
+      requestDrawAll();
       return;
     }
     if (e.button !== 0) return;
@@ -4133,14 +4093,14 @@ canvas.addEventListener("pointerdown", (e) => {
         planningMode.actions.toggleWaypointSelection(hit);
         planningSidebarRenderer.renderPlanList();
         updatePlanSelectionPanel();
-        fieldRenderer.requestDrawAll();
+        requestDrawAll();
         return;
       }
       if (!planningMode.selectedSet.has(hit)) {
         planningMode.actions.selectWaypoint(hit);
         planningSidebarRenderer.renderPlanList();
         updatePlanSelectionPanel();
-        fieldRenderer.requestDrawAll();
+        requestDrawAll();
       }
     } else {
       const pending = (isInField(w) && isPointInFieldBounds(w))
@@ -4180,7 +4140,7 @@ canvas.addEventListener("pointerdown", (e) => {
     };
     planningMode.dragUndoCaptured = false;
     canvas.setPointerCapture(e.pointerId);
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
     return;
   }
 
@@ -4195,7 +4155,7 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 
 canvas.addEventListener("pointermove", (e) => {
-  if (modeController.getMode() === "planning") {
+  if (getMode() === "planning") {
     if (planningMode.thetaDragging && planningMode.pointerId === e.pointerId) {
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
@@ -4209,7 +4169,7 @@ canvas.addEventListener("pointermove", (e) => {
       planningMode.selectRect.y1 = e.clientY - rect.top;
       planningSidebarRenderer.renderPlanList();
       updatePlanSelectionPanel();
-      fieldRenderer.requestDrawAll();
+      requestDrawAll();
       return;
     }
     if (planningMode.dragging && planningMode.pointerId === e.pointerId) {
@@ -4235,14 +4195,14 @@ canvas.addEventListener("pointermove", (e) => {
       planningSidebarRenderer.renderPlanList();
       planningMode.rendering.renderTimelineDom();
       updatePlanSelectionPanel();
-      fieldRenderer.requestDrawAll();
+      requestDrawAll();
       return;
     }
   }
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
-  if (modeController.getMode() === "planning" && planningEmptyFieldPress?.pointerId === e.pointerId) {
+  if (getMode() === "planning" && planningEmptyFieldPress?.pointerId === e.pointerId) {
     const dx = x - planningEmptyFieldPress.startX;
     const dy = y - planningEmptyFieldPress.startY;
     if (Math.abs(dx) + Math.abs(dy) > 3) planningEmptyFieldPress.moved = true;
@@ -4260,7 +4220,7 @@ canvas.addEventListener("pointermove", (e) => {
 });
 
 function endPan(e) {
-  if (modeController.getMode() === "planning") {
+  if (getMode() === "planning") {
     if (planningMode.thetaDragging && (planningMode.pointerId === e.pointerId || planningMode.pointerId == null)) {
       planningMode.thetaDragging = false;
       planningMode.thetaDragIdx = -1;
@@ -4277,7 +4237,7 @@ function endPan(e) {
       planningMode.selectRect = null;
       try { canvas.releasePointerCapture(planningMode.pointerId ?? e.pointerId); } catch { }
       planningMode.pointerId = null;
-      fieldRenderer.requestDrawAll();
+      requestDrawAll();
       return;
     }
     if (planningMode.dragging && (planningMode.pointerId === e.pointerId || planningMode.pointerId == null)) {
@@ -4290,7 +4250,7 @@ function endPan(e) {
       return;
     }
   }
-  if (modeController.getMode() === "planning") {
+  if (getMode() === "planning") {
     const pending = planningEmptyFieldPress?.pointerId === e.pointerId
       ? planningEmptyFieldPress
       : planningMode.pendingCanvasClick;
@@ -4301,7 +4261,7 @@ function endPan(e) {
       if (pending.clearMultiSelection) {
         planningMode.actions.clearSelection();
         planChanged();
-        fieldRenderer.requestDrawAll();
+        requestDrawAll();
         return;
       }
       planningMode.actions.pushUndo();
@@ -4317,7 +4277,7 @@ function endPan(e) {
       planningMode.dragging = false;
       planningSidebarRenderer.renderPlanList();
       updatePlanSelectionPanel();
-      fieldRenderer.requestDrawAll();
+      requestDrawAll();
     }
     return;
   }
@@ -4328,7 +4288,7 @@ function endPan(e) {
 canvas.addEventListener("pointerup", endPan);
 canvas.addEventListener("pointercancel", endPan);
 canvas.addEventListener("contextmenu", (e) => {
-  if (modeController.getMode() === "planning") e.preventDefault();
+  if (getMode() === "planning") e.preventDefault();
 });
 
 // -------- timeline interactions --------
@@ -4338,7 +4298,7 @@ function isInsideTimelineC(cursor) {
   const y = (typeof cursor.clientY === "number") ? cursor.clientY : cursor.y;
   if (typeof x !== "number" || typeof y !== "number") return false;
 
-  const isPlanning = modeController.getMode() === "planning";
+  const isPlanning = getMode() === "planning";
   const canvasEl = isPlanning ? planningTimelineCanvas : timelineCanvas;
   if (!canvasEl) return false;
   if (!isPlanning && timelineBar?.classList.contains("isCollapsed")) return false;
@@ -4365,7 +4325,7 @@ if (planningTimelineCanvas) {
     planningMode.playback.setDistance(planDistFromX(x));
   };
   planningTimelineCanvas.addEventListener("pointerdown", (e) => {
-    if (modeController.getMode() !== "planning") return;
+    if (getMode() !== "planning") return;
     planningMode.scrubbing = true;
     planningTimelineCanvas.setPointerCapture(e.pointerId);
     onPlanScrub(e);
@@ -4385,7 +4345,7 @@ if (planningTimelineCanvas) {
 }
 
 canvas.addEventListener("dblclick", (e) => {
-  if (modeController.getMode() !== "planning") return;
+  if (getMode() !== "planning") return;
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
@@ -4720,7 +4680,7 @@ async function connectLeft() {
 
   if (!prosDirValid) {
     liveAppendLine("Something went wrong. Try restarting the application or waiting.");
-    topBar.setStatus("Cannot connect: set a valid PROS directory in Settings first.");
+    setStatus("Cannot connect: set a valid PROS directory in Settings first.");
     return;
   }
   if (!(await ensureBridgeOriginReady()) || ORIGIN == null || WS_ORIGIN == null) {
@@ -4906,7 +4866,7 @@ async function doLeftRefresh() {
     || watches.length !== liveLastWatchCount
     || livePendingBuffer.consumedIndex !== liveLastRenderAt
   ) {
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
     liveLastPoseCount = rawPoses.length;
     liveLastWatchCount = watches.length;
     liveLastRenderAt = livePendingBuffer.consumedIndex;
@@ -5063,7 +5023,7 @@ function isPlanningTimelineCollapsed() {
   return getPlanningTimelineH() <= COLLAPSE_PX_PLANNING_TIMELINE;
 }
 
-function syncTimelineBarCollapsedForMode(mode = modeController.getMode()) {
+function syncTimelineBarCollapsedForMode(mode = getMode()) {
   if (!timelineBar) return;
   const collapsed = mode === "planning"
     ? isPlanningTimelineCollapsed()
@@ -5127,7 +5087,7 @@ function syncTimelineBarCollapsedForMode(mode = modeController.getMode()) {
   vSplit.addEventListener("mousedown", (e) => {
     draggingV = true;
     startX = e.clientX;
-    startW = (modeController.getMode() === "planning") ? getRightSidebarWPlanning() : getRightSidebarWViewing();
+    startW = (getMode() === "planning") ? getRightSidebarWPlanning() : getRightSidebarWViewing();
     document.body.style.cursor = "col-resize";
     e.preventDefault();
   });
@@ -5174,7 +5134,7 @@ function syncTimelineBarCollapsedForMode(mode = modeController.getMode()) {
 
   if (planningTimelineSplit) {
     planningTimelineSplit.addEventListener("mousedown", (e) => {
-      if (modeController.getMode() !== "planning") return;
+      if (getMode() !== "planning") return;
       draggingPlanningTimeline = true;
       startPlanningTimelineY = e.clientY;
       startPlanningTimelineH = getPlanningTimelineH();
@@ -5193,7 +5153,7 @@ function syncTimelineBarCollapsedForMode(mode = modeController.getMode()) {
 
   if (planSplit) {
     planSplit.addEventListener("mousedown", (e) => {
-      if (modeController.getMode() !== "planning") return;
+      if (getMode() !== "planning") return;
       draggingPlanList = true;
       startPlanY = e.clientY;
       startPlanH = getPlanListH();
@@ -5229,10 +5189,10 @@ function syncTimelineBarCollapsedForMode(mode = modeController.getMode()) {
 
       if (next <= COLLAPSE_PX_SIDEBAR) {
         next = 0;
-        if (modeController.getMode() === "planning") rightPlanningEl?.classList?.add("isCollapsed");
+        if (getMode() === "planning") rightPlanningEl?.classList?.add("isCollapsed");
         else rightViewingEl?.classList?.add("isCollapsed");
       } else {
-        if (modeController.getMode() === "planning") {
+        if (getMode() === "planning") {
           rightPlanningEl?.classList?.remove("isCollapsed");
           layoutState.lastRightSidebarWPlanning = next;
         } else {
@@ -5240,7 +5200,7 @@ function syncTimelineBarCollapsedForMode(mode = modeController.getMode()) {
           layoutState.lastRightSidebarW = next;
         }
       }
-      if (modeController.getMode() === "planning") setRightSidebarWPlanning(next);
+      if (getMode() === "planning") setRightSidebarWPlanning(next);
       else setRightSidebarWViewing(next);
       fieldRenderer.resizeCanvas();
       resizeTimeline();
@@ -5299,7 +5259,7 @@ function syncTimelineBarCollapsedForMode(mode = modeController.getMode()) {
       draggingPlanningTimeline = false;
       document.body.style.cursor = "";
       // If user re-expands from collapsed by dragging, restore visibility automatically
-      if (modeController.getMode() === "planning") {
+      if (getMode() === "planning") {
         if (getRightSidebarWPlanning() > COLLAPSE_PX_SIDEBAR) rightPlanningEl?.classList?.remove("isCollapsed");
       } else {
         if (getRightSidebarWViewing() > COLLAPSE_PX_SIDEBAR) rightViewingEl?.classList?.remove("isCollapsed");
@@ -5329,7 +5289,7 @@ function syncTimelineBarCollapsedForMode(mode = modeController.getMode()) {
   });
 
   vSplit.addEventListener("dblclick", () => {
-    if (modeController.getMode() === "planning") {
+    if (getMode() === "planning") {
       const cur = getRightSidebarWPlanning();
       if (cur <= COLLAPSE_PX_SIDEBAR) {
         setRightSidebarWPlanning(Math.max(1, layoutState.lastRightSidebarWPlanning || 360));
@@ -5386,7 +5346,7 @@ function setData(obj, options = {}) {
   const { replacePlanning = true, replaceViewing = true } = options;
   data = obj;
   if (!obj) {
-    topBar.setStatus("Invalid JSON: missing data object");
+    setStatus("Invalid JSON: missing data object");
     return;
   }
 
@@ -5399,7 +5359,7 @@ function setData(obj, options = {}) {
   }
 
   if (!hasLoadedData()) {
-    topBar.setStatus("Invalid JSON: no viewing or planning route data found");
+    setStatus("Invalid JSON: no viewing or planning route data found");
     return;
   }
 
@@ -5425,7 +5385,7 @@ function setDataFromStreamText(text) {
   setImportedRouteMeta(null);
 
   if (!hasLoadedData()) {
-    topBar.setStatus("No poses, watches, logs, waypoints, or planning data found in file.");
+    setStatus("No poses, watches, logs, waypoints, or planning data found in file.");
     return;
   }
 
@@ -5457,8 +5417,7 @@ function hasLoadedData() {
 }
 
 function finalizeLoadedData() {
-  const currentUnits = settingsUnitsSelect?.value || unitsSelect?.value || "in";
-  setUnitsFactorFromSelect(currentUnits);
+  setCurrentUnits(getCurrentUnits());
   updateOffsetsFromInputs();
 
   computeSpeedNormRange();
@@ -5485,29 +5444,26 @@ function finalizeLoadedData() {
   recomputeWatchMarkers();
   rebuildWatchMarkersByTime();
   viewingRendering.renderWatchFilter();
-  viewingRendering.renderWatchList();
-  floatingInfo.refreshPinnedPanels();
-  viewingRendering.renderLogList();
+  viewingRendering.renderLists();
   viewingRendering.renderWaypointFilter();
-  viewingRendering.renderWaypointList();
-  viewingRendering.renderPoseList();
+  floatingInfo.refreshPinnedPanels();
 
   fieldRenderer.setBounds(FIELD_BOUNDS_IN);
 
-  topBar.setStatus(`Loaded ${rawPoses.length} poses, ${watches.length} watches, ${logs.length} logs, ${waypointVisibleEvents().length} waypoints.`);
+  setStatus(`Loaded `);
   syncTopBarPlayback();
   topBar.setFieldEnabled(true);
   updateExportButtonAvailability();
 
   updatePoseReadout();
-  fieldRenderer.requestDrawAll();
+  requestDrawAll();
 }
 
 async function handleFile(file) {
   try {
     const fileName = file?.name?.toLowerCase?.() ?? "";
     const text = await file.text();
-    topBar.setStatus(`Loaded ${file.name}`);
+    setStatus(`Loaded ${file.name}`);
     if (fileName.endsWith(".json")) {
       const obj = JSON.parse(text);
       const incomingHasPlanning = hasImportedPlanningWaypoints(obj);
@@ -5516,7 +5472,7 @@ async function handleFile(file) {
       if (incomingHasPlanning && currentHasPlanning) {
         const confirmed = await confirmPlanningImportOverride();
         if (!confirmed) {
-          topBar.setStatus("Import cancelled.");
+          setStatus("Import cancelled.");
           return "json-cancelled";
         }
       }
@@ -5530,10 +5486,10 @@ async function handleFile(file) {
       setDataFromStreamText(text);
       return "text";
     }
-    topBar.setStatus("Unsupported file type");
+    setStatus("Unsupported file type");
   } catch (e) {
     console.error(e);
-    topBar.setStatus(`Failed to load: ${e?.message || e}`);
+    setStatus(`Failed to load: ${e?.message || e}`);
     await viewingTelemetry.failedFileLoad({
       reason: e?.message || e,
     });
@@ -5550,7 +5506,7 @@ async function openFile(file, inputEl) {
   if (!isValid) {
     alert("Invalid file type. Please select a .txt, .log, or .json file");
     if (inputEl) inputEl.value = ""; // allow reselect
-    topBar.setStatus("Invalid file type.");
+    setStatus("Invalid file type.");
     return;
   }
   try {
@@ -5652,7 +5608,7 @@ async function loadSettings() {
       if (settings.units) {
         if (settingsUnitsSelect) settingsUnitsSelect.value = settings.units;
         if (unitsSelect) unitsSelect.value = settings.units;
-        setUnitsFactorFromSelect(settings.units);
+        setCurrentUnits(settings.units);
       }
       if (settings.robotW) {
         if (robotWEl) robotWEl.value = settings.robotW;
@@ -5812,7 +5768,7 @@ async function loadDemoRouteIfUpgraded() {
 
     const obj = await response.json();
     setData(obj);
-    topBar.setStatus("Loaded getting started demo route after app upgrade.");
+    setStatus("Loaded getting started demo route after app upgrade.");
     return true;
   } catch (e) {
     console.warn("Failed to load upgrade demo route:", e);
@@ -5882,18 +5838,18 @@ function syncSettingsToMain() {
   if (unitsSelect && settingsUnitsSelect.value !== unitsSelect.value) {
     unitsSelect.value = settingsUnitsSelect.value;
   }
-  if (settingsUnitsSelect.value !== currentUnits) {
-    setUnitsFactorFromSelect(settingsUnitsSelect.value);
+  if (settingsUnitsSelect.value !== getCurrentUnits()) {
+    setCurrentUnits(settingsUnitsSelect.value);
     updateOffsetsFromInputs();
     refreshUnitSensitiveRendering();
   }
   if (settingsRobotW && robotWEl && settingsRobotW.value !== robotWEl.value) {
     robotWEl.value = settingsRobotW.value;
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
   }
   if (settingsRobotH && robotHEl && settingsRobotH.value !== robotHEl.value) {
     robotHEl.value = settingsRobotH.value;
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
   }
   if (settingsOffX && offXEl && settingsOffX.value !== offXEl.value) {
     offXEl.value = settingsOffX.value;
@@ -5912,7 +5868,7 @@ function syncSettingsToMain() {
     computeSpeedNormRange();
     recomputeWatchMarkers();
     rebuildWatchMarkersByTime();
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
     updatePoseReadout();
   }
   if (settingsMaxSpeed && maxSpeedEl && settingsMaxSpeed.value !== maxSpeedEl.value) {
@@ -5920,33 +5876,33 @@ function syncSettingsToMain() {
     computeSpeedNormRange();
     recomputeWatchMarkers();
     rebuildWatchMarkersByTime();
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
     updatePoseReadout();
   }
   if (settingsRobotImgScale && robotImgScaleEl && settingsRobotImgScale.value !== robotImgScaleEl.value) {
     robotImgScaleEl.value = settingsRobotImgScale.value;
     syncRobotImgTxFromInputs();
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
   }
   if (settingsRobotImgOffX && robotImgOffXEl && settingsRobotImgOffX.value !== robotImgOffXEl.value) {
     robotImgOffXEl.value = settingsRobotImgOffX.value;
     syncRobotImgTxFromInputs();
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
   }
   if (settingsRobotImgOffY && robotImgOffYEl && settingsRobotImgOffY.value !== robotImgOffYEl.value) {
     robotImgOffYEl.value = settingsRobotImgOffY.value;
     syncRobotImgTxFromInputs();
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
   }
   if (settingsRobotImgRot && robotImgRotEl && settingsRobotImgRot.value !== robotImgRotEl.value) {
     robotImgRotEl.value = settingsRobotImgRot.value;
     syncRobotImgTxFromInputs();
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
   }
   if (settingsRobotImgAlpha && robotImgAlphaEl && settingsRobotImgAlpha.value !== robotImgAlphaEl.value) {
     robotImgAlphaEl.value = settingsRobotImgAlpha.value;
     syncRobotImgTxFromInputs();
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
   }
   saveSettings();
 }
@@ -6165,7 +6121,7 @@ function serializeExportWaypoint(waypoint) {
 function buildExportMetadata(PathName) {
   const { minV, maxV } = getMinMaxSpeed();
   const robotDims = robotDimsInches();
-  const Units = settingsUnitsSelect?.value || unitsSelect?.value || currentUnits || "in";
+  const Units = settingsUnitsSelect?.value || unitsSelect?.value || getCurrentUnits() || "in";
   const SelectedField = topBar.getSelectedField() || DEFAULT_FIELD_KEY;
   const poseStart = rawPoses[0]?.t ?? null;
   const poseEnd = rawPoses[rawPoses.length - 1]?.t ?? null;
@@ -6372,7 +6328,7 @@ function setImportedRouteMeta(meta) {
 async function applyImportedRunSettings() {
   const viewing = importedRouteMeta?.ViewingSettings;
   if (!viewing || typeof viewing !== "object") {
-    topBar.setStatus("No run settings were found in this route metadata.");
+    setStatus("No run settings were found in this route metadata.");
     return;
   }
 
@@ -6380,7 +6336,7 @@ async function applyImportedRunSettings() {
     const nextUnits = inferUnitsFromMeta(viewing.Units);
     if (unitsSelect) unitsSelect.value = nextUnits;
     if (settingsUnitsSelect) settingsUnitsSelect.value = nextUnits;
-    setUnitsFactorFromSelect(nextUnits);
+    setCurrentUnits(nextUnits);
   }
 
   if (viewing.SelectedField !== undefined) {
@@ -6412,16 +6368,12 @@ async function applyImportedRunSettings() {
   syncMainToSettings();
   updateOffsetsFromInputs();
   computeSpeedNormRange();
-  viewingRendering.renderPoseList();
   viewingRendering.renderWatchFilter();
-  viewingRendering.renderWatchList();
-  viewingRendering.renderLogList();
+  viewingRendering.renderLists();
   viewingRendering.renderWaypointFilter();
-  viewingRendering.renderWaypointList();
-  viewingRendering.updatePoseReadout();
-  fieldRenderer.requestDrawAll();
+  requestDrawAll();
   await saveSettings();
-  topBar.setStatus("Applied run settings from imported metadata.");
+  setStatus("Applied run settings from imported metadata.");
 }
 
 function openRouteInfoModal() {
@@ -6635,7 +6587,7 @@ if (btnExportConfirm) {
         exportSuccessMessage.textContent = `Successfully exported ${pendingExportRequest.pathName} to "${result?.path || pendingExportRequest.filename}"`;
         exportSuccessMessage.hidden = false;
       }
-      topBar.setStatus(`Exported ${pendingExportRequest.filename}.`);
+      setStatus(`Exported ${pendingExportRequest.filename}.`);
       const includesPlanning = pendingExportRequest.exportType === "planning" || pendingExportRequest.exportType === "both";
       const includesViewing = pendingExportRequest.exportType === "viewing" || pendingExportRequest.exportType === "both";
       void exportTelemetry.motionviewJsonExported(planningMode.telemetry.getTelemetryProperties({
@@ -6830,7 +6782,7 @@ function isClientInsidePlanningSidebar(clientX, clientY) {
 }
 
 function hasValidPlanTimelineDropTarget() {
-  return planningMode.state.hasTimelineDropTarget() && modeController.getMode() === "planning" && planningMode.state.getWaypointCount() >= 2;
+  return planningMode.state.hasTimelineDropTarget() && getMode() === "planning" && planningMode.state.getWaypointCount() >= 2;
 }
 
 function commitPlanTimelineDragTarget(context, target) {
@@ -7001,13 +6953,13 @@ if (btnPlanCopyCode) {
       getSortedPlanNodes,
     });
     if (!code) {
-      topBar.setStatus("Add at least one waypoint and a template before copying code.");
+      setStatus("Add at least one waypoint and a template before copying code.");
       return;
     }
     try {
       await copyTextToClipboard(code);
       const waypointCount = planningMode.state.getWaypointCount();
-      topBar.setStatus(`Copied generated code for ${waypointCount} waypoint${waypointCount === 1 ? "" : "s"}.`);
+      setStatus(`Copied generated code for ${waypointCount} waypoint${waypointCount === 1 ? "" : "s"}.`);
       void planningTelemetry.templateExported(planningMode.telemetry.getTelemetryProperties({
         export_surface: "clipboard",
         exported_chars: code.length,
@@ -7015,7 +6967,7 @@ if (btnPlanCopyCode) {
       }));
     } catch (err) {
       console.error("Failed to copy planning export code:", err);
-      topBar.setStatus(`Failed to copy code: ${err?.message || err}`);
+      setStatus(`Failed to copy code: ${err?.message || err}`);
     }
   });
 }
@@ -7055,7 +7007,7 @@ window.addEventListener("keydown", (e) => {
   else if (planObjectDeleteOpen) closePlanObjectDeleteModal();
   else if (viewingSelection.selectedWaypointId != null) {
     clearWaypointSelection();
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
   }
   e.preventDefault();
   e.stopPropagation();
@@ -7300,14 +7252,14 @@ async function updateProsDir(dir) {
     const result = await response.json();
     if (result.ok) {
       prosDirValid = true;
-      topBar.setStatus(`PROS directory set to: ${result.dir}`);
+      setStatus(`PROS directory set to: ${result.dir}`);
       setProsDirStatus(`Using PROS project: ${result.dir}`, "ok");
       saveSettings();
       updateConnectButtonState();
       updateExportUiState();
     } else {
       prosDirValid = false;
-      topBar.setStatus(`Failed to set PROS directory: ${result.status}`);
+      setStatus(`Failed to set PROS directory: ${result.status}`);
       setProsDirStatus(`Invalid PROS directory: ${result.status}`, "error");
       updateConnectButtonState();
       updateExportUiState();
@@ -7315,7 +7267,7 @@ async function updateProsDir(dir) {
   } catch (e) {
     prosDirValid = false;
     console.error("Error updating PROS directory:", e);
-    topBar.setStatus(`Error updating PROS directory: ${e.message || e}`);
+    setStatus(`Error updating PROS directory: ${e.message || e}`);
     setProsDirStatus(`Error validating PROS directory: ${e.message || e}`, "error");
     updateConnectButtonState();
     updateExportUiState();
@@ -7412,7 +7364,7 @@ async function handleRobotImageFile(file, inputEl) {
     await saveSettings();
   } catch (err) {
     console.error("Error loading robot image:", err);
-    topBar.setStatus("Error loading robot image.");
+    setStatus("Error loading robot image.");
   } finally {
     if (inputEl) inputEl.value = "";
   }
@@ -7425,7 +7377,7 @@ if (robotImageToggle) {
     if (settingsRobotImgControls) {
       settingsRobotImgControls.hidden = !(fieldRenderer.isRobotImageEnabled() && fieldRenderer.isRobotImageReady());
     }
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
     saveSettings();
   });
 }
@@ -7443,14 +7395,14 @@ document.addEventListener("pointercancel", () => {
 });
 
 function togglePlaybackForCurrentMode() {
-  if (modeController.getMode() === "planning") {
+  if (getMode() === "planning") {
     if (planningMode.playback.isPlaying()) planningMode.playback.pause();
     else planningMode.playback.play();
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
     return;
   }
   if (!data) return;
-  if (viewingPlayback.isPlaying()) { viewingPlayback.pause(); updatePoseReadout(); fieldRenderer.requestDrawAll(); }
+  if (viewingPlayback.isPlaying()) { viewingPlayback.pause(); updatePoseReadout(); requestDrawAll(); }
   else viewingPlayback.play();
 }
 
@@ -7459,7 +7411,7 @@ if (btnTogglePlanOverlay) {
     const visible = planningMode.actions.toggleOverlay();
     btnTogglePlanOverlay.classList.toggle("isOn", visible);
     topBar.syncPlanOverlay(visible);
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
     viewingTelemetry.planOverlayToggled({
       enabled: visible,
     }).catch(err => console.error(err));
@@ -7470,8 +7422,8 @@ if (btnTogglePlanOverlay) {
 
 if (unitsSelect) {
   unitsSelect.addEventListener("change", (e) => {
-    if (e.target.value !== currentUnits) {
-      setUnitsFactorFromSelect(e.target.value);
+    if (e.target.value !== getCurrentUnits()) {
+      setCurrentUnits(e.target.value);
       updateOffsetsFromInputs();
       refreshUnitSensitiveRendering();
     }
@@ -7481,13 +7433,13 @@ if (unitsSelect) {
 }
 
 robotWEl.addEventListener("input", () => {
-  fieldRenderer.requestDrawAll();
+  requestDrawAll();
   syncMainToSettings();
   saveSettings();
 });
 
 robotHEl.addEventListener("input", () => {
-  fieldRenderer.requestDrawAll();
+  requestDrawAll();
   syncMainToSettings();
   saveSettings();
 });
@@ -7510,7 +7462,7 @@ function syncRobotImgTxFromInputs() {
 
 const onRobotImgInput = () => {
   syncRobotImgTxFromInputs();
-  fieldRenderer.requestDrawAll();
+  requestDrawAll();
   syncMainToSettings();
   saveSettings();
 };
@@ -7531,7 +7483,7 @@ settingsMinSpeed.addEventListener("input", () => {
   computeSpeedNormRange();
   recomputeWatchMarkers();
   rebuildWatchMarkersByTime();
-  fieldRenderer.requestDrawAll();
+  requestDrawAll();
   updatePoseReadout();
   syncMainToSettings();
   saveSettings();
@@ -7541,7 +7493,7 @@ settingsMaxSpeed.addEventListener("input", () => {
   computeSpeedNormRange();
   recomputeWatchMarkers();
   rebuildWatchMarkersByTime();
-  fieldRenderer.requestDrawAll();
+  requestDrawAll();
   updatePoseReadout();
   syncMainToSettings();
   saveSettings();
@@ -7572,7 +7524,7 @@ function bindPlanField(el, getter, setter) {
   el.addEventListener("focus", () => {
     // capture last known good value before edits
     el.dataset.lastValid = el.dataset.lastValid ?? String(getter());
-    if (modeController.getMode() === "planning" && planningMode.state.getSelectedWaypoint() && !el.dataset.undoSession) {
+    if (getMode() === "planning" && planningMode.state.getSelectedWaypoint() && !el.dataset.undoSession) {
       planningMode.actions.pushUndo();
       el.dataset.undoSession = "1";
     }
@@ -7584,7 +7536,7 @@ function bindPlanField(el, getter, setter) {
     if (!isFinite(v)) return;
     setter(v);
     planChanged({ skipSelectionPanel: true });
-    fieldRenderer.requestDrawAll();
+    requestDrawAll();
   });
   el.addEventListener("blur", () => {
     if (!planningMode.state.getSelectedWaypoint()) return;
@@ -7647,7 +7599,7 @@ if (planSelThetaEl) {
     if (isFinite(v)) {
       planningMode.actions.updateSelectedWaypointField("theta", planThetaDisplayToRaw(v));
       updatePlanSelectionPanel();
-      fieldRenderer.requestDrawAll();
+      requestDrawAll();
     }
   });
 }
@@ -7659,7 +7611,7 @@ if (planSelSpeedEl) {
     if (isFinite(v)) {
       planningMode.actions.updateSelectedWaypointField("speed", clampPlanSpeed(v));
       updatePlanSelectionPanel();
-      fieldRenderer.requestDrawAll();
+      requestDrawAll();
     }
   });
 }
@@ -7680,15 +7632,15 @@ offThetaEl.addEventListener("input", () => {
   saveSettings();
 });
 
-if (watchSort) watchSort.addEventListener("change", () => { viewingRendering.renderWatchList(); fieldRenderer.requestDrawAll(); });
+if (watchSort) watchSort.addEventListener("change", () => { viewingRendering.renderWatchList(); requestDrawAll(); });
 if (watchFilter) watchFilter.addEventListener("change", () => {
   viewingRendering.renderWatchList();
-  fieldRenderer.requestDrawAll();
+  requestDrawAll();
 });
 if (logSort) logSort.addEventListener("change", () => { viewingRendering.renderLogList(); });
 if (waypointFilter) waypointFilter.addEventListener("change", () => {
   viewingRendering.renderWaypointList();
-  fieldRenderer.requestDrawAll();
+  requestDrawAll();
 });
 
 function clearAllPosesAndWatches() {
@@ -7724,7 +7676,7 @@ function clearAllPosesAndWatches() {
   try { viewingRendering.renderWaypointList(); } catch { }
   try { viewingRendering.updatePoseReadout(); } catch { }
   try { floatingInfo.updateInfo(null, 0); } catch { }
-  try { fieldRenderer.requestDrawAll(); } catch { }
+  try { requestDrawAll(); } catch { }
 }
 
 function handleClearFieldClick(event) {
@@ -7734,10 +7686,10 @@ function handleClearFieldClick(event) {
     const clearAll = () => {
       clearAllPosesAndWatches();
       resetLiveWin();
-      if (modeController.getMode() === "planning") planningMode.actions.pushUndo();
+      if (getMode() === "planning") planningMode.actions.pushUndo();
       planningMode.clear();
-      fieldRenderer.requestDrawAll();
-      topBar.setStatus("Cleared Field and Planned Path");
+      requestDrawAll();
+      setStatus("Cleared Field and Planned Path");
     };
     if (hasAnyPlanningData()) {
       openPlanDangerConfirmModal("Are you sure you want to clear the field and Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearAll);
@@ -7747,12 +7699,12 @@ function handleClearFieldClick(event) {
     return;
   }
 
-  if (modeController.getMode() === "planning") {
+  if (getMode() === "planning") {
     const clearPlanOnly = () => {
       planningMode.actions.pushUndo();
       planningMode.clear();
-      fieldRenderer.requestDrawAll();
-      topBar.setStatus("Cleared Planned Path");
+      requestDrawAll();
+      setStatus("Cleared Planned Path");
     };
     if (hasAnyPlanningData()) {
       openPlanDangerConfirmModal("Are you sure you want to clear Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearPlanOnly);
@@ -7762,7 +7714,7 @@ function handleClearFieldClick(event) {
   } else {
     clearAllPosesAndWatches();
     resetLiveWin();
-    topBar.setStatus("Cleared Field");
+    setStatus("Cleared Field");
   }
 }
 
@@ -7775,7 +7727,7 @@ function handleGlobalKeydown(e) {
   if (isTypingTarget && e.target !== liveWinEl) return;
 
   const selectedPlanNodeId = planningMode.state.getSelectedNodeId();
-  if (modeController.getMode() === "planning" && selectedPlanNodeId && (e.key === "Backspace" || e.key === "Delete")) {
+  if (getMode() === "planning" && selectedPlanNodeId && (e.key === "Backspace" || e.key === "Delete")) {
     const planTemplateOpen = planTemplateModal && planTemplateModal.style.display !== "none" && !planTemplateModal.hasAttribute("hidden");
     const planObjectDeleteOpen = planObjectDeleteModal && planObjectDeleteModal.style.display !== "none" && !planObjectDeleteModal.hasAttribute("hidden");
     if (!planTemplateOpen && !planObjectDeleteOpen) {
@@ -7788,13 +7740,13 @@ function handleGlobalKeydown(e) {
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
     if (e.key === "1") {
       e.preventDefault();
-      modeController.setMode("viewing");
+      setMode("viewing");
       return;
     }
 
     if (e.key === "2") {
       e.preventDefault();
-      modeController.setMode("planning");
+      setMode("planning");
       return;
     }
 
@@ -7805,7 +7757,7 @@ function handleGlobalKeydown(e) {
     }
 
     if (e.key === "r" || e.key === "R") {
-      if (modeController.getMode() !== "viewing") return;
+      if (getMode() !== "viewing") return;
       e.preventDefault();
       btnLeftRefresh?.click();
       return;
@@ -7813,14 +7765,14 @@ function handleGlobalKeydown(e) {
 
     if (e.key === "c" || e.key === "C") {
       e.preventDefault();
-      if (modeController.getMode() !== "viewing") return;
+      if (getMode() !== "viewing") return;
       if (leftConnected) void disconnectLeft();
       else void connectLeft();
       return;
     }
     if (e.key === "s" || e.key === "S") {
       e.preventDefault();
-      if (modeController.getMode() !== "viewing") return;
+      if (getMode() !== "viewing") return;
 
       if (leftConnected) {
         if (!leftStreaming) void startStreaming();
@@ -7831,12 +7783,12 @@ function handleGlobalKeydown(e) {
 
     if (e.key === "k" || e.key === "K") {
       e.preventDefault();
-      if (modeController.getMode() === "planning") {
+      if (getMode() === "planning") {
         const clearPlanOnly = () => {
           planningMode.actions.pushUndo();
           planningMode.clear();
-          fieldRenderer.requestDrawAll();
-          topBar.setStatus("Cleared Planned Path");
+          requestDrawAll();
+          setStatus("Cleared Planned Path");
         };
         if (hasAnyPlanningData()) {
           openPlanDangerConfirmModal("Are you sure you want to clear Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearPlanOnly);
@@ -7846,7 +7798,7 @@ function handleGlobalKeydown(e) {
       } else {
         clearAllPosesAndWatches();
         resetLiveWin();
-        topBar.setStatus("Cleared Field");
+        setStatus("Cleared Field");
       }
       return;
     }
@@ -7858,10 +7810,10 @@ function handleGlobalKeydown(e) {
     const clearAll = () => {
       clearAllPosesAndWatches();
       resetLiveWin();
-      if (modeController.getMode() === "planning") planningMode.actions.pushUndo();
+      if (getMode() === "planning") planningMode.actions.pushUndo();
       planningMode.clear();
-      fieldRenderer.requestDrawAll();
-      topBar.setStatus("Cleared Field and Planned Path");
+      requestDrawAll();
+      setStatus("Cleared Field and Planned Path");
     };
     if (hasAnyPlanningData()) {
       openPlanDangerConfirmModal("Are you sure you want to clear the field and Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearAll);
@@ -7874,7 +7826,7 @@ function handleGlobalKeydown(e) {
   if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
     if (e.key === "p" || e.key === "P") {
       e.preventDefault();
-      if (modeController.getMode() === "viewing" && btnTogglePlanOverlay) btnTogglePlanOverlay.click();
+      if (getMode() === "viewing" && btnTogglePlanOverlay) btnTogglePlanOverlay.click();
       return;
     }
 
@@ -7885,7 +7837,7 @@ function handleGlobalKeydown(e) {
 
     if (e.key === "g" || e.key === "G") {
       e.preventDefault();
-      if (modeController.getMode() !== "viewing") return;
+      if (getMode() !== "viewing") return;
       watchGraph.toggleCurrentPanel();
       return;
     }
@@ -7903,12 +7855,12 @@ function handleGlobalKeydown(e) {
     return;
   }
 
-  if (modeController.getMode() === "planning") {
+  if (getMode() === "planning") {
     if (e.code === "Space") {
       e.preventDefault();
       if (planningMode.playback.isPlaying()) planningMode.playback.pause();
       else planningMode.playback.play();
-      fieldRenderer.requestDrawAll();
+      requestDrawAll();
       return;
     }
     if ((e.key === "Delete" || e.key === "Backspace") && planningMode.state.getSelectedWaypointCount() > 0) {
@@ -7916,7 +7868,7 @@ function handleGlobalKeydown(e) {
       planningMode.actions.pushUndo();
       planningMode.actions.deleteSelectedWaypoints();
       planChanged();
-      fieldRenderer.requestDrawAll();
+      requestDrawAll();
       return;
     }
     const step = getPlanMoveStepIn();
@@ -7945,7 +7897,7 @@ function handleGlobalKeydown(e) {
         const rdy = dx * s + dy * c;
         planningMode.actions.moveSelectedWaypointsBy(rdx, rdy);
         planChanged();
-        fieldRenderer.requestDrawAll();
+        requestDrawAll();
         sanitizeOffsetInputs();
         return;
       }
@@ -7955,7 +7907,7 @@ function handleGlobalKeydown(e) {
 }
 
 function handlePlanningHistoryKeydown(e) {
-  if (modeController.getMode() !== "planning" || e.defaultPrevented || !(e.metaKey || e.ctrlKey) || e.altKey) return false;
+  if (getMode() !== "planning" || e.defaultPrevented || !(e.metaKey || e.ctrlKey) || e.altKey) return false;
   const key = String(e.key || "").toLowerCase();
   const wantsUndo = key === "z" && !e.shiftKey;
   const wantsRedo = (key === "z" && e.shiftKey) || (key === "y" && !e.shiftKey);
@@ -7975,7 +7927,7 @@ loadFieldOptions();
 await loadSettings();
 await loadSavedPaths();
 await loadDemoRouteIfUpgraded();
-modeController.setMode("viewing");
+setMode("viewing");
 void appTelemetry.loaded({
   plan_saved: planningMode.state.getWaypointCount() > 0,
   plan_points: planningMode.state.getWaypointCount(),
@@ -8024,7 +7976,7 @@ const setupExitHandler = async () => {
   const beginAppQuit = async () => {
     if (appQuitInFlight) return;
     appQuitInFlight = true;
-    topBar.setStatus("App closing");
+    setStatus("App closing");
     await new Promise((resolve) => requestAnimationFrame(resolve));
     await appExit();
     try {

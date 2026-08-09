@@ -1,3 +1,4 @@
+import { setStatus } from "../app/status";
 import type { VirtualList } from "./virtualList";
 
 export interface LogListRendererDependencies {
@@ -12,7 +13,6 @@ export interface LogListRendererDependencies {
   clearWaypointSelectionState(): void;
   highlightWaypointInList(waypointId: unknown, eventTime: unknown, doScroll: boolean): void;
   jumpToEventTime(time: number, options: Record<string, unknown>): void;
-  setStatus(message: string): void;
   getRawPoseTime(index: number): unknown;
   levelStyle(level: unknown): { fill: string; text: string; name: string };
   levelSortRank(level: unknown): number;
@@ -65,9 +65,9 @@ export function createLogListRenderer(deps: LogListRendererDependencies): LogLis
       deps.clearWaypointSelectionState();
       deps.highlightWaypointInList(null, null, false);
       deps.jumpToEventTime(entry.t, {
-        exactStatus: (near: any) => deps.setStatus(`Log @${entry.t}ms mapped to pose @${deps.getRawPoseTime(near.idx)}ms (Δ=${near.dt}ms).`),
-        interpolatedStatus: () => deps.setStatus(`Log @${entry.t}ms shown via interpolation (no pose within ±${deps.watchToleranceMs}ms).`),
-        noPoseStatus: () => deps.setStatus(`Log @${entry.t}ms selected (no poses loaded).`),
+        exactStatus: (near: any) => setStatus(`Log @${entry.t}ms mapped to pose @${deps.getRawPoseTime(near.idx)}ms (Δ=${near.dt}ms).`),
+        interpolatedStatus: () => setStatus(`Log @${entry.t}ms shown via interpolation (no pose within ±${deps.watchToleranceMs}ms).`),
+        noPoseStatus: () => setStatus(`Log @${entry.t}ms selected (no poses loaded).`),
         clearWatchSelection: true,
       });
       highlight(entry.t, true);

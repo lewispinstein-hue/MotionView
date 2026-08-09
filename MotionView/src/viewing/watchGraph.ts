@@ -1,4 +1,5 @@
 import Chart from "chart.js/auto";
+import { requestDrawAll } from "../render/renderScheduler";
 import type { WatchEntry } from "../state/models";
 import type { ViewingSelectionController } from "./viewingSelection";
 import type { WatchMarker } from "./viewingTypes";
@@ -66,7 +67,6 @@ interface WatchGraphOptions {
   clamp(value: number, min: number, max: number): number;
   selectWatchMarker(marker: WatchMarker, fromUserClick: boolean, position?: { x: number; y: number } | null): void;
   updatePoseReadout(): void;
-  requestDrawAll(): void;
 }
 
 const FOLLOW_HEAD_TOLERANCE_S = 2.5;
@@ -447,7 +447,7 @@ export function createWatchGraph(options: WatchGraphOptions): WatchGraphControll
     }
     hoverSaved = null;
     options.updatePoseReadout();
-    options.requestDrawAll();
+    requestDrawAll();
   };
 
   const markerFromEvent = (event: MouseEvent) => {
@@ -611,7 +611,7 @@ export function createWatchGraph(options: WatchGraphOptions): WatchGraphControll
       saveHoverState();
       options.selection.hoverTimelineTime = marker.t ?? null;
       options.updatePoseReadout();
-      options.requestDrawAll();
+      requestDrawAll();
     });
     options.canvas.addEventListener("mouseleave", () => {
       if (!options.getData() || options.isPlaying()) return;

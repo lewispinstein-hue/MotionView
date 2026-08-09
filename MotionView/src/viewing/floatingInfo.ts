@@ -1,3 +1,4 @@
+import { requestDrawAll } from "../render/renderScheduler";
 import type { Pose, WatchEntry } from "../state/models";
 
 export interface FloatingInfoController {
@@ -34,7 +35,6 @@ interface FloatingInfoOptions {
   setSelectedIndex(index: number): void;
   findFloorIndexByTime(timeMs: number): number;
   updatePoseReadout(): void;
-  requestDrawAll(): void;
   levelStyle(level: string): { fill: string; text: string };
   normalizeLogLevel(level: unknown): string;
   onToggle(enabled: boolean): void;
@@ -220,7 +220,7 @@ export function createFloatingInfo(options: FloatingInfoOptions): FloatingInfoCo
           options.setPlayTimeMs(watch.t);
           options.setSelectedIndex(options.findFloorIndexByTime(watch.t));
           options.updatePoseReadout();
-          options.requestDrawAll();
+          requestDrawAll();
         };
       }
       const lockedTime = options.getLockedTimeMs() ?? 0;

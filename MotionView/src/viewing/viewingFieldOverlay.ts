@@ -1,3 +1,5 @@
+import { worldToScreen } from "../render/fieldTransform";
+
 export interface ViewingFieldOverlayDependencies {
   context: CanvasRenderingContext2D;
   getWatchMarkers(): any[];
@@ -7,7 +9,6 @@ export interface ViewingFieldOverlayDependencies {
   getHoverWatch(): any;
   isWatchMarkerVisible(marker: any): boolean;
   waypointFilterMatches(waypoint: any): boolean;
-  worldToScreen(x: number, y: number): { x: number; y: number };
   levelFillWithAlpha(level: unknown, alpha: number): string;
   scaledViewingFieldRadius(baseDiameterPx: number, maxDiameterPx?: number): number;
   viewingFieldMarkerStyleScale(): number;
@@ -28,7 +29,7 @@ export function createViewingFieldOverlayRenderer(deps: ViewingFieldOverlayDepen
       const { pose, watch } = marker;
       if (!deps.isWatchMarkerVisible(marker)) continue;
       if (!pose) continue;
-      const point = deps.worldToScreen(pose.x, pose.y);
+      const point = worldToScreen(pose.x, pose.y);
 
       const isHover = deps.getHoverWatch() === marker;
       const baseDiameter = isHover ? 11.2 : 8.4;
@@ -48,7 +49,7 @@ export function createViewingFieldOverlayRenderer(deps: ViewingFieldOverlayDepen
     const selectedWatch = deps.getSelectedWatch();
     if (selectedWatch?.marker?.pose && deps.isWatchMarkerVisible(selectedWatch.marker)) {
       const pose = selectedWatch.marker.pose;
-      const point = deps.worldToScreen(pose.x, pose.y);
+      const point = worldToScreen(pose.x, pose.y);
 
       const outerRadius = deps.scaledViewingFieldRadius(18);
       const innerRadius = deps.scaledViewingFieldRadius(13);
@@ -75,7 +76,7 @@ export function createViewingFieldOverlayRenderer(deps: ViewingFieldOverlayDepen
 
     for (const waypoint of waypoints) {
       if (!deps.waypointFilterMatches(waypoint)) continue;
-      const point = deps.worldToScreen(waypoint.target.x, waypoint.target.y);
+      const point = worldToScreen(waypoint.target.x, waypoint.target.y);
       const isSelected = deps.getSelectedWaypointId() === waypoint.id;
       const fill = waypoint.active ? "rgba(0,0,0,0.10)" : "rgba(120,120,120,0.10)";
       const stroke = "rgba(255,255,255,0.96)";

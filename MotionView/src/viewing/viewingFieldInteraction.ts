@@ -1,3 +1,7 @@
+import { getMode } from "../app/modeController";
+import { setStatus } from "../app/status";
+import { requestDrawAll } from "../render/renderScheduler";
+import { worldToScreen } from "../render/fieldTransform";
 import type { Pose, Waypoint } from "../state/models";
 import type { ViewingSelectionController } from "./viewingSelection";
 import type { WatchMarker } from "./viewingTypes";
@@ -21,7 +25,6 @@ export interface CreateViewingFieldInteractionOptions {
   getPoses(): readonly Pose[];
   getWatchMarkers(): readonly WatchMarker[];
   getWaypoints(): readonly Waypoint[];
-  worldToScreen(x: number, y: number): { x: number; y: number };
   poseToInches(pose: Pose): Pose;
   angLerpDeg(a: number, b: number, t: number): number;
   trackHoverTolerancePx: number;
@@ -30,7 +33,6 @@ export interface CreateViewingFieldInteractionOptions {
   waypointFilterMatches(waypoint: Waypoint): boolean;
   updateCursorPillsFromClient(clientX: number, clientY: number): void;
   setCursorPills(text: string): void;
-  getAppMode(): string;
   handlePlanningMouseMove(event: MouseEvent): void;
   handlePlanningMouseLeave(): void;
   selectWatchMarker(marker: WatchMarker, fromUserClick: boolean, position?: { x: number; y: number }): void;
@@ -42,8 +44,6 @@ export interface CreateViewingFieldInteractionOptions {
   setLastPoseIndex(index: number): void;
   highlightPoseList(): void;
   updatePoseReadout(): void;
-  requestDrawAll(): void;
-  setStatus(message: string): void;
   getSuppressNextClick(): boolean;
   consumeSuppressNextClick(): void;
 }
@@ -65,8 +65,8 @@ export function createViewingFieldInteraction(options: CreateViewingFieldInterac
     for (let i = 0; i < poses.length - 1; i += 1) {
       const a = poses[i];
       const b = poses[i + 1];
-      const pa = options.worldToScreen(a.x, a.y);
-      const pb = options.worldToScreen(b.x, b.y);
+      const pa = worldToScreen(a.x, a.y);
+      const pb = worldToScreen(b.x, b.y);
 
       const vx = pb.x - pa.x;
       const vy = pb.y - pa.y;
@@ -121,7 +121,7 @@ export function createViewingFieldInteraction(options: CreateViewingFieldInterac
     for (const marker of watchMarkers) {
       if (!options.isWatchMarkerVisible(marker)) continue;
       if (!marker.pose) continue;
-      const p = options.worldToScreen(marker.pose.x, marker.pose.y);
+      const p = worldToScreen(marker.pose.x, marker.pose.y);
       const baseDiameter = hoverWatch === marker ? 11.2 : 8.4;
       const tol = Math.max(8, options.scaledViewingFieldRadius(baseDiameter) + 5);
       const dx = p.x - x;
@@ -146,7 +146,7 @@ export function createViewingFieldInteraction(options: CreateViewingFieldInterac
 
     for (const waypoint of waypoints) {
       if (!options.waypointFilterMatches(waypoint)) continue;
-      const p = options.worldToScreen(waypoint.target.x, waypoint.target.y);
+      const p = worldToScreen(waypoint.target.x, waypoint.target.y);
       const isSelected = options.selection.selectedWaypointId === waypoint.id;
       const baseDiameter = isSelected ? 15 : 12;
       const tol = Math.max(9, options.scaledViewingFieldRadius(baseDiameter) + 6);
@@ -167,7 +167,7 @@ export function createViewingFieldInteraction(options: CreateViewingFieldInterac
     });
 
     options.canvas.addEventListener("mousemove", (event) => {
-      if (options.getAppMode() === "planning") {
+      if (getMode() === "planning") {
         options.handlePlanningMouseMove(event);
         return;
       }
@@ -177,12 +177,12 @@ export function createViewingFieldInteraction(options: CreateViewingFieldInterac
       if (watchHit) {
         hoverWatch = watchHit;
         options.canvas.style.cursor = "pointer";
-        options.requestDrawAll();
+        requestDrawAll();
         return;
       }
       if (hoverWatch) {
         hoverWatch = null;
-        options.requestDrawAll();
+        requestDrawAll();
       }
       options.canvas.style.cursor = "";
 
@@ -199,7 +199,7 @@ export function createViewingFieldInteraction(options: CreateViewingFieldInterac
           options.selection.clearTrackHover(!options.selection.trackLockActive);
           options.highlightPoseList();
           options.updatePoseReadout();
-          options.requestDrawAll();
+          requestDrawAll();
         }
         return;
       }
@@ -211,12 +211,12 @@ export function createViewingFieldInteraction(options: CreateViewingFieldInterac
       options.selection.hoverTimelineTime = hit.pose.t ?? null;
 
       options.updatePoseReadout();
-      options.requestDrawAll();
+      requestDrawAll();
     });
 
     options.canvas.addEventListener("mouseleave", () => {
       options.setCursorPills("Cursor: —");
-      if (options.getAppMode() === "planning") {
+      if (getMode() === "planning") {
         options.handlePlanningMouseLeave();
         return;
       }
@@ -228,12 +228,12 @@ export function createViewingFieldInteraction(options: CreateViewingFieldInterac
         options.selection.clearTrackHover(!options.selection.trackLockActive);
         options.highlightPoseList();
         options.updatePoseReadout();
-        options.requestDrawAll();
+        requestDrawAll();
       }
     });
 
     options.canvas.addEventListener("click", (event) => {
-      if (options.getAppMode() === "planning") return;
+      if (getMode() === "planning") return;
       if (!options.getData()) return;
       if (options.getSuppressNextClick()) {
         options.consumeSuppressNextClick();
@@ -253,7 +253,7 @@ export function createViewingFieldInteraction(options: CreateViewingFieldInterac
       if (waypointHit) {
         if (options.selection.selectedWaypointId === waypointHit.id) {
           options.clearWaypointSelection();
-          options.requestDrawAll();
+          requestDrawAll();
           return;
         }
         options.renderWaypointList();
@@ -276,19 +276,19 @@ export function createViewingFieldInteraction(options: CreateViewingFieldInterac
 
         options.highlightPoseList();
         options.updatePoseReadout();
-        options.requestDrawAll();
+        requestDrawAll();
         return;
       }
 
       if (options.selection.trackLockActive) {
         options.selection.clearTrackLock();
         options.clearWaypointSelection();
-        options.setStatus("Unlocked track lock.");
+        setStatus("Unlocked track lock.");
         options.updatePoseReadout();
-        options.requestDrawAll();
+        requestDrawAll();
       } else if (options.selection.selectedWaypointId != null) {
         options.clearWaypointSelection();
-        options.requestDrawAll();
+        requestDrawAll();
       }
     });
   };

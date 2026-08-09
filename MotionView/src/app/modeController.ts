@@ -2,49 +2,34 @@ export type AppMode = "viewing" | "planning";
 
 export type ModeListener = (mode: AppMode, previousMode: AppMode) => void;
 
-export interface ModeController {
-  getMode(): AppMode;
-  is(mode: AppMode): boolean;
-  setMode(nextMode: AppMode): void;
-  subscribe(listener: ModeListener): () => void;
-}
-
-export interface CreateModeControllerOptions {
-  initialMode?: AppMode;
-}
+let currentMode: AppMode = "viewing";
+const listeners = new Set<ModeListener>();
 
 export function normalizeAppMode(value: unknown): AppMode {
   return value === "planning" ? "planning" : "viewing";
 }
 
-export function createModeController(initialMode: AppMode): ModeController {
-  let currentMode = initialMode;
-  const listeners = new Set<ModeListener>();
+export function getMode(): AppMode {
+  return currentMode;
+}
 
-  return {
-    getMode() {
-      return currentMode;
-    },
+export function isMode(mode: AppMode): boolean {
+  return currentMode === mode;
+}
 
-    is(mode) {
-      return currentMode === mode;
-    },
+export function setMode(nextMode: AppMode): void {
+  const normalizedMode = normalizeAppMode(nextMode);
+  const previousMode = currentMode;
+  currentMode = normalizedMode;
 
-    setMode(nextMode) {
-      const normalizedMode = normalizeAppMode(nextMode);
-      const previousMode = currentMode;
-      currentMode = normalizedMode;
+  for (const listener of listeners) {
+    listener(currentMode, previousMode);
+  }
+}
 
-      for (const listener of listeners) {
-        listener(currentMode, previousMode);
-      }
-    },
-
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+export function subscribeMode(listener: ModeListener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
   };
 }

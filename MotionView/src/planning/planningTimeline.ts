@@ -1,7 +1,8 @@
+import { getMode } from "../app/modeController";
+
 export interface PlanningTimelineRendererDependencies {
   planningTimelineCanvas: HTMLCanvasElement | null;
   context: CanvasRenderingContext2D | null;
-  getAppMode(): string;
   getCurrentPlanTimelineLayout(): { waypointX?: number[] } | null;
   getPlanTotalLength(): number;
   getPlanPlayDistance(): number;
@@ -16,7 +17,7 @@ export interface PlanningTimelineRenderer {
 export function createPlanningTimelineRenderer(deps: PlanningTimelineRendererDependencies): PlanningTimelineRenderer {
   function draw() {
     if (!deps.planningTimelineCanvas || !deps.context) return;
-    if (deps.getAppMode() !== "planning") return;
+    if (getMode() !== "planning") return;
 
     const rect = deps.planningTimelineCanvas.getBoundingClientRect();
     const width = rect.width;

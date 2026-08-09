@@ -1,3 +1,5 @@
+import { setStatus } from "../app/status";
+import { requestDrawAll } from "../render/renderScheduler";
 import type { ViewingInput } from "./viewingTypes";
 
 export interface ViewingInputDependencies {
@@ -17,8 +19,6 @@ export interface ViewingInputDependencies {
   pause?: () => void;
   highlightPoseList?: () => void;
   updatePoseReadout?: () => void;
-  requestDrawAll?: () => void;
-  setStatus?: (message: string) => void;
 }
 
 export function createViewingInput(deps: ViewingInputDependencies = {}): ViewingInput {
@@ -42,7 +42,7 @@ export function createViewingInput(deps: ViewingInputDependencies = {}): Viewing
     deps.setLastPoseIndex?.(nextIndex);
     deps.highlightPoseList?.();
     deps.updatePoseReadout?.();
-    deps.requestDrawAll?.();
+    requestDrawAll();
   };
 
   return {
@@ -58,7 +58,7 @@ export function createViewingInput(deps: ViewingInputDependencies = {}): Viewing
         }
         deps.setLiveAutoFollowHead?.(nextAutoFollow);
         updateLiveAutoFollowWindowState(nextAutoFollow);
-        deps.setStatus?.(`Live View: Auto-follow head: ${nextAutoFollow ? "ON" : "OFF"} (Space)`);
+        setStatus(`Live View: Auto-follow head: ${nextAutoFollow ? "ON" : "OFF"} (Space)`);
         return true;
       }
 
@@ -67,7 +67,7 @@ export function createViewingInput(deps: ViewingInputDependencies = {}): Viewing
         if (deps.isPlaying?.()) {
           deps.pause?.();
           deps.updatePoseReadout?.();
-          deps.requestDrawAll?.();
+          requestDrawAll();
         } else {
           deps.play?.();
         }

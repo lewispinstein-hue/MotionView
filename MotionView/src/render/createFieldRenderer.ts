@@ -1,3 +1,9 @@
+import { getMode } from "../app/modeController";
+import { setStatus } from "../app/status";
+import { isTauriRuntime, readImageData, resolveResourcePath, saveRobotImage } from "../tauri/commands";
+import { configureFieldTransform } from "./fieldTransform";
+import { requestDrawAll } from "./renderScheduler";
+
 export interface FieldBounds {
   minX: number;
   maxX: number;
@@ -29,10 +35,6 @@ export interface RobotImageTransform {
 export interface FieldRendererDependencies {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
-  isTauriRuntime: boolean;
-  resolveResource(path: string): Promise<string>;
-  invokeCommand(command: string, args?: Record<string, unknown>): Promise<unknown>;
-  getMode(): "viewing" | "planning";
   getViewingPathPoses(): readonly FieldPose[];
   getViewingPose(): FieldPose | null;
   getPlanningPose(): FieldPose | null;
@@ -42,10 +44,7 @@ export interface FieldRendererDependencies {
   drawViewingOverlay(): void;
   drawPlanningOverlay(force?: boolean): void;
   isPlanningOverlayVisible(): boolean;
-  drawViewingTimeline(): void;
-  drawPlanningTimeline(): void;
   drawWaypointOffsetOverlay(pose: FieldPose): void;
-  setStatus(message: unknown): void;
   onRobotImageAvailabilityChanged?(available: boolean): void;
   onFieldImageLoaded?(fieldKey: string): void | Promise<void>;
 }
@@ -53,7 +52,6 @@ export interface FieldRendererDependencies {
 export interface FieldRenderer {
   readonly canvas: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
-  requestDrawAll(): void;
   draw(): void;
   resizeCanvas(): void;
   updateFieldLayout(preserveBounds?: boolean): void;
@@ -133,7 +131,6 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
   let panPointerId: number | null = null;
   let panStart = { x: 0, y: 0, panX: 0, panY: 0 };
   let suppressNextClick = false;
-  let drawQueued = false;
 
   function computeTransform() {
     const w = canvas.getBoundingClientRect().width;
@@ -379,7 +376,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
   function draw() {
     drawField();
     drawAxes();
-    if (deps.getMode() === "viewing") {
+    if (getMode() === "viewing") {
       drawPath();
       deps.drawViewingOverlay();
       if (deps.isPlanningOverlayVisible()) deps.drawPlanningOverlay(true);
@@ -393,19 +390,8 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
     }
   }
 
-  function requestDrawAll() {
-    if (drawQueued) return;
-    drawQueued = true;
-    requestAnimationFrame(() => {
-      drawQueued = false;
-      draw();
-      deps.drawViewingTimeline();
-      deps.drawPlanningTimeline();
-    });
-  }
-
   async function resolveFieldImageSrc(fieldKey: string) {
-    if (!deps.isTauriRuntime) return fieldKey;
+    if (!isTauriRuntime()) return fieldKey;
     const normalized = String(fieldKey || "").replace(/^\.\//, "");
     const candidates = [
       `_up_/src/${normalized}`,
@@ -414,7 +400,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
     ];
     for (const candidate of candidates) {
       try {
-        const resolved = await deps.resolveResource(candidate);
+        const resolved = await resolveResourcePath(candidate);
         if (resolved) return resolved;
       } catch {
         // Try the next packaged location.
@@ -434,7 +420,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
       requestDrawAll();
     };
     img.onerror = () => {
-      deps.setStatus("Failed to load saved robot image.");
+      setStatus("Failed to load saved robot image.");
       robotImg = null;
       robotImgOk = false;
       deps.onRobotImageAvailabilityChanged?.(false);
@@ -445,7 +431,6 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
   const renderer: FieldRenderer = {
     canvas,
     ctx,
-    requestDrawAll,
     draw,
     resizeCanvas() {
       const dpr = window.devicePixelRatio || 1;
@@ -509,15 +494,15 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
       if (!fieldKey) {
         fieldImg = null;
         draw();
-        deps.setStatus("No field image is available for the selected competition.");
+        setStatus("No field image is available for the selected competition.");
         return;
       }
       let imgSrc = fieldKey;
-      if (deps.isTauriRuntime) {
+      if (isTauriRuntime()) {
         try {
           const resolvedPath = await resolveFieldImageSrc(fieldKey);
           if (resolvedPath && resolvedPath !== fieldKey && !resolvedPath.startsWith("asset:") && !resolvedPath.startsWith("http")) {
-            imgSrc = String(await deps.invokeCommand("read_image_data", { path: resolvedPath }));
+            imgSrc = await readImageData(resolvedPath);
           } else {
             imgSrc = resolvedPath;
           }
@@ -533,7 +518,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
       img.onerror = () => {
         fieldImg = null;
         draw();
-        deps.setStatus(`Could not load field image: ${fieldKey}`);
+        setStatus(`Could not load field image: ${fieldKey}`);
       };
       img.src = imgSrc;
       await deps.onFieldImageLoaded?.(fieldKey);
@@ -558,7 +543,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
     async loadRobotImageFromPath(path) {
       if (!path) return;
       try {
-        const dataUrl = String(await deps.invokeCommand("read_image_data", { path }));
+        const dataUrl = await readImageData(path);
         robotImageDataUrl = dataUrl;
         await new Promise<void>((resolve, reject) => {
           const img = new Image();
@@ -575,7 +560,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
         });
       } catch (error) {
         console.error("Failed to load robot image from path:", error);
-        deps.setStatus(`Failed to load robot image from path: ${error instanceof Error ? error.message : error}`);
+        setStatus(`Failed to load robot image from path: ${error instanceof Error ? error.message : error}`);
       }
     },
     loadRobotImageFromDataUrl,
@@ -602,7 +587,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
             resolve();
           };
           img.onerror = () => {
-            deps.setStatus("Failed to load uploaded robot image.");
+            setStatus("Failed to load uploaded robot image.");
             robotImg = null;
             robotImgOk = false;
             deps.onRobotImageAvailabilityChanged?.(false);
@@ -611,7 +596,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
           img.src = dataUrl;
           try {
             if (dataUrl) {
-              const savedPath = await deps.invokeCommand("save_robot_image", { dataUrl });
+              const savedPath = await saveRobotImage(dataUrl);
               if (savedPath) robotImagePath = String(savedPath);
             }
           } catch (saveErr) {
@@ -619,7 +604,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
           }
         };
         reader.onerror = () => {
-          deps.setStatus("Failed to read robot image file.");
+          setStatus("Failed to read robot image file.");
           reject(new Error("failed to read robot image file"));
         };
         reader.readAsDataURL(file);
@@ -734,6 +719,15 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
       computeTransform();
     },
   };
+
+  configureFieldTransform({
+    worldToScreen,
+    screenToWorld,
+    getFieldScale: () => scale,
+    getFieldViewZoom: () => viewZoom,
+    getFieldRotationDeg: () => fieldRotationDeg,
+    getFieldBounds: () => bounds,
+  });
 
   return renderer;
 }

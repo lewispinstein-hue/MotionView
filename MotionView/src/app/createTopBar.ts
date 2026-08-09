@@ -1,4 +1,5 @@
-import type { AppMode } from "./modeController";
+import { setMode, type AppMode } from "./modeController";
+import { subscribeStatus } from "./status";
 import type { FieldOption } from "../render/fieldImages";
 
 export interface TopBarPlaybackState {
@@ -14,7 +15,6 @@ export interface TopBarDependencies {
   onClearField(event: MouseEvent): void;
   onOpenSettings(): void;
   onOpenHelp(): void;
-  onSetMode(mode: AppMode): void;
   onTogglePlayback(): void;
   onPlaybackSpeedChanged(speed: number): void;
   onFieldChanged(fieldKey: string): void | Promise<void>;
@@ -22,7 +22,6 @@ export interface TopBarDependencies {
 
 export interface TopBarController {
   bindEvents(): void;
-  setStatus(message: unknown, log?: boolean): void;
   syncMode(mode: AppMode): void;
   syncPlayback(state: TopBarPlaybackState): void;
   syncPlanOverlay(enabled: boolean): void;
@@ -174,8 +173,8 @@ export function createTopBar(deps: TopBarDependencies): TopBarController {
       event.stopPropagation();
       deps.onOpenHelp();
     });
-    modeViewingBtn?.addEventListener("click", () => deps.onSetMode("viewing"));
-    modePlanningBtn?.addEventListener("click", () => deps.onSetMode("planning"));
+    modeViewingBtn?.addEventListener("click", () => setMode("viewing"));
+    modePlanningBtn?.addEventListener("click", () => setMode("planning"));
     btnPlay?.addEventListener("click", () => deps.onTogglePlayback());
     speedSelect?.addEventListener("change", () => deps.onPlaybackSpeedChanged(Number(speedSelect.value) || 1));
     fieldSelect?.addEventListener("change", () => {
@@ -188,6 +187,11 @@ export function createTopBar(deps: TopBarDependencies): TopBarController {
     robotImageFileEl?.addEventListener("change", (event) => {
       const input = event.target instanceof HTMLInputElement ? event.target : robotImageFileEl;
       void deps.onRobotImageSelected(input.files?.[0] ?? null, input);
+    });
+
+    subscribeStatus((message) => {
+      if (statusEl) statusEl.dataset.fullText = message;
+      scheduleLayout();
     });
 
     if (typeof ResizeObserver === "function") {
@@ -206,12 +210,6 @@ export function createTopBar(deps: TopBarDependencies): TopBarController {
 
   return {
     bindEvents,
-    setStatus(message, log = true) {
-      const fullText = String(message ?? "");
-      if (statusEl) statusEl.dataset.fullText = fullText;
-      scheduleLayout();
-      if (log) console.log(`Status: ${message}`);
-    },
     syncMode(mode) {
       if (modeViewingBtn) {
         const active = mode === "viewing";

@@ -1,3 +1,6 @@
+import { requestDrawAll } from "../render/renderScheduler";
+import { formatDistanceFromInches } from "../shared/units";
+
 export interface PlanningSidebarRendererDependencies {
   planListEl: HTMLElement | null;
   planCountEl: HTMLElement | null;
@@ -13,7 +16,6 @@ export interface PlanningSidebarRendererDependencies {
   planThetaDegAt(index: number): number;
   readPlanSpeed(value: unknown, fallback?: number): number;
   fmtNum(value: unknown, decimals?: number): string;
-  formatDistanceFromInches(inches: unknown, decimals?: number): string;
   escapeHtml(value: unknown): string;
   svgIconHref(iconId: string): string;
   getDefaultPlanObjectName(index?: number): string;
@@ -21,7 +23,6 @@ export interface PlanningSidebarRendererDependencies {
   getPlanObjectLatestValue(object: any): string;
   planToggleSelection(index: number): void;
   planSelectSingle(index: number): void;
-  requestDrawAll(): void;
   renderPlanList(): void;
   updatePlanSelectionPanel(): void;
   commitPlanObjectNameEdit(objectId: string, nextName: string): void;
@@ -50,12 +51,12 @@ export function createPlanningSidebarRenderer(deps: PlanningSidebarRendererDepen
       const theta = deps.planThetaDegAt(i);
       item.innerHTML = `
         <div class="muted">#${i + 1}</div>
-        <div>X: ${deps.formatDistanceFromInches(point.x, 2)}  Y: ${deps.formatDistanceFromInches(point.y, 2)}  θ: ${deps.fmtNum(theta, 1)}°  S: ${deps.fmtNum(deps.readPlanSpeed(point.speed, 127), 0)}</div>
+        <div>X: ${formatDistanceFromInches(point.x, 2)}  Y: ${formatDistanceFromInches(point.y, 2)}  θ: ${deps.fmtNum(theta, 1)}°  S: ${deps.fmtNum(deps.readPlanSpeed(point.speed, 127), 0)}</div>
       `;
       item.addEventListener("click", (event) => {
         if (event.shiftKey) deps.planToggleSelection(i);
         else deps.planSelectSingle(i);
-        deps.requestDrawAll();
+        requestDrawAll();
         deps.renderPlanList();
         deps.updatePlanSelectionPanel();
       });

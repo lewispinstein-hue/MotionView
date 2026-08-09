@@ -1,3 +1,4 @@
+import { requestDrawAll } from "../render/renderScheduler";
 import type { PlanningModeDependencies, PlanningPlayback, PlanningRendering } from "./planningTypes";
 import type { PlanningModeInternalState } from "./planningInternalState";
 
@@ -56,7 +57,7 @@ export function createPlanningPlayback(
       dependencies.setPlanningDistanceUi?.(state.playDist, total, state.waypoints.length);
       rendering.drawTimeline();
       dependencies.onPlanningDistanceChanged?.();
-      dependencies.requestDrawAll();
+      requestDrawAll();
     },
     updateControls() {
       dependencies.setPlanningControlsAvailability?.(state.waypoints.length);

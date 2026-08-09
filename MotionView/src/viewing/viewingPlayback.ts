@@ -1,3 +1,5 @@
+import { setStatus } from "../app/status";
+import { requestDrawAll } from "../render/renderScheduler";
 import type { Pose } from "../state/models";
 import type { ViewingSelectionController } from "./viewingSelection";
 import type { WatchMarker } from "./viewingTypes";
@@ -8,14 +10,12 @@ export interface ViewingPlaybackOptions {
   getPlayRate(): number;
   isLivestreaming(): boolean;
   setPlayButtonLabel(label: string): void;
-  setStatus(message: string): void;
   formatTimeSeconds(ms: number | null): string;
   interpolatePoseAtTime(timeMs: number): Pose | null;
   findFloorIndexByTime(timeMs: number): number;
   lastWatchAtTime(timeMs: number): WatchMarker | null;
   highlightWatch(timeMs: number, doScroll: boolean): void;
   updatePoseReadout(): void;
-  requestDrawAll(): void;
 }
 
 export interface ViewingPlaybackController {
@@ -49,14 +49,14 @@ export function createViewingPlayback(options: ViewingPlaybackOptions): ViewingP
     playPose = null;
     lastWall = null;
     const poses = options.getPoses();
-    options.setStatus(`Paused at time ${options.formatTimeSeconds(poses[options.selection.selectedIndex]?.t ?? 0)}s`);
+    setStatus(`Paused at time ${options.formatTimeSeconds(poses[options.selection.selectedIndex]?.t ?? 0)}s`);
   };
 
   const play = () => {
     const poses = options.getPoses();
     if (!poses.length) return;
     if (options.isLivestreaming()) {
-      options.setStatus("Playback disabled while livestreaming.");
+      setStatus("Playback disabled while livestreaming.");
       return;
     }
 
@@ -76,7 +76,7 @@ export function createViewingPlayback(options: ViewingPlaybackOptions): ViewingP
     options.selection.selectedWatch = null;
     options.selection.selectedLogTime = null;
     options.selection.timelineHoverSaved = null;
-    options.setStatus(`Playing from time ${options.formatTimeSeconds(poses[options.selection.selectedIndex]?.t ?? 0)}s`);
+    setStatus(`Playing from time ${options.formatTimeSeconds(poses[options.selection.selectedIndex]?.t ?? 0)}s`);
 
     const tStart = poses[options.selection.selectedIndex]?.t;
     playTimeMs = (typeof tStart === "number") ? tStart : (poses[0]?.t ?? 0);
@@ -97,7 +97,7 @@ export function createViewingPlayback(options: ViewingPlaybackOptions): ViewingP
         playPose = options.interpolatePoseAtTime(playTimeMs);
         options.selection.selectedIndex = poses.length - 1;
         options.updatePoseReadout();
-        options.requestDrawAll();
+        requestDrawAll();
         pause();
         return;
       }
@@ -112,7 +112,7 @@ export function createViewingPlayback(options: ViewingPlaybackOptions): ViewingP
       }
 
       options.updatePoseReadout();
-      options.requestDrawAll();
+      requestDrawAll();
       raf = requestAnimationFrame(tick);
     };
 

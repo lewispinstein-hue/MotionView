@@ -40,9 +40,7 @@ export interface CreateViewingListsDependencies {
   toggleWatchVisibilityForWatch(watch: any): void;
   openOrToggleWatchGraphPanel(marker: any): void;
   refreshWatchGraphPanelData(): void;
-  requestDrawAll(): void;
   jumpToEventTime(time: number, options: Record<string, unknown>): void;
-  setStatus(message: string): void;
   getRawPoseTime(index: number): unknown;
   poseToInches(pose: any): { x: number; y: number; theta: number };
   formatNumberString(value: unknown, decimals?: number, fallback?: string): string;
@@ -98,7 +96,6 @@ export function createViewingLists(deps: CreateViewingListsDependencies): Viewin
     getSelectedWatch: deps.getSelectedWatch,
     setRenderedWatchIndexByTime: () => {},
     refreshWatchGraphPanelData: deps.refreshWatchGraphPanelData,
-    requestDrawAll: deps.requestDrawAll,
     levelStyle: deps.levelStyle,
     levelSortRank: deps.levelSortRank,
     watchSortValueKey: deps.watchSortValueKey,
@@ -176,7 +173,6 @@ export function createViewingLists(deps: CreateViewingListsDependencies): Viewin
     clearWaypointSelectionState: deps.clearWaypointSelectionState,
     highlightWaypointInList: (waypointId, eventTime, doScroll) => waypointListRenderer.highlight(waypointId, eventTime, doScroll),
     jumpToEventTime: deps.jumpToEventTime,
-    setStatus: deps.setStatus,
     getRawPoseTime: deps.getRawPoseTime,
     levelStyle: deps.levelStyle,
     levelSortRank: deps.levelSortRank,

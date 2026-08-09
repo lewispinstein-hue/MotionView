@@ -1,3 +1,5 @@
+import { getMode } from "../app/modeController";
+import { requestDrawAll } from "../render/renderScheduler";
 import type {
   PlanningActions,
   PlanningHistorySnapshot,
@@ -121,7 +123,7 @@ export function createPlanningActions(
     state.exportTemplate = String(snapshot.exportTemplate || options.defaultExportTemplate);
     playback.pause();
     dependencies.onPlanningChanged?.({ renderPlanObjects: true });
-    dependencies.requestDrawAll();
+    requestDrawAll();
     state.undoApplying = false;
   }
 
@@ -189,19 +191,19 @@ export function createPlanningActions(
       }
     },
     undo() {
-      if (dependencies.getAppMode() !== "planning") return;
+      if (getMode() !== "planning") return;
       if (!state.undoStack.length) return;
       state.redoStack.push(cloneStateSnapshot());
       applyStateSnapshot(state.undoStack.pop());
     },
     redo() {
-      if (dependencies.getAppMode() !== "planning") return;
+      if (getMode() !== "planning") return;
       if (!state.redoStack.length) return;
       state.undoStack.push(cloneStateSnapshot());
       applyStateSnapshot(state.redoStack.pop());
     },
     pushUndo() {
-      if (dependencies.getAppMode() !== "planning" || state.undoApplying) return;
+      if (getMode() !== "planning" || state.undoApplying) return;
       const snapshot = cloneStateSnapshot();
       const last = state.undoStack[state.undoStack.length - 1];
       if (last && stateSnapshotsEqual(last, snapshot)) return;
