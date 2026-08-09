@@ -611,8 +611,7 @@
             <div class="detailsBody">
               <div class="rowline" style="margin-bottom:8px">
                 <span class="muted">Sort</span>
-                <select id="logSort" class="settingsSelect toolbarSelect" style="margin-left:auto"
-                  title="Sort for what's on top">
+                <select id="logSort" class="settingsSelect toolbarSelect" style="margin-left:auto">
                   <option value="level">Level</option>
                   <option value="time" selected>Old</option>
                   <option value="-time">New</option>
@@ -639,8 +638,7 @@
 
               <div class="rowline" style="margin-bottom:8px">
                 <span class="muted">Sort</span>
-                <select id="watchSort" class="settingsSelect toolbarSelect" style="margin-left:auto"
-                  title="Sort for what's on top">
+                <select id="watchSort" class="settingsSelect toolbarSelect" style="margin-left:auto">
                   <option value="level">Level</option>
                   <option value="time">Old</option>
                   <option value="-time" selected>New</option>
@@ -679,7 +677,7 @@
               <span class="pill" id="poseCount">—</span>
             </summary>
             <div class="detailsBody">
-              <div id="poseList" title="Click a pose to jump to that moment"
+              <div id="poseList"
                 style="max-height: 40vh; overflow:auto; border:1px solid var(--line); border-radius:10px;"></div>
             </div>
           </details>
@@ -731,7 +729,8 @@
             <div class="planningExportActions">
               <button id="btnPlanCopyCode" class="iconBtn secondaryBtn" type="button">Copy Code</button>
               <button id="btnPlanEditTemplate" class="iconBtn secondaryBtn" type="button">Edit Template</button>
-              <button id="btnPlanExport" class="iconBtn secondaryBtn planExportIconBtn" type="button" aria-label="Export Route">
+              <button id="btnPlanExport" class="iconBtn secondaryBtn planExportIconBtn" type="button"
+                aria-label="Export Route">
                 <svg width="18" height="18">
                   <use href="./assets/svg/export/exportPath.svg#icon-exportPath"></use>
                 </svg>
@@ -743,7 +742,8 @@
           <div class="statsPanel planEventsPanel">
             <div class="statsHeader">
               <div class="statsTitle" style="margin-bottom: 4px; align-items: center;">Custom Events</div>
-              <button id="btnPlanAddObject" class="iconBtn secondaryBtn planEventAddBtn" type="button" title="Add Object" aria-label="Add Object">
+              <button id="btnPlanAddObject" class="iconBtn secondaryBtn planEventAddBtn" type="button"
+                title="Add Object" aria-label="Add Object">
                 <svg width="20" height="20">
                   <use href="./assets/svg/planning/addPlanningObject.svg#icon-addPlanningObject"></use>
                 </svg>
@@ -927,7 +927,8 @@
         <div class="modalHeader">
           <div class="modalHeaderContent">
             <div id="planTemplateTitle" class="settingsMainTitle">Edit Template</div>
-            <div id="planTemplateSubtitle" class="settingsSubtitle">One template block is generated for each waypoint.</div>
+            <div id="planTemplateSubtitle" class="settingsSubtitle">One template block is generated for each waypoint.
+            </div>
           </div>
           <button id="btnPlanTemplateClose" class="iconBtn closeBtn" title="Close">✕</button>
         </div>
@@ -935,17 +936,22 @@
           <div class="settingsSection settingsGroup">
             <div class="settingsGroupHeader">
               <div class="settingsGroupIcon">&lt;/&gt;</div>
-              <div id="planTemplateGroupTitle" class="settingsGroupTitle" style="font-size: 20px;">Planning Export Template</div>
+              <div id="planTemplateGroupTitle" class="settingsGroupTitle" style="font-size: 20px;">Planning Export
+                Template</div>
             </div>
             <div class="settingsGroupBody">
               <div id="planTemplateNameField" hidden>
                 <label class="fieldLabel" for="planTemplateNameInput">Name</label>
-                <label id="planTemplateNameDescription" class="settingsDescription" for="planTemplateNameInput">Method name</label>
-                <input id="planTemplateNameInput" type="text" class="settingsInput" maxlength="25" autocomplete="off" spellcheck="false" />
+                <label id="planTemplateNameDescription" class="settingsDescription" for="planTemplateNameInput">Method
+                  name</label>
+                <input id="planTemplateNameInput" type="text" class="settingsInput" maxlength="25" autocomplete="off"
+                  spellcheck="false" />
               </div>
-              <label id="planTemplateDescription" class="settingsDescription" for="planTemplateInput">Available placeholders: <code>${x}</code>,
+              <label id="planTemplateDescription" class="settingsDescription" for="planTemplateInput">Available
+                placeholders: <code>${x}</code>,
                 <code>${y}</code>,
-                <code>${theta}</code>, <code>${distance}</code>, <code>${iteration}</code>, and <code>${speed}</code>.</label>
+                <code>${theta}</code>, <code>${distance}</code>, <code>${iteration}</code>, and
+                <code>${speed}</code>.</label>
               <textarea id="planTemplateInput" class="settingsInput planTemplateInput" spellcheck="false"
                 placeholder="moveToPoint(${x}, ${y}, ${theta});"></textarea>
               <div id="planTemplateValidation" class="templateModalValidation" hidden></div>
@@ -960,7 +966,8 @@
     </div>
     <div id="planObjectDeleteModal" class="modal" hidden>
       <div class="modalBackdrop"></div>
-      <div class="modalCard planConfirmModalCard" role="dialog" aria-modal="true" aria-labelledby="planObjectDeleteTitle" tabindex="-1">
+      <div class="modalCard planConfirmModalCard" role="dialog" aria-modal="true"
+        aria-labelledby="planObjectDeleteTitle" tabindex="-1">
         <div class="modalHeader">
           <div class="modalHeaderContent">
             <div id="planObjectDeleteTitle" class="settingsMainTitle">Remove Object</div>
@@ -968,7 +975,8 @@
           <button id="btnPlanObjectDeleteClose" class="iconBtn closeBtn" title="Close">✕</button>
         </div>
         <div class="modalBody settingsBody">
-          <div id="planObjectDeleteMessage" class="planConfirmMessage">Are you sure you want to remove this object?</div>
+          <div id="planObjectDeleteMessage" class="planConfirmMessage">Are you sure you want to remove this object?
+          </div>
           <div class="exportFooter">
             <button id="btnPlanObjectDeleteCancel" class="iconBtn secondaryBtn" type="button">Cancel</button>
             <button id="btnPlanObjectDeleteConfirm" class="iconBtn secondaryBtn" type="button">Confirm</button>
