@@ -13,6 +13,7 @@ export interface PlanningSidebarRendererDependencies {
   planThetaDegAt(index: number): number;
   readPlanSpeed(value: unknown, fallback?: number): number;
   fmtNum(value: unknown, decimals?: number): string;
+  formatDistanceFromInches(inches: unknown, decimals?: number): string;
   escapeHtml(value: unknown): string;
   svgIconHref(iconId: string): string;
   getDefaultPlanObjectName(index?: number): string;
@@ -49,7 +50,7 @@ export function createPlanningSidebarRenderer(deps: PlanningSidebarRendererDepen
       const theta = deps.planThetaDegAt(i);
       item.innerHTML = `
         <div class="muted">#${i + 1}</div>
-        <div>X: ${deps.fmtNum(point.x, 2)}  Y: ${deps.fmtNum(point.y, 2)}  θ: ${deps.fmtNum(theta, 1)}°  S: ${deps.fmtNum(deps.readPlanSpeed(point.speed, 127), 0)}</div>
+        <div>X: ${deps.formatDistanceFromInches(point.x, 2)}  Y: ${deps.formatDistanceFromInches(point.y, 2)}  θ: ${deps.fmtNum(theta, 1)}°  S: ${deps.fmtNum(deps.readPlanSpeed(point.speed, 127), 0)}</div>
       `;
       item.addEventListener("click", (event) => {
         if (event.shiftKey) deps.planToggleSelection(i);

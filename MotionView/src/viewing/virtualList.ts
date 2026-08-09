@@ -129,7 +129,7 @@ export interface VirtualList<T> {
   add(item: T): void;
   addMany(items: Iterable<T> | ArrayLike<T>): void;
   clear(options?: { resetScroll?: boolean }): void;
-  setItems(nextItems: ArrayLike<T>, options?: { resetScroll?: boolean }): void;
+  setItems(nextItems: ArrayLike<T>, options?: { resetScroll?: boolean; preserveScroll?: boolean }): void;
   refresh(): void;
   scrollToIndex(index: number, pad?: number): void;
   getRange(index: number, elements: number): VirtualListRange<T>;
@@ -158,6 +158,7 @@ export function createVirtualList<T>(
   let renderQueued = false;
   let tops: number[] = [];
   let heights: number[] = [];
+  let totalHeight = 0;
   const measuredHeights = new Map<string, number>();
 
   function recomputeLayout() {
@@ -174,6 +175,7 @@ export function createVirtualList<T>(
       cursor += height;
     }
 
+    totalHeight = cursor;
     content.style.height = `${cursor}px`;
   }
 
@@ -255,6 +257,43 @@ export function createVirtualList<T>(
     requestAnimationFrame(renderNow);
   }
 
+  function captureScrollAnchor() {
+    const nearBottom = listContainer.scrollTop + listContainer.clientHeight >= listContainer.scrollHeight - 12;
+    const index = Math.max(0, Math.min(store.length - 1, lowerBoundTop(listContainer.scrollTop)));
+    const item = store.get(index);
+    if (item == null) {
+      return {
+        nearBottom,
+        key: null,
+        offset: 0,
+        scrollTop: listContainer.scrollTop,
+      };
+    }
+    return {
+      nearBottom,
+      key: getKey(item, index),
+      offset: listContainer.scrollTop - (tops[index] ?? 0),
+      scrollTop: listContainer.scrollTop,
+    };
+  }
+
+  function restoreScrollAnchor(anchor: ReturnType<typeof captureScrollAnchor> | null) {
+    if (!anchor) return;
+    if (anchor.nearBottom) {
+      listContainer.scrollTop = Math.max(0, totalHeight - listContainer.clientHeight);
+      return;
+    }
+    if (anchor.key != null) {
+      for (let i = 0; i < store.length; i += 1) {
+        const item = store.get(i) as T;
+        if (getKey(item, i) !== anchor.key) continue;
+        listContainer.scrollTop = Math.max(0, (tops[i] ?? 0) + anchor.offset);
+        return;
+      }
+    }
+    listContainer.scrollTop = anchor.scrollTop;
+  }
+
   function scrollToIndex(index: number, pad = 12) {
     if (!Number.isInteger(index) || index < 0 || index >= store.length) return;
     const top = tops[index] ?? 0;
@@ -268,12 +307,14 @@ export function createVirtualList<T>(
     requestRender();
   }
 
-  function setItems(nextItems: ArrayLike<T>, { resetScroll = false } = {}) {
+  function setItems(nextItems: ArrayLike<T>, { resetScroll = false, preserveScroll = true } = {}) {
+    const anchor = preserveScroll && !resetScroll ? captureScrollAnchor() : null;
     if (nextItems && typeof nextItems.length === "number") store.setItems(nextItems);
     else store.clear();
     measuredHeights.clear();
     recomputeLayout();
     if (resetScroll) listContainer.scrollTop = 0;
+    else restoreScrollAnchor(anchor);
     requestRender();
   }
 
@@ -302,13 +343,17 @@ export function createVirtualList<T>(
     },
     reserve: (capacity: number) => store.reserve(capacity),
     add(item: T) {
+      const anchor = captureScrollAnchor();
       store.add(item);
       recomputeLayout();
+      restoreScrollAnchor(anchor);
       requestRender();
     },
     addMany(items: Iterable<T> | ArrayLike<T>) {
+      const anchor = captureScrollAnchor();
       store.addMany(items);
       recomputeLayout();
+      restoreScrollAnchor(anchor);
       requestRender();
     },
     clear,

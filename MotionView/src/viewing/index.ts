@@ -8,6 +8,7 @@ export * from "./poseList";
 export * from "./logList";
 export * from "./waypointList";
 export * from "./watchList";
+export * from "./createViewingLists";
 export * from "./watchVisibility";
 export * from "./watchGraph";
 export * from "./floatingInfo";

@@ -446,7 +446,7 @@
           <div class="settingsGroupBody">
             <div class="grid2">
               <div>
-                <label class="fieldLabel">Snap to grid (in)</label>
+                <label id="settingsPlanSnapStepLabel" class="fieldLabel">Snap to grid (in)</label>
                 <select id="settingsPlanSnapStep" class="settingsSelect">
                   <option value="0">off</option>
                   <option value="0.1">0.1</option>
@@ -471,7 +471,7 @@
                 </select>
               </div>
               <div>
-                <label class="fieldLabel">Move selected waypoint (in)</label>
+                <label id="settingsPlanMoveStepLabel" class="fieldLabel">Move selected waypoint (in)</label>
                 <input id="settingsPlanMoveStep" type="number" step="0.1" value="0.5" class="settingsInput" />
               </div>
               <div>
@@ -702,11 +702,11 @@
               </div>
               <div class="grid4" style="margin-top:10px">
                 <div>
-                  <label>X</label>
+                  <label id="planSelXLabel">X</label>
                   <input id="planSelX" type="text" inputmode="decimal" />
                 </div>
                 <div>
-                  <label>Y</label>
+                  <label id="planSelYLabel">Y</label>
                   <input id="planSelY" type="text" inputmode="decimal" />
                 </div>
                 <div>

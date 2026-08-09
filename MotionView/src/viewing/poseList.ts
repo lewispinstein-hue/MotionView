@@ -60,7 +60,6 @@ export function createPoseListRenderer(deps: PoseListRendererDependencies): Pose
     }
     if (deps.poseCount) deps.poseCount.textContent = `${count}`;
     deps.poseListVirtual?.setItems({ length: count });
-    highlight();
   }
 
   return {

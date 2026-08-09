@@ -1,3 +1,5 @@
+import { captureScrollAnchor, restoreScrollAnchor } from "./scrollAnchor";
+
 export interface WaypointListRendererDependencies {
   waypointList: HTMLElement | null;
   waypointCount: HTMLElement | null;
@@ -65,6 +67,11 @@ export function createWaypointListRenderer(deps: WaypointListRendererDependencie
 
   function renderList() {
     if (!deps.waypointList || !deps.waypointCount) return;
+    const scrollAnchor = captureScrollAnchor(
+      deps.waypointList,
+      ".watchItem",
+      (element) => `${element.dataset.waypointId ?? ""}:${element.dataset.eventTime ?? ""}`,
+    );
     deps.waypointList.innerHTML = "";
 
     const visible = deps.getVisibleEvents();
@@ -113,6 +120,12 @@ export function createWaypointListRenderer(deps: WaypointListRendererDependencie
     if (deps.getSelectedWaypointId() != null) {
       highlight(deps.getSelectedWaypointId(), deps.getSelectedWaypointEventTime(), false);
     }
+    restoreScrollAnchor(
+      deps.waypointList,
+      scrollAnchor,
+      ".watchItem",
+      (element) => `${element.dataset.waypointId ?? ""}:${element.dataset.eventTime ?? ""}`,
+    );
   }
 
   return {
