@@ -9,6 +9,7 @@ import invisibleWatchIconUrl from "./assets/svg/viewing/invisibleWatch.svg?url";
 import pinWatchIconUrl from "./assets/svg/viewing/pinWatch.svg?url";
 import visibleWatchIconUrl from "./assets/svg/viewing/visibleWatch.svg?url";
 import watchGraphIconUrl from "./assets/svg/viewing/watchGraph.svg?url";
+import { initializeMotionViewApp } from "./app/appRuntime";
 import { createTopBar } from "./app/createTopBar";
 import { getMode, setMode, subscribeMode } from "./app/modeController";
 import { setStatus } from "./app/status";
@@ -56,21 +57,11 @@ import {
   setPlanNodeCodeOverride,
 } from "./planning";
 import { createPoseStore } from "./state/poseStore";
-import { appTelemetry, exportTelemetry, initTelemetry, liveTelemetry, planningTelemetry, telemetryClient, viewingTelemetry } from "./telemetry/createTelemetry";
+import { appTelemetry, exportTelemetry, liveTelemetry, planningTelemetry, viewingTelemetry } from "./telemetry/createTelemetry";
 import {
   buildWaypointState,
-  createWatchGraph,
-  createViewingLists,
-  createViewingFieldOverlayRenderer,
-  createViewingFieldInteraction,
-  createFloatingInfo,
-  createViewingInput,
+  createViewingUi,
   createViewingMode,
-  createViewingPlayback,
-  createViewingRendering,
-  createViewingSelection,
-  createViewingTimeline,
-  createWatchVisibility,
   lastWatchAtTime,
   normalizeLogs,
   normalizeSystemLogMessage,
@@ -78,11 +69,12 @@ import {
   normalizeWaypointType,
   parseWaypointNumber,
   parseWaypointParams,
-  scrollIntoViewIfNeeded,
-  sortWatchMarkersByTime,
   watchGraphKeyForWatch,
   waypointEventCount,
 } from "./viewing";
+
+const app = initializeMotionViewApp();
+void app.start();
 
 const isWindowsPlatform = typeof navigator === "object" && /Windows/.test(navigator.userAgent);
 
@@ -127,26 +119,10 @@ let WS_ORIGIN = ORIGIN ? ORIGIN.replace(/^http/, "ws") : null;
 
 const root = document.documentElement;
 let persistedAppState = null;
-
-let APP_VERSION = telemetryClient.getAppVersion();
-
-void initTelemetry()
-  .then((version) => {
-    APP_VERSION = version;
-    const versionDisplayEl = document.getElementById("versionDisplay");
-    if (versionDisplayEl) versionDisplayEl.textContent = APP_VERSION;
-  })
-  .catch((err) => {
-    console.warn("Telemetry initialization failed:", err);
-  });
 // Live streaming state shared across handlers (avoids TDZ issues)
 window.__live = window.__live || { connected: false, streaming: false };
 
 const canvas = document.getElementById("c");
-// Track last mouse position (for small popups)
-let lastMouseClient = { x: 20, y: 20 };
-window.addEventListener("mousemove", (e) => { lastMouseClient = { x: e.clientX, y: e.clientY }; }, { passive: true });
-
 const ctx = canvas.getContext("2d");
 const timelineCanvas = document.getElementById("timelineCanvas");
 const tctx = timelineCanvas.getContext("2d");
@@ -174,19 +150,9 @@ const btnHelpClose = document.getElementById("btnHelpClose");
 const btnHelpKeybinds = document.getElementById("btnHelpKeybinds");
 const keybindsModal = document.getElementById("keybindsModal");
 const btnKeybindsClose = document.getElementById("btnKeybindsClose");
-const logSort = document.getElementById("logSort");
-const waypointFilter = document.getElementById("waypointFilter");
-const watchFilter = document.getElementById("watchFilter");
-const watchSort = document.getElementById("watchSort");
 const vSplit = document.getElementById("vSplit");
 const hSplit = document.getElementById("hSplit");
 const planningTimelineSplit = document.getElementById("planningTimelineSplit");
-const timePill = document.getElementById("timePill");
-const deltaPill = document.getElementById("deltaPill");
-const pointPill = document.getElementById("pointPill");
-const posePill = document.getElementById("posePill");
-const cursorPill = document.getElementById("cursorPill");
-const planCursorPill = document.getElementById("planCursorPill");
 
 const rightViewingEl = document.getElementById("rightViewing");
 const rightPlanningEl = document.getElementById("rightPlanning");
@@ -215,16 +181,6 @@ function readRootCssNumber(prop, fallback = 0) {
   const num = parseFloat(raw);
   return Number.isFinite(num) ? num : fallback;
 }
-
-const watchList = document.getElementById("watchList");
-const watchCount = document.getElementById("watchCount");
-const logList = document.getElementById("logList");
-const logCount = document.getElementById("logCount");
-const waypointList = document.getElementById("waypointList");
-const waypointCount = document.getElementById("waypointCount");
-
-const poseList = document.getElementById("poseList");
-const poseCount = document.getElementById("poseCount");
 
 const offXEl = document.getElementById("settingsOffX");
 const offYEl = document.getElementById("settingsOffY");
@@ -285,28 +241,6 @@ const planObjectDeleteMessageEl = document.getElementById("planObjectDeleteMessa
 const btnPlanObjectDeleteClose = document.getElementById("btnPlanObjectDeleteClose");
 const btnPlanObjectDeleteCancel = document.getElementById("btnPlanObjectDeleteCancel");
 const btnPlanObjectDeleteConfirm = document.getElementById("btnPlanObjectDeleteConfirm");
-const watchGraphPanel = document.getElementById("watchGraphPanel");
-const btnCloseWatchGraph = document.getElementById("btnCloseWatchGraph");
-const watchGraphHeader = document.getElementById("watchGraphHeader");
-const watchGraphResizer = document.getElementById("watchGraphResizer");
-const watchGraphSubtitle = document.getElementById("watchGraphSubtitle");
-const watchGraphTitle = document.getElementById("watchGraphTitle");
-const watchGraphCompareSelect = document.getElementById("watchGraphCompareSelect");
-const watchGraphLatest = document.getElementById("watchGraphLatest");
-const watchGraphCompareLatest = document.getElementById("watchGraphCompareLatest");
-const watchGraphCount = document.getElementById("watchGraphCount");
-const watchGraphAvg = document.getElementById("watchGraphAvg");
-const watchGraphMin = document.getElementById("watchGraphMin");
-const watchGraphMax = document.getElementById("watchGraphMax");
-const watchGraphCompareCount = document.getElementById("watchGraphCompareCount");
-const watchGraphCompareAvg = document.getElementById("watchGraphCompareAvg");
-const watchGraphCompareMin = document.getElementById("watchGraphCompareMin");
-const watchGraphCompareMax = document.getElementById("watchGraphCompareMax");
-const watchGraphCanvas = document.getElementById("watchGraphCanvas");
-const watchGraphEmpty = document.getElementById("watchGraphEmpty");
-const pinnedWatchHost = document.getElementById("pinnedWatchHost");
-const pinnedWatchTemplate = document.getElementById("pinnedWatchTemplate");
-
 // Settings modal elements
 const settingsModal = document.getElementById("settingsModal");
 const btnSettingsClose = document.getElementById("btnSettingsClose");
@@ -349,7 +283,10 @@ const planSelYEl = document.getElementById("planSelY");
 const planSelThetaEl = document.getElementById("planSelTheta");
 const planSelSpeedEl = document.getElementById("planSelSpeed");
 const versionDisplayEl = document.getElementById("versionDisplay");
-if (versionDisplayEl) versionDisplayEl.textContent = APP_VERSION;
+if (versionDisplayEl) versionDisplayEl.textContent = app.version;
+app.core.events.versionChanged.subscribe(({ version }) => {
+  if (versionDisplayEl) versionDisplayEl.textContent = version;
+});
 
 const prosDirStatusEl = document.getElementById("prosDirStatus");
 const prosDirAutoStatusEl = document.getElementById("prosDirAutoStatus");
@@ -418,9 +355,9 @@ function getValidFieldKey(fieldKey) {
 
 // Raw poses are stored in FILE units; we convert to inches for rendering.
 // Fields: t, x, y, theta, l_vel, r_vel, speed_raw, speed_norm
-let viewingWatchVisibility = null;
+let viewingUi = null;
 function currentVisibilityForWatch(watch) {
-  return viewingWatchVisibility?.currentVisibilityForWatch(watch) ?? true;
+  return viewingUi?.currentVisibilityForWatch(watch) ?? true;
 }
 
 const viewingMode = createViewingMode({
@@ -438,24 +375,6 @@ const waypoints = viewingMode.data.getWaypoints();
 const waypointsById = viewingMode.data.getWaypointMap();
 const watchMarkers = viewingMode.data.getWatchMarkers(); // {watch, t, pose(in), ok, idx, dt}
 
-const viewingSelection = createViewingSelection();
-viewingWatchVisibility = createWatchVisibility({
-  getWatches: () => watches,
-  getFilterValue: () => watchFilterValue(),
-  graphKeyForWatch: (watch) => watchGraphKeyForWatch(watch),
-  updateButtons: (key, iconId, title) => {
-    const buttons = watchList?.querySelectorAll(`.watchVisibilityBtn[data-watch-visibility-key="${key}"]`) ?? [];
-    for (const button of buttons) {
-      button.dataset.iconId = iconId;
-      button.dataset.title = title;
-    }
-    updateWatchVisibilityButtons(key);
-  },
-});
-
-let viewingFieldInteraction = null;
-let watchGraph = null;
-
 const telemetryMetrics = {
   totalPosesReceived: 0,
   totalLogsReceived: 0,
@@ -468,7 +387,7 @@ let importedRouteMeta = null;
 let playRate = 1;
 let playButtonLabel = "▶";
 
-const topBar = createTopBar({
+export const topBar = createTopBar({
   onOpenFile: (file, input) => openFile(file, input),
   onRobotImageSelected: (file, input) => handleRobotImageFile(file, input),
   onFitField: () => fieldRenderer.resetFieldPosition(),
@@ -478,7 +397,7 @@ const topBar = createTopBar({
   onTogglePlayback: () => togglePlaybackForCurrentMode(),
   onPlaybackSpeedChanged: (speed) => {
     playRate = speed;
-    viewingPlayback.setPlayRate(playRate);
+    viewingUi?.setPlaybackRate(playRate);
     saveSettings();
   },
   onFieldChanged: async (fieldKey) => {
@@ -501,18 +420,18 @@ const fieldRenderer = createFieldRenderer({
   canvas,
   ctx,
   getViewingPathPoses: () => rawPoses.map(poseToInches),
-  getViewingPose: () => currentDisplayPose(),
+  getViewingPose: () => viewingUi?.currentDisplayPose() ?? null,
   getPlanningPose: () => planSampleAtDist(planningMode.playback.getPlaybackDistance()),
   getRobotDimensions: () => robotDimsInches(),
   fieldHeadingToCanvasRotationDeg,
   heatColorFromNorm,
   drawViewingOverlay: () => {
-    viewingFieldOverlayRenderer.drawWaypointDots();
-    viewingFieldOverlayRenderer.drawWatchDots();
+    viewingUi?.fieldOverlay.drawWaypointDots();
+    viewingUi?.fieldOverlay.drawWatchDots();
   },
   drawPlanningOverlay: (force = false) => planningMode.rendering.drawFieldOverlay(force),
   isPlanningOverlayVisible: () => planningMode.state.isOverlayVisible(),
-  drawWaypointOffsetOverlay: (pose) => drawWaypointOffsetOverlay(pose),
+  drawWaypointOffsetOverlay: (pose) => viewingUi?.drawWaypointOffsetOverlay(pose),
   onRobotImageAvailabilityChanged: (available) => {
     if (robotImgControlsEl) robotImgControlsEl.hidden = !available;
     if (settingsRobotImgControls) settingsRobotImgControls.hidden = !(fieldRenderer.isRobotImageEnabled() && available);
@@ -567,7 +486,7 @@ let planningMode = createPlanningMode({
 subscribeMode((mode) => {
   document.body.classList.toggle("mode-planning", mode === "planning");
   syncTimelineBarCollapsedForMode(mode);
-  if (mode === "planning" && viewingPlayback.isPlaying()) viewingPlayback.pause();
+  if (mode === "planning" && viewingUi?.playback.isPlaying()) viewingUi.playback.pause();
   if (mode === "viewing" && planningMode.playback.isPlaying()) planningMode.playback.pause();
   planningMode.actions.clearSelection();
   topBar.syncMode(mode);
@@ -1865,7 +1784,7 @@ function hasImportedViewingData(obj) {
   return normalizePoseArray(obj?.poses || obj?.["robot-path"] || []).length > 0
     || normalizeWatches(obj?.watches || obj?.watch || [], toNumMaybe).length > 0
     || normalizeLogs(obj?.logs || obj?.log || [], toNumMaybe, normalizeLogLevel).length > 0
-    || normalizeWaypoints(obj?.waypoints || []).length > 0;
+    || buildWaypointState(obj?.waypoints || []).waypoints.length > 0;
 }
 
 function applyImportedViewingData(obj) {
@@ -2036,20 +1955,6 @@ planningMode.rendering.render = function renderPlanningMode() {
 planningMode.rendering.drawTimeline = function drawTimeline() {
   planningTimelineRenderer.draw();
 };
-
-const viewingFieldOverlayRenderer = createViewingFieldOverlayRenderer({
-  context: ctx,
-  getWatchMarkers: () => watchMarkers,
-  getWaypoints: () => waypoints,
-  getSelectedWatch: () => viewingSelection.selectedWatch,
-  getSelectedWaypointId: () => viewingSelection.selectedWaypointId,
-  getHoverWatch: () => viewingFieldInteraction?.getHoverWatch(),
-  isWatchMarkerVisible,
-  waypointFilterMatches,
-  levelFillWithAlpha,
-  scaledViewingFieldRadius,
-  viewingFieldMarkerStyleScale,
-});
 
 function applySavedLayout(settings) {
   if (!settings) return;
@@ -2643,16 +2548,6 @@ function normalizeLogLevel(levelRaw) {
   return "INFO";
 }
 
-function getPinnedWatchReferenceTimeMs() {
-  if (viewingPlayback.isPlaying()) return viewingPlayback.getPlayTimeMs() ?? null;
-  if (viewingSelection.hoverTimelineTime != null) return viewingSelection.hoverTimelineTime;
-  if (!viewingPlayback.isPlaying() && viewingSelection.trackHover?.pose?.t != null) return viewingSelection.trackHover.pose.t;
-  if (!viewingPlayback.isPlaying() && viewingSelection.trackLockActive && viewingSelection.trackLockPose?.t != null) return viewingSelection.trackLockPose.t;
-  if (!rawPoses.length) return null;
-  const idx = clamp(viewingSelection.selectedIndex, 0, Math.max(0, rawPoses.length - 1));
-  return rawPoses[idx]?.t ?? null;
-}
-
 function levelSortRank(levelRaw) {
   const L = normalizeLogLevel(levelRaw);
   if (L === "FATAL") return 4;
@@ -2678,7 +2573,7 @@ function refreshUnitSensitiveRendering() {
   planningSidebarRenderer?.renderPlanList?.();
   updatePlanSelectionPanel();
   planningMode?.playback?.setDistance?.(planningMode.playback.getPlaybackDistance());
-  updatePoseReadout();
+  viewingUi?.updatePoseReadout();
   requestDrawAll();
 }
 
@@ -2704,10 +2599,10 @@ function updateOffsetsFromInputs() {
   offsetsIn.y = uy * getUnitsToInchesFactor();
   offsetsIn.theta = ut;
 
-  recomputeWatchMarkers();
+  viewingUi?.recomputeWatchMarkers();
   fieldRenderer.draw();
-  updatePoseReadout();
-  viewingTimeline.draw();
+  viewingUi?.updatePoseReadout();
+  viewingUi?.timeline.draw();
 }
 
 // -------- speed normalization (single source of truth) --------
@@ -2921,20 +2816,6 @@ function setFieldRotationDeg(deg) {
   if (settingsFieldRotation) settingsFieldRotation.value = String(fieldRenderer.getFieldRotationDeg());
 }
 
-function setCursorPills(text) {
-  if (cursorPill) cursorPill.textContent = text;
-  if (planCursorPill) planCursorPill.textContent = text;
-}
-
-function updateCursorPillsFromClient(clientX, clientY) {
-  if (!cursorPill && !planCursorPill) return;
-  const rect = canvas.getBoundingClientRect();
-  const mx = clientX - rect.left;
-  const my = clientY - rect.top;
-  const w = fieldRenderer.screenToWorld(mx, my);
-  setCursorPills(`Cursor: X ${formatDistanceFromInches(w.x, 2)} Y ${formatDistanceFromInches(w.y, 2)}`);
-}
-
 function layoutTimelineCanvas() {
   if (!timelineCanvas || !timelineBar) return;
   if (timelineBar.classList.contains("isCollapsed")) return;
@@ -2954,7 +2835,7 @@ function resizeTimeline() {
   timelineCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
   timelineCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
   tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  viewingTimeline.draw();
+  viewingUi?.timeline.draw();
 }
 
 function syncPlanningTimelineCanvasSize() {
@@ -3053,322 +2934,89 @@ function nearestIndexWithinTol(tMs, tolMs) {
   return null;
 }
 
-// -------- watches --------
-function fmtSecondsToString(ms) {
-  if (typeof ms !== "number" || !isFinite(ms)) return null;
-  return `${formatNumberString(ms / 1000, 2)}s`;
+function setSvgUseHref(useEl, href) {
+  if (!useEl || !href) return;
+  useEl.setAttribute("href", href);
+  useEl.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", href);
 }
 
-function waypointTypeStyle(typeRaw) {
-  const type = normalizeWaypointType(typeRaw);
-  if (type === "TIMEDOUT") return { fill: "rgba(255, 120, 120, 0.18)", text: "#ffb0b0" };
-  if (type === "REACHED") return { fill: "rgba(120, 220, 150, 0.18)", text: "#b6ffd0" };
-  return { fill: "rgba(255,255,255,0.12)", text: "#f7fbff" };
+const svgIconUrls = {
+  "icon-fit": fitIconUrl,
+  "icon-removePlanningObject": removePlanningObjectIconUrl,
+  "icon-planningChangeObjectColor": changeObjectColorIconUrl,
+  "icon-pinWatch": pinWatchIconUrl,
+  "icon-invisibleWatch": invisibleWatchIconUrl,
+  "icon-visibleWatch": visibleWatchIconUrl,
+  "icon-watchGraph": watchGraphIconUrl,
+};
+
+function svgIconHref(iconId) {
+  const iconUrl = svgIconUrls[iconId];
+  return iconUrl ? `${iconUrl}#${iconId}` : "";
 }
 
-function waypointEventLines(event) {
-  if (!event) return [];
-  const params = event.params || {};
-  if (event.type === "CREATED") {
-    const target = [`X: ${formatNumberString(params.tarX)}`, `Y: ${formatNumberString(params.tarY)}`];
-    if (params.tarT != null) target.push(`θ: ${formatNumberString(params.tarT)}`);
-
-    const lines = [`Target: ${target.join(", ")}`];
-    const tolerances = [];
-    if (params.linearTol != null) tolerances.push(`Linear: ${formatNumberString(params.linearTol)}`);
-    if (params.thetaTol != null) tolerances.push(`Angular: ${formatNumberString(params.thetaTol)}`);
-    if (tolerances.length) lines.push(`Tolerances: ${tolerances.join(", ")}`);
-    if (params.timeoutMs != null) lines.push(`Timeout: ${fmtSecondsToString(params.timeoutMs)}`);
-    return lines;
-  }
-
-  if (event.type === "REACHED") {
-    const lines = [];
-    if (params.remainingTime != null) lines.push(`Time Left: ${fmtSecondsToString(params.remainingTime)}`);
-    return lines;
-  }
-
-  return [];
+function viewingFieldMarkerStyleScale() {
+  return clamp(fieldRenderer.getViewZoom(), CANVAS_ZOOM_MIN, 1.75);
 }
 
-function normalizeWaypoints(arr) {
-  const normalized = buildWaypointState(arr);
-  waypointsById.clear();
-  for (const [id, waypoint] of normalized.waypointsById) waypointsById.set(id, waypoint);
-  waypoints.length = 0;
-  waypoints.push(...normalized.waypoints);
-  return waypoints;
+function scaledPlanFieldNodeSize(basePx, maxIn) {
+  return Math.min(basePx * Math.max(fieldRenderer.getViewZoom(), CANVAS_ZOOM_MIN), maxIn * fieldRenderer.getScale());
 }
 
-function waypointFilterValue() {
-  return waypointFilter?.value || "all";
-}
-
-function waypointFilterMatches(waypoint) {
-  const filter = waypointFilterValue();
-  if (filter === "all") return true;
-  if (filter === "active") return !!waypoint?.active;
-  return String(waypoint?.id) === filter;
-}
-
-function waypointVisibleEvents() {
-  const visible = [];
-  for (const waypoint of waypoints) {
-    if (!waypointFilterMatches(waypoint)) continue;
-    for (const event of waypoint.events) {
-      visible.push({ waypoint, event });
-    }
-  }
-  return visible.sort((a, b) => (a.event.t ?? 0) - (b.event.t ?? 0));
-}
-
-function recomputeWatchMarkers() {
-  watchMarkers.length = 0;
-  for (const w of watches) {
-    const t = w.t;
-    const near = nearestIndexWithinTol(t, WATCH_TOL_MS);
-    if (near) {
-      const p = rawPoses[near.idx];
-      watchMarkers.push({ watch: w, t, ok: true, dt: near.dt, pose: poseToInches(p), idx: near.idx });
-    } else {
-      const ip = interpolatePoseAtTime(t);
-      watchMarkers.push({ watch: w, t, ok: false, dt: null, pose: ip, idx: null });
-    }
-  }
-}
-
-// watchMarkersByTime is used for fast "last watch hit" lookup during playback
-let watchMarkersByTime = [];
-
-function rebuildWatchMarkersByTime() {
-  watchMarkersByTime = sortWatchMarkersByTime(watchMarkers);
-}
-
-watchGraph = createWatchGraph({
-  selection: viewingSelection,
-  panel: watchGraphPanel,
-  header: watchGraphHeader,
-  resizer: watchGraphResizer,
-  closeButton: btnCloseWatchGraph,
-  subtitle: watchGraphSubtitle,
-  title: watchGraphTitle,
-  compareSelect: watchGraphCompareSelect,
-  latest: watchGraphLatest,
-  compareLatest: watchGraphCompareLatest,
-  count: watchGraphCount,
-  avg: watchGraphAvg,
-  min: watchGraphMin,
-  max: watchGraphMax,
-  compareCount: watchGraphCompareCount,
-  compareAvg: watchGraphCompareAvg,
-  compareMin: watchGraphCompareMin,
-  compareMax: watchGraphCompareMax,
-  canvas: watchGraphCanvas,
-  empty: watchGraphEmpty,
+viewingUi = createViewingUi({
+  canvas,
+  ctx,
+  timelineCanvas,
+  timelineContext: tctx,
+  timelineBar,
   getData: () => data,
-  getWatches: () => watches,
-  getWatchMarkers: () => watchMarkers,
-  getWatchMarkersByTime: () => watchMarkersByTime,
-  getReferenceTimeMs: () => getPinnedWatchReferenceTimeMs(),
-  getCurrentPoseTimeMs: () => currentDisplayPose()?.t ?? null,
-  getLatestRobotTimeMs: () => rawPoses[rawPoses.length - 1]?.t ?? null,
-  isPlaying: () => viewingPlayback.isPlaying(),
-  isLivestreaming: () => !!(window.__live && window.__live.streaming),
-  lastWatchAtTime,
-  formatNumber: formatNumberString,
-  clamp,
-  selectWatchMarker,
-  updatePoseReadout,
-  requestDrawAll,
-});
-watchGraph.bindEvents();
-
-const viewingLists = createViewingLists({
-  elements: {
-    watchList,
-    watchFilter,
-    watchSort,
-    watchCount,
-    poseList,
-    poseCount,
-    waypointList,
-    waypointCount,
-    waypointFilter,
-    logList,
-    logCount,
-    logSort,
-  },
-  getWatchMarkers: () => watchMarkers,
+  setData: (nextData) => { data = nextData; },
+  getPoses: () => rawPoses,
   getWatches: () => watches,
   getLogs: () => logs,
   getWaypoints: () => waypoints,
-  getVisibleWaypointEvents: waypointVisibleEvents,
-  getSelectedWatch: () => viewingSelection.selectedWatch,
-  getSelectedPoseIndex: () => viewingSelection.selectedIndex,
-  getPoseCount: () => rawPoses.length,
-  getPose: (index) => rawPoses[index],
-  getSelectedWaypointId: () => viewingSelection.selectedWaypointId,
-  getSelectedWaypointEventTime: () => viewingSelection.selectedWaypointEventTime,
-  getSelectedLogTime: () => viewingSelection.selectedLogTime,
-  setSelectedLogTime: (time) => { viewingSelection.selectedLogTime = time; },
-  clearWaypointSelectionState: () => {
-    viewingSelection.selectedWaypointId = null;
-    viewingSelection.selectedWaypointEventTime = null;
-  },
-  onPoseSelected: (index) => {
-    viewingPlayback.pause();
-    viewingSelection.clearTrackHover(true);
-    viewingSelection.clearTrackLock();
-    viewingSelection.selectedWatch = null;
-    viewingSelection.selectedLogTime = null;
-    viewingSelection.selectedWaypointId = null;
-    viewingSelection.selectedWaypointEventTime = null;
-    viewingLists.highlightWaypoint(null, null, false);
-    viewingSelection.selectedIndex = index;
-    if (leftConnected && leftStreaming) liveAutoFollowHead = false;
-    lastPoseIndex = viewingSelection.selectedIndex;
-    setStatus(`Jumped to pose #${index + 1}.`);
-    viewingLists.highlightPose();
-    updatePoseReadout();
-    requestDrawAll();
-  },
-  onWaypointEventSelected: (waypoint, event) => selectWaypointEvent(waypoint, event, true),
-  selectWatchMarker,
-  toggleFloatingWatch: (watchId) => floatingInfo.toggleWatch(watchId),
-  toggleWatchVisibilityForWatch,
-  openOrToggleWatchGraphPanel: (marker) => watchGraph.openOrTogglePanel(marker),
-  refreshWatchGraphPanelData: () => watchGraph.refreshPanelData(),
-  jumpToEventTime,
-  getRawPoseTime: (index) => rawPoses[index]?.t,
-  poseToInches,
-  formatNumberString,
-  fmtNum,
-  escapeHtml,
-  levelStyle,
-  levelSortRank,
-  watchSortValueKey,
-  watchFilterKeyForWatch,
-  watchFilterMatches,
-  watchFilterLabelForWatch,
-  watchVisibilityKeyForWatch,
-  watchVisibilityIconId,
-  watchVisibilityTitle,
-  isGraphableWatchValue: (value) => watchGraph.isGraphableValue(value),
-  svgIconHref,
-  setSvgUseHref,
-  waypointTypeStyle,
-  waypointEventLines,
-  fmtSecondsToString,
-  scrollIntoViewIfNeeded,
-  watchToleranceMs: WATCH_TOL_MS,
-});
-viewingLists.bindEvents();
-const {
-  watchListRenderer,
-  poseListRenderer,
-  waypointListRenderer,
-  logListRenderer,
-} = viewingLists.renderers;
-
-const viewingRendering = createViewingRendering({
-  watchListRenderer,
-  logListRenderer,
-  waypointListRenderer,
-  poseListRenderer,
-  updatePoseReadout,
-});
-
-const viewingPlayback = createViewingPlayback({
-  selection: viewingSelection,
-  getPoses: () => rawPoses,
-  getPlayRate: () => playRate,
-  isLivestreaming: () => !!(window.__live && window.__live.streaming),
-  setPlayButtonLabel: syncTopBarPlayback,
-  formatTimeSeconds: (ms) => formatNumberString((ms ?? 0) / 1000, 1, "0"),
-  interpolatePoseAtTime,
-  findFloorIndexByTime,
-  lastWatchAtTime: (timeMs) => lastWatchAtTime(watchMarkersByTime, timeMs),
-  highlightWatch: (timeMs, doScroll) => watchListRenderer.highlight(timeMs, doScroll),
-  updatePoseReadout,
-});
-
-const viewingInput = createViewingInput({
-  hasData: () => !!data,
+  getWaypointMap: () => waypointsById,
+  getWatchMarkers: () => watchMarkers,
   isLiveConnected: () => leftConnected,
+  isLivestreaming: () => !!(window.__live && window.__live.streaming),
   getLiveAutoFollowHead: () => liveAutoFollowHead,
   setLiveAutoFollowHead: (enabled) => { liveAutoFollowHead = enabled; },
-  getSelectedIndex: () => viewingSelection.selectedIndex,
-  getPoseCount: () => rawPoses.length,
-  setSelectedIndex: (index) => {
-    viewingSelection.selectedIndex = clamp(index, 0, Math.max(0, rawPoses.length - 1));
-  },
-  setLastPoseIndex: (index) => { lastPoseIndex = index; },
-  clearTransientSelection: () => {
-    viewingSelection.clearSelectedDetail();
-    viewingSelection.clearTimelineHover(false);
-    viewingSelection.clearTrackHover(false);
-    viewingSelection.clearTrackLock();
-    waypointListRenderer.highlight(null, null, false);
-  },
-  clearTrackHover: () => viewingSelection.clearTrackHover(true),
-  clearTrackLock: () => viewingSelection.clearTrackLock(),
-  isPlaying: () => viewingPlayback.isPlaying(),
-  play: viewingPlayback.play,
-  pause: viewingPlayback.pause,
-  highlightPoseList: () => poseListRenderer.highlight(),
-  updatePoseReadout,
-});
-
-const viewingTimeline = createViewingTimeline({
-  canvas: timelineCanvas,
-  context: tctx,
-  timelineBar,
-  selection: viewingSelection,
-  hasData: () => !!data,
-  getPoses: () => rawPoses,
-  getWatchMarkers: () => watchMarkers,
-  isPlaying: () => viewingPlayback.isPlaying(),
-  getPlayTimeMs: () => viewingPlayback.getPlayTimeMs(),
-  isLivestreaming: () => !!(window.__live && window.__live.streaming),
-  findFloorIndexByTime,
-  isWatchMarkerVisible,
-  selectWatchMarker,
-  clearTrackHover: (restore) => viewingSelection.clearTrackHover(restore),
-  clearTrackLock: () => viewingSelection.clearTrackLock(),
-  clearWaypointHighlight: () => waypointListRenderer.highlight(null, null, false),
-  setLastPoseIndex: (index) => { lastPoseIndex = index; },
-  highlightPoseList: () => poseListRenderer.highlight(),
-  updatePoseReadout,
-  clamp,
-  heatColorFromNorm,
-  levelFillWithAlpha,
-});
-viewingTimeline.bindEvents();
-
-configureRenderScheduler({
-  drawField: () => fieldRenderer.draw(),
-  drawViewingTimeline: () => viewingTimeline.draw(),
-  drawPlanningTimeline: () => planningMode.rendering.drawTimeline(),
-});
-
-viewingFieldInteraction = createViewingFieldInteraction({
-  canvas,
-  selection: viewingSelection,
-  getData: () => data,
-  isPlaying: () => viewingPlayback.isPlaying(),
-  isPanning: () => fieldRenderer.isPanning(),
-  isLivestreaming: () => !!(window.__live && window.__live.streaming),
-  getPoses: () => rawPoses,
-  getWatchMarkers: () => watchMarkers,
-  getWaypoints: () => waypoints,
+  getPlayRate: () => playRate,
+  setPlayButtonLabel: syncTopBarPlayback,
+  getFieldViewZoom: () => fieldRenderer.getViewZoom(),
+  getFieldScale: () => fieldRenderer.getScale(),
+  worldToScreen: fieldRenderer.worldToScreen,
+  screenToWorld: fieldRenderer.screenToWorld,
+  isFieldPanning: () => fieldRenderer.isPanning(),
+  getSuppressNextClick: () => fieldRenderer.getSuppressNextClick(),
+  consumeSuppressNextClick: () => fieldRenderer.consumeSuppressNextClick(),
   poseToInches,
+  interpolatePoseAtTime,
+  findFloorIndexByTime,
+  nearestIndexWithinTol,
+  lastWatchAtTime,
+  formatNumberString,
+  formatFixedNumberString,
+  fmtNum,
+  escapeHtml,
+  clamp,
   angLerpDeg,
-  trackHoverTolerancePx: HOVER_PIXEL_TOL + TRACK_HOVER_PAD_PX,
-  scaledViewingFieldRadius,
-  isWatchMarkerVisible,
-  waypointFilterMatches,
-  updateCursorPillsFromClient,
-  setCursorPills,
+  heatColorFromNorm,
+  levelStyle,
+  levelFillWithAlpha,
+  levelSortRank,
+  normalizeLogLevel,
+  speedFromNorm,
+  normFromSpeedRaw,
+  watchGraphKeyForWatch,
+  normalizeWaypointType,
+  svgIconHref,
+  setSvgUseHref,
+  isInsideField: isInsideFieldC,
+  isInsideTimeline: isInsideTimelineC,
+  onFloatingInfoToggled: (enabled) => {
+    viewingTelemetry.floatingInfoToggled({ enabled }).catch(err => console.error(err));
+  },
   handlePlanningMouseMove: (event) => {
     const rect = canvas.getBoundingClientRect();
     const mx = event.clientX - rect.left;
@@ -3398,650 +3046,14 @@ viewingFieldInteraction = createViewingFieldInteraction({
     canvas.style.cursor = "";
     if (hadHover) requestDrawAll();
   },
-  selectWatchMarker,
-  selectWaypointEvent,
-  clearWaypointSelection,
-  renderWaypointList: () => viewingRendering.renderWaypointList(),
-  clearWaypointHighlight: () => waypointListRenderer.highlight(null, null, false),
-  pausePlayback: () => viewingPlayback.pause(),
-  setLastPoseIndex: (index) => { lastPoseIndex = index; },
-  highlightPoseList: () => poseListRenderer.highlight(),
-  updatePoseReadout,
-  getSuppressNextClick: () => fieldRenderer.getSuppressNextClick(),
-  consumeSuppressNextClick: () => fieldRenderer.consumeSuppressNextClick(),
 });
-viewingFieldInteraction.bindEvents();
-
-function jumpToEventTime(tMs, {
-  exactStatus,
-  interpolatedStatus,
-  noPoseStatus,
-  clearWatchSelection = false,
-} = {}) {
-  // Clicking an event should override track lock/hover to avoid confusion.
-  viewingSelection.clearTrackHover(true);
-  viewingSelection.clearTrackLock();
-
-  if (leftConnected && leftStreaming) liveAutoFollowHead = false;
-
-  if (!rawPoses.length) {
-    viewingSelection.selectedIndex = 0;
-    lastPoseIndex = 0;
-
-    viewingPlayback.pause();
-    viewingSelection.hoverTimelineTime = null;
-    viewingSelection.timelineHoverSaved = null;
-
-    if (clearWatchSelection) {
-      viewingSelection.selectedWatch = null;
-      watchListRenderer.highlight(null, false);
-      hideWatchPopup();
-    }
-
-    if (typeof noPoseStatus === "function") noPoseStatus();
-
-    poseListRenderer.highlight();
-    updatePoseReadout();
-    requestDrawAll();
-    return;
-  }
-
-  const near = nearestIndexWithinTol(tMs, WATCH_TOL_MS);
-  if (near) {
-    viewingSelection.selectedIndex = near.idx;
-    if (typeof exactStatus === "function") exactStatus(near);
-  } else {
-    viewingSelection.selectedIndex = findFloorIndexByTime(tMs);
-    if (typeof interpolatedStatus === "function") interpolatedStatus();
-  }
-  lastPoseIndex = viewingSelection.selectedIndex;
-
-  viewingPlayback.pause();
-  viewingSelection.hoverTimelineTime = null;
-  viewingSelection.timelineHoverSaved = null;
-
-  if (clearWatchSelection) {
-    viewingSelection.selectedWatch = null;
-    watchListRenderer.highlight(null, false);
-    hideWatchPopup();
-  }
-
-  poseListRenderer.highlight();
-  updatePoseReadout();
-  requestDrawAll();
-}
-
-// --- Watch popup (tiny, click to show, click elsewhere to dismiss) ---
-const watchPopup = document.getElementById("watchPopup");
-let watchPopupOpen = false;
-
-function hideWatchPopup() {
-  if (!watchPopup) return;
-  watchPopup.hidden = true;
-  watchPopupOpen = false;
-}
-
-function watchFilterValue() {
-  return watchFilter?.value || "all";
-}
-
-function watchVisibilityKeyForWatch(w) {
-  return viewingWatchVisibility.keyForWatch(w);
-}
-
-function watchFilterKeyForWatch(w) {
-  return viewingWatchVisibility.filterKeyForWatch(w);
-}
-
-function watchFilterMatches(watch) {
-  return viewingWatchVisibility.filterMatches(watch);
-}
-
-function watchFilterLabelForWatch(watch) {
-  return viewingWatchVisibility.filterLabelForWatch(watch);
-}
-
-function isWatchMarkerVisible(marker) {
-  return viewingWatchVisibility.isMarkerVisible(marker);
-}
-
-function watchVisibilityIconId(w) {
-  return viewingWatchVisibility.iconId(w);
-}
-
-function watchVisibilityTitle(w) {
-  return viewingWatchVisibility.title(w);
-}
-
-
-function setSvgUseHref(useEl, href) {
-  if (!useEl || !href) return;
-  useEl.setAttribute("href", href);
-  useEl.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", href);
-}
-
-const svgIconUrls = {
-  "icon-fit": fitIconUrl,
-  "icon-removePlanningObject": removePlanningObjectIconUrl,
-  "icon-planningChangeObjectColor": changeObjectColorIconUrl,
-  "icon-pinWatch": pinWatchIconUrl,
-  "icon-invisibleWatch": invisibleWatchIconUrl,
-  "icon-visibleWatch": visibleWatchIconUrl,
-  "icon-watchGraph": watchGraphIconUrl,
-};
-
-function svgIconHref(iconId) {
-  const iconUrl = svgIconUrls[iconId];
-  return iconUrl ? `${iconUrl}#${iconId}` : "";
-}
-
-function updateWatchVisibilityButtons(key) {
-  if (!watchList || !key) return;
-  const buttons = watchList.querySelectorAll(`.watchVisibilityBtn[data-watch-visibility-key="${key}"]`);
-  for (const button of buttons) {
-    const useEl = button.querySelector("use");
-    const iconId = button.dataset.iconId || "icon-visibleWatch";
-    if (useEl) setSvgUseHref(useEl, svgIconHref(iconId));
-    button.title = button.dataset.title || "Toggle watch visibility";
-    button.setAttribute("aria-label", button.dataset.title || "Toggle watch visibility");
-  }
-  requestDrawAll();
-}
-
-function toggleWatchVisibilityForWatch(watch) {
-  viewingWatchVisibility.toggleWatchVisibilityForWatch(watch);
-}
-
-function fmtPose(p) {
-  if (!p) return "—";
-  const x = formatNumberString(p.x, 1, "0");
-  const y = formatNumberString(p.y, 1, "0");
-  const th = formatNumberString(p.theta, 1, "0");
-  return `X: ${x} Y: ${y} θ: ${th}°`;
-}
-
-function showWatchPopup(marker, clickPos) {
-  if (!watchPopup || !marker) return;
-  if (!isInsideFieldC(clickPos) && !isInsideTimelineC(clickPos)) return;
-
-  const w = marker.watch || {};
-  const pose = marker.pose || interpolatePoseAtTime(marker.t);
-  const poseStr = fmtPose(pose);
-
-  const tStr = (marker.t != null) ? `${fmtNum(marker.t / 1000)}s` : "—";
-  const labelStr = w.label || "—";
-  const valStr = (w.value == null) ? "—" : String(w.value);
-
-  watchPopup.innerHTML = `
-    <div class="row"><div class="k">Time</div><div class="v">${escapeHtml(tStr)}</div></div>
-    <div class="row"><div class="k">Pose</div><div class="v">${escapeHtml(poseStr)}</div></div>
-    <div class="row"><div class="k">Name</div><div class="v">${escapeHtml(String(labelStr))}</div></div>
-    <div class="row"><div class="k">Value</div><div class="v">${escapeHtml(valStr)}</div></div>
-  `;
-
-  // Position above click, clamp to viewport
-  const x = (clickPos && isFinite(clickPos.x)) ? clickPos.x : (lastMouseClient?.x ?? 20);
-  const y = (clickPos && isFinite(clickPos.y)) ? clickPos.y : (lastMouseClient?.y ?? 20);
-
-  watchPopup.hidden = false;
-  watchPopupOpen = true;
-
-  // measure after display
-  requestAnimationFrame(() => {
-    const rect = watchPopup.getBoundingClientRect();
-    let left = x - rect.width * 0.5;
-    let top = y - rect.height - 10;
-
-    left = clamp(left, 8, window.innerWidth - rect.width - 8);
-    if (top < 8) top = clamp(y + 10, 8, window.innerHeight - rect.height - 8);
-
-    watchPopup.style.left = `${left}px`;
-    watchPopup.style.top = `${top}px`;
-  });
-}
-
-// dismiss by clicking anywhere else
-document.addEventListener("mousedown", (e) => {
-  if (!watchPopupOpen) return;
-  if (watchPopup && watchPopup.contains(e.target)) return;
-  hideWatchPopup();
-}, { capture: true });
-
-function watchSortValueKey(value) {
-  if (value == null) return { t: 2, n: 0, s: "" };
-  if (typeof value === "boolean") return { t: 0, n: value ? 1 : 0, s: String(value) };
-  if (typeof value === "number") return { t: 1, n: value, s: "" };
-  return { t: 0, n: 0, s: String(value) };
-}
-
-function clearWaypointSelection() {
-  viewingSelection.selectedWaypointId = null;
-  viewingSelection.selectedWaypointEventTime = null;
-  waypointListRenderer.highlight(null, null, false);
-}
-
-function waypointPoseIndexForSelection(waypoint, eventTime = null) {
-  if (!waypoint || !rawPoses.length) return null;
-  const startT = waypoint.createdTime;
-  const endT = waypoint.terminalEvent?.t ?? Infinity;
-  if (typeof startT !== "number") return null;
-
-  let bestIdx = null;
-  let bestDiff = Infinity;
-  const targetTime = (typeof eventTime === "number") ? eventTime : (waypoint.latestActiveEvent?.t ?? waypoint.createdTime);
-
-  for (let i = 0; i < rawPoses.length; i += 1) {
-    const t = rawPoses[i]?.t;
-    if (typeof t !== "number") continue;
-    if (t < startT || t > endT) continue;
-    const diff = Math.abs(t - targetTime);
-    if (diff < bestDiff) {
-      bestDiff = diff;
-      bestIdx = i;
-    }
-  }
-
-  return bestIdx;
-}
-
-function selectWaypointEvent(waypoint, event = null, fromUserClick = false) {
-  if (!waypoint) return;
-  viewingSelection.selectedWaypointId = waypoint.id;
-  viewingSelection.selectedWaypointEventTime = event?.t ?? waypoint.latestActiveEvent?.t ?? waypoint.createdTime ?? null;
-  viewingSelection.selectedWatch = null;
-  viewingSelection.selectedLogTime = null;
-  watchListRenderer.highlight(null, false);
-  logListRenderer.highlight(null, false);
-  hideWatchPopup();
-
-  if (leftConnected && leftStreaming) {
-    requestDrawAll();
-    setStatus(`Waypoint: ${waypoint.name || waypoint.id} selected.`);
-    waypointListRenderer.highlight(waypoint.id, viewingSelection.selectedWaypointEventTime, fromUserClick);
-    return;
-  }
-
-  const poseIdx = waypointPoseIndexForSelection(waypoint, viewingSelection.selectedWaypointEventTime);
-  if (poseIdx != null) {
-    viewingSelection.clearTrackHover(true);
-    viewingSelection.clearTrackLock();
-    viewingPlayback.pause();
-    viewingSelection.hoverTimelineTime = null;
-    viewingSelection.timelineHoverSaved = null;
-    viewingSelection.selectedIndex = poseIdx;
-    lastPoseIndex = viewingSelection.selectedIndex;
-    poseListRenderer.highlight();
-    updatePoseReadout();
-    requestDrawAll();
-    setStatus(`Waypoint: ${waypoint.name || waypoint.id} mapped to pose @${rawPoses[poseIdx].t}ms.`);
-  } else {
-    setStatus(`Waypoint: ${waypoint.name || waypoint.id} has no poses while active.`);
-    requestDrawAll();
-  }
-
-  waypointListRenderer.highlight(waypoint.id, viewingSelection.selectedWaypointEventTime, fromUserClick);
-}
-
-function selectWatchMarker(marker, fromUserClick = false, clickPos = null) {
-  viewingSelection.selectedWatch = { marker };
-  viewingSelection.selectedLogTime = null;
-  viewingSelection.selectedWaypointId = null;
-  viewingSelection.selectedWaypointEventTime = null;
-
-  const timeStr = (marker.t != null) ? `${fmtNum(marker.t / 1000)}s` : "—";;
-
-  jumpToEventTime(marker.t, {
-    exactStatus: (near) => setStatus(`Watch @${timeStr} mapped to pose `
-      + `@${((rawPoses[near.idx].t != null) ? `${fmtNum(rawPoses[near.idx].t / 1000)}s` : "—")} (Δ=${fmtNum(near.dt / 1000, 2)}s).`),
-    interpolatedStatus: () => setStatus(`Watch @${timeStr} shown via interpolation (no pose within ±${WATCH_TOL_MS}ms).`),
-    noPoseStatus: () => setStatus(`Watch @${timeStr} selected (no poses loaded).`),
-  });
-
-  watchListRenderer.highlight(marker.t, fromUserClick);
-  logListRenderer.highlight(null, false);
-  waypointListRenderer.highlight(null, null, false);
-
-  if (fromUserClick) showWatchPopup(marker, clickPos);
-  else hideWatchPopup();
-}
-
-// -------- drawing helpers --------
-function normalizeSignedDeg(d) {
-  if (typeof d !== "number" || !isFinite(d)) return null;
-  return ((d + 180) % 360 + 360) % 360 - 180;
-}
-
-function formatUnitsParts(inches, decimals = 1) {
-  if (typeof inches !== "number" || !isFinite(inches)) return [{ text: "—", kind: "value" }];
-  return [
-    { text: formatDistanceFromInches(inches, decimals), kind: "value" },
-    { text: getCurrentUnits(), kind: "unit" },
-  ];
-}
-
-function formatThetaParts(thetaDelta) {
-  if (thetaDelta == null) return [{ text: "θ: —", kind: "unit" }];
-  return [
-    { text: fmtNum(thetaDelta, 1), kind: "value" },
-    { text: "°", kind: "unit" },
-  ];
-}
-
-function waypointOffsetUiScale() {
-  return clamp(fieldRenderer.getViewZoom(), 0.25, 1);
-}
-
-function viewingFieldMarkerScale() {
-  return Math.max(fieldRenderer.getViewZoom(), CANVAS_ZOOM_MIN);
-}
-
-function viewingFieldMarkerStyleScale() {
-  return clamp(fieldRenderer.getViewZoom(), CANVAS_ZOOM_MIN, 1.75);
-}
-
-function scaledViewingFieldDiameter(baseDiameterPx, maxDiameterPx = Infinity) {
-  return Math.min(baseDiameterPx * viewingFieldMarkerScale(), maxDiameterPx);
-}
-
-function scaledViewingFieldRadius(baseDiameterPx, maxDiameterPx = Infinity) {
-  return scaledViewingFieldDiameter(baseDiameterPx, maxDiameterPx) / 2;
-}
-
-function scaledPlanFieldNodeSize(basePx, maxIn) {
-  return Math.min(basePx * Math.max(fieldRenderer.getViewZoom(), CANVAS_ZOOM_MIN), maxIn * fieldRenderer.getScale());
-}
-
-function waypointByIdLike(id) {
-  if (id == null) return null;
-  return waypointsById.get(Number(id))
-    || waypoints.find((waypoint) => String(waypoint?.id) === String(id))
-    || null;
-}
-
-function selectedWaypointForOverlay() {
-  if (getMode() !== "viewing") return null;
-  const filter = waypointFilterValue();
-  const overlayWaypointId = (filter !== "all" && filter !== "active")
-    ? filter
-    : viewingSelection.selectedWaypointId;
-  if (overlayWaypointId == null) return null;
-  const waypoint = waypointByIdLike(overlayWaypointId);
-  return waypoint && waypointFilterMatches(waypoint) ? waypoint : null;
-}
-
-function drawOffsetPill(x, y, parts, options = {}) {
-  if (!parts?.length) return;
-  const uiScale = options.uiScale ?? waypointOffsetUiScale();
-  const padX = (options.padX ?? 12) * uiScale;
-  const padY = (options.padY ?? 4) * uiScale;
-  const radius = options.radius ?? 999;
-  const bg = options.bg ?? "rgba(30, 30, 30, 0.85)";
-  const border = options.border ?? "rgba(255, 255, 255, 0.15)";
-  const valueColor = options.valueColor ?? "rgba(255, 255, 255, 0.96)";
-  const unitColor = options.unitColor ?? "rgba(255, 255, 255, 0.62)";
-  const fontSize = (options.fontSize ?? 10) * uiScale;
-  const valueFont = `300 ${fontSize}px ui-monospace, "SFMono-Regular", "SF Mono", Menlo, monospace`;
-  const unitFont = `200 ${fontSize}px ui-monospace, "SFMono-Regular", "SF Mono", Menlo, monospace`;
-
-  ctx.save();
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  const gap = options.gap ?? 2;
-  let textWidth = 0;
-  for (const part of parts) {
-    ctx.font = part.kind === "unit" ? unitFont : valueFont;
-    textWidth += ctx.measureText(part.text).width;
-  }
-  textWidth += gap * Math.max(0, parts.length - 1);
-  const naturalWidth = Math.ceil(textWidth + padX * 2);
-  const maxWidth = (options.maxWidth ?? WAYPOINT_OFFSET_PILL_MAX_W_PX) * uiScale;
-  const width = Math.min(naturalWidth, maxWidth);
-  const height = Math.ceil(fontSize + padY * 2);
-  const left = x - width / 2;
-  const top = y - height / 2;
-
-  ctx.shadowColor = "rgba(0, 0, 0, 0.30)";
-  ctx.shadowBlur = 10;
-  ctx.fillStyle = bg;
-  ctx.strokeStyle = border;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.roundRect(left, top, width, height, radius);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.shadowColor = "transparent";
-  const availableTextWidth = Math.max(1, width - padX * 2);
-  const textScaleX = Math.min(1, availableTextWidth / Math.max(1, textWidth));
-  ctx.translate(x, y + 0.5);
-  ctx.fieldRenderer.getScale()(textScaleX, 1);
-  let cursorX = -textWidth / 2;
-  ctx.textAlign = "left";
-  for (const part of parts) {
-    ctx.font = part.kind === "unit" ? unitFont : valueFont;
-    ctx.fillStyle = part.kind === "unit" ? unitColor : valueColor;
-    ctx.fillText(part.text, cursorX, 0);
-    cursorX += ctx.measureText(part.text).width + gap;
-  }
-  ctx.restore();
-}
-
-function drawWaypointOffsetOverlay(pose) {
-  const waypoint = selectedWaypointForOverlay();
-  if (!waypoint || !pose) return;
-
-  const waypointScreen = fieldRenderer.worldToScreen(waypoint.target.x, waypoint.target.y);
-  const robotScreen = fieldRenderer.worldToScreen(pose.x, pose.y);
-  const elbowScreen = fieldRenderer.worldToScreen(pose.x, waypoint.target.y);
-
-  const dxIn = Math.abs((pose.x ?? 0) - (waypoint.target.x ?? 0));
-  const dyIn = Math.abs((pose.y ?? 0) - (waypoint.target.y ?? 0));
-  const distanceIn = Math.hypot(dxIn, dyIn);
-  const thetaDelta = (typeof waypoint.target.theta === "number" && typeof pose.theta === "number")
-    ? normalizeSignedDeg(waypoint.target.theta - pose.theta)
-    : null;
-
-  const legColor = "rgba(210, 245, 255, 0.46)";
-  const hypColor = "rgba(218, 250, 255, 0.96)";
-  const pillBg = "rgba(30, 30, 30, 0.85)";
-  const pillBorder = "rgba(255, 255, 255, 0.15)";
-  const xParts = formatUnitsParts(dxIn);
-  const yParts = formatUnitsParts(dyIn);
-  const hyptText = thetaDelta ? " | " : "";
-  const thetaParts = thetaDelta ? formatThetaParts(thetaDelta) : [{text: "", kind: "unit"}];
-  const hypParts = [
-    ...formatUnitsParts(distanceIn),
-    { text: hyptText, kind: "unit" },
-    ...thetaParts,
-  ];
-  const uiScale = waypointOffsetUiScale();
-
-  ctx.save();
-  ctx.strokeStyle = legColor;
-  ctx.lineWidth = 2;
-  ctx.setLineDash([7, 6]);
-  ctx.beginPath();
-  ctx.moveTo(waypointScreen.x, waypointScreen.y);
-  ctx.lineTo(elbowScreen.x, elbowScreen.y);
-  ctx.moveTo(elbowScreen.x, elbowScreen.y);
-  ctx.lineTo(robotScreen.x, robotScreen.y);
-  ctx.stroke();
-
-  ctx.setLineDash([]);
-  ctx.strokeStyle = hypColor;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(robotScreen.x, robotScreen.y);
-  ctx.lineTo(waypointScreen.x, waypointScreen.y);
-  ctx.stroke();
-  ctx.restore();
-
-  const pillOffset = 16 * uiScale;
-  const xMid = {
-    x: (waypointScreen.x + elbowScreen.x) / 2,
-    y: (waypointScreen.y + elbowScreen.y) / 2 - Math.sign(robotScreen.y - waypointScreen.y || 1) * pillOffset,
-  };
-  const yMid = {
-    x: (robotScreen.x + elbowScreen.x) / 2 + Math.sign(robotScreen.x - waypointScreen.x || 1) * pillOffset,
-    y: (robotScreen.y + elbowScreen.y) / 2,
-  };
-
-  const hx = robotScreen.x - waypointScreen.x;
-  const hy = robotScreen.y - waypointScreen.y;
-  const hLen = Math.hypot(hx, hy) || 1;
-  const nx = -hy / hLen;
-  const ny = hx / hLen;
-  const hypMidX = robotScreen.x + (waypointScreen.x - robotScreen.x) * 0.75;
-  const hypMidY = robotScreen.y + (waypointScreen.y - robotScreen.y) * 0.75;
-  const normalScale = 18 * uiScale;
-  const c1 = { x: hypMidX + nx * normalScale, y: hypMidY + ny * normalScale };
-  const c2 = { x: hypMidX - nx * normalScale, y: hypMidY - ny * normalScale };
-  const d1 = Math.hypot(c1.x - elbowScreen.x, c1.y - elbowScreen.y);
-  const d2 = Math.hypot(c2.x - elbowScreen.x, c2.y - elbowScreen.y);
-  const hypPill = d1 >= d2 ? c1 : c2;
-
-  const legFontSize = 9.5;
-  const legPadX = 10;
-  drawOffsetPill(xMid.x, xMid.y, xParts, { bg: pillBg, border: pillBorder, fontSize: legFontSize, padX: legPadX, uiScale });
-  drawOffsetPill(yMid.x, yMid.y, yParts, { bg: pillBg, border: pillBorder, fontSize: legFontSize, padX: legPadX, uiScale });
-  drawOffsetPill(hypPill.x, hypPill.y, hypParts, { bg: pillBg, border: pillBorder, fontSize: 11, padX: 12, uiScale });
-}
-
-function currentDisplayPose() {
-  // priority:
-  // viewingPlayback.isPlaying() > timeline hover > track hover > track lock > viewingSelection.selectedIndex
-  if (viewingPlayback.isPlaying()) return viewingPlayback.getPlayPose() || interpolatePoseAtTime(viewingPlayback.getPlayTimeMs());
-  if (!viewingPlayback.isPlaying() && viewingSelection.hoverTimelineTime != null) return interpolatePoseAtTime(viewingSelection.hoverTimelineTime);
-  if (!viewingPlayback.isPlaying() && viewingSelection.trackHover?.pose) return viewingSelection.trackHover.pose;
-  if (!viewingPlayback.isPlaying() && viewingSelection.trackLockActive && viewingSelection.trackLockPose) return viewingSelection.trackLockPose;
-  const poses = rawPoses.map(poseToInches);
-  return poses[viewingSelection.selectedIndex] || null;
-}
-
-// Timeline time readout
-function updateDeltaReadout() {
-  if (!data || !rawPoses.length) return;
-  const lockedTime = rawPoses[viewingSelection.selectedIndex]?.t || 0;
-
-  // viewingSelection.hoverTimelineTime is the time currently under the cursor
-  const hoveredTime = viewingSelection.hoverTimelineTime !== null ? viewingSelection.hoverTimelineTime : lockedTime;
-  const delta = Math.abs(hoveredTime - lockedTime) / 1000;
-  if (deltaPill) {
-    deltaPill.textContent = `Δ: ${formatFixedNumberString(delta, 2, "0.00")}s`;
-  }
-}
-
-// --- Floating Window Logic ---
-const floatWin = document.getElementById("floatingInfo");
-const btnToggleFloat = document.getElementById("btnToggleFloat");
-const btnCloseFloat = document.getElementById("btnCloseFloat");
-const floatHeader = document.getElementById("floatHeader");
-const floatResizer = document.getElementById("floatResizer");
-const floatingInfo = createFloatingInfo({
-  floatWindow: floatWin,
-  toggleButton: btnToggleFloat,
-  closeButton: btnCloseFloat,
-  header: floatHeader,
-  resizer: floatResizer,
-  pinnedHost: pinnedWatchHost,
-  pinnedTemplate: pinnedWatchTemplate,
-  bounds: floatingWindowBounds,
-  getWatches: () => watches,
-  getReferenceTimeMs: () => getPinnedWatchReferenceTimeMs(),
-  getLockedTimeMs: () => rawPoses[viewingSelection.selectedIndex]?.t ?? null,
-  getHoverTimeMs: () => viewingSelection.hoverTimelineTime,
-  hasData: () => !!data,
-  hasPoses: () => rawPoses.length > 0,
-  isWatchMarkerVisibleForClosestWatch: () => true,
-  speedFromNorm,
-  normFromSpeedRaw,
-  formatNumber: formatNumberString,
-  setPlayTimeMs: (timeMs) => viewingPlayback.setPlayTimeMs(timeMs),
-  pausePlayback: () => viewingPlayback.pause(),
-  setSelectedIndex: (index) => { viewingSelection.selectedIndex = index; },
-  findFloorIndexByTime,
-  updatePoseReadout,
-  requestDrawAll,
-  levelStyle,
-  normalizeLogLevel,
-  onToggle: (enabled) => {
-    viewingTelemetry.floatingInfoToggled({ enabled }).catch(err => console.error(err));
-  },
+viewingUi.bindEvents();
+
+configureRenderScheduler({
+  drawField: () => fieldRenderer.draw(),
+  drawViewingTimeline: () => viewingUi.timeline.draw(),
+  drawPlanningTimeline: () => planningMode.rendering.drawTimeline(),
 });
-
-window.addEventListener("mousemove", (e) => {
-  floatingInfo.handleWindowMouseMove(e);
-  watchGraph?.handleWindowMouseMove(e);
-});
-
-window.addEventListener("mouseup", () => {
-  floatingInfo.handleWindowMouseUp();
-  watchGraph?.handleWindowMouseUp();
-});
-
-// -------- pose readout --------
-function updatePoseReadout() {
-  if (!data || !rawPoses.length) {
-    timePill.textContent = "Time: —";
-    pointPill.textContent = "Point: —/—";
-    posePill.textContent = "X: —  Y: — θ: —  Speed: —";
-    floatingInfo.refreshPinnedPanels();
-    return;
-  }
-  if (viewingSelection.selectedIndex < 0) viewingSelection.selectedIndex = 0;
-  if (viewingSelection.selectedIndex >= rawPoses.length) viewingSelection.selectedIndex = Math.max(0, rawPoses.length - 1);
-  let idx = viewingSelection.selectedIndex;
-  let t = rawPoses[idx]?.t ?? null;
-  let p = null;
-  if (viewingPlayback.isPlaying()) {
-    t = viewingPlayback.getPlayTimeMs();
-    idx = findFloorIndexByTime(viewingPlayback.getPlayTimeMs());
-    p = interpolatePoseAtTime(viewingPlayback.getPlayTimeMs());
-
-  } else if (viewingSelection.hoverTimelineTime != null) {
-    t = viewingSelection.hoverTimelineTime;
-    idx = findFloorIndexByTime(viewingSelection.hoverTimelineTime);
-    p = interpolatePoseAtTime(viewingSelection.hoverTimelineTime);
-
-  } else if (!viewingPlayback.isPlaying() && viewingSelection.trackHover?.pose) {
-    // if hover pose has a time, use interpolation (smooth) instead of the raw cached pose (snappy)
-    const ht = viewingSelection.trackHover.pose.t ?? null;
-
-    if (ht != null) {
-      t = ht;
-      idx = findFloorIndexByTime(ht);
-      p = interpolatePoseAtTime(ht);
-    } else {
-      // fallback to old behavior if hover time isn"t available
-      p = viewingSelection.trackHover.pose;
-      idx = viewingSelection.trackHover.idxNearest ?? viewingSelection.selectedIndex;
-      t = rawPoses[idx]?.t ?? null;
-    }
-
-  } else if (!viewingPlayback.isPlaying() && viewingSelection.trackLockActive && viewingSelection.trackLockPose) {
-    p = viewingSelection.trackLockPose;
-    idx = viewingSelection.trackLockIndex ?? viewingSelection.selectedIndex;
-    t = rawPoses[idx]?.t ?? null;
-
-  } else {
-    p = poseToInches(rawPoses[idx]);
-  }
-
-  const total = rawPoses.length;
-  timePill.textContent = (t == null) ? "Time: —" : `Time: ${formatFixedNumberString(t / 1000, 2)}s`;
-  pointPill.textContent = `Point: ${Math.max(1, idx + 1)}/${total}`;
-
-  const spNorm = (p?.speed_norm != null) ? p.speed_norm : (rawPoses[idx]?.speed_norm ?? null);
-  const spDisp = speedFromNorm(spNorm);
-
-  posePill.textContent = p
-    ? `X: ${formatDistanceFromInches(p.x, 1)}  Y: ${formatDistanceFromInches(p.y, 1)}  θ: ${fmtNum(p.theta, 1)}°  Speed: ${spDisp == null ? "—" : fmtNum(spDisp, 2)}`
-    : "X: —  Y: —  θ: —  Speed: —";
-  updateDeltaReadout();
-  floatingInfo.updateInfo(p, idx);
-  watchGraph.refreshPanelData();
-  floatingInfo.refreshPinnedPanels();
-}
 
 // -------- view controls (square maximize + pan/zoom) --------
 canvas.addEventListener("wheel", (event) => {
@@ -4210,11 +3222,9 @@ canvas.addEventListener("pointermove", (e) => {
   fieldRenderer.movePan(x, y, {
     onStart: () => {
       // If a hover-preview was active, clear it so the view feels stable while panning.
-    if (viewingSelection.trackHover) {
-      viewingSelection.clearTrackHover(!viewingSelection.trackLockActive);
-      poseListRenderer.highlight();
-      updatePoseReadout();
-    }
+      viewingUi?.selection.clearTrackHover(!viewingUi.selection.trackLockActive);
+      viewingUi?.rendering.renderPoseList();
+      viewingUi?.updatePoseReadout();
     },
   });
 });
@@ -4691,7 +3701,7 @@ async function connectLeft() {
     leftSetUI("Backend is still starting. Please try again in a moment.");
     return;
   }
-  viewingPlayback.pause();
+  viewingUi?.playback.pause();
   if (leftStreaming) {
     await stopStreaming(false, false);
   }
@@ -4774,7 +3784,6 @@ function startLeftRefresh() {
   }, leftRefreshMs);
 }
 
-let lastPoseIndex = 0;
 async function doLeftRefresh() {
   // During live mode, refresh means: integrate any pending WS lines into
   // rawPoses/watches, then update derived state and redraw.
@@ -4794,13 +3803,7 @@ async function doLeftRefresh() {
   const batch = livePendingBuffer.batch();
   if (!batch) {
     // Nothing new; still ensure we snap to latest if appropriate
-    if (liveAutoFollowHead && rawPoses.length && viewingSelection.hoverTimelineTime == null && !viewingPlayback.isPlaying() && !viewingSelection.trackLockActive && !(viewingSelection.trackHover && (viewingSelection.trackHover.pose || viewingSelection.trackHover.t))) {
-      viewingSelection.selectedIndex = rawPoses.length - 1;
-      lastPoseIndex = viewingSelection.selectedIndex;
-      updatePoseReadout();
-    } else if (!liveAutoFollowHead && rawPoses.length && viewingSelection.hoverTimelineTime == null && !viewingPlayback.isPlaying() && !viewingSelection.trackLockActive && !(viewingSelection.trackHover && (viewingSelection.trackHover.pose || viewingSelection.trackHover.t))) {
-      viewingSelection.selectedIndex = lastPoseIndex;
-    }
+    viewingUi?.syncLivePoseSelection();
     return;
   }
 
@@ -4833,34 +3836,12 @@ async function doLeftRefresh() {
   data.logs = logs;
   data.waypoints = waypoints;
 
-  if (watchesAdded > 0) {
-    recomputeWatchMarkers();
-    rebuildWatchMarkersByTime();
-    viewingRendering.renderWatchFilter();
-    viewingRendering.renderWatchList();
-    floatingInfo.refreshPinnedPanels();
-  }
-
-  if (logsAdded > 0) {
-    viewingRendering.renderLogList();
-  }
-  if (waypointsAdded > 0) {
-    viewingRendering.renderWaypointFilter();
-    viewingRendering.renderWaypointList();
-  }
-
-  if (posesAdded > 0) {
-    viewingRendering.renderPoseList();
-    // If not hovering timeline/track, keep the robot on the most recent pose.
-    if (liveAutoFollowHead && viewingSelection.hoverTimelineTime == null && !viewingPlayback.isPlaying() && !viewingSelection.trackLockActive && !(viewingSelection.trackHover && (viewingSelection.trackHover.pose || viewingSelection.trackHover.t))) {
-      viewingSelection.selectedIndex = rawPoses.length - 1;
-    } else if (!liveAutoFollowHead && rawPoses.length && viewingSelection.hoverTimelineTime == null && !viewingPlayback.isPlaying() && !viewingSelection.trackLockActive && !(viewingSelection.trackHover && (viewingSelection.trackHover.pose || viewingSelection.trackHover.t))) {
-      viewingSelection.selectedIndex = lastPoseIndex;
-    }
-    poseListRenderer.highlight();
-  }
-
-  updatePoseReadout();
+  viewingUi?.updateAfterDataChange({
+    posesChanged: posesAdded > 0,
+    watchesChanged: watchesAdded > 0,
+    logsChanged: logsAdded > 0,
+    waypointsChanged: waypointsAdded > 0,
+  });
   if (
     rawPoses.length !== liveLastPoseCount
     || watches.length !== liveLastWatchCount
@@ -5427,26 +4408,7 @@ function finalizeLoadedData() {
   syncMainToSettings();
   saveSettings();
 
-  viewingSelection.selectedWatch = null;
-  watchGraph.hidePanel();
-  viewingSelection.selectedLogTime = null;
-  viewingSelection.selectedWaypointId = null;
-  viewingSelection.selectedWaypointEventTime = null;
-  viewingSelection.selectedIndex = 0;
-  viewingSelection.hoverTimelineTime = null;
-  viewingSelection.timelineHoverSaved = null;
-  viewingFieldInteraction?.clearHoverWatch();
-
-  viewingSelection.clearTrackHover(true);
-  viewingSelection.clearTrackLock();
-  viewingPlayback.pause();
-
-  recomputeWatchMarkers();
-  rebuildWatchMarkersByTime();
-  viewingRendering.renderWatchFilter();
-  viewingRendering.renderLists();
-  viewingRendering.renderWaypointFilter();
-  floatingInfo.refreshPinnedPanels();
+  viewingUi?.resetForLoadedData();
 
   fieldRenderer.setBounds(FIELD_BOUNDS_IN);
 
@@ -5455,7 +4417,7 @@ function finalizeLoadedData() {
   topBar.setFieldEnabled(true);
   updateExportButtonAvailability();
 
-  updatePoseReadout();
+  viewingUi?.updatePoseReadout();
   requestDrawAll();
 }
 
@@ -5683,7 +4645,7 @@ async function loadSettings() {
       if (settings.playbackSpeed !== undefined) {
         topBar.setPlaybackSpeed(Number(settings.playbackSpeed) || 1);
         playRate = topBar.getPlaybackSpeed();
-        viewingPlayback.setPlayRate(playRate);
+        viewingUi?.setPlaybackRate(playRate);
       }
       if (settings.selectedField !== undefined) {
         const nextField = getValidFieldKey(settings.selectedField);
@@ -5757,7 +4719,7 @@ async function loadDemoRouteIfUpgraded() {
     const upgradeState = await invoke("was_previous_version_old");
     persistedAppState = {
       ...(persistedAppState && typeof persistedAppState === "object" ? persistedAppState : {}),
-      lastSeenAppVersion: APP_VERSION,
+      lastSeenAppVersion: app.version,
     };
     if (!upgradeState?.wasPreviousVersionOlder) return false;
 
@@ -5866,18 +4828,16 @@ function syncSettingsToMain() {
   if (settingsMinSpeed && minSpeedEl && settingsMinSpeed.value !== minSpeedEl.value) {
     minSpeedEl.value = settingsMinSpeed.value;
     computeSpeedNormRange();
-    recomputeWatchMarkers();
-    rebuildWatchMarkersByTime();
+    viewingUi?.recomputeWatchMarkers();
     requestDrawAll();
-    updatePoseReadout();
+    viewingUi?.updatePoseReadout();
   }
   if (settingsMaxSpeed && maxSpeedEl && settingsMaxSpeed.value !== maxSpeedEl.value) {
     maxSpeedEl.value = settingsMaxSpeed.value;
     computeSpeedNormRange();
-    recomputeWatchMarkers();
-    rebuildWatchMarkersByTime();
+    viewingUi?.recomputeWatchMarkers();
     requestDrawAll();
-    updatePoseReadout();
+    viewingUi?.updatePoseReadout();
   }
   if (settingsRobotImgScale && robotImgScaleEl && settingsRobotImgScale.value !== robotImgScaleEl.value) {
     robotImgScaleEl.value = settingsRobotImgScale.value;
@@ -6138,7 +5098,7 @@ function buildExportMetadata(PathName) {
   return {
     SchemaVersion: 3,
     CreationDate: formattedDateGB,
-    AppVersion: APP_VERSION,
+    AppVersion: app.version,
     Creator: "MotionView",
     PathName,
     Stats: {
@@ -6368,9 +5328,13 @@ async function applyImportedRunSettings() {
   syncMainToSettings();
   updateOffsetsFromInputs();
   computeSpeedNormRange();
-  viewingRendering.renderWatchFilter();
-  viewingRendering.renderLists();
-  viewingRendering.renderWaypointFilter();
+  viewingUi?.updateAfterDataChange({
+    posesChanged: true,
+    watchesChanged: true,
+    logsChanged: true,
+    waypointsChanged: true,
+    filtersChanged: true,
+  });
   requestDrawAll();
   await saveSettings();
   setStatus("Applied run settings from imported metadata.");
@@ -7005,8 +5969,8 @@ window.addEventListener("keydown", (e) => {
   else if (routeInfoOpen) closeRouteInfoModal();
   else if (planTemplateOpen) closePlanTemplateModal();
   else if (planObjectDeleteOpen) closePlanObjectDeleteModal();
-  else if (viewingSelection.selectedWaypointId != null) {
-    clearWaypointSelection();
+  else if (viewingUi?.hasSelectedWaypoint()) {
+    viewingUi.clearWaypointSelection();
     requestDrawAll();
   }
   e.preventDefault();
@@ -7402,8 +6366,13 @@ function togglePlaybackForCurrentMode() {
     return;
   }
   if (!data) return;
-  if (viewingPlayback.isPlaying()) { viewingPlayback.pause(); updatePoseReadout(); requestDrawAll(); }
-  else viewingPlayback.play();
+  if (viewingUi?.playback.isPlaying()) {
+    viewingUi.playback.pause();
+    viewingUi.updatePoseReadout();
+    requestDrawAll();
+  } else {
+    viewingUi?.playback.play();
+  }
 }
 
 if (btnTogglePlanOverlay) {
@@ -7481,20 +6450,18 @@ if (settingsRobotImgAlpha) settingsRobotImgAlpha.addEventListener("input", onRob
 
 settingsMinSpeed.addEventListener("input", () => {
   computeSpeedNormRange();
-  recomputeWatchMarkers();
-  rebuildWatchMarkersByTime();
+  viewingUi?.recomputeWatchMarkers();
   requestDrawAll();
-  updatePoseReadout();
+  viewingUi?.updatePoseReadout();
   syncMainToSettings();
   saveSettings();
 });
 
 settingsMaxSpeed.addEventListener("input", () => {
   computeSpeedNormRange();
-  recomputeWatchMarkers();
-  rebuildWatchMarkersByTime();
+  viewingUi?.recomputeWatchMarkers();
   requestDrawAll();
-  updatePoseReadout();
+  viewingUi?.updatePoseReadout();
   syncMainToSettings();
   saveSettings();
 });
@@ -7632,28 +6599,12 @@ offThetaEl.addEventListener("input", () => {
   saveSettings();
 });
 
-if (watchSort) watchSort.addEventListener("change", () => { viewingRendering.renderWatchList(); requestDrawAll(); });
-if (watchFilter) watchFilter.addEventListener("change", () => {
-  viewingRendering.renderWatchList();
-  requestDrawAll();
-});
-if (logSort) logSort.addEventListener("change", () => { viewingRendering.renderLogList(); });
-if (waypointFilter) waypointFilter.addEventListener("change", () => {
-  viewingRendering.renderWaypointList();
-  requestDrawAll();
-});
-
 function clearAllPosesAndWatches() {
-  // Stop playback/hover/locks so UI doesn’t reference stale indices
-  try { viewingPlayback.pause(); } catch { }
-  try { viewingSelection.hoverTimelineTime = null; } catch { }
-  try { viewingSelection.trackHover = null; } catch { }
-  try { viewingSelection.trackLockActive = false; } catch { }
+  viewingUi?.clearTransientState();
 
   // Clear core data
   viewingMode.actions.clear();
     try { watchByLabel = {}; } catch { }
-  try { lastPoseIndex = 0; } catch { }
   liveLastPoseT = null;
   liveLastPoseCount = 0;
   liveLastWatchCount = 0;
@@ -7668,14 +6619,13 @@ function clearAllPosesAndWatches() {
     data.waypoints = [];
   }
 
-  try { viewingRendering.renderPoseList(); } catch { }
-  try { viewingRendering.renderWatchList(); } catch { }
-  try { floatingInfo.refreshPinnedPanels(); } catch { }
-  try { viewingRendering.renderLogList(); } catch { }
-  try { viewingRendering.renderWaypointFilter(); } catch { }
-  try { viewingRendering.renderWaypointList(); } catch { }
-  try { viewingRendering.updatePoseReadout(); } catch { }
-  try { floatingInfo.updateInfo(null, 0); } catch { }
+  viewingUi?.updateAfterDataChange({
+    posesChanged: true,
+    watchesChanged: true,
+    logsChanged: true,
+    waypointsChanged: true,
+    filtersChanged: true,
+  });
   try { requestDrawAll(); } catch { }
 }
 
@@ -7831,21 +6781,21 @@ function handleGlobalKeydown(e) {
     }
 
     if (e.key === "t" || e.key === "T") {
-      floatingInfo.toggleInfo();
+      viewingUi?.toggleFloatingInfo();
       return;
     }
 
     if (e.key === "g" || e.key === "G") {
       e.preventDefault();
       if (getMode() !== "viewing") return;
-      watchGraph.toggleCurrentPanel();
+      viewingUi?.toggleWatchGraph();
       return;
     }
   }
 
   if (!e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && (e.key === "N" || e.key === "n")) {
     e.preventDefault();
-    floatingInfo.openWatch(null);
+    viewingUi?.openFloatingWatch(null);
     return;
   }
 
@@ -7903,7 +6853,7 @@ function handleGlobalKeydown(e) {
       }
     }
   }
-  if (viewingInput.handleKeydown(e)) return;
+  if (viewingUi?.input.handleKeydown(e)) return;
 }
 
 function handlePlanningHistoryKeydown(e) {
@@ -7928,14 +6878,12 @@ await loadSettings();
 await loadSavedPaths();
 await loadDemoRouteIfUpgraded();
 setMode("viewing");
-void appTelemetry.loaded({
+void app.markReady({
   plan_saved: planningMode.state.getWaypointCount() > 0,
   plan_points: planningMode.state.getWaypointCount(),
-}).catch((err) => {
-  console.warn("App loaded telemetry failed:", err);
 });
 
-async function appExit() {
+async function prepareAppExit() {
   try {
     if (fieldRenderer.getRobotImageDataUrl() && invoke && !fieldRenderer.getRobotImagePath()) {
       try {
@@ -7962,44 +6910,46 @@ async function appExit() {
     ? fmtNum(performance.now() / 1000 / 60, 2)
     : fmtNum(performance.now() / 1000, 2);
 
-  await appTelemetry.exiting({
+  return {
     uptime: Number(uptime),
-  });
-
+  };
 }
 
 const setupExitHandler = async () => {
+  if (!app.core.tauri.isTauriRuntime()) return;
   const appWindow = getCurrentWindow();
   if (!appWindow?.listen) return;
-  let appQuitInFlight = false;
 
-  const beginAppQuit = async () => {
-    if (appQuitInFlight) return;
-    appQuitInFlight = true;
+  const beginAppQuit = async (reason) => {
+    if (!app.beginExit(reason)) return;
     setStatus("App closing");
     await new Promise((resolve) => requestAnimationFrame(resolve));
-    await appExit();
+    let exitProperties = {};
     try {
-      await invoke("finalize_app_quit");
+      exitProperties = await prepareAppExit();
+    } catch (err) {
+      console.error("Failed to prepare app quit:", err);
+    }
+    try {
+      await app.finalizeExit(exitProperties);
     } catch (err) {
       console.error("Failed to finalize app quit:", err);
-      appQuitInFlight = false;
     }
   };
 
   // Listen for the user clicking the "X"
   await appWindow.listen("tauri://close-requested", async () => {
-    await beginAppQuit();
+    await beginAppQuit("window-close");
   });
 
   await appWindow.listen("motionview://app-quit-requested", async () => {
-    await beginAppQuit();
+    await beginAppQuit("backend-request");
   });
 
   window.addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && (event.key === "q" || event.key === "Q")) {
       event.preventDefault();
-      void beginAppQuit();
+      void beginAppQuit("keyboard");
     }
   });
 };
@@ -8048,7 +6998,7 @@ window.addEventListener("resize", () => {
   fieldRenderer.updateFieldLayout(true); // keep bounds, recompute square sizing
   resizeTimeline();
   resizePlanningTimeline();
-  watchGraph.resizeChart();
+  viewingUi?.resizeWatchGraph();
   topBar.scheduleLayout();
 });
 

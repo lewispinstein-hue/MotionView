@@ -18,3 +18,4 @@ export * from "./viewingInput";
 export * from "./viewingRendering";
 export * from "./viewingTimeline";
 export * from "./createViewingMode";
+export * from "./createViewingUi";

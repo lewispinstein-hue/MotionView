@@ -20,3 +20,7 @@ export function readImageData(path: string): Promise<string> {
 export function saveRobotImage(dataUrl: string): Promise<string | null> {
   return invokeCommand<string | null>("save_robot_image", { dataUrl });
 }
+
+export function finalizeAppQuit(): Promise<void> {
+  return invokeCommand<void>("finalize_app_quit");
+}
