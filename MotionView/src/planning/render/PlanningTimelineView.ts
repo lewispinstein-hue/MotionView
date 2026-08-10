@@ -10,8 +10,9 @@ import { getUtf8ByteLength } from "../planningTemplate";
 import type { PlanningMethodDrag, PlanningDragCoordinator } from "./PlanningDragCoordinator";
 
 const PAD = 20;
-const NODE_WIDTH = 34;
+const NODE_WIDTH = 18;
 const NODE_GAP = 6;
+const NODE_START_OFFSET = 18;
 
 interface ActiveDrag extends PlanningMethodDrag {
   readonly ghost: HTMLElement;
@@ -68,7 +69,8 @@ export class PlanningTimelineView {
     this.dom.timelineWaypointLayer.replaceChildren();
     this.dom.eventTimelineHint.hidden = this.planning.route.length >= 2;
     const width = Math.max(this.dom.timelineViewport.clientWidth, 360);
-    this.dom.timelineContent.style.width = `${width}px`;
+    const finalBucketCount = nodes.filter((node) => node.beforeWaypoint >= this.planning.route.length).length;
+    this.dom.timelineContent.style.width = `${width + (finalBucketCount ? NODE_START_OFFSET + finalBucketCount * (NODE_WIDTH + NODE_GAP) : 0)}px`;
     this.planning.route.waypoints.forEach((_point, index) => {
       const marker = document.createElement("div");
       marker.className = "planningTimelineWaypointConnector";
@@ -83,7 +85,7 @@ export class PlanningTimelineView {
       element.type = "button";
       element.className = `planningTimelineNode${this.planning.selection.selectedNodeId === node.id ? " isSelected" : ""}${hasPlanNodeMethodOverride(node as any) ? " hasOverride" : ""}`;
       element.dataset.nodeId = node.id;
-      element.style.left = `${this.xForBucket(node.beforeWaypoint, width) + node.index * (NODE_WIDTH + NODE_GAP)}px`;
+      element.style.left = `${this.xForBucket(node.beforeWaypoint, width) + NODE_START_OFFSET + node.index * (NODE_WIDTH + NODE_GAP)}px`;
       element.style.background = object.color || getDefaultPlanObjectColor(0);
       element.style.color = getContrastTextColor(object.color);
       element.textContent = String(getPlanMethodNumber(this.planning.objects.items, node.objectId, node.methodId) ?? "");
@@ -143,8 +145,9 @@ export class PlanningTimelineView {
   }
 
   private xForBucket(bucket: number, width: number): number {
+    if (bucket <= 0) return PAD;
     if (bucket >= this.planning.route.length) return width - PAD;
-    return this.xForWaypoint(Math.max(0, bucket), width);
+    return this.xForWaypoint(bucket - 1, width);
   }
 
   private scrub(clientX: number): void {
@@ -227,7 +230,7 @@ export class PlanningTimelineView {
     this.hideTooltip();
     this.#tooltipTimer = window.setTimeout(() => {
       this.dom.nodeTooltip.textContent = text;
-      this.dom.nodeTooltip.classList.toggle("isEdited", edited);
+      this.dom.nodeTooltip.classList.toggle("hasOverride", edited);
       this.dom.nodeTooltip.hidden = false;
       this.dom.nodeTooltip.classList.add("isVisible");
       this.positionTooltip(x, y);

@@ -5,7 +5,7 @@ import { requestDrawAll } from "../../render/renderScheduler";
 import type { PlanningFeature } from "../PlanningFeature";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningDialogs } from "../PlanningDialogs";
-import { getPlanNodeEffectiveMethod } from "../planningObjects";
+import { getPlanMethodTooltipName, getPlanNodeEffectiveMethod } from "../planningObjects";
 import { planningTelemetry } from "../../telemetry/createTelemetry";
 import { getUtf8ByteLength } from "../planningTemplate";
 
@@ -15,13 +15,18 @@ interface NodeMarker {
   readonly node: (PlanningFeature["timeline"]["nodes"])[number];
   readonly x: number;
   readonly y: number;
-  readonly angle: number;
+  readonly tx: number;
+  readonly ty: number;
 }
 
 const POINT_RADIUS = 11;
 const OVERLAY_POINT_RADIUS = 7;
 const THETA_HANDLE_RADIUS = 6;
 const THETA_HANDLE_OFFSET = 25;
+const NODE_LONG = 22;
+const NODE_THICK = 4;
+const NODE_TICK = 14;
+const NODE_BORDER = 1.5;
 
 function normalizeDegrees(value: number): number {
   return ((value % 360) + 360) % 360;
@@ -37,6 +42,7 @@ export class PlanningFieldView {
   #thetaOriginal: readonly Readonly<{ index: number; theta: number }>[] = [];
   #pendingAdd: Readonly<{ x: number; y: number; screenX: number; screenY: number; clearSelection: boolean }> | null = null;
   #hoverNodeId: string | null = null;
+  #tooltipTimer: number | null = null;
 
   constructor(
     private readonly planning: PlanningFeature,
@@ -50,6 +56,13 @@ export class PlanningFieldView {
     this.dom.canvas.addEventListener("pointermove", (event) => this.pointerMove(event));
     this.dom.canvas.addEventListener("pointerup", (event) => this.pointerEnd(event));
     this.dom.canvas.addEventListener("pointercancel", (event) => this.pointerEnd(event));
+    this.dom.canvas.addEventListener("pointerleave", () => {
+      if (this.#pointerId == null) {
+        this.#hoverNodeId = null;
+        this.hideNodeTooltip();
+        requestDrawAll();
+      }
+    });
     this.dom.canvas.addEventListener("contextmenu", (event) => {
       if (getMode() === "planning") event.preventDefault();
     });
@@ -106,21 +119,37 @@ export class PlanningFieldView {
       const object = this.planning.objects.get(marker.node.objectId);
       if (!object) continue;
       const screen = this.field.worldToScreen(marker.x, marker.y);
+      const tangentStart = this.field.worldToScreen(marker.x - marker.tx, marker.y - marker.ty);
+      const tangentEnd = this.field.worldToScreen(marker.x + marker.tx, marker.y + marker.ty);
+      const normalAngle = Math.atan2(tangentEnd.y - tangentStart.y, tangentEnd.x - tangentStart.x) + Math.PI / 2;
       const selected = this.planning.selection.selectedNodeId === marker.node.id || this.#hoverNodeId === marker.node.id;
+      const long = Math.max(8, this.scaledNodeSize(NODE_LONG, 2.15));
+      const thick = Math.max(3, this.scaledNodeSize(NODE_THICK, 0.28));
+      const tick = Math.max(10, this.scaledNodeSize(NODE_TICK, 0.7));
+      const viewingCap = 2.12 * this.field.getScale();
+      const visibleLong = getMode() === "planning" ? long : Math.min(viewingCap, long);
+      const visibleThick = getMode() === "planning" ? thick : Math.min(viewingCap, thick);
+      const visibleTick = getMode() === "planning" ? tick : Math.min(viewingCap, tick);
+      const border = NODE_BORDER * Math.max(Math.min(Math.max(this.field.getViewZoom(), CANVAS_ZOOM_MIN), 1.75), 0.85);
       context.save();
       context.translate(screen.x, screen.y);
-      context.rotate(marker.angle + Math.PI / 2);
+      context.rotate(normalAngle);
       context.lineCap = "round";
+      context.lineJoin = "round";
       context.strokeStyle = object.color;
-      context.lineWidth = selected ? 3 : 2;
+      context.lineWidth = selected ? 2.5 : 2;
       context.beginPath();
-      context.moveTo(-7, 0);
-      context.lineTo(7, 0);
+      context.moveTo(-visibleTick / 2, 0);
+      context.lineTo(visibleTick / 2, 0);
       context.stroke();
       context.fillStyle = selected ? "rgba(255,255,255,.98)" : "rgba(15,25,35,.7)";
-      context.fillRect(-12, -4, 24, 8);
+      context.beginPath();
+      context.roundRect(-(visibleLong + border * 2) / 2, -(visibleThick + border * 2) / 2, visibleLong + border * 2, visibleThick + border * 2, Math.max(2, (visibleThick + border * 2) / 2));
+      context.fill();
       context.fillStyle = object.color;
-      context.fillRect(-11, -3, 22, 6);
+      context.beginPath();
+      context.roundRect(-visibleLong / 2, -visibleThick / 2, visibleLong, visibleThick, Math.max(2, visibleThick / 2));
+      context.fill();
       context.restore();
     }
 
@@ -215,7 +244,13 @@ export class PlanningFieldView {
     if (getMode() !== "planning") return;
     const point = this.canvasPoint(event);
     if (this.#pointerId !== event.pointerId) {
-      this.#hoverNodeId = this.hitNode(point.x, point.y)?.id ?? null;
+      const node = this.hitNode(point.x, point.y);
+      const nextId = node?.id ?? null;
+      if (nextId !== this.#hoverNodeId) {
+        this.#hoverNodeId = nextId;
+        if (node) this.showNodeTooltip(node.id, event.clientX, event.clientY);
+        else this.hideNodeTooltip();
+      } else if (node) this.positionNodeTooltip(event.clientX, event.clientY);
       requestDrawAll();
       return;
     }
@@ -329,6 +364,7 @@ export class PlanningFieldView {
     this.planning.route.updateMany(this.#thetaOriginal.map((entry) => [entry.index, {
       theta: this.planning.projection.constrainTheta(normalizeDegrees(entry.theta + delta)),
     }]));
+    requestDrawAll();
   }
 
   private displayTheta(index: number): number {
@@ -389,11 +425,45 @@ export class PlanningFieldView {
           node,
           x: start.x + dx * along / length,
           y: start.y + dy * along / length,
-          angle: Math.atan2(dy, dx),
+          tx: dx / length,
+          ty: dy / length,
         });
       });
     }
     return markers;
+  }
+
+  private scaledNodeSize(basePixels: number, maximumInches: number): number {
+    return Math.min(basePixels * Math.max(this.field.getViewZoom(), CANVAS_ZOOM_MIN), maximumInches * this.field.getScale());
+  }
+
+  private showNodeTooltip(nodeId: string, clientX: number, clientY: number): void {
+    this.hideNodeTooltip();
+    const node = this.planning.timeline.get(nodeId);
+    const object = node ? this.planning.objects.get(node.objectId) : null;
+    const method = node ? getPlanNodeEffectiveMethod(this.planning.objects.items, node) : null;
+    if (!node || !object || !method) return;
+    this.#tooltipTimer = window.setTimeout(() => {
+      this.dom.nodeTooltip.textContent = `${object.name || "Object"} · ${getPlanMethodTooltipName(method.name)}`;
+      this.dom.nodeTooltip.classList.toggle("hasOverride", method.hasOverride);
+      this.dom.nodeTooltip.hidden = false;
+      this.dom.nodeTooltip.classList.add("isVisible");
+      this.positionNodeTooltip(clientX, clientY);
+    }, 250);
+  }
+
+  private positionNodeTooltip(clientX: number, clientY: number): void {
+    const maxX = window.innerWidth - this.dom.nodeTooltip.offsetWidth - 8;
+    const maxY = window.innerHeight - this.dom.nodeTooltip.offsetHeight - 8;
+    this.dom.nodeTooltip.style.left = `${Math.max(8, Math.min(clientX + 12, maxX))}px`;
+    this.dom.nodeTooltip.style.top = `${Math.max(8, Math.min(clientY + 14, maxY))}px`;
+  }
+
+  private hideNodeTooltip(): void {
+    if (this.#tooltipTimer != null) window.clearTimeout(this.#tooltipTimer);
+    this.#tooltipTimer = null;
+    this.dom.nodeTooltip.classList.remove("isVisible", "hasOverride");
+    this.dom.nodeTooltip.hidden = true;
   }
 
   private async editNode(nodeId: string): Promise<void> {
