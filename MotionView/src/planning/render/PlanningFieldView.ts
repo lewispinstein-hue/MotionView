@@ -11,6 +11,12 @@ import { getUtf8ByteLength } from "../planningTemplate";
 
 interface SelectionRect { x0: number; y0: number; x1: number; y1: number }
 interface DragPoint { index: number; x: number; y: number }
+interface NodeMarker {
+  readonly node: (PlanningFeature["timeline"]["nodes"])[number];
+  readonly x: number;
+  readonly y: number;
+  readonly angle: number;
+}
 
 const POINT_RADIUS = 11;
 const OVERLAY_POINT_RADIUS = 7;
@@ -72,26 +78,6 @@ export class PlanningFieldView {
     });
     context.stroke();
 
-    for (const node of this.planning.timeline.nodes) {
-      const distance = node.beforeWaypoint >= this.planning.route.length
-        ? this.planning.projection.totalLength
-        : this.planning.projection.distances[node.beforeWaypoint] ?? 0;
-      const pose = this.planning.projection.sample(distance);
-      const object = this.planning.objects.get(node.objectId);
-      if (!pose || !object) continue;
-      const screen = this.field.worldToScreen(pose.x, pose.y);
-      const selected = this.planning.selection.selectedNodeId === node.id || this.#hoverNodeId === node.id;
-      context.save();
-      context.translate(screen.x, screen.y);
-      context.rotate((Number(pose.theta) || 0) * Math.PI / 180);
-      context.fillStyle = object.color;
-      context.strokeStyle = selected ? "rgba(255,255,255,.98)" : "rgba(15,25,35,.7)";
-      context.lineWidth = selected ? 3 : 2;
-      context.fillRect(-11, -3, 22, 6);
-      context.strokeRect(-11, -3, 22, 6);
-      context.restore();
-    }
-
     waypoints.forEach((point, index) => {
       const screen = this.field.worldToScreen(point.x, point.y);
       const selected = this.planning.selection.isWaypointSelected(index);
@@ -115,6 +101,28 @@ export class PlanningFieldView {
       context.stroke();
       if (selected && getMode() === "planning") this.drawThetaHandle(index, radius, angle);
     });
+
+    for (const marker of this.nodeMarkers()) {
+      const object = this.planning.objects.get(marker.node.objectId);
+      if (!object) continue;
+      const screen = this.field.worldToScreen(marker.x, marker.y);
+      const selected = this.planning.selection.selectedNodeId === marker.node.id || this.#hoverNodeId === marker.node.id;
+      context.save();
+      context.translate(screen.x, screen.y);
+      context.rotate(marker.angle + Math.PI / 2);
+      context.lineCap = "round";
+      context.strokeStyle = object.color;
+      context.lineWidth = selected ? 3 : 2;
+      context.beginPath();
+      context.moveTo(-7, 0);
+      context.lineTo(7, 0);
+      context.stroke();
+      context.fillStyle = selected ? "rgba(255,255,255,.98)" : "rgba(15,25,35,.7)";
+      context.fillRect(-12, -4, 24, 8);
+      context.fillStyle = object.color;
+      context.fillRect(-11, -3, 22, 6);
+      context.restore();
+    }
 
     if (this.#selectionRect) {
       const rect = this.#selectionRect;
@@ -229,6 +237,7 @@ export class PlanningFieldView {
         const current = this.planning.route.waypoints[entry.index];
         return [entry.index, this.planning.projection.constrain({ ...current, x: entry.x + dx, y: entry.y + dy })];
       }));
+      requestDrawAll();
       return;
     }
     if (this.#pendingAdd && Math.abs(point.x - this.#pendingAdd.screenX) + Math.abs(point.y - this.#pendingAdd.screenY) > 3) {
@@ -340,19 +349,51 @@ export class PlanningFieldView {
   }
 
   private hitNode(x: number, y: number) {
-    let best: (typeof this.planning.timeline.nodes)[number] | null = null;
+    let best: NodeMarker | null = null;
     let distance = 12 * 12;
-    for (const node of this.planning.timeline.nodes) {
-      const routeDistance = node.beforeWaypoint >= this.planning.route.length
-        ? this.planning.projection.totalLength
-        : this.planning.projection.distances[node.beforeWaypoint] ?? 0;
-      const pose = this.planning.projection.sample(routeDistance);
-      if (!pose) continue;
-      const screen = this.field.worldToScreen(pose.x, pose.y);
+    for (const marker of this.nodeMarkers()) {
+      const screen = this.field.worldToScreen(marker.x, marker.y);
       const next = (screen.x - x) ** 2 + (screen.y - y) ** 2;
-      if (next <= distance) { best = node; distance = next; }
+      if (next <= distance) { best = marker; distance = next; }
     }
-    return best;
+    return best?.node ?? null;
+  }
+
+  private nodeMarkers(): readonly NodeMarker[] {
+    const waypoints = this.planning.route.waypoints;
+    if (waypoints.length < 2) return [];
+    const buckets = new Map<number, typeof this.planning.timeline.nodes[number][]>();
+    for (const node of this.planning.timeline.nodes) {
+      const bucket = buckets.get(node.beforeWaypoint) ?? [];
+      bucket.push(node);
+      buckets.set(node.beforeWaypoint, bucket);
+    }
+    const markers: NodeMarker[] = [];
+    for (const [beforeWaypoint, nodes] of buckets) {
+      if (beforeWaypoint <= 0 || beforeWaypoint > waypoints.length) continue;
+      const endIndex = Math.min(beforeWaypoint, waypoints.length - 1);
+      const start = waypoints[Math.max(0, endIndex - 1)];
+      const end = waypoints[endIndex];
+      if (!start || !end) continue;
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const length = Math.hypot(dx, dy);
+      if (length <= 0) continue;
+      const clearance = Math.min(length, 18 / Math.max(this.field.getScale(), 0.0001));
+      const usableLength = Math.max(0, length - clearance);
+      nodes.sort((a, b) => a.index - b.index || a.id.localeCompare(b.id));
+      nodes.forEach((node, order) => {
+        const rawDistance = length * (order / Math.max(1, nodes.length));
+        const along = clearance + (rawDistance / length) * usableLength;
+        markers.push({
+          node,
+          x: start.x + dx * along / length,
+          y: start.y + dy * along / length,
+          angle: Math.atan2(dy, dx),
+        });
+      });
+    }
+    return markers;
   }
 
   private async editNode(nodeId: string): Promise<void> {

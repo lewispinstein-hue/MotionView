@@ -166,6 +166,13 @@ export class PlanningSidebarView {
     });
   }
 
+  updatePlayback(): void {
+    for (const card of this.dom.objectList.querySelectorAll<HTMLElement>(".planObjectCard[data-object-id]")) {
+      const value = card.querySelector<HTMLElement>(".planObjectLatestValue");
+      if (value) value.textContent = this.latestMethodName(card.dataset.objectId ?? "");
+    }
+  }
+
   private bindSelectionField(input: HTMLInputElement, field: "x" | "y" | "theta" | "speed"): void {
     input.addEventListener("focus", () => this.planning.history.begin("route"));
     input.addEventListener("input", () => {

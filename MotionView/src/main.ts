@@ -1969,7 +1969,6 @@ function finalizeLoadedData() {
 
   fieldRenderer.setBounds(FIELD_BOUNDS_IN);
 
-  setStatus(`Loaded `);
   syncTopBarPlayback();
   topBar.setFieldEnabled(true);
   updateExportButtonAvailability();

@@ -43,7 +43,7 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
     this.planning.events.playbackChanged.subscribe((event) => {
       this.dom.timePill.textContent = `Plan: ${formatDistanceFromInches(event.distance, 2)} / ${formatDistanceFromInches(this.planning.projection.totalLength, 2)} ${getCurrentUnits()}`;
       this.dom.pointPill.textContent = `Points: ${this.planning.route.length}`;
-      this.#sidebar.renderObjects();
+      this.#sidebar.updatePlayback();
       this.#timeline.draw();
       requestDrawAll();
     });
