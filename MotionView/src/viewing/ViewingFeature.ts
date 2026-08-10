@@ -1,7 +1,7 @@
 import type { WatchEntry } from "../state/models";
 import { ViewingEvents } from "./viewingEvents";
 import { ViewingNavigation } from "./ViewingNavigation";
-import { ViewingPlayback } from "./ViewingPlayback";
+import { ViewingPlayback } from "./viewingPlayback";
 import { ViewingProjection } from "./ViewingProjection";
 import { ViewingSession } from "./viewingSession";
 import type {

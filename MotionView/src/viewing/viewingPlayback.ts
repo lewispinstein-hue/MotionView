@@ -85,6 +85,14 @@ export class ViewingPlayback {
     return this.navigation.selectedIndex;
   }
 
+  currentDisplayDeltaMs(): number | null {
+    const displayTime = this.currentDisplayPose()?.t;
+    const anchorTime = this.navigation.trackLockPose?.t
+      ?? this.projection.poseAt(this.navigation.selectedIndex)?.t;
+    if (displayTime == null || anchorTime == null) return null;
+    return Math.abs(displayTime - anchorTime);
+  }
+
   readonly tick = (wallTime: number): void => {
     if (!this.#playing) return;
     const range = this.projection.timeRange();

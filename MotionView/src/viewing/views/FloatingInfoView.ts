@@ -49,6 +49,7 @@ export class FloatingInfoView {
   update(): void {
     const pose = this.viewing.playback.currentDisplayPose();
     const index = this.viewing.playback.currentDisplayIndex();
+    const deltaMs = this.viewing.playback.currentDisplayDeltaMs();
     const set = (id: string, value: string) => {
       const element = document.getElementById(id);
       if (element) element.textContent = value;
@@ -64,8 +65,7 @@ export class FloatingInfoView {
       set("favg", formatNumber(pose.speed_raw, 2));
       set("flv", formatNumber(pose.l_vel, 2));
       set("frv", formatNumber(pose.r_vel, 2));
-      const previous = index > 0 ? this.viewing.data.poses[index - 1]?.t : null;
-      set("fdeltat", previous != null && pose.t != null ? `${formatNumber((pose.t - previous) / 1000, 3)}s` : "—");
+      set("fdeltat", deltaMs == null ? "—" : `${formatNumber(deltaMs / 1000, 3)}s`);
       set("fcount", `Point: ${index + 1}/${this.viewing.data.poses.length}`);
     }
     const reference = pose?.t ?? null;

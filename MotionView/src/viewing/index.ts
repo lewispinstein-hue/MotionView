@@ -1,7 +1,7 @@
 export * from "./viewingTypes";
 export * from "./ViewingFeature";
 export * from "./ViewingNavigation";
-export { ViewingPlayback } from "./ViewingPlayback";
+export { ViewingPlayback } from "./viewingPlayback";
 export * from "./ViewingProjection";
 export * from "./ViewingDom";
 export * from "./ViewingView";

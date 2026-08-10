@@ -53,6 +53,10 @@ export class TimelineView {
         const time = this.xToTime(x);
         this.viewing.playback.pause();
         this.viewing.playback.setTime(time);
+        this.viewing.navigation.setTimelineHover(null);
+        const index = this.viewing.projection.findFloorIndex(time);
+        const pose = this.viewing.projection.interpolatePose(time);
+        if (index >= 0 && pose) this.viewing.navigation.lockTrack(pose, index);
       }
       requestDrawAll();
     });
