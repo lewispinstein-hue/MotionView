@@ -1,9 +1,47 @@
-import type { LogEntry, WatchEntry, Waypoint, WaypointEvent } from "../state/models";
+import type { LogEntry, Pose, WatchEntry, Waypoint, WaypointEvent } from "../state/models";
 
 type NumberParser = (value: unknown) => number | null;
 type LogLevelNormalizer = (value: unknown) => string;
 
-export function normalizeWatches(value: unknown, toNumMaybe: NumberParser): WatchEntry[] {
+export function parseViewingNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+  const parsed = Number(value.trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function normalizeViewingLogLevel(value: unknown): string {
+  const level = String(value || "INFO").trim().toUpperCase();
+  return level === "DEBUG" || level === "INFO" || level === "WARN" || level === "ERROR" || level === "FATAL"
+    ? level
+    : "INFO";
+}
+
+export function normalizePoses(value: unknown, toNumber: NumberParser = parseViewingNumber): Pose[] {
+  if (!Array.isArray(value)) return [];
+  const poses: Pose[] = [];
+  for (const rawPose of value) {
+    if (!rawPose || typeof rawPose !== "object") continue;
+    const pose = rawPose as Record<string, unknown>;
+    if (typeof pose.x !== "number" || typeof pose.y !== "number") continue;
+    poses.push({
+      t: typeof pose.t === "number" ? pose.t : toNumber(pose.t),
+      x: pose.x,
+      y: pose.y,
+      theta: typeof pose.theta === "number" ? pose.theta : (toNumber(pose.theta) ?? 0),
+      l_vel: typeof pose.l_vel === "number" ? pose.l_vel : toNumber(pose.l_vel),
+      r_vel: typeof pose.r_vel === "number" ? pose.r_vel : toNumber(pose.r_vel),
+      speed_raw: typeof pose.speed_raw === "number"
+        ? pose.speed_raw
+        : (typeof pose.speed === "number" ? pose.speed : (toNumber(pose.speed) ?? 0)),
+      speed_norm: 0,
+    });
+  }
+  poses.sort((left, right) => (left.t ?? 0) - (right.t ?? 0));
+  return poses;
+}
+
+export function normalizeWatches(value: unknown, toNumMaybe: NumberParser = parseViewingNumber): WatchEntry[] {
   const out: WatchEntry[] = [];
   if (!Array.isArray(value)) return out;
 
@@ -29,7 +67,11 @@ export function normalizeWatches(value: unknown, toNumMaybe: NumberParser): Watc
   return out;
 }
 
-export function normalizeLogs(value: unknown, toNumMaybe: NumberParser, normalizeLogLevel: LogLevelNormalizer): LogEntry[] {
+export function normalizeLogs(
+  value: unknown,
+  toNumMaybe: NumberParser = parseViewingNumber,
+  normalizeLogLevel: LogLevelNormalizer = normalizeViewingLogLevel,
+): LogEntry[] {
   const out: LogEntry[] = [];
   if (!Array.isArray(value)) return out;
 

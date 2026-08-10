@@ -44,7 +44,10 @@ export class LivePendingBuffer {
   }
 
   markConsumed(endIndex: number) {
-    this.consumed = endIndex;
+    const consumedCount = Math.max(0, Math.min(endIndex, this.lines.length));
+    if (consumedCount === 0) return;
+    this.lines = this.lines.slice(consumedCount);
+    this.consumed = 0;
   }
 
   pendingCount() {

@@ -7,7 +7,7 @@ export interface LogListRendererDependencies {
   logListVirtual: VirtualList<any> | null;
   logSort: HTMLSelectElement | null;
   watchToleranceMs: number;
-  getLogs(): any[];
+  getLogs(): readonly any[];
   getSelectedLogTime(): number | null;
   setSelectedLogTime(time: number | null): void;
   clearWaypointSelectionState(): void;

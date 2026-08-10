@@ -1,13 +1,18 @@
 import type { Pose } from "./models";
 
-export interface PoseStore extends Iterable<Pose> {
+export interface PoseReader extends Iterable<Readonly<Pose>> {
   readonly length: number;
+  readonly [index: number]: Readonly<Pose> | undefined;
+  at(index: number): Readonly<Pose> | undefined;
+  map<T>(callback: (pose: Readonly<Pose>, index: number, reader: PoseReader) => T, thisArg?: unknown): T[];
+}
+
+export interface PoseStore extends PoseReader {
   push(pose: Partial<Pose> | null | undefined): number;
+  reserve(capacity: number): void;
   clear(): void;
-  map<T>(callback: (pose: Pose, index: number, store: PoseStore) => T, thisArg?: unknown): T[];
   setSpeedNorm(index: number, value: number): void;
   toArray(): Pose[];
-  [index: number]: Pose | undefined;
 }
 
 export function createPoseStore(initialCapacity = 1024): PoseStore {
@@ -107,7 +112,9 @@ export function createPoseStore(initialCapacity = 1024): PoseStore {
   }
 
   const api = {
+    at: getPose,
     push: pushPose,
+    reserve: grow,
     clear,
     map: mapPoses,
     setSpeedNorm,

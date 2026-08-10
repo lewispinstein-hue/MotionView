@@ -3,6 +3,7 @@ import { setStatus } from "../app/status";
 import { requestDrawAll } from "../render/renderScheduler";
 import { formatDistanceFromInches, getCurrentUnits } from "../shared/units";
 import type { Pose, WatchEntry, Waypoint, WaypointEvent } from "../state/models";
+import type { ViewingFeature } from "./ViewingFeature";
 import { createFloatingInfo } from "./floatingInfo";
 import { createViewingFieldInteraction, type ViewingFieldInteractionController } from "./viewingFieldInteraction";
 import { createViewingFieldOverlayRenderer, type ViewingFieldOverlayRenderer } from "./viewingFieldOverlay";
@@ -14,7 +15,7 @@ import { createViewingSelection, scrollIntoViewIfNeeded, type ViewingSelectionCo
 import { createViewingTimeline, type ViewingTimelineController } from "./viewingTimeline";
 import { createWatchGraph } from "./watchGraph";
 import { createWatchVisibility, type WatchVisibilityController } from "./watchVisibility";
-import type { WatchMarker } from "./viewingTypes";
+import type { WatchMarker, WaypointEventView, WaypointView } from "./viewingTypes";
 
 export interface ViewingRenderFlags {
   posesChanged?: boolean;
@@ -59,14 +60,7 @@ export interface CreateViewingUiOptions {
   timelineCanvas: HTMLCanvasElement | null;
   timelineContext: CanvasRenderingContext2D | null;
   timelineBar: HTMLElement | null;
-  getData(): unknown;
-  setData(data: any): void;
-  getPoses(): any;
-  getWatches(): WatchEntry[];
-  getLogs(): any[];
-  getWaypoints(): Waypoint[];
-  getWaypointMap(): Map<number, Waypoint> | ReadonlyMap<number, Waypoint>;
-  getWatchMarkers(): WatchMarker[];
+  viewing: ViewingFeature;
   isLiveConnected(): boolean;
   isLivestreaming(): boolean;
   getLiveAutoFollowHead(): boolean;
@@ -138,6 +132,7 @@ function watchSortValueKey(value: unknown) {
 }
 
 export function createViewingUi(options: CreateViewingUiOptions): ViewingUiController {
+  const watchMarkers: WatchMarker[] = [];
   const watchList = byId<HTMLElement>("watchList");
   const watchFilter = byId<HTMLSelectElement>("watchFilter");
   const watchSort = byId<HTMLSelectElement>("watchSort");
@@ -171,7 +166,7 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
   }
 
   const watchVisibility = createWatchVisibility({
-    getWatches: options.getWatches,
+    viewing: options.viewing,
     getFilterValue: watchFilterValue,
     graphKeyForWatch: options.watchGraphKeyForWatch,
     updateButtons: (key, iconId, title) => {
@@ -188,7 +183,7 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
     return waypointFilter?.value || "all";
   }
 
-  function waypointFilterMatches(waypoint: Waypoint | null | undefined) {
+  function waypointFilterMatches(waypoint: WaypointView | null | undefined) {
     const filter = waypointFilterValue();
     if (filter === "all") return true;
     if (filter === "active") return !!waypoint?.active;
@@ -196,8 +191,8 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
   }
 
   function waypointVisibleEvents() {
-    const visible: Array<{ waypoint: Waypoint; event: WaypointEvent }> = [];
-    for (const waypoint of options.getWaypoints()) {
+    const visible: Array<{ waypoint: WaypointView; event: WaypointEventView }> = [];
+    for (const waypoint of options.viewing.data.waypoints) {
       if (!waypointFilterMatches(waypoint)) continue;
       for (const event of waypoint.events) visible.push({ waypoint, event });
     }
@@ -237,13 +232,12 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
   }
 
   function recomputeWatchMarkers() {
-    const watchMarkers = options.getWatchMarkers();
     watchMarkers.length = 0;
-    for (const watch of options.getWatches()) {
+    for (const watch of options.viewing.data.watches) {
       const t = watch.t;
       const near = options.nearestIndexWithinTol(t, WATCH_TOL_MS);
       if (near) {
-        const pose = options.getPoses()[near.idx];
+        const pose = options.viewing.data.poses[near.idx];
         watchMarkers.push({ watch, t, ok: true, dt: near.dt, pose: options.poseToInches(pose), idx: near.idx });
       } else {
         const interpolatedPose = options.interpolatePoseAtTime(t);
@@ -328,7 +322,7 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
   }
 
   function waypointPoseIndexForSelection(waypoint: Waypoint, eventTime: number | null = null) {
-    const poses = options.getPoses();
+    const poses = options.viewing.data.poses;
     if (!waypoint || !poses.length) return null;
     const startT = waypoint.createdTime;
     const endT = waypoint.terminalEvent?.t ?? Infinity;
@@ -371,7 +365,7 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
 
     if (options.isLiveConnected() && options.isLivestreaming()) options.setLiveAutoFollowHead(false);
 
-    const poses = options.getPoses();
+    const poses = options.viewing.data.poses;
     if (!poses.length) {
       selection.selectedIndex = 0;
       lastPoseIndex = 0;
@@ -446,7 +440,7 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
       poseListRenderer.highlight();
       updatePoseReadout();
       requestDrawAll();
-      setStatus(`Waypoint: ${waypoint.name || waypoint.id} mapped to pose @${options.getPoses()[poseIdx].t}ms.`);
+      setStatus(`Waypoint: ${waypoint.name || waypoint.id} mapped to pose @${options.viewing.data.poses[poseIdx]?.t}ms.`);
     } else {
       setStatus(`Waypoint: ${waypoint.name || waypoint.id} has no poses while active.`);
       requestDrawAll();
@@ -464,7 +458,7 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
 
     jumpToEventTime(marker.t, {
       exactStatus: (near) => setStatus(`Watch @${timeStr} mapped to pose `
-        + `@${options.getPoses()[near.idx].t != null ? `${options.fmtNum(options.getPoses()[near.idx].t / 1000)}s` : "—"} (Δ=${options.fmtNum(near.dt / 1000, 2)}s).`),
+        + `@${options.viewing.data.poses[near.idx]?.t != null ? `${options.fmtNum((options.viewing.data.poses[near.idx]?.t ?? 0) / 1000)}s` : "—"} (Δ=${options.fmtNum(near.dt / 1000, 2)}s).`),
       interpolatedStatus: () => setStatus(`Watch @${timeStr} shown via interpolation (no pose within ±${WATCH_TOL_MS}ms).`),
       noPoseStatus: () => setStatus(`Watch @${timeStr} selected (no poses loaded).`),
     });
@@ -482,13 +476,13 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
     if (!playback.isPlaying() && selection.hoverTimelineTime != null) return options.interpolatePoseAtTime(selection.hoverTimelineTime);
     if (!playback.isPlaying() && selection.trackHover?.pose) return selection.trackHover.pose as Pose;
     if (!playback.isPlaying() && selection.trackLockActive && selection.trackLockPose) return selection.trackLockPose;
-    const poses = Array.from(options.getPoses()).map(options.poseToInches);
+    const poses = Array.from(options.viewing.data.poses).map(options.poseToInches);
     return poses[selection.selectedIndex] || null;
   }
 
   function updateDeltaReadout() {
-    const poses = options.getPoses();
-    if (!options.getData() || !poses.length) return;
+    const poses = options.viewing.data.poses;
+    if (!options.viewing.data.hasData || !poses.length) return;
     const lockedTime = poses[selection.selectedIndex]?.t || 0;
     const hoveredTime = selection.hoverTimelineTime !== null ? selection.hoverTimelineTime : lockedTime;
     const delta = Math.abs(hoveredTime - lockedTime) / 1000;
@@ -496,8 +490,8 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
   }
 
   function updatePoseReadout() {
-    const poses = options.getPoses();
-    if (!options.getData() || !poses.length) {
+    const poses = options.viewing.data.poses;
+    if (!options.viewing.data.hasData || !poses.length) {
       if (timePill) timePill.textContent = "Time: —";
       if (pointPill) pointPill.textContent = "Point: —/—";
       if (posePill) posePill.textContent = "X: —  Y: — θ: —  Speed: —";
@@ -569,8 +563,8 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
 
   const fieldOverlay = createViewingFieldOverlayRenderer({
     context: options.ctx,
-    getWatchMarkers: options.getWatchMarkers,
-    getWaypoints: options.getWaypoints,
+    getWatchMarkers: () => watchMarkers,
+    getWaypoints: () => options.viewing.data.waypoints,
     getSelectedWatch: () => selection.selectedWatch,
     getSelectedWaypointId: () => selection.selectedWaypointId,
     getHoverWatch: () => fieldInteraction.getHoverWatch(),
@@ -602,13 +596,13 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
     compareMax: byId("watchGraphCompareMax"),
     canvas: byId("watchGraphCanvas"),
     empty: byId("watchGraphEmpty"),
-    getData: options.getData,
-    getWatches: options.getWatches,
-    getWatchMarkers: options.getWatchMarkers,
+    getData: () => options.viewing.data.hasData,
+    getWatches: () => options.viewing.data.watches,
+    getWatchMarkers: () => watchMarkers,
     getWatchMarkersByTime: () => watchMarkersByTime,
-    getReferenceTimeMs: () => selection.currentReferenceTime(options.getPoses(), playback.getPlayTimeMs(), playback.isPlaying()),
+    getReferenceTimeMs: () => selection.currentReferenceTime(options.viewing.data.poses, playback.getPlayTimeMs(), playback.isPlaying()),
     getCurrentPoseTimeMs: () => currentDisplayPose()?.t ?? null,
-    getLatestRobotTimeMs: () => options.getPoses()[options.getPoses().length - 1]?.t ?? null,
+    getLatestRobotTimeMs: () => options.viewing.data.poses[options.viewing.data.poses.length - 1]?.t ?? null,
     isPlaying: () => playback.isPlaying(),
     isLivestreaming: options.isLivestreaming,
     lastWatchAtTime: options.lastWatchAtTime,
@@ -633,15 +627,15 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
       logCount,
       logSort,
     },
-    getWatchMarkers: options.getWatchMarkers,
-    getWatches: options.getWatches,
-    getLogs: options.getLogs,
-    getWaypoints: options.getWaypoints,
+    getWatchMarkers: () => watchMarkers,
+    getWatches: () => options.viewing.data.watches,
+    getLogs: () => options.viewing.data.logs,
+    getWaypoints: () => options.viewing.data.waypoints,
     getVisibleWaypointEvents: waypointVisibleEvents,
     getSelectedWatch: () => selection.selectedWatch,
     getSelectedPoseIndex: () => selection.selectedIndex,
-    getPoseCount: () => options.getPoses().length,
-    getPose: (index) => options.getPoses()[index],
+    getPoseCount: () => options.viewing.data.poses.length,
+    getPose: (index) => options.viewing.data.poses[index],
     getSelectedWaypointId: () => selection.selectedWaypointId,
     getSelectedWaypointEventTime: () => selection.selectedWaypointEventTime,
     getSelectedLogTime: () => selection.selectedLogTime,
@@ -671,7 +665,7 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
     openOrToggleWatchGraphPanel: (marker) => watchGraph.openOrTogglePanel(marker),
     refreshWatchGraphPanelData: () => watchGraph.refreshPanelData(),
     jumpToEventTime,
-    getRawPoseTime: (index) => options.getPoses()[index]?.t,
+    getRawPoseTime: (index) => options.viewing.data.poses[index]?.t,
     poseToInches: options.poseToInches,
     formatNumberString: options.formatNumberString,
     fmtNum: options.fmtNum,
@@ -707,7 +701,7 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
 
   const playback = createViewingPlayback({
     selection,
-    getPoses: options.getPoses,
+    getPoses: () => options.viewing.data.poses,
     getPlayRate: options.getPlayRate,
     isLivestreaming: options.isLivestreaming,
     setPlayButtonLabel: options.setPlayButtonLabel,
@@ -720,14 +714,14 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
   });
 
   const input = createViewingInput({
-    hasData: () => !!options.getData(),
+    hasData: () => options.viewing.data.hasData,
     isLiveConnected: options.isLiveConnected,
     getLiveAutoFollowHead: options.getLiveAutoFollowHead,
     setLiveAutoFollowHead: options.setLiveAutoFollowHead,
     getSelectedIndex: () => selection.selectedIndex,
-    getPoseCount: () => options.getPoses().length,
+    getPoseCount: () => options.viewing.data.poses.length,
     setSelectedIndex: (index) => {
-      selection.selectedIndex = options.clamp(index, 0, Math.max(0, options.getPoses().length - 1));
+      selection.selectedIndex = options.clamp(index, 0, Math.max(0, options.viewing.data.poses.length - 1));
     },
     setLastPoseIndex: (index) => { lastPoseIndex = index; },
     clearTransientSelection: () => {
@@ -751,9 +745,9 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
     context: options.timelineContext,
     timelineBar: options.timelineBar,
     selection,
-    hasData: () => !!options.getData(),
-    getPoses: options.getPoses,
-    getWatchMarkers: options.getWatchMarkers,
+    hasData: () => options.viewing.data.hasData,
+    getPoses: () => options.viewing.data.poses,
+    getWatchMarkers: () => watchMarkers,
     isPlaying: () => playback.isPlaying(),
     getPlayTimeMs: () => playback.getPlayTimeMs(),
     isLivestreaming: options.isLivestreaming,
@@ -774,13 +768,13 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
   const fieldInteraction = createViewingFieldInteraction({
     canvas: options.canvas,
     selection,
-    getData: options.getData,
+    getData: () => options.viewing.data.hasData,
     isPlaying: () => playback.isPlaying(),
     isPanning: options.isFieldPanning,
     isLivestreaming: options.isLivestreaming,
-    getPoses: options.getPoses,
-    getWatchMarkers: options.getWatchMarkers,
-    getWaypoints: options.getWaypoints,
+    getPoses: () => options.viewing.data.poses,
+    getWatchMarkers: () => watchMarkers,
+    getWaypoints: () => options.viewing.data.waypoints,
     poseToInches: options.poseToInches,
     angLerpDeg: options.angLerpDeg,
     trackHoverTolerancePx: HOVER_PIXEL_TOL + TRACK_HOVER_PAD_PX,
@@ -813,12 +807,12 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
     pinnedHost: byId("pinnedWatchHost"),
     pinnedTemplate: byId("pinnedWatchTemplate"),
     bounds: floatingWindowBounds,
-    getWatches: options.getWatches,
-    getReferenceTimeMs: () => selection.currentReferenceTime(options.getPoses(), playback.getPlayTimeMs(), playback.isPlaying()),
-    getLockedTimeMs: () => options.getPoses()[selection.selectedIndex]?.t ?? null,
+    getWatches: () => options.viewing.data.watches,
+    getReferenceTimeMs: () => selection.currentReferenceTime(options.viewing.data.poses, playback.getPlayTimeMs(), playback.isPlaying()),
+    getLockedTimeMs: () => options.viewing.data.poses[selection.selectedIndex]?.t ?? null,
     getHoverTimeMs: () => selection.hoverTimelineTime,
-    hasData: () => !!options.getData(),
-    hasPoses: () => options.getPoses().length > 0,
+    hasData: () => options.viewing.data.hasData,
+    hasPoses: () => options.viewing.data.poses.length > 0,
     isWatchMarkerVisibleForClosestWatch: () => true,
     speedFromNorm: options.speedFromNorm,
     normFromSpeedRaw: options.normFromSpeedRaw,
@@ -835,8 +829,8 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
 
   function waypointByIdLike(id: unknown) {
     if (id == null) return null;
-    return options.getWaypointMap().get(Number(id))
-      || options.getWaypoints().find((waypoint) => String(waypoint?.id) === String(id))
+    return options.viewing.data.waypointById.get(Number(id))
+      || options.viewing.data.waypoints.find((waypoint) => String(waypoint?.id) === String(id))
       || null;
   }
 
@@ -1032,7 +1026,7 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
   }
 
   function canAutoSyncPoseSelection() {
-    return options.getPoses().length > 0
+    return options.viewing.data.poses.length > 0
       && selection.hoverTimelineTime == null
       && !playback.isPlaying()
       && !selection.trackLockActive
@@ -1041,7 +1035,7 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
 
   function syncLivePoseSelection() {
     if (!canAutoSyncPoseSelection()) return;
-    const poses = options.getPoses();
+    const poses = options.viewing.data.poses;
     if (!poses.length) return;
     if (options.getLiveAutoFollowHead()) {
       selection.selectedIndex = poses.length - 1;
@@ -1100,6 +1094,27 @@ export function createViewingUi(options: CreateViewingUiOptions): ViewingUiContr
   function bindEvents() {
     if (bound) return;
     bound = true;
+    options.viewing.events.dataChanged.subscribe((change) => {
+      if (change.kind === "replaced") {
+        resetForLoadedData();
+      } else if (change.kind === "appended") {
+        updateAfterDataChange({
+          posesChanged: change.result.posesAdded > 0,
+          watchesChanged: change.result.watchesAdded > 0,
+          logsChanged: change.result.logsAdded > 0,
+          waypointsChanged: change.result.waypointsAdded > 0,
+        });
+      } else if (change.kind === "cleared") {
+        clearTransientState();
+        resetForLoadedData();
+      } else if (change.kind === "watch-visibility") {
+        rendering.renderWatchList();
+        floatingInfo.refreshPinnedPanels();
+      } else if (change.kind === "speed-range") {
+        updatePoseReadout();
+      }
+      requestDrawAll();
+    });
     watchGraph.bindEvents();
     viewingLists.bindEvents();
     timeline.bindEvents();

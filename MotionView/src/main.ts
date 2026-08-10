@@ -56,14 +56,13 @@ import {
   serializePlanNode,
   setPlanNodeCodeOverride,
 } from "./planning";
-import { createPoseStore } from "./state/poseStore";
 import { appTelemetry, exportTelemetry, liveTelemetry, planningTelemetry, viewingTelemetry } from "./telemetry/createTelemetry";
 import {
   buildWaypointState,
   createViewingUi,
-  createViewingMode,
   lastWatchAtTime,
   normalizeLogs,
+  normalizePoses,
   normalizeSystemLogMessage,
   normalizeWatches,
   normalizeWaypointType,
@@ -330,7 +329,6 @@ const floatingWindowBounds = {
   maxHeight: 600
 }
 
-let data = null;
 let showPreviousYearFields = true;
 let fieldCompetition = "all";
 
@@ -356,24 +354,6 @@ function getValidFieldKey(fieldKey) {
 // Raw poses are stored in FILE units; we convert to inches for rendering.
 // Fields: t, x, y, theta, l_vel, r_vel, speed_raw, speed_norm
 let viewingUi = null;
-function currentVisibilityForWatch(watch) {
-  return viewingUi?.currentVisibilityForWatch(watch) ?? true;
-}
-
-const viewingMode = createViewingMode({
-  createPoseStore,
-  toNumMaybe,
-  normalizeLogLevel,
-  getWatchVisibility: currentVisibilityForWatch,
-});
-const rawPoses = viewingMode.data.getPoses();
-
-// Watches: normalized
-const watches = viewingMode.data.getWatches();
-const logs = viewingMode.data.getLogs();
-const waypoints = viewingMode.data.getWaypoints();
-const waypointsById = viewingMode.data.getWaypointMap();
-const watchMarkers = viewingMode.data.getWatchMarkers(); // {watch, t, pose(in), ok, idx, dt}
 
 const telemetryMetrics = {
   totalPosesReceived: 0,
@@ -382,7 +362,6 @@ const telemetryMetrics = {
   totalWaypointsReceived: 0,
 };
 let pendingExportRequest = null;
-let importedRouteMeta = null;
 
 let playRate = 1;
 let playButtonLabel = "▶";
@@ -411,7 +390,7 @@ function syncTopBarPlayback(label = playButtonLabel) {
   const liveConnected = !!window.__live?.connected;
   const mode = getMode();
   const planningWaypointCount = planningMode?.state?.getWaypointCount?.() ?? 0;
-  const enabled = !liveConnected && (mode === "planning" ? planningWaypointCount >= 2 : rawPoses.length >= 2);
+  const enabled = !liveConnected && (mode === "planning" ? planningWaypointCount >= 2 : app.viewing.data.poses.length >= 2);
   const playing = label === "⏸";
   topBar.syncPlayback({ enabled, playing, label });
 }
@@ -419,7 +398,7 @@ function syncTopBarPlayback(label = playButtonLabel) {
 const fieldRenderer = createFieldRenderer({
   canvas,
   ctx,
-  getViewingPathPoses: () => rawPoses.map(poseToInches),
+  getViewingPathPoses: () => app.viewing.data.poses.map(poseToInches),
   getViewingPose: () => viewingUi?.currentDisplayPose() ?? null,
   getPlanningPose: () => planSampleAtDist(planningMode.playback.getPlaybackDistance()),
   getRobotDimensions: () => robotDimsInches(),
@@ -1781,15 +1760,14 @@ function hasImportedPlanningWaypoints(obj) {
 }
 
 function hasImportedViewingData(obj) {
-  return normalizePoseArray(obj?.poses || obj?.["robot-path"] || []).length > 0
+  return normalizePoses(obj?.poses || obj?.["robot-path"] || []).length > 0
     || normalizeWatches(obj?.watches || obj?.watch || [], toNumMaybe).length > 0
     || normalizeLogs(obj?.logs || obj?.log || [], toNumMaybe, normalizeLogLevel).length > 0
     || buildWaypointState(obj?.waypoints || []).waypoints.length > 0;
 }
 
 function applyImportedViewingData(obj) {
-  viewingMode.actions.loadViewingData(obj);
-    setImportedRouteMeta(viewingMode.getExportData().meta);
+  app.viewing.load(obj);
 }
 
 function confirmPlanningImportOverride() {
@@ -2072,7 +2050,7 @@ async function loadSavedPaths() {
     if (!saved) return;
     const obj = JSON.parse(saved);
     planningMode.loadImportedData(obj);
-    viewingMode.actions.loadViewingData(obj);
+    app.viewing.load(obj);
     if (hasLoadedData()) {
       finalizeLoadedData();
       planningMode.playback.updateControls();
@@ -2113,7 +2091,7 @@ function buildSavedPathsPayload() {
       })),
     })),
     "planned-nodes": planningExport.nodes.map(serializePlanNode),
-    "robot-path": rawPoses.map((p) => ({
+    "robot-path": app.viewing.data.poses.map((p) => ({
       t: p.t ?? null,
       x: p.x, y: p.y,
       theta: p.theta ?? 0,
@@ -2121,7 +2099,7 @@ function buildSavedPathsPayload() {
       r_vel: p.r_vel ?? null,
       speed_raw: p.speed_raw ?? 0,
     })),
-    "watches": watches.map((w) => ({
+    "watches": app.viewing.data.watches.map((w) => ({
       t: w.t ?? null,
       id: Number.isInteger(w.id) ? w.id : null,
       visible: w.visible !== false,
@@ -2129,14 +2107,14 @@ function buildSavedPathsPayload() {
       label: w.label ?? "",
       value: w.value ?? "",
     })),
-    "logs": logs.map((entry) => ({
+    "logs": app.viewing.data.logs.map((entry) => ({
       t: entry.t ?? null,
       level: normalizeLogLevel(entry.level),
       label: entry.label ?? "",
       value: entry.message ?? entry.value ?? "",
       isSystem: entry.isSystem === true,
     })),
-    "waypoints": waypoints.map((waypoint) => ({
+    "waypoints": app.viewing.data.waypoints.map((waypoint) => ({
       id: waypoint.id,
       name: waypoint.name,
       createdTime: waypoint.createdTime ?? null,
@@ -2617,14 +2595,9 @@ function getMinMaxSpeed() {
   return { minV, maxV };
 }
 
-function computeSpeedNormRange(startIndex = 0) {
+function applyViewingSpeedRange() {
   const { minV, maxV } = getMinMaxSpeed();
-  const denom = (maxV - minV) || 1;
-  for (let i = Math.max(0, startIndex); i < rawPoses.length; i += 1) {
-    const p = rawPoses[i];
-    const s = Math.abs(p.speed_raw ?? 0);
-    rawPoses.setSpeedNorm(i, clamp((s - minV) / denom, 0, 1));
-  }
+  app.viewing.setSpeedRange(minV, maxV);
 }
 
 function normFromSpeedRaw(s) {
@@ -2873,14 +2846,15 @@ function drawFirstField() {
 
 // -------- time helpers --------
 function timeRange() {
-  const t0 = rawPoses[0]?.t;
-  const tN = rawPoses[rawPoses.length - 1]?.t;
+  const poses = app.viewing.data.poses;
+  const t0 = poses[0]?.t;
+  const tN = poses[poses.length - 1]?.t;
   if (typeof t0 !== "number" || typeof tN !== "number" || tN <= t0) return null;
   return { t0, tN };
 }
 
 function findFloorIndexByTime(tMs) {
-  const poses = rawPoses;
+  const poses = app.viewing.data.poses;
   if (!poses.length) return -1;
   let lo = 0, hi = poses.length - 1;
   while (lo <= hi) {
@@ -2893,12 +2867,13 @@ function findFloorIndexByTime(tMs) {
 }
 
 function interpolatePoseAtTime(tMs) {
-  if (!rawPoses.length) return null;
+  const poses = app.viewing.data.poses;
+  if (!poses.length) return null;
   const i = findFloorIndexByTime(tMs);
-  const p0 = rawPoses[i];
-  if (i >= rawPoses.length - 1) return poseToInches({ ...p0, t: p0.t });
+  const p0 = poses[i];
+  if (i >= poses.length - 1) return poseToInches({ ...p0, t: p0.t });
 
-  const p1 = rawPoses[i + 1];
+  const p1 = poses[i + 1];
   const t0 = p0.t ?? tMs;
   const t1 = p1.t ?? t0;
   const denom = (t1 - t0) || 1;
@@ -2920,12 +2895,13 @@ function interpolatePoseAtTime(tMs) {
 }
 
 function nearestIndexWithinTol(tMs, tolMs) {
-  if (!rawPoses.length) return null;
+  const poses = app.viewing.data.poses;
+  if (!poses.length) return null;
   const i0 = findFloorIndexByTime(tMs);
-  const cands = [i0, Math.min(i0 + 1, rawPoses.length - 1)];
+  const cands = [i0, Math.min(i0 + 1, poses.length - 1)];
   let best = null;
   for (const i of cands) {
-    const tt = rawPoses[i].t;
+    const tt = poses[i].t;
     if (typeof tt !== "number") continue;
     const dt = Math.abs(tt - tMs);
     if (best === null || dt < best.dt) best = { idx: i, dt };
@@ -2969,14 +2945,7 @@ viewingUi = createViewingUi({
   timelineCanvas,
   timelineContext: tctx,
   timelineBar,
-  getData: () => data,
-  setData: (nextData) => { data = nextData; },
-  getPoses: () => rawPoses,
-  getWatches: () => watches,
-  getLogs: () => logs,
-  getWaypoints: () => waypoints,
-  getWaypointMap: () => waypointsById,
-  getWatchMarkers: () => watchMarkers,
+  viewing: app.viewing,
   isLiveConnected: () => leftConnected,
   isLivestreaming: () => !!(window.__live && window.__live.streaming),
   getLiveAutoFollowHead: () => liveAutoFollowHead,
@@ -3048,6 +3017,13 @@ viewingUi = createViewingUi({
   },
 });
 viewingUi.bindEvents();
+app.viewing.events.dataChanged.subscribe((change) => {
+  if (change.kind === "replaced" || change.kind === "cleared" || (change.kind === "appended" && change.result.metadataChanged)) {
+    syncImportedRouteMetaUi();
+  }
+  scheduleSavedPathsSave();
+  updateExportButtonAvailability();
+});
 
 configureRenderScheduler({
   drawField: () => fieldRenderer.draw(),
@@ -3419,12 +3395,8 @@ let leftRefreshTimer = null;
 let leftRefreshMs = parseInt(leftRefreshIntervalEl?.value || "500", 10) || 500;
 
 // --- Live incremental processing ---
-// Buffer incoming WS lines; doLeftRefresh consumes them and updates poses/watches.
-// Track how much we"ve already integrated into rawPoses/watches
+// Buffer incoming WS lines until Viewing accepts a parsed batch.
 let liveLastPoseT = null; // last pose timestamp integrated
-let liveLastPoseCount = 0;
-let liveLastWatchCount = 0;
-let liveLastRenderAt = 0;
 let liveDebugEnabled = false;
 let liveReqId = 0;
 
@@ -3457,13 +3429,12 @@ function appendParsedLiveRecords(batch, targetBatch = null) {
     };
   }
 
-  const result = viewingMode.actions.appendLiveBatch(batch);
-    return result;
+  return app.viewing.appendLiveBatch(batch);
 }
 
 function viewingWillAcceptWaypointEvent(event, targetBatch = null) {
   if (event.type === "CREATED") return true;
-  if (waypointsById.has(event.id)) return true;
+  if (app.viewing.data.waypointById.has(event.id)) return true;
   return !!targetBatch?.waypointEvents?.some((queuedEvent) => queuedEvent.type === "CREATED" && queuedEvent.id === event.id);
 }
 
@@ -3786,7 +3757,7 @@ function startLeftRefresh() {
 
 async function doLeftRefresh() {
   // During live mode, refresh means: integrate any pending WS lines into
-  // rawPoses/watches, then update derived state and redraw.
+  // Parse pending transport lines and transfer ownership to Viewing.
   if (!leftConnected) return;
   if (!leftStreaming) {
     // "Stop" pauses drawing; do not let WS backlog grow unbounded.
@@ -3795,10 +3766,6 @@ async function doLeftRefresh() {
   }
 
   const t0 = performance.now();
-
-  if (!data) {
-    data = { poses: [], watches: [], logs: [], waypoints: [], meta: {} };
-  }
 
   const batch = livePendingBuffer.batch();
   if (!batch) {
@@ -3812,52 +3779,16 @@ async function doLeftRefresh() {
   for (let i = batch.startIndex; i < batch.endIndex; i++) {
     parseLiveLineIntoState(batch.lines[i], parsedViewingBatch);
   }
-  const { posesAdded, watchesAdded, logsAdded, waypointsAdded } = viewingMode.actions.appendLiveBatch(parsedViewingBatch);
-    livePendingBuffer.markConsumed(batch.endIndex);
+  const { posesAdded, watchesAdded, logsAdded, waypointsAdded } = app.viewing.appendLiveBatch(parsedViewingBatch);
+  livePendingBuffer.markConsumed(batch.endIndex);
 
   const hasNewData = posesAdded > 0 || watchesAdded > 0 || logsAdded > 0 || waypointsAdded > 0;
   if (!hasNewData) return;
 
-  // Keep watches sorted (poses are appended monotonically by t)
-  if (watchesAdded > 0) {
-    watches.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
-  }
-  if (logsAdded > 0) {
-    logs.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
-  }
-  if (waypointsAdded > 0) {
-    waypoints.sort((a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0));
-  }
-
-  // Recompute derived fields incrementally for newly appended poses.
-  if (posesAdded > 0) computeSpeedNormRange(rawPoses.length - posesAdded);
-  data.poses = rawPoses;
-  data.watches = watches;
-  data.logs = logs;
-  data.waypoints = waypoints;
-
-  viewingUi?.updateAfterDataChange({
-    posesChanged: posesAdded > 0,
-    watchesChanged: watchesAdded > 0,
-    logsChanged: logsAdded > 0,
-    waypointsChanged: waypointsAdded > 0,
-  });
-  if (
-    rawPoses.length !== liveLastPoseCount
-    || watches.length !== liveLastWatchCount
-    || livePendingBuffer.consumedIndex !== liveLastRenderAt
-  ) {
-    requestDrawAll();
-    liveLastPoseCount = rawPoses.length;
-    liveLastWatchCount = watches.length;
-    liveLastRenderAt = livePendingBuffer.consumedIndex;
-  }
-  scheduleSavedPathsSave();
-
   const t1 = performance.now();
   const dt = t1 - t0;
   if (dt > 100) {
-    dbgLive(`doLeftRefresh: ${formatNumberString(dt, 1, "0")}ms (poses=${rawPoses.length}, watches=${watches.length}, pending=${livePendingBuffer.pendingCount()})`);
+    dbgLive(`doLeftRefresh: ${formatNumberString(dt, 1, "0")}ms (poses=${app.viewing.data.poses.length}, watches=${app.viewing.data.watches.length}, pending=${livePendingBuffer.pendingCount()})`);
   }
 }
 
@@ -4325,7 +4256,6 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
 // -------- data load --------
 function setData(obj, options = {}) {
   const { replacePlanning = true, replaceViewing = true } = options;
-  data = obj;
   if (!obj) {
     setStatus("Invalid JSON: missing data object");
     return;
@@ -4349,21 +4279,14 @@ function setData(obj, options = {}) {
 
 function setDataFromStreamText(text) {
   planningMode.clear();
-  viewingMode.actions.clear();
-    liveLastPoseT = null;
+  liveLastPoseT = null;
 
   const parsedViewingBatch = createParsedLiveViewingBatch();
   const lines = String(text ?? "").split(/\r?\n/);
   for (const line of lines) {
     parseLiveLineIntoState(line, parsedViewingBatch);
   }
-  viewingMode.actions.appendLiveBatch(parsedViewingBatch);
-  
-  watches.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
-  logs.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
-  waypoints.sort((a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0));
-  data = { poses: rawPoses, watches, logs, waypoints, meta: {} };
-  setImportedRouteMeta(null);
+  app.viewing.loadParsedBatch(parsedViewingBatch);
 
   if (!hasLoadedData()) {
     setStatus("No poses, watches, logs, waypoints, or planning data found in file.");
@@ -4373,35 +4296,14 @@ function setDataFromStreamText(text) {
   finalizeLoadedData();
 }
 
-function normalizePoseArray(arr) {
-  const store = createPoseStore(Array.isArray(arr) ? arr.length : 16);
-  const items = (Array.isArray(arr) ? arr : [])
-    .filter(p => p && typeof p.x === "number" && typeof p.y === "number")
-    .map(p => ({
-      t: (typeof p.t === "number") ? p.t : (toNumMaybe(p.t) ?? null),
-      x: p.x, y: p.y,
-      theta: (typeof p.theta === "number") ? p.theta : (toNumMaybe(p.theta) ?? 0),
-      l_vel: (typeof p.l_vel === "number") ? p.l_vel : (toNumMaybe(p.l_vel) ?? null),
-      r_vel: (typeof p.r_vel === "number") ? p.r_vel : (toNumMaybe(p.r_vel) ?? null),
-      speed_raw: (typeof p.speed_raw === "number")
-        ? p.speed_raw
-        : ((typeof p.speed === "number") ? p.speed : (toNumMaybe(p.speed) ?? 0)),
-      speed_norm: 0,
-    }))
-    .sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
-  for (let i = 0; i < items.length; i += 1) store.push(items[i]);
-  return store;
-}
-
 function hasLoadedData() {
-  return viewingMode.data.hasData() || planningMode.state.hasData();
+  return app.viewing.data.hasData || planningMode.state.hasData();
 }
 
 function finalizeLoadedData() {
   setCurrentUnits(getCurrentUnits());
   updateOffsetsFromInputs();
 
-  computeSpeedNormRange();
   scheduleSavedPathsSave();
 
   // Sync to settings modal and save
@@ -4704,7 +4606,7 @@ async function loadSettings() {
       }
       applySavedLayout(settings);
       updateOffsetsFromInputs();
-      computeSpeedNormRange();
+      applyViewingSpeedRange();
       if (robotImageToggle) robotImageToggle.checked = fieldRenderer.isRobotImageEnabled();
     }
   } catch (e) {
@@ -4827,14 +4729,14 @@ function syncSettingsToMain() {
   }
   if (settingsMinSpeed && minSpeedEl && settingsMinSpeed.value !== minSpeedEl.value) {
     minSpeedEl.value = settingsMinSpeed.value;
-    computeSpeedNormRange();
+    applyViewingSpeedRange();
     viewingUi?.recomputeWatchMarkers();
     requestDrawAll();
     viewingUi?.updatePoseReadout();
   }
   if (settingsMaxSpeed && maxSpeedEl && settingsMaxSpeed.value !== maxSpeedEl.value) {
     maxSpeedEl.value = settingsMaxSpeed.value;
-    computeSpeedNormRange();
+    applyViewingSpeedRange();
     viewingUi?.recomputeWatchMarkers();
     requestDrawAll();
     viewingUi?.updatePoseReadout();
@@ -5083,8 +4985,9 @@ function buildExportMetadata(PathName) {
   const robotDims = robotDimsInches();
   const Units = settingsUnitsSelect?.value || unitsSelect?.value || getCurrentUnits() || "in";
   const SelectedField = topBar.getSelectedField() || DEFAULT_FIELD_KEY;
-  const poseStart = rawPoses[0]?.t ?? null;
-  const poseEnd = rawPoses[rawPoses.length - 1]?.t ?? null;
+  const poses = app.viewing.data.poses;
+  const poseStart = poses[0]?.t ?? null;
+  const poseEnd = poses[poses.length - 1]?.t ?? null;
 
   const formattedDateGB = new Intl.DateTimeFormat("en-GB", {
     year: "numeric",
@@ -5102,11 +5005,11 @@ function buildExportMetadata(PathName) {
     Creator: "MotionView",
     PathName,
     Stats: {
-      PoseCount: rawPoses.length,
-      WatchCount: watches.length,
-      LogCount: logs.length,
-      WaypointCount: waypoints.length,
-      WaypointEvents: waypointEventCount(waypoints),
+      PoseCount: poses.length,
+      WatchCount: app.viewing.data.watches.length,
+      LogCount: app.viewing.data.logs.length,
+      WaypointCount: app.viewing.data.waypoints.length,
+      WaypointEvents: waypointEventCount(app.viewing.data.waypoints),
       PlannedWaypointCount: planningMode.state.getWaypointCount(),
       PlannedObjectCount: planningMode.state.getObjectCount(),
       PlannedNodeCount: planningMode.state.getNodeCount(),
@@ -5142,7 +5045,7 @@ function getSelectedExportType() {
 }
 
 function hasViewingExportData() {
-  return rawPoses.length > 0 || watches.length > 0 || logs.length > 0 || waypoints.length > 0;
+  return app.viewing.data.hasData;
 }
 
 function hasPlanningExportData() {
@@ -5195,7 +5098,7 @@ function buildExportPayload() {
   }
 
   if (includeViewing) {
-    const viewingExport = viewingMode.getExportData();
+    const viewingExport = app.viewing.exportData();
     payload.poses = viewingExport.poses.map(serializeExportPose);
     payload.watches = viewingExport.watches.map(serializeExportWatch);
     payload.logs = viewingExport.logs.map(serializeExportLog);
@@ -5256,7 +5159,7 @@ function flattenMetaEntries(value, prefix = "") {
 
 function renderRouteInfoList() {
   if (!routeInfoList) return;
-  const entries = flattenMetaEntries(importedRouteMeta);
+  const entries = flattenMetaEntries(app.viewing.data.metadata);
   if (!entries.length) {
     routeInfoList.innerHTML = '<div class="routeInfoEmpty">No imported metadata is available for this route.</div>';
     return;
@@ -5271,22 +5174,20 @@ function renderRouteInfoList() {
     .join("");
 }
 
-function setImportedRouteMeta(meta) {
-  importedRouteMeta = (meta && typeof meta === "object" && !Array.isArray(meta) && Object.keys(meta).length)
-    ? meta
-    : null;
+function syncImportedRouteMetaUi() {
+  const metadata = app.viewing.data.metadata;
   if (btnRouteInfo) {
-    btnRouteInfo.disabled = !importedRouteMeta;
+    btnRouteInfo.disabled = !metadata;
   }
   updateExportButtonAvailability();
   if (btnApplyRunSettings) {
-    btnApplyRunSettings.disabled = !importedRouteMeta?.ViewingSettings;
+    btnApplyRunSettings.disabled = !metadata?.ViewingSettings;
   }
   renderRouteInfoList();
 }
 
 async function applyImportedRunSettings() {
-  const viewing = importedRouteMeta?.ViewingSettings;
+  const viewing = app.viewing.data.metadata?.ViewingSettings;
   if (!viewing || typeof viewing !== "object") {
     setStatus("No run settings were found in this route metadata.");
     return;
@@ -5327,7 +5228,7 @@ async function applyImportedRunSettings() {
   sanitizeOffsetInputs();
   syncMainToSettings();
   updateOffsetsFromInputs();
-  computeSpeedNormRange();
+  applyViewingSpeedRange();
   viewingUi?.updateAfterDataChange({
     posesChanged: true,
     watchesChanged: true,
@@ -5341,7 +5242,7 @@ async function applyImportedRunSettings() {
 }
 
 function openRouteInfoModal() {
-  if (!routeInfoModal || !importedRouteMeta) return;
+  if (!routeInfoModal || !app.viewing.data.metadata) return;
   renderRouteInfoList();
   routeInfoModal.removeAttribute("hidden");
   routeInfoModal.style.display = "flex";
@@ -5562,10 +5463,10 @@ if (btnExportConfirm) {
         exported_chars: pendingExportRequest.json.length,
         exported_bytes: getUtf8ByteLength(pendingExportRequest.json),
         exported_planning_template_bytes: includesPlanning ? getUtf8ByteLength(planningMode.state.getExportTemplate()) : 0,
-        exported_viewing_poses: includesViewing ? rawPoses.length : 0,
-        exported_viewing_watches: includesViewing ? watches.length : 0,
-        exported_viewing_logs: includesViewing ? logs.length : 0,
-        exported_viewing_waypoints: includesViewing ? waypoints.length : 0,
+        exported_viewing_poses: includesViewing ? app.viewing.data.poses.length : 0,
+        exported_viewing_watches: includesViewing ? app.viewing.data.watches.length : 0,
+        exported_viewing_logs: includesViewing ? app.viewing.data.logs.length : 0,
+        exported_viewing_waypoints: includesViewing ? app.viewing.data.waypoints.length : 0,
       }));
       console.log("MotionView export payload written:", {
         request: pendingExportRequest,
@@ -6365,7 +6266,7 @@ function togglePlaybackForCurrentMode() {
     requestDrawAll();
     return;
   }
-  if (!data) return;
+  if (!app.viewing.data.hasData) return;
   if (viewingUi?.playback.isPlaying()) {
     viewingUi.playback.pause();
     viewingUi.updatePoseReadout();
@@ -6449,7 +6350,7 @@ if (settingsRobotImgAlpha) settingsRobotImgAlpha.addEventListener("input", onRob
 
 
 settingsMinSpeed.addEventListener("input", () => {
-  computeSpeedNormRange();
+  applyViewingSpeedRange();
   viewingUi?.recomputeWatchMarkers();
   requestDrawAll();
   viewingUi?.updatePoseReadout();
@@ -6458,7 +6359,7 @@ settingsMinSpeed.addEventListener("input", () => {
 });
 
 settingsMaxSpeed.addEventListener("input", () => {
-  computeSpeedNormRange();
+  applyViewingSpeedRange();
   viewingUi?.recomputeWatchMarkers();
   requestDrawAll();
   viewingUi?.updatePoseReadout();
@@ -6602,31 +6503,10 @@ offThetaEl.addEventListener("input", () => {
 function clearAllPosesAndWatches() {
   viewingUi?.clearTransientState();
 
-  // Clear core data
-  viewingMode.actions.clear();
-    try { watchByLabel = {}; } catch { }
+  app.viewing.clear();
+  try { watchByLabel = {}; } catch { }
   liveLastPoseT = null;
-  liveLastPoseCount = 0;
-  liveLastWatchCount = 0;
-  liveLastRenderAt = 0;
   try { livePendingBuffer.clear(); } catch { }
-  setImportedRouteMeta(null);
-
-  if (typeof data === "object" && data) {
-    data.poses = [];
-    data.watches = [];
-    data.logs = [];
-    data.waypoints = [];
-  }
-
-  viewingUi?.updateAfterDataChange({
-    posesChanged: true,
-    watchesChanged: true,
-    logsChanged: true,
-    waypointsChanged: true,
-    filtersChanged: true,
-  });
-  try { requestDrawAll(); } catch { }
 }
 
 function handleClearFieldClick(event) {

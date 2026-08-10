@@ -19,10 +19,10 @@ export interface CreateViewingListsDependencies {
     logCount: HTMLElement | null;
     logSort: HTMLSelectElement | null;
   };
-  getWatchMarkers(): any[];
-  getWatches(): any[];
-  getLogs(): any[];
-  getWaypoints(): any[];
+  getWatchMarkers(): readonly any[];
+  getWatches(): readonly any[];
+  getLogs(): readonly any[];
+  getWaypoints(): readonly any[];
   getVisibleWaypointEvents(): Array<{ waypoint: any; event: any }>;
   getSelectedWatch(): any;
   getSelectedPoseIndex(): number;

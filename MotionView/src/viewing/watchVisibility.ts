@@ -1,4 +1,5 @@
 import type { WatchEntry } from "../state/models";
+import type { ViewingFeature } from "./ViewingFeature";
 import type { WatchMarker } from "./viewingTypes";
 
 export interface WatchVisibilityController {
@@ -15,7 +16,7 @@ export interface WatchVisibilityController {
 }
 
 export interface CreateWatchVisibilityOptions {
-  getWatches(): readonly WatchEntry[];
+  viewing: ViewingFeature;
   getFilterValue(): string;
   graphKeyForWatch(watch: WatchEntry | null | undefined): string;
   updateButtons(key: string, iconId: string, title: string): void;
@@ -57,7 +58,7 @@ export function createWatchVisibility(options: CreateWatchVisibilityOptions): Wa
 
   const currentVisibilityForWatch = (watch: WatchEntry | null | undefined) => {
     const key = keyForWatch(watch);
-    const watches = options.getWatches();
+    const watches = options.viewing.data.watches;
     for (let i = watches.length - 1; i >= 0; i -= 1) {
       const candidate = watches[i];
       if (keyForWatch(candidate) !== key) continue;
@@ -83,10 +84,7 @@ export function createWatchVisibility(options: CreateWatchVisibilityOptions): Wa
       const key = keyForWatch(watch);
       const nextVisible = !isWatchVisible(watch);
 
-      for (const candidate of options.getWatches()) {
-        if (keyForWatch(candidate) !== key) continue;
-        candidate.visible = nextVisible;
-      }
+      options.viewing.setWatchVisibility(watch, nextVisible);
 
       const nextWatch = { visible: nextVisible };
       options.updateButtons(key, iconId(nextWatch), title(nextWatch));

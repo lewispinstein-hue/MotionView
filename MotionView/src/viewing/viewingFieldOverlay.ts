@@ -2,8 +2,8 @@ import { worldToScreen } from "../render/fieldTransform";
 
 export interface ViewingFieldOverlayDependencies {
   context: CanvasRenderingContext2D;
-  getWatchMarkers(): any[];
-  getWaypoints(): any[];
+  getWatchMarkers(): readonly any[];
+  getWaypoints(): readonly any[];
   getSelectedWatch(): any;
   getSelectedWaypointId(): unknown;
   getHoverWatch(): any;

@@ -4,7 +4,7 @@ export interface WaypointListRendererDependencies {
   waypointList: HTMLElement | null;
   waypointCount: HTMLElement | null;
   waypointFilter: HTMLSelectElement | null;
-  getWaypoints(): any[];
+  getWaypoints(): readonly any[];
   getVisibleEvents(): Array<{ waypoint: any; event: any }>;
   getSelectedWaypointId(): unknown;
   getSelectedWaypointEventTime(): unknown;

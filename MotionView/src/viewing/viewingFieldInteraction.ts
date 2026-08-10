@@ -3,8 +3,9 @@ import { setStatus } from "../app/status";
 import { requestDrawAll } from "../render/renderScheduler";
 import { worldToScreen } from "../render/fieldTransform";
 import type { Pose, Waypoint } from "../state/models";
+import type { PoseReader } from "../state/poseStore";
 import type { ViewingSelectionController } from "./viewingSelection";
-import type { WatchMarker } from "./viewingTypes";
+import type { WatchMarker, WaypointView } from "./viewingTypes";
 
 export interface ViewingFieldInteractionController {
   bindEvents(): void;
@@ -12,7 +13,7 @@ export interface ViewingFieldInteractionController {
   clearHoverWatch(): void;
   pickTrackPose(clientX: number, clientY: number): { pose: Pose; nearestIdx: number } | null;
   hitTestWatchAtClient(clientX: number, clientY: number): WatchMarker | null;
-  hitTestWaypointAtClient(clientX: number, clientY: number): Waypoint | null;
+  hitTestWaypointAtClient(clientX: number, clientY: number): WaypointView | null;
 }
 
 export interface CreateViewingFieldInteractionOptions {
@@ -22,21 +23,21 @@ export interface CreateViewingFieldInteractionOptions {
   isPlaying(): boolean;
   isPanning(): boolean;
   isLivestreaming(): boolean;
-  getPoses(): readonly Pose[];
+  getPoses(): PoseReader;
   getWatchMarkers(): readonly WatchMarker[];
-  getWaypoints(): readonly Waypoint[];
+  getWaypoints(): readonly WaypointView[];
   poseToInches(pose: Pose): Pose;
   angLerpDeg(a: number, b: number, t: number): number;
   trackHoverTolerancePx: number;
   scaledViewingFieldRadius(baseDiameterPx: number): number;
   isWatchMarkerVisible(marker: WatchMarker): boolean;
-  waypointFilterMatches(waypoint: Waypoint): boolean;
+  waypointFilterMatches(waypoint: WaypointView): boolean;
   updateCursorPillsFromClient(clientX: number, clientY: number): void;
   setCursorPills(text: string): void;
   handlePlanningMouseMove(event: MouseEvent): void;
   handlePlanningMouseLeave(): void;
   selectWatchMarker(marker: WatchMarker, fromUserClick: boolean, position?: { x: number; y: number }): void;
-  selectWaypointEvent(waypoint: Waypoint, event: unknown, fromUserClick: boolean): void;
+  selectWaypointEvent(waypoint: WaypointView, event: unknown, fromUserClick: boolean): void;
   clearWaypointSelection(): void;
   renderWaypointList(): void;
   clearWaypointHighlight(): void;
@@ -141,7 +142,7 @@ export function createViewingFieldInteraction(options: CreateViewingFieldInterac
     const rect = options.canvas.getBoundingClientRect();
     const x = clientX - rect.left;
     const y = clientY - rect.top;
-    let best: Waypoint | null = null;
+    let best: WaypointView | null = null;
     let bestD2 = Infinity;
 
     for (const waypoint of waypoints) {

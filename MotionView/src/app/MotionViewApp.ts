@@ -1,9 +1,11 @@
 import type { TelemetryProperties } from "../telemetry/telemetryTypes";
+import { ViewingFeature } from "../viewing/ViewingFeature";
 import type { AppExitReason, AppLifecycleState } from "./appEvents";
 import { CoreServices } from "./coreServices";
 
 export class MotionViewApp {
   readonly core = new CoreServices();
+  readonly viewing = new ViewingFeature();
 
   #lifecycle: AppLifecycleState = "created";
   #lifecycleBeforeExit: AppLifecycleState = "created";

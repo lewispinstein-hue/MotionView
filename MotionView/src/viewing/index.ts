@@ -1,4 +1,6 @@
 export * from "./viewingTypes";
+export * from "./ViewingFeature";
+export * from "./viewingEvents";
 export * from "./routeNormalization";
 export * from "./watchMarkers";
 export * from "./virtualList";
@@ -17,5 +19,4 @@ export * from "./viewingFieldInteraction";
 export * from "./viewingInput";
 export * from "./viewingRendering";
 export * from "./viewingTimeline";
-export * from "./createViewingMode";
 export * from "./createViewingUi";

@@ -1,4 +1,5 @@
 import type { Pose } from "../state/models";
+import type { PoseReader } from "../state/poseStore";
 import type { WatchMarker } from "./viewingTypes";
 
 export interface TimelineHoverSnapshot {
@@ -41,7 +42,7 @@ export interface ViewingSelectionController {
   clearTrackHover(restore: boolean): void;
   clearTrackLock(): void;
   lockTrackPose(pose: Pose, index: number): void;
-  currentReferenceTime(poses: readonly Pose[], playingTime?: number | null, playing?: boolean): number | null;
+  currentReferenceTime(poses: PoseReader, playingTime?: number | null, playing?: boolean): number | null;
   reset(): void;
 }
 

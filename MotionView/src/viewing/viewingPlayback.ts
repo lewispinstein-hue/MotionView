@@ -1,12 +1,13 @@
 import { setStatus } from "../app/status";
 import { requestDrawAll } from "../render/renderScheduler";
 import type { Pose } from "../state/models";
+import type { PoseReader } from "../state/poseStore";
 import type { ViewingSelectionController } from "./viewingSelection";
 import type { WatchMarker } from "./viewingTypes";
 
 export interface ViewingPlaybackOptions {
   selection: ViewingSelectionController;
-  getPoses(): readonly Pose[];
+  getPoses(): PoseReader;
   getPlayRate(): number;
   isLivestreaming(): boolean;
   setPlayButtonLabel(label: string): void;

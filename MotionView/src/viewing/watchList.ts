@@ -7,8 +7,8 @@ export interface WatchListRendererDependencies {
   watchSort: HTMLSelectElement | null;
   watchCount: HTMLElement | null;
   get watchListVirtual(): VirtualList<any> | null;
-  getWatchMarkers(): any[];
-  getWatches(): any[];
+  getWatchMarkers(): readonly any[];
+  getWatches(): readonly any[];
   getSelectedWatch(): any;
   setRenderedWatchIndexByTime(indexByTime: Map<unknown, number>): void;
   refreshWatchGraphPanelData(): void;

@@ -1,5 +1,6 @@
 import { requestDrawAll } from "../render/renderScheduler";
 import type { Pose } from "../state/models";
+import type { PoseReader } from "../state/poseStore";
 import type { ViewingSelectionController } from "./viewingSelection";
 import type { WatchMarker } from "./viewingTypes";
 
@@ -17,7 +18,7 @@ export interface CreateViewingTimelineOptions {
   timelineBar: HTMLElement | null;
   selection: ViewingSelectionController;
   hasData(): boolean;
-  getPoses(): readonly Pose[];
+  getPoses(): PoseReader;
   getWatchMarkers(): readonly WatchMarker[];
   isPlaying(): boolean;
   getPlayTimeMs(): number | null;
@@ -136,8 +137,8 @@ export function createViewingTimeline(options: CreateViewingTimelineOptions): Vi
 
     context.lineWidth = 2;
     for (let i = 1; i < poses.length; i += 1) {
-      const a = poses[i - 1];
-      const b = poses[i];
+      const a = poses[i - 1]!;
+      const b = poses[i]!;
       if (typeof a.t !== "number" || typeof b.t !== "number") continue;
       const xa = timeToX(a.t);
       const xb = timeToX(b.t);
