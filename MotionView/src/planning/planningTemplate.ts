@@ -1,15 +1,15 @@
-import type { PlanningNode, PlanningObject, PlanningTelemetrySnapshot, PlanningWaypoint } from "./planningTypes";
+import type { PlanningNode, PlanningNodeView, PlanningObject, PlanningObjectView, PlanningTelemetrySnapshot, PlanningWaypoint, PlanningWaypointView } from "./planningTypes";
 import { getPlanNodeEffectiveMethod } from "./planningObjects";
 
 export interface BuildPlanExportCodeOptions {
   template: string;
-  waypoints: PlanningWaypoint[];
-  nodes: PlanningNode[];
-  objects: PlanningObject[];
+  waypoints: readonly PlanningWaypointView[];
+  nodes: readonly PlanningNodeView[];
+  objects: readonly PlanningObjectView[];
   readPlanSpeed(value: unknown, fallback?: number): number;
   formatTemplateNumber(value: unknown, decimals?: number): string;
   planThetaDegAt(index: number): number;
-  getSortedPlanNodes(): PlanningNode[];
+  getSortedPlanNodes(): readonly PlanningNodeView[];
 }
 
 export function getUtf8ByteLength(value: unknown) {
@@ -19,9 +19,9 @@ export function getUtf8ByteLength(value: unknown) {
 }
 
 export function getPlanningTelemetryProperties(
-  waypoints: PlanningWaypoint[],
-  objects: PlanningObject[],
-  nodes: PlanningNode[],
+  waypoints: readonly Readonly<PlanningWaypoint>[],
+  objects: readonly Readonly<PlanningObject>[],
+  nodes: readonly Readonly<PlanningNode>[],
   template: string,
   extra: Record<string, unknown> = {},
 ): PlanningTelemetrySnapshot {
@@ -40,7 +40,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
   const rawTemplate = String(options.template ?? "");
   if (!rawTemplate.trim()) return "";
 
-  const renderWaypointBlock = (point: PlanningWaypoint, index: number) => {
+  const renderWaypointBlock = (point: Readonly<PlanningWaypoint>, index: number) => {
     const prev = options.waypoints[index - 1];
     const distance = prev ? Math.hypot(point.x - prev.x, point.y - prev.y) : 0;
     const replacements: Record<string, string> = {
@@ -54,7 +54,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     return rawTemplate.replace(/\$\{(x|y|theta|distance|iteration|speed)\}/g, (_, token) => replacements[token] ?? "");
   };
 
-  const nodesByBucket = new Map<number, PlanningNode[]>();
+  const nodesByBucket = new Map<number, Readonly<PlanningNode>[]>();
   for (const node of options.getSortedPlanNodes()) {
     const arr = nodesByBucket.get(node.beforeWaypoint) || [];
     arr.push(node);

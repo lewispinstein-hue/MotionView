@@ -85,6 +85,12 @@ export class PlanningDialogs {
     return this.#confirmResolver != null || this.#editorResolver != null;
   }
 
+  cancelOpen(): boolean {
+    if (this.#editorResolver) { this.closeEditor(null); return true; }
+    if (this.#confirmResolver) { this.closeConfirm(false); return true; }
+    return false;
+  }
+
   private confirmEditor(): void {
     if (!this.#editorResolver) return;
     const name = this.dom.templateName.value.trim().slice(0, 25);

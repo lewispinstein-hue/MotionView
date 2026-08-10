@@ -4,6 +4,10 @@ import { CANVAS_ZOOM_MIN } from "../../render/createFieldRenderer";
 import { requestDrawAll } from "../../render/renderScheduler";
 import type { PlanningFeature } from "../PlanningFeature";
 import type { PlanningDom } from "../PlanningDom";
+import type { PlanningDialogs } from "../PlanningDialogs";
+import { getPlanNodeEffectiveMethod } from "../planningObjects";
+import { planningTelemetry } from "../../telemetry/createTelemetry";
+import { getUtf8ByteLength } from "../planningTemplate";
 
 interface SelectionRect { x0: number; y0: number; x1: number; y1: number }
 interface DragPoint { index: number; x: number; y: number }
@@ -26,11 +30,13 @@ export class PlanningFieldView {
   #thetaStart = 0;
   #thetaOriginal: readonly Readonly<{ index: number; theta: number }>[] = [];
   #pendingAdd: Readonly<{ x: number; y: number; screenX: number; screenY: number; clearSelection: boolean }> | null = null;
+  #hoverNodeId: string | null = null;
 
   constructor(
     private readonly planning: PlanningFeature,
     private readonly field: FieldRenderer,
     private readonly dom: PlanningDom,
+    private readonly dialogs: PlanningDialogs,
   ) {}
 
   bind(): void {
@@ -40,6 +46,12 @@ export class PlanningFieldView {
     this.dom.canvas.addEventListener("pointercancel", (event) => this.pointerEnd(event));
     this.dom.canvas.addEventListener("contextmenu", (event) => {
       if (getMode() === "planning") event.preventDefault();
+    });
+    this.dom.canvas.addEventListener("dblclick", (event) => {
+      if (getMode() !== "planning") return;
+      const point = this.canvasPoint(event as PointerEvent);
+      const node = this.hitNode(point.x, point.y);
+      if (node) { event.preventDefault(); void this.editNode(node.id); }
     });
   }
 
@@ -59,6 +71,26 @@ export class PlanningFieldView {
       else context.lineTo(screen.x, screen.y);
     });
     context.stroke();
+
+    for (const node of this.planning.timeline.nodes) {
+      const distance = node.beforeWaypoint >= this.planning.route.length
+        ? this.planning.projection.totalLength
+        : this.planning.projection.distances[node.beforeWaypoint] ?? 0;
+      const pose = this.planning.projection.sample(distance);
+      const object = this.planning.objects.get(node.objectId);
+      if (!pose || !object) continue;
+      const screen = this.field.worldToScreen(pose.x, pose.y);
+      const selected = this.planning.selection.selectedNodeId === node.id || this.#hoverNodeId === node.id;
+      context.save();
+      context.translate(screen.x, screen.y);
+      context.rotate((Number(pose.theta) || 0) * Math.PI / 180);
+      context.fillStyle = object.color;
+      context.strokeStyle = selected ? "rgba(255,255,255,.98)" : "rgba(15,25,35,.7)";
+      context.lineWidth = selected ? 3 : 2;
+      context.fillRect(-11, -3, 22, 6);
+      context.strokeRect(-11, -3, 22, 6);
+      context.restore();
+    }
 
     waypoints.forEach((point, index) => {
       const screen = this.field.worldToScreen(point.x, point.y);
@@ -133,9 +165,17 @@ export class PlanningFieldView {
       return;
     }
     const hit = this.hitWaypoint(point.x, point.y);
+    const node = hit < 0 ? this.hitNode(point.x, point.y) : null;
+    if (node) {
+      this.planning.selection.selectNode(node.id);
+      this.releaseCapture(event.pointerId);
+      this.#pointerId = null;
+      return;
+    }
     if (hit >= 0) {
       if (event.shiftKey) {
         this.planning.selection.toggleWaypoint(hit);
+        this.releaseCapture(event.pointerId);
         this.#pointerId = null;
         return;
       }
@@ -153,13 +193,24 @@ export class PlanningFieldView {
       return;
     }
     const world = this.field.screenToWorld(point.x, point.y);
+    const bounds = this.field.getBounds();
+    if (world.x < bounds.minX || world.x > bounds.maxX || world.y < bounds.minY || world.y > bounds.maxY) {
+      this.#pendingAdd = null;
+      this.field.beginPan(event.pointerId, point.x, point.y);
+      return;
+    }
     this.#pendingAdd = { ...world, screenX: point.x, screenY: point.y, clearSelection: this.planning.selection.waypointIndices.size > 1 };
     this.field.beginPan(event.pointerId, point.x, point.y);
   }
 
   private pointerMove(event: PointerEvent): void {
-    if (getMode() !== "planning" || this.#pointerId !== event.pointerId) return;
+    if (getMode() !== "planning") return;
     const point = this.canvasPoint(event);
+    if (this.#pointerId !== event.pointerId) {
+      this.#hoverNodeId = this.hitNode(point.x, point.y)?.id ?? null;
+      requestDrawAll();
+      return;
+    }
     if (this.#selectionRect) {
       this.#selectionRect.x1 = point.x;
       this.#selectionRect.y1 = point.y;
@@ -217,7 +268,7 @@ export class PlanningFieldView {
         }
       }
     }
-    try { this.dom.canvas.releasePointerCapture(event.pointerId); } catch { /* capture may already be released */ }
+    this.releaseCapture(event.pointerId);
     this.#pointerId = null;
     this.#dragStart = null;
     this.#dragPoints = [];
@@ -282,5 +333,35 @@ export class PlanningFieldView {
   private canvasPoint(event: PointerEvent): Readonly<{ x: number; y: number }> {
     const rect = this.dom.canvas.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
+
+  private releaseCapture(pointerId: number): void {
+    try { this.dom.canvas.releasePointerCapture(pointerId); } catch { /* capture may already be released */ }
+  }
+
+  private hitNode(x: number, y: number) {
+    let best: (typeof this.planning.timeline.nodes)[number] | null = null;
+    let distance = 12 * 12;
+    for (const node of this.planning.timeline.nodes) {
+      const routeDistance = node.beforeWaypoint >= this.planning.route.length
+        ? this.planning.projection.totalLength
+        : this.planning.projection.distances[node.beforeWaypoint] ?? 0;
+      const pose = this.planning.projection.sample(routeDistance);
+      if (!pose) continue;
+      const screen = this.field.worldToScreen(pose.x, pose.y);
+      const next = (screen.x - x) ** 2 + (screen.y - y) ** 2;
+      if (next <= distance) { best = node; distance = next; }
+    }
+    return best;
+  }
+
+  private async editNode(nodeId: string): Promise<void> {
+    const node = this.planning.timeline.get(nodeId);
+    const method = node ? getPlanNodeEffectiveMethod(this.planning.objects.items, node) : null;
+    if (!node || !method) return;
+    const result = await this.dialogs.edit({ title: "Edit Placed Node", groupTitle: "Node Code", description: "These code changes only apply to this placed node.", code: method.code });
+    if (!result) return;
+    const changed = this.planning.timeline.setCodeOverride(nodeId, result.code);
+    if (changed.changed) void planningTelemetry.timelineNodeUpdated(this.planning.telemetryProperties({ node_override_created: !changed.hadOverride && changed.hasOverride, node_override_cleared: changed.hadOverride && !changed.hasOverride, node_code_chars: result.code.length, node_code_bytes: getUtf8ByteLength(result.code) }));
   }
 }

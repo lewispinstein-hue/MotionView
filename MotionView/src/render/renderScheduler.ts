@@ -1,6 +1,5 @@
 export interface RenderSchedulerCallbacks {
   drawField(): void;
-  drawPlanningTimeline?(): void;
 }
 
 export interface ViewingRenderLayer {
@@ -31,8 +30,7 @@ export function registerPlanningRenderLayer(layer: PlanningRenderLayer): void {
 export function drawAllNow(): void {
   callbacks?.drawField();
   viewingLayer?.drawTimeline();
-  if (planningLayer) planningLayer.drawTimeline();
-  else callbacks?.drawPlanningTimeline?.();
+  planningLayer?.drawTimeline();
 }
 
 export function requestDrawAll(): void {

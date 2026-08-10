@@ -29,7 +29,6 @@ export class PlanningDom {
   readonly selectedTheta: HTMLInputElement;
   readonly selectedSpeed: HTMLInputElement;
   readonly objectList: HTMLElement;
-  readonly eventsHint: HTMLElement;
   readonly addObject: HTMLButtonElement;
   readonly copyCode: HTMLButtonElement;
   readonly editTemplate: HTMLButtonElement;
@@ -78,9 +77,6 @@ export class PlanningDom {
     this.selectedTheta = requiredElement(document, "planSelTheta");
     this.selectedSpeed = requiredElement(document, "planSelSpeed");
     this.objectList = requiredElement(document, "planObjectList");
-    const eventsHint = document.querySelector<HTMLElement>(".planEventsHint");
-    if (!eventsHint) throw new Error("MotionView Planning UI requires .planEventsHint.");
-    this.eventsHint = eventsHint;
     this.addObject = requiredElement(document, "btnPlanAddObject");
     this.copyCode = requiredElement(document, "btnPlanCopyCode");
     this.editTemplate = requiredElement(document, "btnPlanEditTemplate");

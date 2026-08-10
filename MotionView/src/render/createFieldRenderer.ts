@@ -35,12 +35,9 @@ export interface RobotImageTransform {
 export interface FieldRendererDependencies {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
-  getPlanningPose?(): FieldPose | null;
   getRobotDimensions(): { w: number; h: number };
   fieldHeadingToCanvasRotationDeg(thetaField: number): number;
   heatColorFromNorm(norm: number): string;
-  drawPlanningOverlay?(force?: boolean): void;
-  isPlanningOverlayVisible?(): boolean;
   onRobotImageAvailabilityChanged?(available: boolean): void;
   onFieldImageLoaded?(fieldKey: string): void | Promise<void>;
 }
@@ -395,14 +392,12 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
       drawPath();
       viewingLayer?.drawOverlay();
       if (planningLayer?.overlayVisible) planningLayer.drawOverlay(true);
-      else if (deps.isPlanningOverlayVisible?.()) deps.drawPlanningOverlay?.(true);
       const pose = viewingLayer?.currentPose() ?? null;
       if (pose) viewingLayer?.drawWaypointOffset(pose);
       if (pose) drawRobot(pose, 1.0);
     } else {
-      if (planningLayer) planningLayer.drawOverlay();
-      else deps.drawPlanningOverlay?.();
-      const pose = planningLayer?.currentPose() ?? deps.getPlanningPose?.() ?? null;
+      planningLayer?.drawOverlay();
+      const pose = planningLayer?.currentPose() ?? null;
       if (pose) drawRobot(pose, 1.0);
     }
   }

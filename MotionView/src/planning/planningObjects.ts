@@ -1,6 +1,6 @@
 import { createPlanMethodId, createPlanObjectId, getDefaultPlanObjectColor, getDefaultPlanObjectName } from "./planningState";
 import type { PlanningSession } from "./planningSession";
-import type { PlanningMethod, PlanningNode, PlanningObject, PlanningObjectView } from "./planningTypes";
+import type { PlanningMethod, PlanningNode, PlanningNodeView, PlanningObject, PlanningObjectView } from "./planningTypes";
 
 export class PlanningObjects {
   constructor(private readonly session: PlanningSession) {}
@@ -91,11 +91,11 @@ export interface EffectivePlanningMethod {
   hasOverride: boolean;
 }
 
-export function getPlanObjectById(objects: readonly PlanningObject[], objectId: string): PlanningObject | null {
-  return objects.find((entry) => entry.id === objectId) as PlanningObject | undefined ?? null;
+export function getPlanObjectById(objects: readonly PlanningObjectView[], objectId: string): PlanningObjectView | null {
+  return objects.find((entry) => entry.id === objectId) ?? null;
 }
 
-export function getPlanMethodById(objects: readonly PlanningObject[], objectId: string, methodId: string): PlanningMethod | null {
+export function getPlanMethodById(objects: readonly PlanningObjectView[], objectId: string, methodId: string): Readonly<PlanningMethod> | null {
   return getPlanObjectById(objects, objectId)?.methods?.find((entry) => entry.id === methodId) ?? null;
 }
 
@@ -104,8 +104,8 @@ export function hasPlanNodeMethodOverride(node: PlanningNode | null | undefined)
 }
 
 export function getPlanNodeEffectiveMethod(
-  objects: readonly PlanningObject[],
-  node: PlanningNode | null | undefined,
+  objects: readonly PlanningObjectView[],
+  node: PlanningNodeView | null | undefined,
 ): EffectivePlanningMethod | null {
   if (!node) return null;
   const method = getPlanMethodById(objects, node.objectId, node.methodId);
@@ -150,7 +150,7 @@ export function serializePlanNode(node: PlanningNode): PlanningNode {
   return serialized;
 }
 
-export function getPlanMethodNumber(objects: readonly PlanningObject[], objectId: string, methodId: string): number | null {
+export function getPlanMethodNumber(objects: readonly PlanningObjectView[], objectId: string, methodId: string): number | null {
   const index = getPlanObjectById(objects, objectId)?.methods.findIndex((entry) => entry.id === methodId) ?? -1;
   return index >= 0 ? index + 1 : null;
 }
