@@ -1,138 +1,97 @@
-import { setStatus } from "../app/status";
-import { requestDrawAll } from "../render/renderScheduler";
 import type { Pose } from "../state/models";
-import type { PoseReader } from "../state/poseStore";
-import type { ViewingSelectionController } from "./viewingSelection";
-import type { WatchMarker } from "./viewingTypes";
+import type { ViewingEvents } from "./viewingEvents";
+import type { ViewingDataReader } from "./viewingTypes";
+import type { ViewingNavigation } from "./ViewingNavigation";
+import type { ViewingProjection } from "./ViewingProjection";
 
-export interface ViewingPlaybackOptions {
-  selection: ViewingSelectionController;
-  getPoses(): PoseReader;
-  getPlayRate(): number;
-  isLivestreaming(): boolean;
-  setPlayButtonLabel(label: string): void;
-  formatTimeSeconds(ms: number | null): string;
-  interpolatePoseAtTime(timeMs: number): Pose | null;
-  findFloorIndexByTime(timeMs: number): number;
-  lastWatchAtTime(timeMs: number): WatchMarker | null;
-  highlightWatch(timeMs: number, doScroll: boolean): void;
-  updatePoseReadout(): void;
-}
+/** Owns Viewing playback timing and exposes readonly current-frame state. */
+export class ViewingPlayback {
+  #playing = false;
+  #rate = 1;
+  #timeMs: number | null = null;
+  #pose: Readonly<Pose> | null = null;
+  #lastWallTime: number | null = null;
+  #frame: number | null = null;
 
-export interface ViewingPlaybackController {
-  isPlaying(): boolean;
-  getPlayTimeMs(): number | null;
-  getPlayPose(): Pose | null;
-  setPlayTimeMs(timeMs: number | null): void;
-  play(): void;
-  pause(): void;
-  setPlayRate(rate: number): void;
-}
+  constructor(
+    private readonly data: ViewingDataReader,
+    private readonly navigation: ViewingNavigation,
+    private readonly projection: ViewingProjection,
+    private readonly events: ViewingEvents,
+  ) {
+    events.dataChanged.subscribe((change) => {
+      if (change.kind === "replaced" || change.kind === "cleared") this.pause();
+    });
+  }
 
-export function createViewingPlayback(options: ViewingPlaybackOptions): ViewingPlaybackController {
-  let playing = false;
-  let raf: number | null = null;
-  let playTimeMs: number | null = null;
-  let lastWall: number | null = null;
-  let playRate = options.getPlayRate();
-  let playPose: Pose | null = null;
+  get isPlaying(): boolean { return this.#playing; }
+  get rate(): number { return this.#rate; }
+  get timeMs(): number | null { return this.#timeMs; }
+  get pose(): Readonly<Pose> | null { return this.#pose; }
 
-  const cancelFrame = () => {
-    if (raf != null) cancelAnimationFrame(raf);
-    raf = null;
-  };
+  setRate(rate: number): void {
+    const next = Number.isFinite(rate) && rate > 0 ? rate : 1;
+    if (next === this.#rate) return;
+    this.#rate = next;
+    this.events.playbackChanged.emit({ kind: "rate", rate: next });
+  }
 
-  const pause = () => {
-    if (!playing) return;
-    playing = false;
-    options.setPlayButtonLabel("▶");
-    cancelFrame();
-    playPose = null;
-    lastWall = null;
-    const poses = options.getPoses();
-    setStatus(`Paused at time ${options.formatTimeSeconds(poses[options.selection.selectedIndex]?.t ?? 0)}s`);
-  };
+  setTime(timeMs: number | null): void {
+    this.#timeMs = timeMs;
+    this.#pose = this.projection.interpolatePose(timeMs);
+    if (timeMs != null) {
+      this.navigation.selectPose(this.projection.findFloorIndex(timeMs), { preserveDetails: true });
+    }
+    this.events.playbackChanged.emit({ kind: "frame" });
+  }
 
-  const play = () => {
-    const poses = options.getPoses();
-    if (!poses.length) return;
-    if (options.isLivestreaming()) {
-      setStatus("Playback disabled while livestreaming.");
+  play(): void {
+    const range = this.projection.timeRange();
+    if (!range || this.#playing) return;
+    this.#playing = true;
+    this.#timeMs = this.#timeMs == null || this.#timeMs >= range.end ? range.start : this.#timeMs;
+    this.#lastWallTime = null;
+    this.events.playbackChanged.emit({ kind: "started" });
+    this.#frame = requestAnimationFrame(this.tick);
+  }
+
+  pause(): void {
+    if (this.#frame != null) cancelAnimationFrame(this.#frame);
+    this.#frame = null;
+    this.#lastWallTime = null;
+    if (!this.#playing) return;
+    this.#playing = false;
+    this.events.playbackChanged.emit({ kind: "paused" });
+  }
+
+  toggle(): void {
+    if (this.#playing) this.pause();
+    else this.play();
+  }
+
+  currentDisplayPose(): Readonly<Pose> | null {
+    if (this.#playing) return this.#pose ?? this.projection.interpolatePose(this.#timeMs);
+    if (this.navigation.hoverTimelineTime != null) return this.projection.interpolatePose(this.navigation.hoverTimelineTime);
+    if (this.navigation.trackHoverPose) return this.navigation.trackHoverPose;
+    if (this.navigation.trackLockPose) return this.navigation.trackLockPose;
+    return this.projection.poseAt(this.navigation.selectedIndex);
+  }
+
+  readonly tick = (wallTime: number): void => {
+    if (!this.#playing) return;
+    const range = this.projection.timeRange();
+    if (!range) {
+      this.pause();
       return;
     }
-
-    const tMin = poses[0]?.t ?? 0;
-    const tMax = poses[poses.length - 1]?.t ?? tMin;
-    if (
-      options.selection.selectedIndex >= poses.length - 1
-      || (typeof playTimeMs === "number" && playTimeMs >= tMax)
-    ) {
-      options.selection.selectedIndex = 0;
-      playTimeMs = tMin;
-      playPose = null;
-    }
-
-    options.selection.clearTrackHover(true);
-    options.selection.clearTrackLock();
-    options.selection.selectedWatch = null;
-    options.selection.selectedLogTime = null;
-    options.selection.timelineHoverSaved = null;
-    setStatus(`Playing from time ${options.formatTimeSeconds(poses[options.selection.selectedIndex]?.t ?? 0)}s`);
-
-    const tStart = poses[options.selection.selectedIndex]?.t;
-    playTimeMs = (typeof tStart === "number") ? tStart : (poses[0]?.t ?? 0);
-
-    playing = true;
-    options.setPlayButtonLabel("⏸");
-    lastWall = performance.now();
-
-    const tick = (now: number) => {
-      if (!playing) return;
-      const previousWall = lastWall ?? now;
-      const dtWall = now - previousWall;
-      lastWall = now;
-      playTimeMs = (playTimeMs ?? tMin) + dtWall * playRate;
-
-      if (playTimeMs >= tMax) {
-        playTimeMs = tMax;
-        playPose = options.interpolatePoseAtTime(playTimeMs);
-        options.selection.selectedIndex = poses.length - 1;
-        options.updatePoseReadout();
-        requestDrawAll();
-        pause();
-        return;
-      }
-
-      playPose = options.interpolatePoseAtTime(playTimeMs);
-      options.selection.selectedIndex = options.findFloorIndexByTime(playTimeMs);
-
-      const last = options.lastWatchAtTime(playTimeMs);
-      if (last && (!options.selection.selectedWatch || options.selection.selectedWatch.marker?.t !== last.t)) {
-        options.selection.selectedWatch = { marker: last };
-        options.highlightWatch(last.t, false);
-      }
-
-      options.updatePoseReadout();
-      requestDrawAll();
-      raf = requestAnimationFrame(tick);
-    };
-
-    cancelFrame();
-    raf = requestAnimationFrame(tick);
-  };
-
-  return {
-    isPlaying: () => playing,
-    getPlayTimeMs: () => playTimeMs,
-    getPlayPose: () => playPose,
-    setPlayTimeMs(timeMs: number | null) {
-      playTimeMs = timeMs;
-      playPose = typeof timeMs === "number" ? options.interpolatePoseAtTime(timeMs) : null;
-    },
-    play,
-    pause,
-    setPlayRate(rate: number) {
-      playRate = Number(rate) || 1;
-    },
+    if (this.#lastWallTime == null) this.#lastWallTime = wallTime;
+    const elapsed = (wallTime - this.#lastWallTime) * this.#rate;
+    this.#lastWallTime = wallTime;
+    this.#timeMs = Math.min(range.end, (this.#timeMs ?? range.start) + elapsed);
+    this.#pose = this.projection.interpolatePose(this.#timeMs);
+    this.navigation.selectPose(this.projection.findFloorIndex(this.#timeMs), { preserveDetails: true });
+    this.events.playbackChanged.emit({ kind: "frame" });
+    if (this.#timeMs >= range.end) this.pause();
+    else this.#frame = requestAnimationFrame(this.tick);
   };
 }

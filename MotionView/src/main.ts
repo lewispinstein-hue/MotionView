@@ -5,10 +5,6 @@ import fitIconUrl from "./assets/svg/common/fit.svg?url";
 import demoRouteUrl from "./assets/demo/getting-started-route.json?url";
 import changeObjectColorIconUrl from "./assets/svg/planning/changeObjectColor.svg?url";
 import removePlanningObjectIconUrl from "./assets/svg/planning/removePlanningObject.svg?url";
-import invisibleWatchIconUrl from "./assets/svg/viewing/invisibleWatch.svg?url";
-import pinWatchIconUrl from "./assets/svg/viewing/pinWatch.svg?url";
-import visibleWatchIconUrl from "./assets/svg/viewing/visibleWatch.svg?url";
-import watchGraphIconUrl from "./assets/svg/viewing/watchGraph.svg?url";
 import { initializeMotionViewApp } from "./app/appRuntime";
 import { createTopBar } from "./app/createTopBar";
 import { getMode, setMode, subscribeMode } from "./app/modeController";
@@ -17,7 +13,7 @@ import { applyLiveButtonState } from "./live/liveDomAdapter";
 import { LiveActionGate, LivePendingBuffer, LiveWebSocketClient, stripToTag } from "./live/liveCore";
 import { LiveConsoleBuffer } from "./live/liveConsole";
 import { createFieldRenderer, FIELD_BOUNDS_IN, CANVAS_ZOOM_MIN } from "./render/createFieldRenderer";
-import { configureRenderScheduler, requestDrawAll } from "./render/renderScheduler";
+import { configureRenderScheduler, registerViewingRenderLayer, requestDrawAll } from "./render/renderScheduler";
 import {
   currentUnitsToInches,
   formatDistanceFromInches,
@@ -59,8 +55,9 @@ import {
 import { appTelemetry, exportTelemetry, liveTelemetry, planningTelemetry, viewingTelemetry } from "./telemetry/createTelemetry";
 import {
   buildWaypointState,
-  createViewingUi,
-  lastWatchAtTime,
+  ViewingDom,
+  ViewingInput,
+  ViewingView,
   normalizeLogs,
   normalizePoses,
   normalizeSystemLogMessage,
@@ -68,7 +65,6 @@ import {
   normalizeWaypointType,
   parseWaypointNumber,
   parseWaypointParams,
-  watchGraphKeyForWatch,
   waypointEventCount,
 } from "./viewing";
 
@@ -353,7 +349,8 @@ function getValidFieldKey(fieldKey) {
 
 // Raw poses are stored in FILE units; we convert to inches for rendering.
 // Fields: t, x, y, theta, l_vel, r_vel, speed_raw, speed_norm
-let viewingUi = null;
+let viewingView;
+let viewingInput;
 
 const telemetryMetrics = {
   totalPosesReceived: 0,
@@ -376,7 +373,7 @@ export const topBar = createTopBar({
   onTogglePlayback: () => togglePlaybackForCurrentMode(),
   onPlaybackSpeedChanged: (speed) => {
     playRate = speed;
-    viewingUi?.setPlaybackRate(playRate);
+    app.viewing.playback.setRate(playRate);
     saveSettings();
   },
   onFieldChanged: async (fieldKey) => {
@@ -398,19 +395,12 @@ function syncTopBarPlayback(label = playButtonLabel) {
 const fieldRenderer = createFieldRenderer({
   canvas,
   ctx,
-  getViewingPathPoses: () => app.viewing.data.poses.map(poseToInches),
-  getViewingPose: () => viewingUi?.currentDisplayPose() ?? null,
   getPlanningPose: () => planSampleAtDist(planningMode.playback.getPlaybackDistance()),
   getRobotDimensions: () => robotDimsInches(),
   fieldHeadingToCanvasRotationDeg,
   heatColorFromNorm,
-  drawViewingOverlay: () => {
-    viewingUi?.fieldOverlay.drawWaypointDots();
-    viewingUi?.fieldOverlay.drawWatchDots();
-  },
   drawPlanningOverlay: (force = false) => planningMode.rendering.drawFieldOverlay(force),
   isPlanningOverlayVisible: () => planningMode.state.isOverlayVisible(),
-  drawWaypointOffsetOverlay: (pose) => viewingUi?.drawWaypointOffsetOverlay(pose),
   onRobotImageAvailabilityChanged: (available) => {
     if (robotImgControlsEl) robotImgControlsEl.hidden = !available;
     if (settingsRobotImgControls) settingsRobotImgControls.hidden = !(fieldRenderer.isRobotImageEnabled() && available);
@@ -465,12 +455,12 @@ let planningMode = createPlanningMode({
 subscribeMode((mode) => {
   document.body.classList.toggle("mode-planning", mode === "planning");
   syncTimelineBarCollapsedForMode(mode);
-  if (mode === "planning" && viewingUi?.playback.isPlaying()) viewingUi.playback.pause();
+  if (mode === "planning" && app.viewing.playback.isPlaying) app.viewing.playback.pause();
   if (mode === "viewing" && planningMode.playback.isPlaying()) planningMode.playback.pause();
   planningMode.actions.clearSelection();
   topBar.syncMode(mode);
   fieldRenderer.updateFieldLayout(true);
-  resizeTimeline();
+  viewingView?.resizeTimeline();
   resizePlanningTimeline();
   planningSidebarRenderer.renderPlanList();
   planningMode.playback.updateControls();
@@ -1766,10 +1756,6 @@ function hasImportedViewingData(obj) {
     || buildWaypointState(obj?.waypoints || []).waypoints.length > 0;
 }
 
-function applyImportedViewingData(obj) {
-  app.viewing.load(obj);
-}
-
 function confirmPlanningImportOverride() {
   return new Promise((resolve) => {
     openPlanDangerConfirmModalWithOptions({
@@ -2025,9 +2011,8 @@ function applySavedLayout(settings) {
   if (layoutChanged) {
     syncTimelineBarCollapsedForMode();
     fieldRenderer.updateFieldLayout(true);
-    resizeTimeline();
+    viewingView?.resizeTimeline();
     resizePlanningTimeline();
-    layoutTimelineCanvas();
   }
 }
 
@@ -2502,37 +2487,10 @@ function sanitizeOffsetInputs() {
   }
 }
 
-function levelStyle(levelRaw) {
-  const L = String(levelRaw || "INFO").toUpperCase();
-  if (L.includes("FATAL")) return { name: "FATAL", fill: "rgba(164, 0, 0, 1)", text: "#081018" };
-  if (L.includes("ERROR")) return { name: "ERROR", fill: "rgb(255,77,77)", text: "#081018" };
-  if (L.includes("WARN")) return { name: "WARN", fill: "rgb(255,212,77)", text: "#081018" };
-  if (L.includes("DEBUG")) return { name: "DEBUG", fill: "rgba(78, 246, 255, 1)", text: "#081018" };
-  return { name: "INFO", fill: "rgb(77,255,136)", text: "#081018" };
-}
-
-function levelFillWithAlpha(levelRaw, alpha) {
-  const L = String(levelRaw || "INFO").toUpperCase();
-  if (L.includes("FATAL")) return `rgba(164, 0, 0, ${alpha})`;
-  if (L.includes("ERROR")) return `rgba(255, 77, 77, ${alpha})`;
-  if (L.includes("WARN")) return `rgba(255, 212, 77, ${alpha})`;
-  if (L.includes("DEBUG")) return `rgba(78, 246, 255, ${alpha})`;
-  return `rgba(77, 255, 136, ${alpha})`;
-}
-
 function normalizeLogLevel(levelRaw) {
   const L = String(levelRaw || "INFO").trim().toUpperCase();
   if (L === "DEBUG" || L === "INFO" || L === "WARN" || L === "ERROR" || L === "FATAL") return L;
   return "INFO";
-}
-
-function levelSortRank(levelRaw) {
-  const L = normalizeLogLevel(levelRaw);
-  if (L === "FATAL") return 4;
-  if (L === "ERROR") return 3;
-  if (L === "WARN") return 2;
-  if (L === "INFO") return 1;
-  return 0;
 }
 
 function robotDimsInches() {
@@ -2551,7 +2509,7 @@ function refreshUnitSensitiveRendering() {
   planningSidebarRenderer?.renderPlanList?.();
   updatePlanSelectionPanel();
   planningMode?.playback?.setDistance?.(planningMode.playback.getPlaybackDistance());
-  viewingUi?.updatePoseReadout();
+  updateOffsetsFromInputs();
   requestDrawAll();
 }
 
@@ -2576,11 +2534,13 @@ function updateOffsetsFromInputs() {
   offsetsIn.x = ux * getUnitsToInchesFactor();
   offsetsIn.y = uy * getUnitsToInchesFactor();
   offsetsIn.theta = ut;
-
-  viewingUi?.recomputeWatchMarkers();
-  fieldRenderer.draw();
-  viewingUi?.updatePoseReadout();
-  viewingUi?.timeline.draw();
+  app.viewing.projection.setTransform({
+    unitsToInches: getUnitsToInchesFactor(),
+    offsetXInches: offsetsIn.x,
+    offsetYInches: offsetsIn.y,
+    offsetThetaDegrees: offsetsIn.theta,
+  });
+  requestDrawAll();
 }
 
 // -------- speed normalization (single source of truth) --------
@@ -2593,24 +2553,6 @@ function getMinMaxSpeed() {
   maxV = (isFinite(maxV) ? maxV : 127);
   if (minV > maxV) { const tmp = minV; minV = maxV; maxV = tmp; }
   return { minV, maxV };
-}
-
-function applyViewingSpeedRange() {
-  const { minV, maxV } = getMinMaxSpeed();
-  app.viewing.setSpeedRange(minV, maxV);
-}
-
-function normFromSpeedRaw(s) {
-  const { minV, maxV } = getMinMaxSpeed();
-  const denom = (maxV - minV) || 1;
-  const v = Math.abs(s ?? 0);
-  return clamp((v - minV) / denom, 0, 1);
-}
-
-function speedFromNorm(n) {
-  if (n == null || !isFinite(n)) return null;
-  // Display normalized speed on a 0-100 fieldRenderer.getScale() so min/max changes shift the value.
-  return clamp(n, 0, 1) * 100;
 }
 
 function heatColorFromNorm(n) {
@@ -2650,32 +2592,6 @@ function heatColorFromNorm(n) {
   }
 
   return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},0.88)`;
-}
-
-// -------- pose conversion --------
-function poseToInches(p) {
-  if (!p) {
-    return {
-      t: null,
-      x: offsetsIn.x,
-      y: offsetsIn.y,
-      theta: normalizeDeg(offsetsIn.theta),
-      l_vel: null,
-      r_vel: null,
-      speed_raw: null,
-      speed_norm: 0,
-    };
-  }
-  return {
-    t: (typeof p.t === "number") ? p.t : null,
-    x: (p.x ?? 0) * getUnitsToInchesFactor() + offsetsIn.x,
-    y: (p.y ?? 0) * getUnitsToInchesFactor() + offsetsIn.y,
-    theta: normalizeDeg((p.theta ?? 0) + offsetsIn.theta),
-    l_vel: (typeof p.l_vel === "number") ? p.l_vel : null,
-    r_vel: (typeof p.r_vel === "number") ? p.r_vel : null,
-    speed_raw: (typeof p.speed_raw === "number") ? p.speed_raw : null,
-    speed_norm: (typeof p.speed_norm === "number") ? p.speed_norm : 0,
-  };
 }
 
 function refreshBridgeOrigin() {
@@ -2789,28 +2705,6 @@ function setFieldRotationDeg(deg) {
   if (settingsFieldRotation) settingsFieldRotation.value = String(fieldRenderer.getFieldRotationDeg());
 }
 
-function layoutTimelineCanvas() {
-  if (!timelineCanvas || !timelineBar) return;
-  if (timelineBar.classList.contains("isCollapsed")) return;
-
-  // Ensure we never clip the bottom: compute available height.
-  const barH = timelineBar.getBoundingClientRect().height;
-  const topH = timelineTop ? timelineTop.getBoundingClientRect().height : 0;
-  const padding = 10 + 10; // rough internal padding
-  const avail = Math.max(144, barH - topH - padding);
-  timelineCanvas.style.height = `${avail}px`;
-}
-
-function resizeTimeline() {
-  layoutTimelineCanvas();
-  const dpr = window.devicePixelRatio || 1;
-  const rect = timelineCanvas.getBoundingClientRect();
-  timelineCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
-  timelineCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
-  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  viewingUi?.timeline.draw();
-}
-
 function syncPlanningTimelineCanvasSize() {
   if (!planningTimelineCanvas || !pctx) return;
   const dpr = window.devicePixelRatio || 1;
@@ -2844,86 +2738,10 @@ function drawFirstField() {
   if (nextField) void fieldRenderer.loadFieldImage(nextField);
 }
 
-// -------- time helpers --------
-function timeRange() {
-  const poses = app.viewing.data.poses;
-  const t0 = poses[0]?.t;
-  const tN = poses[poses.length - 1]?.t;
-  if (typeof t0 !== "number" || typeof tN !== "number" || tN <= t0) return null;
-  return { t0, tN };
-}
-
-function findFloorIndexByTime(tMs) {
-  const poses = app.viewing.data.poses;
-  if (!poses.length) return -1;
-  let lo = 0, hi = poses.length - 1;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    const tm = poses[mid].t ?? -Infinity;
-    if (tm <= tMs) lo = mid + 1;
-    else hi = mid - 1;
-  }
-  return clamp(hi, 0, poses.length - 1);
-}
-
-function interpolatePoseAtTime(tMs) {
-  const poses = app.viewing.data.poses;
-  if (!poses.length) return null;
-  const i = findFloorIndexByTime(tMs);
-  const p0 = poses[i];
-  if (i >= poses.length - 1) return poseToInches({ ...p0, t: p0.t });
-
-  const p1 = poses[i + 1];
-  const t0 = p0.t ?? tMs;
-  const t1 = p1.t ?? t0;
-  const denom = (t1 - t0) || 1;
-  const a = clamp((tMs - t0) / denom, 0, 1);
-
-  const x = (p0.x ?? 0) + ((p1.x ?? 0) - (p0.x ?? 0)) * a;
-  const y = (p0.y ?? 0) + ((p1.y ?? 0) - (p0.y ?? 0)) * a;
-  const theta = angLerpDeg(p0.theta ?? 0, p1.theta ?? 0, a);
-
-  const l_vel = (p0.l_vel ?? 0) + ((p1.l_vel ?? 0) - (p0.l_vel ?? 0)) * a;
-  const r_vel = (p0.r_vel ?? 0) + ((p1.r_vel ?? 0) - (p0.r_vel ?? 0)) * a;
-
-  const s0 = (p0.speed_raw ?? 0), s1 = (p1.speed_raw ?? 0);
-  const speed_raw = s0 + (s1 - s0) * a;
-  const speed_norm = (p0.speed_norm ?? 0) + ((p1.speed_norm ?? 0) - (p0.speed_norm ?? 0)) * a;
-
-  // feed in file units and norm; poseToInches will reapply offsets for x/y/theta
-  return poseToInches({ t: tMs, x, y, theta, l_vel, r_vel, speed_raw, speed_norm });
-}
-
-function nearestIndexWithinTol(tMs, tolMs) {
-  const poses = app.viewing.data.poses;
-  if (!poses.length) return null;
-  const i0 = findFloorIndexByTime(tMs);
-  const cands = [i0, Math.min(i0 + 1, poses.length - 1)];
-  let best = null;
-  for (const i of cands) {
-    const tt = poses[i].t;
-    if (typeof tt !== "number") continue;
-    const dt = Math.abs(tt - tMs);
-    if (best === null || dt < best.dt) best = { idx: i, dt };
-  }
-  if (best && best.dt <= tolMs) return best;
-  return null;
-}
-
-function setSvgUseHref(useEl, href) {
-  if (!useEl || !href) return;
-  useEl.setAttribute("href", href);
-  useEl.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", href);
-}
-
 const svgIconUrls = {
   "icon-fit": fitIconUrl,
   "icon-removePlanningObject": removePlanningObjectIconUrl,
   "icon-planningChangeObjectColor": changeObjectColorIconUrl,
-  "icon-pinWatch": pinWatchIconUrl,
-  "icon-invisibleWatch": invisibleWatchIconUrl,
-  "icon-visibleWatch": visibleWatchIconUrl,
-  "icon-watchGraph": watchGraphIconUrl,
 };
 
 function svgIconHref(iconId) {
@@ -2939,84 +2757,17 @@ function scaledPlanFieldNodeSize(basePx, maxIn) {
   return Math.min(basePx * Math.max(fieldRenderer.getViewZoom(), CANVAS_ZOOM_MIN), maxIn * fieldRenderer.getScale());
 }
 
-viewingUi = createViewingUi({
-  canvas,
-  ctx,
-  timelineCanvas,
-  timelineContext: tctx,
-  timelineBar,
-  viewing: app.viewing,
-  isLiveConnected: () => leftConnected,
-  isLivestreaming: () => !!(window.__live && window.__live.streaming),
-  getLiveAutoFollowHead: () => liveAutoFollowHead,
-  setLiveAutoFollowHead: (enabled) => { liveAutoFollowHead = enabled; },
-  getPlayRate: () => playRate,
-  setPlayButtonLabel: syncTopBarPlayback,
-  getFieldViewZoom: () => fieldRenderer.getViewZoom(),
-  getFieldScale: () => fieldRenderer.getScale(),
-  worldToScreen: fieldRenderer.worldToScreen,
-  screenToWorld: fieldRenderer.screenToWorld,
-  isFieldPanning: () => fieldRenderer.isPanning(),
-  getSuppressNextClick: () => fieldRenderer.getSuppressNextClick(),
-  consumeSuppressNextClick: () => fieldRenderer.consumeSuppressNextClick(),
-  poseToInches,
-  interpolatePoseAtTime,
-  findFloorIndexByTime,
-  nearestIndexWithinTol,
-  lastWatchAtTime,
-  formatNumberString,
-  formatFixedNumberString,
-  fmtNum,
-  escapeHtml,
-  clamp,
-  angLerpDeg,
-  heatColorFromNorm,
-  levelStyle,
-  levelFillWithAlpha,
-  levelSortRank,
-  normalizeLogLevel,
-  speedFromNorm,
-  normFromSpeedRaw,
-  watchGraphKeyForWatch,
-  normalizeWaypointType,
-  svgIconHref,
-  setSvgUseHref,
-  isInsideField: isInsideFieldC,
-  isInsideTimeline: isInsideTimelineC,
-  onFloatingInfoToggled: (enabled) => {
-    viewingTelemetry.floatingInfoToggled({ enabled }).catch(err => console.error(err));
-  },
-  handlePlanningMouseMove: (event) => {
-    const rect = canvas.getBoundingClientRect();
-    const mx = event.clientX - rect.left;
-    const my = event.clientY - rect.top;
-    const waypointHit = planningMode.rendering.hitTestField(mx, my) >= 0;
-    const thetaHandleHit = planThetaHandleHit(mx, my) >= 0;
-    const nodeHit = (!waypointHit && !thetaHandleHit) ? hitTestPlanFieldNodeAtClient(event.clientX, event.clientY) : null;
-    if (nodeHit) {
-      if (planningMode.fieldHoverNodeId !== nodeHit.node.id) {
-        planningMode.fieldHoverNodeId = nodeHit.node.id;
-        requestDrawAll();
-      }
-      canvas.style.cursor = "pointer";
-      updatePlanNodeTooltip(nodeHit.tooltipText, event.clientX, event.clientY, !!nodeHit.method?.hasOverride);
-    } else {
-      const hadHover = planningMode.fieldHoverNodeId != null;
-      planningMode.fieldHoverNodeId = null;
-      canvas.style.cursor = "";
-      hidePlanNodeTooltip();
-      if (hadHover) requestDrawAll();
-    }
-  },
-  handlePlanningMouseLeave: () => {
-    const hadHover = planningMode.fieldHoverNodeId != null;
-    planningMode.fieldHoverNodeId = null;
-    hidePlanNodeTooltip({ immediate: true });
-    canvas.style.cursor = "";
-    if (hadHover) requestDrawAll();
-  },
+const viewingDom = ViewingDom.from(document);
+viewingView = new ViewingView(app.viewing, fieldRenderer, viewingDom);
+viewingInput = new ViewingInput(app.viewing);
+viewingView.bind();
+viewingView.render();
+fieldRenderer.registerViewingLayer(viewingView);
+registerViewingRenderLayer(viewingView);
+app.viewing.events.playbackChanged.subscribe((change) => {
+  if (change.kind === "started") syncTopBarPlayback("⏸");
+  else if (change.kind === "paused") syncTopBarPlayback("▶");
 });
-viewingUi.bindEvents();
 app.viewing.events.dataChanged.subscribe((change) => {
   if (change.kind === "replaced" || change.kind === "cleared" || (change.kind === "appended" && change.result.metadataChanged)) {
     syncImportedRouteMetaUi();
@@ -3027,7 +2778,6 @@ app.viewing.events.dataChanged.subscribe((change) => {
 
 configureRenderScheduler({
   drawField: () => fieldRenderer.draw(),
-  drawViewingTimeline: () => viewingUi.timeline.draw(),
   drawPlanningTimeline: () => planningMode.rendering.drawTimeline(),
 });
 
@@ -3198,9 +2948,7 @@ canvas.addEventListener("pointermove", (e) => {
   fieldRenderer.movePan(x, y, {
     onStart: () => {
       // If a hover-preview was active, clear it so the view feels stable while panning.
-      viewingUi?.selection.clearTrackHover(!viewingUi.selection.trackLockActive);
-      viewingUi?.rendering.renderPoseList();
-      viewingUi?.updatePoseReadout();
+      app.viewing.navigation.setTrackHover(null);
     },
   });
 });
@@ -3276,33 +3024,6 @@ canvas.addEventListener("pointercancel", endPan);
 canvas.addEventListener("contextmenu", (e) => {
   if (getMode() === "planning") e.preventDefault();
 });
-
-// -------- timeline interactions --------
-function isInsideTimelineC(cursor) {
-  if (!cursor) return false;
-  const x = (typeof cursor.clientX === "number") ? cursor.clientX : cursor.x;
-  const y = (typeof cursor.clientY === "number") ? cursor.clientY : cursor.y;
-  if (typeof x !== "number" || typeof y !== "number") return false;
-
-  const isPlanning = getMode() === "planning";
-  const canvasEl = isPlanning ? planningTimelineCanvas : timelineCanvas;
-  if (!canvasEl) return false;
-  if (!isPlanning && timelineBar?.classList.contains("isCollapsed")) return false;
-
-  const rect = canvasEl.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) return false;
-  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
-}
-
-function isInsideFieldC(cursor) {
-  if (!cursor) return false;
-  const x = (typeof cursor.clientX === "number") ? cursor.clientX : cursor.x;
-  const y = (typeof cursor.clientY === "number") ? cursor.clientY : cursor.y;
-  if (typeof x !== "number" || typeof y !== "number") return false;
-  const rect = canvas.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) return false;
-  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
-}
 
 if (planningTimelineCanvas) {
   const onPlanScrub = (e) => {
@@ -3386,10 +3107,6 @@ function withTimeout(promise, ms, label) {
     timeout,
   ]);
 }
-
-// In livestream mode, optionally keep the robot snapped to the newest pose when not hovering the timeline.
-// Toggled with Space (while connected).
-let liveAutoFollowHead = true;
 
 let leftRefreshTimer = null;
 let leftRefreshMs = parseInt(leftRefreshIntervalEl?.value || "500", 10) || 500;
@@ -3609,6 +3326,7 @@ function setLeftUi() {
 
 function leftSetUI(reason) {
   setLeftUi();
+  app.viewing.navigation.setLiveState(!!leftConnected, !!leftStreaming);
   if (window.__live) { window.__live.connected = !!leftConnected; window.__live.streaming = !!leftStreaming; }
   if (reason) liveAppendLine(`[UI] ${reason}`);
 }
@@ -3672,7 +3390,7 @@ async function connectLeft() {
     leftSetUI("Backend is still starting. Please try again in a moment.");
     return;
   }
-  viewingUi?.playback.pause();
+  app.viewing.playback.pause();
   if (leftStreaming) {
     await stopStreaming(false, false);
   }
@@ -3769,8 +3487,6 @@ async function doLeftRefresh() {
 
   const batch = livePendingBuffer.batch();
   if (!batch) {
-    // Nothing new; still ensure we snap to latest if appropriate
-    viewingUi?.syncLivePoseSelection();
     return;
   }
 
@@ -4091,7 +3807,7 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
       }
       setLeftSidebarW(next);
       fieldRenderer.resizeCanvas();
-      resizeTimeline();
+      viewingView.resizeTimeline();
     }
 
     if (draggingV) {
@@ -4115,7 +3831,7 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
       if (getMode() === "planning") setRightSidebarWPlanning(next);
       else setRightSidebarWViewing(next);
       fieldRenderer.resizeCanvas();
-      resizeTimeline();
+      viewingView.resizeTimeline();
     }
 
     if (draggingH) {
@@ -4132,7 +3848,7 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
       }
 
       setTimelineH(next);
-      resizeTimeline();
+      viewingView.resizeTimeline();
       fieldRenderer.resizeCanvas();
     }
 
@@ -4178,7 +3894,7 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
       }
       syncTimelineBarCollapsedForMode();
       fieldRenderer.resizeCanvas();
-      resizeTimeline();
+      viewingView.resizeTimeline();
       void saveSettings();
     }
   });
@@ -4197,7 +3913,7 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
       rowGrid && rowGrid.classList.add("leftCollapsed");
     }
     fieldRenderer.resizeCanvas();
-    resizeTimeline();
+    viewingView.resizeTimeline();
   });
 
   vSplit.addEventListener("dblclick", () => {
@@ -4224,7 +3940,7 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
     }
     fieldRenderer.resetFieldPosition();
     fieldRenderer.resizeCanvas();
-    layoutTimelineCanvas();
+    viewingView.resizeTimeline();
   });
 
   hSplit.addEventListener("dblclick", () => {
@@ -4237,10 +3953,9 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
       setTimelineH(0);
       timelineBar.classList.add("isCollapsed");
     }
-    resizeTimeline();
+    viewingView.resizeTimeline();
     fieldRenderer.resetFieldPosition();
     fieldRenderer.resizeCanvas();
-    layoutTimelineCanvas();
   });
 
   if (planningTimelineSplit) {
@@ -4266,7 +3981,7 @@ function setData(obj, options = {}) {
   }
 
   if (replaceViewing) {
-    applyImportedViewingData(obj);
+    app.viewing.load(obj);
   }
 
   if (!hasLoadedData()) {
@@ -4310,8 +4025,6 @@ function finalizeLoadedData() {
   syncMainToSettings();
   saveSettings();
 
-  viewingUi?.resetForLoadedData();
-
   fieldRenderer.setBounds(FIELD_BOUNDS_IN);
 
   setStatus(`Loaded `);
@@ -4319,7 +4032,6 @@ function finalizeLoadedData() {
   topBar.setFieldEnabled(true);
   updateExportButtonAvailability();
 
-  viewingUi?.updatePoseReadout();
   requestDrawAll();
 }
 
@@ -4547,7 +4259,7 @@ async function loadSettings() {
       if (settings.playbackSpeed !== undefined) {
         topBar.setPlaybackSpeed(Number(settings.playbackSpeed) || 1);
         playRate = topBar.getPlaybackSpeed();
-        viewingUi?.setPlaybackRate(playRate);
+        app.viewing.playback.setRate(playRate);
       }
       if (settings.selectedField !== undefined) {
         const nextField = getValidFieldKey(settings.selectedField);
@@ -4606,7 +4318,8 @@ async function loadSettings() {
       }
       applySavedLayout(settings);
       updateOffsetsFromInputs();
-      applyViewingSpeedRange();
+      const { minV, maxV } = getMinMaxSpeed();
+      app.viewing.setSpeedRange(minV, maxV);
       if (robotImageToggle) robotImageToggle.checked = fieldRenderer.isRobotImageEnabled();
     }
   } catch (e) {
@@ -4621,7 +4334,7 @@ async function loadDemoRouteIfUpgraded() {
     const upgradeState = await invoke("was_previous_version_old");
     persistedAppState = {
       ...(persistedAppState && typeof persistedAppState === "object" ? persistedAppState : {}),
-      lastSeenAppVersion: app.version,
+      lastSeenAppVersion: upgradeState.currentVersion,
     };
     if (!upgradeState?.wasPreviousVersionOlder) return false;
 
@@ -4729,17 +4442,13 @@ function syncSettingsToMain() {
   }
   if (settingsMinSpeed && minSpeedEl && settingsMinSpeed.value !== minSpeedEl.value) {
     minSpeedEl.value = settingsMinSpeed.value;
-    applyViewingSpeedRange();
-    viewingUi?.recomputeWatchMarkers();
-    requestDrawAll();
-    viewingUi?.updatePoseReadout();
+    const { minV, maxV } = getMinMaxSpeed();
+    app.viewing.setSpeedRange(minV, maxV);
   }
   if (settingsMaxSpeed && maxSpeedEl && settingsMaxSpeed.value !== maxSpeedEl.value) {
     maxSpeedEl.value = settingsMaxSpeed.value;
-    applyViewingSpeedRange();
-    viewingUi?.recomputeWatchMarkers();
-    requestDrawAll();
-    viewingUi?.updatePoseReadout();
+    const { minV, maxV } = getMinMaxSpeed();
+    app.viewing.setSpeedRange(minV, maxV);
   }
   if (settingsRobotImgScale && robotImgScaleEl && settingsRobotImgScale.value !== robotImgScaleEl.value) {
     robotImgScaleEl.value = settingsRobotImgScale.value;
@@ -5228,14 +4937,8 @@ async function applyImportedRunSettings() {
   sanitizeOffsetInputs();
   syncMainToSettings();
   updateOffsetsFromInputs();
-  applyViewingSpeedRange();
-  viewingUi?.updateAfterDataChange({
-    posesChanged: true,
-    watchesChanged: true,
-    logsChanged: true,
-    waypointsChanged: true,
-    filtersChanged: true,
-  });
+  const { minV, maxV } = getMinMaxSpeed();
+  app.viewing.setSpeedRange(minV, maxV);
   requestDrawAll();
   await saveSettings();
   setStatus("Applied run settings from imported metadata.");
@@ -5870,8 +5573,8 @@ window.addEventListener("keydown", (e) => {
   else if (routeInfoOpen) closeRouteInfoModal();
   else if (planTemplateOpen) closePlanTemplateModal();
   else if (planObjectDeleteOpen) closePlanObjectDeleteModal();
-  else if (viewingUi?.hasSelectedWaypoint()) {
-    viewingUi.clearWaypointSelection();
+  else if (app.viewing.navigation.selectedWaypointId != null) {
+    viewingView.clearWaypointSelection();
     requestDrawAll();
   }
   e.preventDefault();
@@ -6267,13 +5970,7 @@ function togglePlaybackForCurrentMode() {
     return;
   }
   if (!app.viewing.data.hasData) return;
-  if (viewingUi?.playback.isPlaying()) {
-    viewingUi.playback.pause();
-    viewingUi.updatePoseReadout();
-    requestDrawAll();
-  } else {
-    viewingUi?.playback.play();
-  }
+  app.viewing.playback.toggle();
 }
 
 if (btnTogglePlanOverlay) {
@@ -6350,19 +6047,15 @@ if (settingsRobotImgAlpha) settingsRobotImgAlpha.addEventListener("input", onRob
 
 
 settingsMinSpeed.addEventListener("input", () => {
-  applyViewingSpeedRange();
-  viewingUi?.recomputeWatchMarkers();
-  requestDrawAll();
-  viewingUi?.updatePoseReadout();
+  const { minV, maxV } = getMinMaxSpeed();
+  app.viewing.setSpeedRange(minV, maxV);
   syncMainToSettings();
   saveSettings();
 });
 
 settingsMaxSpeed.addEventListener("input", () => {
-  applyViewingSpeedRange();
-  viewingUi?.recomputeWatchMarkers();
-  requestDrawAll();
-  viewingUi?.updatePoseReadout();
+  const { minV, maxV } = getMinMaxSpeed();
+  app.viewing.setSpeedRange(minV, maxV);
   syncMainToSettings();
   saveSettings();
 });
@@ -6501,8 +6194,6 @@ offThetaEl.addEventListener("input", () => {
 });
 
 function clearAllPosesAndWatches() {
-  viewingUi?.clearTransientState();
-
   app.viewing.clear();
   try { watchByLabel = {}; } catch { }
   liveLastPoseT = null;
@@ -6661,21 +6352,21 @@ function handleGlobalKeydown(e) {
     }
 
     if (e.key === "t" || e.key === "T") {
-      viewingUi?.toggleFloatingInfo();
+      viewingView.toggleFloatingInfo();
       return;
     }
 
     if (e.key === "g" || e.key === "G") {
       e.preventDefault();
       if (getMode() !== "viewing") return;
-      viewingUi?.toggleWatchGraph();
+      viewingView.toggleWatchGraph();
       return;
     }
   }
 
   if (!e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && (e.key === "N" || e.key === "n")) {
     e.preventDefault();
-    viewingUi?.openFloatingWatch(null);
+    viewingView.openFloatingWatch(null);
     return;
   }
 
@@ -6733,7 +6424,7 @@ function handleGlobalKeydown(e) {
       }
     }
   }
-  if (viewingUi?.input.handleKeydown(e)) return;
+  if (viewingInput.handleKeydown(e)) return;
 }
 
 function handlePlanningHistoryKeydown(e) {
@@ -6876,14 +6567,14 @@ const bridgeReadyPoll = setInterval(() => {
 }, 250);
 window.addEventListener("resize", () => {
   fieldRenderer.updateFieldLayout(true); // keep bounds, recompute square sizing
-  resizeTimeline();
+  viewingView.resizeTimeline();
   resizePlanningTimeline();
-  viewingUi?.resizeWatchGraph();
+  viewingView.resizeWatchGraph();
   topBar.scheduleLayout();
 });
 
 fieldRenderer.updateFieldLayout(false);
-resizeTimeline();
+viewingView.resizeTimeline();
 resizePlanningTimeline();
 topBar.bindEvents();
 topBar.scheduleLayout();

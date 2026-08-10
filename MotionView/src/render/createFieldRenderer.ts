@@ -35,23 +35,28 @@ export interface RobotImageTransform {
 export interface FieldRendererDependencies {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
-  getViewingPathPoses(): readonly FieldPose[];
-  getViewingPose(): FieldPose | null;
   getPlanningPose(): FieldPose | null;
   getRobotDimensions(): { w: number; h: number };
   fieldHeadingToCanvasRotationDeg(thetaField: number): number;
   heatColorFromNorm(norm: number): string;
-  drawViewingOverlay(): void;
   drawPlanningOverlay(force?: boolean): void;
   isPlanningOverlayVisible(): boolean;
-  drawWaypointOffsetOverlay(pose: FieldPose): void;
   onRobotImageAvailabilityChanged?(available: boolean): void;
   onFieldImageLoaded?(fieldKey: string): void | Promise<void>;
+}
+
+export interface ViewingFieldLayer {
+  readonly pathLength: number;
+  pathPoseAt(index: number): FieldPose | null;
+  currentPose(): FieldPose | null;
+  drawOverlay(): void;
+  drawWaypointOffset(pose: FieldPose): void;
 }
 
 export interface FieldRenderer {
   readonly canvas: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
+  registerViewingLayer(layer: ViewingFieldLayer): void;
   draw(): void;
   resizeCanvas(): void;
   updateFieldLayout(preserveBounds?: boolean): void;
@@ -131,6 +136,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
   let panPointerId: number | null = null;
   let panStart = { x: 0, y: 0, panX: 0, panY: 0 };
   let suppressNextClick = false;
+  let viewingLayer: ViewingFieldLayer | null = null;
 
   function computeTransform() {
     const w = canvas.getBoundingClientRect().width;
@@ -289,11 +295,12 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
   }
 
   function drawPath() {
-    const poses = deps.getViewingPathPoses();
-    if (poses.length < 2) return;
-    for (let i = 1; i < poses.length; i += 1) {
-      const a = poses[i - 1];
-      const b = poses[i];
+    const length = viewingLayer?.pathLength ?? 0;
+    if (length < 2) return;
+    for (let i = 1; i < length; i += 1) {
+      const a = viewingLayer?.pathPoseAt(i - 1) ?? null;
+      const b = viewingLayer?.pathPoseAt(i) ?? null;
+      if (!a || !b) continue;
       const pa = worldToScreen(a.x, a.y);
       const pb = worldToScreen(b.x, b.y);
       const grad = ctx.createLinearGradient(pa.x, pa.y, pb.x, pb.y);
@@ -378,10 +385,10 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
     drawAxes();
     if (getMode() === "viewing") {
       drawPath();
-      deps.drawViewingOverlay();
+      viewingLayer?.drawOverlay();
       if (deps.isPlanningOverlayVisible()) deps.drawPlanningOverlay(true);
-      const pose = deps.getViewingPose();
-      if (pose) deps.drawWaypointOffsetOverlay(pose);
+      const pose = viewingLayer?.currentPose() ?? null;
+      if (pose) viewingLayer?.drawWaypointOffset(pose);
       if (pose) drawRobot(pose, 1.0);
     } else {
       deps.drawPlanningOverlay();
@@ -431,6 +438,9 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
   const renderer: FieldRenderer = {
     canvas,
     ctx,
+    registerViewingLayer(layer) {
+      viewingLayer = layer;
+    },
     draw,
     resizeCanvas() {
       const dpr = window.devicePixelRatio || 1;

@@ -1,5 +1,8 @@
 import type { WatchEntry } from "../state/models";
 import { ViewingEvents } from "./viewingEvents";
+import { ViewingNavigation } from "./ViewingNavigation";
+import { ViewingPlayback } from "./ViewingPlayback";
+import { ViewingProjection } from "./ViewingProjection";
 import { ViewingSession } from "./viewingSession";
 import type {
   ParsedLiveViewingBatch,
@@ -12,11 +15,17 @@ import type {
 export class ViewingFeature implements ViewingDataSink {
   readonly events = new ViewingEvents();
   readonly data: ViewingDataReader;
+  readonly navigation: ViewingNavigation;
+  readonly projection: ViewingProjection;
+  readonly playback: ViewingPlayback;
   readonly #session: ViewingSession;
 
   constructor() {
     this.#session = new ViewingSession(this.events);
     this.data = this.#session;
+    this.navigation = new ViewingNavigation(this.data, this.events);
+    this.projection = new ViewingProjection(this.data, this.events);
+    this.playback = new ViewingPlayback(this.data, this.navigation, this.projection, this.events);
   }
 
   load(data: unknown): void {

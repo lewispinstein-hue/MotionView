@@ -17,6 +17,7 @@ const LAST_SEEN_APP_VERSION_KEY: &str = "lastSeenAppVersion";
 #[serde(rename_all = "camelCase")]
 pub struct PreviousVersionStatus {
     pub previous_version: Option<String>,
+    pub current_version: String,
     pub was_previous_version_older: bool,
 }
 
@@ -142,12 +143,13 @@ pub fn was_previous_version_old(app: AppHandle) -> Result<PreviousVersionStatus,
 
     app_state_obj.insert(
         LAST_SEEN_APP_VERSION_KEY.to_string(),
-        serde_json::Value::String(current_version),
+        serde_json::Value::String(current_version.clone()),
     );
     write_settings_value(&app, &settings)?;
 
     Ok(PreviousVersionStatus {
         previous_version,
+        current_version,
         was_previous_version_older,
     })
 }

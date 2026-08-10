@@ -19,7 +19,7 @@ export type WaypointView = Readonly<Omit<
 };
 
 export interface WatchMarker {
-  watch: WatchEntry;
+  watch: Readonly<WatchEntry>;
   t: number;
   ok: boolean;
   dt: number | null;
@@ -75,25 +75,23 @@ export type ViewingDataChangedEvent =
   | { readonly kind: "watch-visibility"; readonly key: string; readonly visible: boolean }
   | { readonly kind: "speed-range"; readonly minimum: number; readonly maximum: number };
 
+export type ViewingNavigationChangedEvent =
+  | { readonly kind: "selection" }
+  | { readonly kind: "hover" }
+  | { readonly kind: "track-lock" }
+  | { readonly kind: "live-state" };
+
+export type ViewingPlaybackChangedEvent =
+  | { readonly kind: "started" }
+  | { readonly kind: "paused" }
+  | { readonly kind: "frame" }
+  | { readonly kind: "rate"; readonly rate: number };
+
+export type ViewingProjectionChangedEvent =
+  | { readonly kind: "replaced" }
+  | { readonly kind: "appended"; readonly watchesAdded: number }
+  | { readonly kind: "transform" };
+
 export interface ViewingDataSink {
   appendLiveBatch(batch: ParsedLiveViewingBatch): ViewingAppendResult;
-}
-
-
-export interface ViewingRendering {
-  renderLists(): void;
-  renderWatchFilter(): void;
-  renderWatchList(): void;
-  renderLogList(): void;
-  renderWaypointFilter(): void;
-  renderWaypointList(): void;
-  renderPoseList(): void;
-  drawFieldOverlay(): void;
-  drawTimeline(): void;
-  updatePoseReadout(): void;
-}
-
-export interface ViewingInput {
-  bindEvents(): void;
-  handleKeydown(event: KeyboardEvent): boolean;
 }
