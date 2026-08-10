@@ -12,7 +12,7 @@ export class PoseReadoutView {
 
   render(): void {
     const pose = this.viewing.playback.currentDisplayPose();
-    const index = this.viewing.navigation.selectedIndex;
+    const index = this.viewing.playback.currentDisplayIndex();
     if (!pose) {
       this.dom.timePill.textContent = "Time: —";
       this.dom.deltaPill.textContent = "Δ: —";

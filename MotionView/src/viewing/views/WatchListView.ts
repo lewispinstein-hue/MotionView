@@ -129,9 +129,10 @@ export class WatchListView {
       if (event.button !== 0 || (event.target instanceof Element && event.target.closest("button"))) return;
       event.preventDefault();
       this.viewing.playback.pause();
-      this.viewing.navigation.selectWatch(marker);
       const index = marker.idx ?? this.viewing.projection.findFloorIndex(marker.t);
-      if (index >= 0) this.viewing.navigation.selectPose(index, { preserveDetails: true });
+      const pose = this.viewing.projection.interpolatePose(marker.t) ?? marker.pose;
+      if (index >= 0 && pose) this.viewing.navigation.lockTrack(pose, index);
+      this.viewing.navigation.selectWatch(marker);
       setStatus(`Watch @${formatNumber(marker.t / 1000, 2)}s selected.`);
     }, { passive: false });
     const moreButton = element.querySelector<HTMLButtonElement>(".watchActionsMoreBtn");

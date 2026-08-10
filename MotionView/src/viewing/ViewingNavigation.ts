@@ -99,19 +99,24 @@ export class ViewingNavigation {
   }
 
   setTimelineHover(time: number | null): void {
+    if (time === this.#hoverTimelineTime) return;
     this.#hoverTimelineTime = time;
     this.emit("hover");
   }
 
   setTrackHover(pose: Readonly<Pose> | null, time: number | null = null): void {
+    if (pose === this.#trackHoverPose && time === this.#trackHoverTime) return;
     this.#trackHoverPose = pose;
     this.#trackHoverTime = time;
     this.emit("hover");
   }
 
   lockTrack(pose: Readonly<Pose>, index: number): void {
+    this.#selectedIndex = Math.max(0, Math.min(this.data.poses.length - 1, Math.trunc(index)));
+    this.#lastManualIndex = this.#selectedIndex;
+    this.clearDetails(false);
     this.#trackLockPose = pose;
-    this.#trackLockIndex = index;
+    this.#trackLockIndex = this.#selectedIndex;
     this.emit("track-lock");
   }
 

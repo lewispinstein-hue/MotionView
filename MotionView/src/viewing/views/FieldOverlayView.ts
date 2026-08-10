@@ -96,13 +96,21 @@ export class FieldOverlayView {
   private handleMouseMove(event: MouseEvent): void {
     if (getMode() !== "viewing") return;
     if (this.viewing.playback.isPlaying || this.field.isPanning()) return;
+    const trackHit = this.hitTrack(event.clientX, event.clientY);
     this.#hoverWatch = this.hitWatch(event.clientX, event.clientY);
     if (this.#hoverWatch) {
+      this.viewing.navigation.setTrackHover(trackHit?.pose ?? null, trackHit?.time ?? null);
       this.dom.canvas.style.cursor = "pointer";
       return;
     }
     const waypoint = this.hitWaypoint(event.clientX, event.clientY);
-    this.dom.canvas.style.cursor = waypoint ? "pointer" : "";
+    if (waypoint) {
+      this.viewing.navigation.setTrackHover(null);
+      this.dom.canvas.style.cursor = "pointer";
+      return;
+    }
+    this.viewing.navigation.setTrackHover(trackHit?.pose ?? null, trackHit?.time ?? null);
+    this.dom.canvas.style.cursor = trackHit ? "crosshair" : "";
   }
 
   private handleClick(event: MouseEvent): void {
@@ -111,13 +119,18 @@ export class FieldOverlayView {
       this.field.consumeSuppressNextClick();
       return;
     }
+    const trackHit = this.hitTrack(event.clientX, event.clientY);
     const watch = this.hitWatch(event.clientX, event.clientY);
     if (watch && !this.viewing.navigation.livestreaming) {
       this.viewing.playback.pause();
+      this.viewing.navigation.clearTrackLock();
+      this.viewing.navigation.setTrackHover(null);
       this.viewing.navigation.setTimelineHover(null);
-      this.viewing.navigation.selectWatch(watch);
       const index = watch.idx ?? this.viewing.projection.findFloorIndex(watch.t);
-      if (index >= 0) this.viewing.navigation.selectPose(index, { preserveDetails: true });
+      const pose = trackHit?.pose ?? this.viewing.projection.interpolatePose(watch.t) ?? watch.pose;
+      const poseIndex = trackHit?.index ?? index;
+      if (poseIndex >= 0 && pose) this.viewing.navigation.lockTrack(pose, poseIndex);
+      this.viewing.navigation.selectWatch(watch);
       this.watchTooltip.show(watch, { x: event.clientX, y: event.clientY });
       return;
     }
@@ -125,18 +138,17 @@ export class FieldOverlayView {
     const waypoint = this.hitWaypoint(event.clientX, event.clientY);
     if (waypoint) {
       this.viewing.playback.pause();
+      this.viewing.navigation.clearTrackLock();
+      this.viewing.navigation.setTrackHover(null);
       this.viewing.navigation.selectWaypoint(waypoint, waypoint.latestActiveEvent);
       const index = this.viewing.projection.waypointPoseIndex(waypoint);
       if (index != null) this.viewing.navigation.selectPose(index, { preserveDetails: true });
       return;
     }
     if (!this.viewing.navigation.livestreaming) {
-      const poseIndex = this.hitTrack(event.clientX, event.clientY);
-      if (poseIndex != null) {
+      if (trackHit) {
         this.viewing.playback.pause();
-        this.viewing.navigation.selectPose(poseIndex);
-        const pose = this.viewing.projection.poseAt(poseIndex);
-        if (pose) this.viewing.navigation.lockTrack(pose, poseIndex);
+        this.viewing.navigation.lockTrack(trackHit.pose, trackHit.index);
       } else this.viewing.navigation.clearTrackLock();
     }
   }
@@ -173,24 +185,54 @@ export class FieldOverlayView {
     return best;
   }
 
-  private hitTrack(clientX: number, clientY: number): number | null {
+  private hitTrack(clientX: number, clientY: number): Readonly<{
+    index: number;
+    time: number;
+    pose: NonNullable<ReturnType<ViewingFeature["projection"]["interpolatePose"]>>;
+  }> | null {
     const rect = this.dom.canvas.getBoundingClientRect();
     const x = clientX - rect.left;
     const y = clientY - rect.top;
-    let bestIndex: number | null = null;
-    let bestDistance = 144;
+    let best: { startIndex: number; amount: number; distance: number; indexDelta: number } | null = null;
+    const anchorIndex = this.viewing.navigation.trackLockIndex
+      ?? this.viewing.navigation.selectedIndex;
+    const distanceTieTolerance = 4;
     const step = Math.max(1, Math.floor(this.viewing.data.poses.length / 2000));
-    for (let index = 0; index < this.viewing.data.poses.length; index += step) {
-      const pose = this.viewing.projection.poseAt(index);
-      if (!pose) continue;
-      const point = this.field.worldToScreen(pose.x, pose.y);
-      const distance = (point.x - x) ** 2 + (point.y - y) ** 2;
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestIndex = index;
+    for (let startIndex = 0; startIndex < this.viewing.data.poses.length - 1; startIndex += step) {
+      const endIndex = Math.min(this.viewing.data.poses.length - 1, startIndex + step);
+      const startPose = this.viewing.projection.poseAt(startIndex);
+      const endPose = this.viewing.projection.poseAt(endIndex);
+      if (!startPose || !endPose) continue;
+      const start = this.field.worldToScreen(startPose.x, startPose.y);
+      const end = this.field.worldToScreen(endPose.x, endPose.y);
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const lengthSquared = dx * dx + dy * dy;
+      const amount = lengthSquared > 0
+        ? Math.max(0, Math.min(1, ((x - start.x) * dx + (y - start.y) * dy) / lengthSquared))
+        : 0;
+      const projectedX = start.x + dx * amount;
+      const projectedY = start.y + dy * amount;
+      const distance = (projectedX - x) ** 2 + (projectedY - y) ** 2;
+      const indexDelta = anchorIndex < startIndex
+        ? startIndex - anchorIndex
+        : anchorIndex > endIndex ? anchorIndex - endIndex : 0;
+      const previousBest = best;
+      const spatiallyBetter = !previousBest || distance < previousBest.distance - distanceTieTolerance;
+      const spatialTie = previousBest && Math.abs(distance - previousBest.distance) <= distanceTieTolerance;
+      if (distance <= 144 && (spatiallyBetter || (spatialTie && indexDelta < previousBest.indexDelta))) {
+        best = { startIndex, amount, distance, indexDelta };
       }
     }
-    return bestIndex;
+    if (!best) return null;
+    const endIndex = Math.min(this.viewing.data.poses.length - 1, best.startIndex + step);
+    const startTime = this.viewing.data.poses[best.startIndex]?.t;
+    const endTime = this.viewing.data.poses[endIndex]?.t;
+    if (typeof startTime !== "number" || typeof endTime !== "number") return null;
+    const time = startTime + (endTime - startTime) * best.amount;
+    const pose = this.viewing.projection.interpolatePose(time);
+    if (!pose) return null;
+    return { index: this.viewing.projection.findFloorIndex(time), time, pose };
   }
 
   private selectedWaypoint(): WaypointView | null {

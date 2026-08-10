@@ -38,12 +38,15 @@ export class TimelineView {
       const rect = this.dom.timelineCanvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const marker = this.pickWatch(x, event.clientY - rect.top);
+      this.viewing.navigation.clearTrackLock();
+      this.viewing.navigation.setTrackHover(null);
       if (marker) {
         this.viewing.playback.pause();
         this.viewing.navigation.setTimelineHover(null);
-        this.viewing.navigation.selectWatch(marker);
         const index = marker.idx ?? this.viewing.projection.findFloorIndex(marker.t);
-        this.viewing.navigation.selectPose(index, { preserveDetails: true });
+        const pose = this.viewing.projection.interpolatePose(marker.t) ?? marker.pose;
+        if (index >= 0 && pose) this.viewing.navigation.lockTrack(pose, index);
+        this.viewing.navigation.selectWatch(marker);
         this.watchTooltip.show(marker, { x: event.clientX, y: event.clientY });
       } else {
         this.watchTooltip.hide();
@@ -127,11 +130,23 @@ export class TimelineView {
       context.stroke();
       context.restore();
     }
-    const currentTime = this.viewing.playback.isPlaying ? this.viewing.playback.timeMs
-      : this.viewing.navigation.hoverTimelineTime ?? poses[this.viewing.navigation.selectedIndex]?.t;
+    const currentTime = this.viewing.playback.isPlaying
+      ? this.viewing.playback.timeMs
+      : this.viewing.navigation.trackLockPose?.t ?? poses[this.viewing.navigation.selectedIndex]?.t;
     if (currentTime != null) {
       const x = this.timeToX(currentTime);
       context.strokeStyle = "rgba(255,255,255,.9)";
+      context.lineWidth = 1;
+      context.beginPath();
+      context.moveTo(x, 0);
+      context.lineTo(x, height);
+      context.stroke();
+    }
+    const hoverTime = this.viewing.navigation.hoverTimelineTime
+      ?? this.viewing.navigation.trackHoverTime;
+    if (!this.viewing.playback.isPlaying && hoverTime != null && hoverTime !== currentTime) {
+      const x = this.timeToX(hoverTime);
+      context.strokeStyle = "rgba(210,218,228,.42)";
       context.lineWidth = 1;
       context.beginPath();
       context.moveTo(x, 0);

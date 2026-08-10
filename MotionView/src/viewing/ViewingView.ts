@@ -58,10 +58,12 @@ export class ViewingView implements ViewingFieldLayer, ViewingRenderLayer {
     this.viewing.events.navigationChanged.subscribe(() => {
       this.#lists.highlight();
       this.#readout.render();
+      this.#watchGraph.updatePlayhead();
       requestDrawAll();
     });
     this.viewing.events.playbackChanged.subscribe(() => {
       this.#readout.render();
+      this.#watchGraph.updatePlayhead();
       requestDrawAll();
     });
     this.viewing.events.projectionChanged.subscribe(() => requestDrawAll());

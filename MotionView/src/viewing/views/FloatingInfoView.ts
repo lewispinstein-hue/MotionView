@@ -48,7 +48,7 @@ export class FloatingInfoView {
 
   update(): void {
     const pose = this.viewing.playback.currentDisplayPose();
-    const index = this.viewing.navigation.selectedIndex;
+    const index = this.viewing.playback.currentDisplayIndex();
     const set = (id: string, value: string) => {
       const element = document.getElementById(id);
       if (element) element.textContent = value;

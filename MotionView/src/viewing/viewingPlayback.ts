@@ -77,6 +77,14 @@ export class ViewingPlayback {
     return this.projection.poseAt(this.navigation.selectedIndex);
   }
 
+  currentDisplayIndex(): number {
+    if (this.#playing && this.#timeMs != null) return this.projection.findFloorIndex(this.#timeMs);
+    if (this.navigation.hoverTimelineTime != null) return this.projection.findFloorIndex(this.navigation.hoverTimelineTime);
+    if (this.navigation.trackHoverTime != null) return this.projection.findFloorIndex(this.navigation.trackHoverTime);
+    if (this.navigation.trackLockIndex != null) return this.navigation.trackLockIndex;
+    return this.navigation.selectedIndex;
+  }
+
   readonly tick = (wallTime: number): void => {
     if (!this.#playing) return;
     const range = this.projection.timeRange();

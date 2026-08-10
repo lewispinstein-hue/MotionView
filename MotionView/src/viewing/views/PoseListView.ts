@@ -1,20 +1,21 @@
+import type { Pose } from "../../state/models";
 import type { ViewingFeature } from "../ViewingFeature";
 import type { ViewingDom } from "../ViewingDom";
 import { createVirtualList, type VirtualList } from "../virtualList";
 import { escapeHtml, formatNumber } from "../viewingPresentation";
 
 export class PoseListView {
-  readonly #list: VirtualList<number>;
+  readonly #list: VirtualList<Readonly<Pose>>;
 
   constructor(
     private readonly viewing: ViewingFeature,
     private readonly dom: ViewingDom,
   ) {
-    const list = createVirtualList<number>(dom.poseList, {
+    const list = createVirtualList<Readonly<Pose>>(dom.poseList, {
       estimateRowHeight: 64,
       overscanPx: 320,
-      getKey: (index) => String(index),
-      renderItem: (index) => this.createItem(index),
+      getKey: (_pose, index) => String(index),
+      renderItem: (_pose, index) => this.createItem(index),
     });
     if (!list) throw new Error("MotionView could not initialize the pose virtual list.");
     this.#list = list;
@@ -23,7 +24,7 @@ export class PoseListView {
   render(): void {
     const count = this.viewing.data.poses.length;
     this.dom.poseCount.textContent = count ? String(count) : "—";
-    this.#list.setItems({ length: count });
+    this.#list.setItems(this.viewing.data.poses as ArrayLike<Readonly<Pose>>);
   }
 
   highlight(scroll = false): void {
