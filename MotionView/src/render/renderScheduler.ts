@@ -1,14 +1,19 @@
 export interface RenderSchedulerCallbacks {
   drawField(): void;
-  drawPlanningTimeline(): void;
+  drawPlanningTimeline?(): void;
 }
 
 export interface ViewingRenderLayer {
   drawTimeline(): void;
 }
 
+export interface PlanningRenderLayer {
+  drawTimeline(): void;
+}
+
 let callbacks: RenderSchedulerCallbacks | null = null;
 let viewingLayer: ViewingRenderLayer | null = null;
+let planningLayer: PlanningRenderLayer | null = null;
 let drawQueued = false;
 
 export function configureRenderScheduler(nextCallbacks: RenderSchedulerCallbacks): void {
@@ -19,10 +24,15 @@ export function registerViewingRenderLayer(layer: ViewingRenderLayer): void {
   viewingLayer = layer;
 }
 
+export function registerPlanningRenderLayer(layer: PlanningRenderLayer): void {
+  planningLayer = layer;
+}
+
 export function drawAllNow(): void {
   callbacks?.drawField();
   viewingLayer?.drawTimeline();
-  callbacks?.drawPlanningTimeline();
+  if (planningLayer) planningLayer.drawTimeline();
+  else callbacks?.drawPlanningTimeline?.();
 }
 
 export function requestDrawAll(): void {

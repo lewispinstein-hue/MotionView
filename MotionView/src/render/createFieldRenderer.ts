@@ -35,12 +35,12 @@ export interface RobotImageTransform {
 export interface FieldRendererDependencies {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
-  getPlanningPose(): FieldPose | null;
+  getPlanningPose?(): FieldPose | null;
   getRobotDimensions(): { w: number; h: number };
   fieldHeadingToCanvasRotationDeg(thetaField: number): number;
   heatColorFromNorm(norm: number): string;
-  drawPlanningOverlay(force?: boolean): void;
-  isPlanningOverlayVisible(): boolean;
+  drawPlanningOverlay?(force?: boolean): void;
+  isPlanningOverlayVisible?(): boolean;
   onRobotImageAvailabilityChanged?(available: boolean): void;
   onFieldImageLoaded?(fieldKey: string): void | Promise<void>;
 }
@@ -53,10 +53,17 @@ export interface ViewingFieldLayer {
   drawWaypointOffset(pose: FieldPose): void;
 }
 
+export interface PlanningFieldLayer {
+  readonly overlayVisible: boolean;
+  currentPose(): FieldPose | null;
+  drawOverlay(force?: boolean): void;
+}
+
 export interface FieldRenderer {
   readonly canvas: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
   registerViewingLayer(layer: ViewingFieldLayer): void;
+  registerPlanningLayer(layer: PlanningFieldLayer): void;
   draw(): void;
   resizeCanvas(): void;
   updateFieldLayout(preserveBounds?: boolean): void;
@@ -137,6 +144,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
   let panStart = { x: 0, y: 0, panX: 0, panY: 0 };
   let suppressNextClick = false;
   let viewingLayer: ViewingFieldLayer | null = null;
+  let planningLayer: PlanningFieldLayer | null = null;
 
   function computeTransform() {
     const w = canvas.getBoundingClientRect().width;
@@ -386,13 +394,15 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
     if (getMode() === "viewing") {
       drawPath();
       viewingLayer?.drawOverlay();
-      if (deps.isPlanningOverlayVisible()) deps.drawPlanningOverlay(true);
+      if (planningLayer?.overlayVisible) planningLayer.drawOverlay(true);
+      else if (deps.isPlanningOverlayVisible?.()) deps.drawPlanningOverlay?.(true);
       const pose = viewingLayer?.currentPose() ?? null;
       if (pose) viewingLayer?.drawWaypointOffset(pose);
       if (pose) drawRobot(pose, 1.0);
     } else {
-      deps.drawPlanningOverlay();
-      const pose = deps.getPlanningPose();
+      if (planningLayer) planningLayer.drawOverlay();
+      else deps.drawPlanningOverlay?.();
+      const pose = planningLayer?.currentPose() ?? deps.getPlanningPose?.() ?? null;
       if (pose) drawRobot(pose, 1.0);
     }
   }
@@ -440,6 +450,9 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
     ctx,
     registerViewingLayer(layer) {
       viewingLayer = layer;
+    },
+    registerPlanningLayer(layer) {
+      planningLayer = layer;
     },
     draw,
     resizeCanvas() {
