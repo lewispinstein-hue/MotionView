@@ -181,9 +181,22 @@ export class PlanningSession {
   }
 
   private pushUndoSnapshot(snapshot: PlanningHistorySnapshot): void {
+    if (this.matchesCurrent(snapshot)) return;
     this.undoStack.push(snapshot);
     if (this.undoStack.length > this.maxUndoSteps) this.undoStack.shift();
     this.redoStack.length = 0;
+  }
+
+  private matchesCurrent(snapshot: PlanningHistorySnapshot): boolean {
+    return snapshot.selectedIndex === this.selectedWaypoint
+      && snapshot.selectedNodeId === this.selectedNodeId
+      && snapshot.playDist === this.playbackDistance
+      && snapshot.exportTemplate === this.exportTemplate
+      && snapshot.selected.length === this.selectedWaypoints.size
+      && snapshot.selected.every((index) => this.selectedWaypoints.has(index))
+      && JSON.stringify(snapshot.waypoints) === JSON.stringify(this.waypoints)
+      && JSON.stringify(snapshot.objects) === JSON.stringify(this.objects)
+      && JSON.stringify(snapshot.nodes) === JSON.stringify(this.nodes);
   }
 
   private resetTransientDomainState(): void {

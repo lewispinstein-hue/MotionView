@@ -23,8 +23,8 @@ const POINT_RADIUS = 11;
 const OVERLAY_POINT_RADIUS = 7;
 const THETA_HANDLE_RADIUS = 6;
 const THETA_HANDLE_OFFSET = 25;
-const NODE_LONG = 22;
-const NODE_THICK = 4;
+const NODE_LONG = 38;
+const NODE_THICK = 12.5;
 const NODE_TICK = 14;
 const NODE_BORDER = 1.5;
 
@@ -123,8 +123,8 @@ export class PlanningFieldView {
       const tangentEnd = this.field.worldToScreen(marker.x + marker.tx, marker.y + marker.ty);
       const normalAngle = Math.atan2(tangentEnd.y - tangentStart.y, tangentEnd.x - tangentStart.x) + Math.PI / 2;
       const selected = this.planning.selection.selectedNodeId === marker.node.id || this.#hoverNodeId === marker.node.id;
-      const long = Math.max(8, this.scaledNodeSize(NODE_LONG, 2.15));
-      const thick = Math.max(3, this.scaledNodeSize(NODE_THICK, 0.28));
+      const long = Math.max(12, this.scaledNodeSize(NODE_LONG, 3.225));
+      const thick = Math.max(3.75, this.scaledNodeSize(NODE_THICK, 0.35));
       const tick = Math.max(10, this.scaledNodeSize(NODE_TICK, 0.7));
       const viewingCap = 2.12 * this.field.getScale();
       const visibleLong = getMode() === "planning" ? long : Math.min(viewingCap, long);
@@ -444,7 +444,7 @@ export class PlanningFieldView {
     const method = node ? getPlanNodeEffectiveMethod(this.planning.objects.items, node) : null;
     if (!node || !object || !method) return;
     this.#tooltipTimer = window.setTimeout(() => {
-      this.dom.nodeTooltip.textContent = `${object.name || "Object"} · ${getPlanMethodTooltipName(method.name)}`;
+      this.dom.nodeTooltip.textContent = `${object.name || "Object"} • ${getPlanMethodTooltipName(method.name)}`;
       this.dom.nodeTooltip.classList.toggle("hasOverride", method.hasOverride);
       this.dom.nodeTooltip.hidden = false;
       this.dom.nodeTooltip.classList.add("isVisible");

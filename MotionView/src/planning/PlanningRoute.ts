@@ -5,6 +5,7 @@ export class PlanningRoute {
   constructor(private readonly session: PlanningSession) {}
   get waypoints(): readonly PlanningWaypointView[] { return this.session.waypoints; }
   get length(): number { return this.session.waypoints.length; }
+  get revision(): number { return this.session.routeRevision; }
   get hasData(): boolean { return this.session.waypoints.length > 0; }
 
   add(waypoint: PlanningWaypoint, index = this.session.waypoints.length): number {

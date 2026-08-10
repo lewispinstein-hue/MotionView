@@ -131,6 +131,8 @@ export class PlanningDialogs {
   }
 
   private hide(modal: HTMLElement): void {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && modal.contains(active)) active.blur();
     modal.setAttribute("hidden", "");
     modal.style.display = "none";
   }

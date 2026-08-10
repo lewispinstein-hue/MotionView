@@ -8,16 +8,30 @@ import type { PlanningFeature } from "./PlanningFeature";
 
 /** Translates Planning keyboard intent into domain commands. */
 export class PlanningInput {
+  #bound = false;
+
   constructor(
     private readonly planning: PlanningFeature,
     private readonly field: FieldRenderer,
     private readonly dialogs: PlanningDialogs,
   ) {}
 
+  bind(): void {
+    if (this.#bound) return;
+    this.#bound = true;
+    document.addEventListener("keydown", (event) => {
+      if (this.handleKeydown(event)) event.stopImmediatePropagation();
+    });
+  }
+
   handleKeydown(event: KeyboardEvent): boolean {
     if (getMode() !== "planning" || event.defaultPrevented) return false;
     const target = event.target;
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable)) {
+    const visibleTypingTarget = target instanceof HTMLElement
+      && (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable)
+      && target.isConnected
+      && target.closest("[hidden]") == null;
+    if (visibleTypingTarget) {
       return false;
     }
     if ((event.metaKey || event.ctrlKey) && !event.altKey) {
@@ -26,7 +40,6 @@ export class PlanningInput {
       const redo = (key === "z" && event.shiftKey) || (key === "y" && !event.shiftKey);
       if (undo || redo) {
         event.preventDefault();
-        event.stopPropagation();
         if (undo) this.planning.history.undo();
         else this.planning.history.redo();
         return true;

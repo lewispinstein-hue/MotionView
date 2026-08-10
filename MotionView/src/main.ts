@@ -354,6 +354,7 @@ const planningView = new PlanningView(app.planning, fieldRenderer, planningDom, 
 const planningInput = new PlanningInput(app.planning, fieldRenderer, planningDialogs);
 planningDialogs.bind();
 planningView.bind();
+planningInput.bind();
 planningView.render();
 fieldRenderer.registerPlanningLayer(planningView);
 registerPlanningRenderLayer(planningView);
@@ -3770,8 +3771,6 @@ function handleClearFieldClick(event) {
 
 
 function handleGlobalKeydown(e) {
-  if (planningInput?.handleKeydown(e)) return;
-
   const mouseTag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
   const isTypingTarget = (mouseTag === "input" || mouseTag === "textarea" || (e.target && e.target.isContentEditable));
   if (isTypingTarget && e.target !== liveWinEl) return;

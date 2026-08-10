@@ -187,6 +187,7 @@ export class PlanningSidebarView {
         this.planning.route.updateField(index, field, constrained[field]);
       } else if (field === "theta") this.planning.route.updateField(index, field, this.planning.projection.constrainTheta(value));
       else this.planning.route.updateField(index, field, Math.max(-127, Math.min(127, value)));
+      requestDrawAll();
     });
     input.addEventListener("blur", () => this.planning.history.commit());
     input.addEventListener("keydown", (event) => {

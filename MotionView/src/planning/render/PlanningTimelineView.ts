@@ -46,6 +46,7 @@ export class PlanningTimelineView {
   #scrubbing = false;
   #tooltipTimer: number | null = null;
   #layout: TimelineLayout | null = null;
+  #renderedRouteRevision = -1;
   #bound = false;
 
   constructor(
@@ -88,6 +89,7 @@ export class PlanningTimelineView {
     const nodes = [...this.planning.timeline.nodes].sort((a, b) => a.beforeWaypoint - b.beforeWaypoint || a.index - b.index || a.id.localeCompare(b.id));
     const layout = this.buildLayout(nodes);
     this.#layout = layout;
+    this.#renderedRouteRevision = this.planning.route.revision;
     this.dom.timelineNodeLayer.replaceChildren();
     this.dom.timelineWaypointLayer.replaceChildren();
     this.dom.eventTimelineHint.hidden = this.planning.route.length >= 2;
@@ -118,7 +120,7 @@ export class PlanningTimelineView {
         if (event.button !== 0) return;
         this.beginDrag({ source: "timeline", objectId: node.objectId, methodId: node.methodId, nodeId: node.id, sourceElement: element, startX: event.clientX, startY: event.clientY });
       });
-      element.addEventListener("pointerenter", (event) => this.showTooltip(method.name, event.clientX, event.clientY, method.hasOverride));
+      element.addEventListener("pointerenter", (event) => this.showTooltip(`${object.name || "Object"} • ${method.name}`, event.clientX, event.clientY, method.hasOverride));
       element.addEventListener("pointermove", (event) => this.positionTooltip(event.clientX, event.clientY));
       element.addEventListener("pointerleave", () => this.hideTooltip());
       this.dom.timelineNodeLayer.appendChild(element);
@@ -129,6 +131,10 @@ export class PlanningTimelineView {
 
   draw(): void {
     if (getMode() !== "planning") return;
+    if (this.#renderedRouteRevision !== this.planning.route.revision) {
+      this.render();
+      return;
+    }
     const rect = this.dom.timelineCanvas.getBoundingClientRect();
     const layout = this.#layout ?? this.buildLayout([...this.planning.timeline.nodes]);
     const ratio = window.devicePixelRatio || 1;
@@ -172,8 +178,7 @@ export class PlanningTimelineView {
   private beginDrag(event: Readonly<PlanningMethodDrag>): void {
     if (getMode() !== "planning" || this.planning.route.length < 2) return;
     this.cancelDrag();
-    const ghost = event.sourceElement.cloneNode(true) as HTMLElement;
-    ghost.classList.add("planMethodDragGhost");
+    const ghost = this.createMethodGhost(event.objectId, event.methodId);
     document.body.appendChild(ghost);
     this.#activeDrag = { ...event, ghost, started: false };
   }
@@ -183,9 +188,15 @@ export class PlanningTimelineView {
     if (!drag) return;
     if (!drag.started && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
     drag.started = true;
+    drag.sourceElement.classList.add("isDragging");
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
     drag.ghost.style.left = `${event.clientX + 12}px`;
     drag.ghost.style.top = `${event.clientY + 12}px`;
+    drag.ghost.style.zIndex = "1000";
     const rect = this.dom.timelineViewport.getBoundingClientRect();
+    if (event.clientX < rect.left + 40) this.dom.timelineViewport.scrollLeft -= 10;
+    else if (event.clientX > rect.right - 40) this.dom.timelineViewport.scrollLeft += 10;
     if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
       this.#drop = null;
     } else {
@@ -211,10 +222,38 @@ export class PlanningTimelineView {
   }
 
   private cancelDrag(): void {
+    this.#activeDrag?.sourceElement.classList.remove("isDragging");
     this.#activeDrag?.ghost.remove();
     this.#activeDrag = null;
     this.#drop = null;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
     this.updateDropLine();
+  }
+
+  private createMethodGhost(objectId: string, methodId: string): HTMLElement {
+    const object = this.planning.objects.get(objectId);
+    const method = this.planning.objects.method(objectId, methodId);
+    const ghost = document.createElement("div");
+    ghost.className = "planMethodCard planMethodDragGhost";
+    const grip = document.createElement("div");
+    grip.className = "planMethodGrip";
+    grip.textContent = "⋮⋮";
+    const index = document.createElement("div");
+    index.className = "planMethodIndex";
+    index.textContent = String(getPlanMethodNumber(this.planning.objects.items, objectId, methodId) ?? "");
+    const content = document.createElement("div");
+    content.className = "planMethodContent";
+    const name = document.createElement("div");
+    name.className = "planMethodName";
+    name.textContent = method?.name ?? "";
+    const code = document.createElement("div");
+    code.className = "planMethodCode";
+    code.textContent = method?.code ?? "";
+    content.append(name, code);
+    ghost.append(grip, index, content);
+    if (object?.color) ghost.style.setProperty("--plan-drag-color", object.color);
+    return ghost;
   }
 
   private updateDropLine(): void {

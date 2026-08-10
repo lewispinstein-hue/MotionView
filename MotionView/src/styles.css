@@ -2666,7 +2666,7 @@ body:not(.mode-planning) #rightPlanning {
   pointer-events: none;
   transform: scale(0.72);
   transform-origin: top left;
-  opacity: 0.92;
+  opacity: 0.78;
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
 }
 
