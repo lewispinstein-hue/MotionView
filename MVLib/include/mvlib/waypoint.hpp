@@ -122,8 +122,7 @@ public:
   /**
    * @brief Check if the robot has reached the waypoint.
    *
-   * \return Returns true if the robot is currently within tolerance or this
-   *         waypoint has been reached before.
+   * \return Returns true if the robot has ever been within tolerance before.
    *
    * @note For retriggerable waypoints, this returns true after the first reach
    *       and stays true even if the robot later leaves the tolerance window.
