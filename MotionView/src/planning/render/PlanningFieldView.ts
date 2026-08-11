@@ -1,6 +1,5 @@
 import { getMode } from "../../app/modeController";
 import type { FieldRenderer } from "../../render/createFieldRenderer";
-import { CANVAS_ZOOM_MIN } from "../../render/createFieldRenderer";
 import { requestDrawAll } from "../../render/renderScheduler";
 import type { PlanningFeature } from "../PlanningFeature";
 import type { PlanningDom } from "../PlanningDom";
@@ -19,14 +18,15 @@ interface NodeMarker {
   readonly ty: number;
 }
 
-const POINT_RADIUS = 11;
-const OVERLAY_POINT_RADIUS = 7;
-const THETA_HANDLE_RADIUS = 6;
-const THETA_HANDLE_OFFSET = 25;
-const NODE_LONG = 38;
-const NODE_THICK = 12.5;
-const NODE_TICK = 14;
+const WAYPOINT_RADIUS = 9;
+const OVERLAY_WAYPOINT_RADIUS = 6;
+const THETA_HANDLE_RADIUS = 4;
+const THETA_HANDLE_OFFSET = 20;
+const NODE_LONG = 12;
+const NODE_THICK = 3.75;
+const NODE_TICK = 10;
 const NODE_BORDER = 1.5;
+const NODE_CLEARANCE_IN = 5.5;
 
 function normalizeDegrees(value: number): number {
   return ((value % 360) + 360) % 360;
@@ -81,8 +81,8 @@ export class PlanningFieldView {
     if (!waypoints.length) return;
     const context = this.field.ctx;
     context.save();
-    context.lineWidth = 2;
-    context.strokeStyle = "rgba(120,180,255,0.7)";
+    context.lineWidth = this.field.sizes.screen({ width: 2, height: 2 }).width;
+    context.strokeStyle = "rgb(120,180,255)";
     context.beginPath();
     waypoints.forEach((point, index) => {
       const screen = this.field.worldToScreen(point.x, point.y);
@@ -94,10 +94,7 @@ export class PlanningFieldView {
     waypoints.forEach((point, index) => {
       const screen = this.field.worldToScreen(point.x, point.y);
       const selected = this.planning.selection.isWaypointSelected(index);
-      const radius = Math.min(
-        getMode() === "planning" ? POINT_RADIUS : OVERLAY_POINT_RADIUS,
-        (getMode() === "planning" ? 3 : 1) * this.field.getScale(),
-      );
+      const radius = this.waypointRadius(getMode() !== "planning");
       context.beginPath();
       context.arc(screen.x, screen.y, radius, 0, Math.PI * 2);
       context.fillStyle = index === this.planning.selection.primaryWaypointIndex
@@ -123,32 +120,31 @@ export class PlanningFieldView {
       const tangentEnd = this.field.worldToScreen(marker.x + marker.tx, marker.y + marker.ty);
       const normalAngle = Math.atan2(tangentEnd.y - tangentStart.y, tangentEnd.x - tangentStart.x) + Math.PI / 2;
       const selected = this.planning.selection.selectedNodeId === marker.node.id || this.#hoverNodeId === marker.node.id;
-      const long = Math.max(12, this.scaledNodeSize(NODE_LONG, 3.225));
-      const thick = Math.max(3.75, this.scaledNodeSize(NODE_THICK, 0.35));
-      const tick = Math.max(10, this.scaledNodeSize(NODE_TICK, 0.7));
-      const viewingCap = 2.12 * this.field.getScale();
-      const visibleLong = getMode() === "planning" ? long : Math.min(viewingCap, long);
-      const visibleThick = getMode() === "planning" ? thick : Math.min(viewingCap, thick);
-      const visibleTick = getMode() === "planning" ? tick : Math.min(viewingCap, tick);
-      const border = NODE_BORDER * Math.max(Math.min(Math.max(this.field.getViewZoom(), CANVAS_ZOOM_MIN), 1.75), 0.85);
+      const size = this.nodeScreenSize(getMode() === "planning");
       context.save();
       context.translate(screen.x, screen.y);
       context.rotate(normalAngle);
       context.lineCap = "round";
       context.lineJoin = "round";
       context.strokeStyle = object.color;
-      context.lineWidth = selected ? 2.5 : 2;
+      context.lineWidth = size.border * (selected ? 5 / 3 : 4 / 3);
       context.beginPath();
-      context.moveTo(-visibleTick / 2, 0);
-      context.lineTo(visibleTick / 2, 0);
+      context.moveTo(-size.tick / 2, 0);
+      context.lineTo(size.tick / 2, 0);
       context.stroke();
       context.fillStyle = selected ? "rgba(255,255,255,.98)" : "rgba(15,25,35,.7)";
       context.beginPath();
-      context.roundRect(-(visibleLong + border * 2) / 2, -(visibleThick + border * 2) / 2, visibleLong + border * 2, visibleThick + border * 2, Math.max(2, (visibleThick + border * 2) / 2));
+      context.roundRect(
+        -(size.width + size.border * 2) / 2,
+        -(size.height + size.border * 2) / 2,
+        size.width + size.border * 2,
+        size.height + size.border * 2,
+        (size.height + size.border * 2) / 2,
+      );
       context.fill();
       context.fillStyle = object.color;
       context.beginPath();
-      context.roundRect(-visibleLong / 2, -visibleThick / 2, visibleLong, visibleThick, Math.max(2, visibleThick / 2));
+      context.roundRect(-size.width / 2, -size.height / 2, size.width, size.height, size.height / 2);
       context.fill();
       context.restore();
     }
@@ -169,7 +165,7 @@ export class PlanningFieldView {
 
   hitWaypoint(x: number, y: number): number {
     let index = -1;
-    let distance = 12 * 12;
+    let distance = this.waypointRadius(false) ** 2;
     this.planning.route.waypoints.forEach((point, candidate) => {
       const screen = this.field.worldToScreen(point.x, point.y);
       const next = (screen.x - x) ** 2 + (screen.y - y) ** 2;
@@ -327,7 +323,8 @@ export class PlanningFieldView {
     if (!point) return;
     const context = this.field.ctx;
     const screen = this.field.worldToScreen(point.x, point.y);
-    const distance = radius + THETA_HANDLE_OFFSET * Math.max(this.field.getViewZoom(), CANVAS_ZOOM_MIN);
+    const handle = this.thetaHandleGeometry(radius);
+    const distance = handle.distance;
     const x = screen.x + Math.sin(angle) * distance;
     const y = screen.y - Math.cos(angle) * distance;
     context.beginPath();
@@ -335,7 +332,7 @@ export class PlanningFieldView {
     context.lineTo(x, y);
     context.stroke();
     context.beginPath();
-    context.arc(x, y, THETA_HANDLE_RADIUS, 0, Math.PI * 2);
+    context.arc(x, y, handle.radius, 0, Math.PI * 2);
     context.fillStyle = "rgba(90,160,255,1)";
     context.fill();
     context.stroke();
@@ -347,10 +344,11 @@ export class PlanningFieldView {
       if (!point) continue;
       const screen = this.field.worldToScreen(point.x, point.y);
       const angle = this.screenHeading(index) * Math.PI / 180;
-      const distance = POINT_RADIUS + THETA_HANDLE_OFFSET * Math.max(this.field.getViewZoom(), CANVAS_ZOOM_MIN);
+      const handle = this.thetaHandleGeometry(this.waypointRadius(false));
+      const distance = handle.distance;
       const handleX = screen.x + Math.sin(angle) * distance;
       const handleY = screen.y - Math.cos(angle) * distance;
-      if ((handleX - x) ** 2 + (handleY - y) ** 2 <= THETA_HANDLE_RADIUS ** 2) return index;
+      if ((handleX - x) ** 2 + (handleY - y) ** 2 <= handle.radius ** 2) return index;
     }
     return -1;
   }
@@ -386,13 +384,62 @@ export class PlanningFieldView {
 
   private hitNode(x: number, y: number) {
     let best: NodeMarker | null = null;
-    let distance = 12 * 12;
+    let distance = Infinity;
+    const size = this.nodeScreenSize(true);
     for (const marker of this.nodeMarkers()) {
       const screen = this.field.worldToScreen(marker.x, marker.y);
-      const next = (screen.x - x) ** 2 + (screen.y - y) ** 2;
-      if (next <= distance) { best = marker; distance = next; }
+      const tangentStart = this.field.worldToScreen(marker.x - marker.tx, marker.y - marker.ty);
+      const tangentEnd = this.field.worldToScreen(marker.x + marker.tx, marker.y + marker.ty);
+      const angle = Math.atan2(tangentEnd.y - tangentStart.y, tangentEnd.x - tangentStart.x) + Math.PI / 2;
+      const dx = x - screen.x;
+      const dy = y - screen.y;
+      const localX = dx * Math.cos(angle) + dy * Math.sin(angle);
+      const localY = -dx * Math.sin(angle) + dy * Math.cos(angle);
+      const width = Math.max(size.width + size.border * 2, size.tick);
+      const height = size.height + size.border * 2;
+      if (Math.abs(localX) > width / 2 || Math.abs(localY) > height / 2) continue;
+      const next = dx * dx + dy * dy;
+      if (next < distance) { best = marker; distance = next; }
     }
     return best?.node ?? null;
+  }
+
+  private waypointRadius(overlay: boolean): number {
+    const radius = overlay ? OVERLAY_WAYPOINT_RADIUS : WAYPOINT_RADIUS;
+    return this.field.sizes.screen({ width: radius * 2, height: radius * 2 }).width / 2;
+  }
+
+  private thetaHandleGeometry(waypointRadius: number): Readonly<{ radius: number; distance: number }> {
+    const diameter = this.field.sizes.screen({
+      width: THETA_HANDLE_RADIUS * 2,
+      height: THETA_HANDLE_RADIUS * 2,
+    });
+    const offset = this.field.sizes.screen({
+      width: THETA_HANDLE_OFFSET,
+      height: THETA_HANDLE_OFFSET,
+    });
+    return {
+      radius: diameter.width / 2,
+      distance: waypointRadius + offset.width,
+    };
+  }
+
+  private nodeScreenSize(planningMode: boolean): Readonly<{
+    width: number;
+    height: number;
+    tick: number;
+    border: number;
+  }> {
+    const node = this.field.sizes.screen({ width: NODE_LONG, height: NODE_THICK });
+    const tick = this.field.sizes.screen({ width: NODE_TICK, height: NODE_BORDER });
+    if (planningMode) return { width: node.width, height: node.height, tick: tick.width, border: tick.height };
+    const cap = this.field.sizes.world({ width: 2.12, height: 2.12 });
+    return {
+      width: Math.min(cap.width, node.width),
+      height: Math.min(cap.height, node.height),
+      tick: Math.min(cap.width, tick.width),
+      border: tick.height,
+    };
   }
 
   private nodeMarkers(): readonly NodeMarker[] {
@@ -415,7 +462,7 @@ export class PlanningFieldView {
       const dy = end.y - start.y;
       const length = Math.hypot(dx, dy);
       if (length <= 0) continue;
-      const clearance = Math.min(length, 18 / Math.max(this.field.getScale(), 0.0001));
+      const clearance = Math.min(length, NODE_CLEARANCE_IN);
       const usableLength = Math.max(0, length - clearance);
       nodes.sort((a, b) => a.index - b.index || a.id.localeCompare(b.id));
       nodes.forEach((node, order) => {
@@ -431,10 +478,6 @@ export class PlanningFieldView {
       });
     }
     return markers;
-  }
-
-  private scaledNodeSize(basePixels: number, maximumInches: number): number {
-    return Math.min(basePixels * Math.max(this.field.getViewZoom(), CANVAS_ZOOM_MIN), maximumInches * this.field.getScale());
   }
 
   private showNodeTooltip(nodeId: string, clientX: number, clientY: number): void {

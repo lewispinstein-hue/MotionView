@@ -12,7 +12,7 @@ import { setStatus } from "./app/status";
 import { applyLiveButtonState } from "./live/liveDomAdapter";
 import { LiveActionGate, LivePendingBuffer, LiveWebSocketClient, stripToTag } from "./live/liveCore";
 import { LiveConsoleBuffer } from "./live/liveConsole";
-import { createFieldRenderer, FIELD_BOUNDS_IN, CANVAS_ZOOM_MIN } from "./render/createFieldRenderer";
+import { createFieldRenderer, FIELD_BOUNDS_IN } from "./render/createFieldRenderer";
 import { configureRenderScheduler, registerPlanningRenderLayer, registerViewingRenderLayer, requestDrawAll } from "./render/renderScheduler";
 import {
   currentUnitsToInches,
@@ -937,14 +937,6 @@ const svgIconUrls = {
 function svgIconHref(iconId) {
   const iconUrl = svgIconUrls[iconId];
   return iconUrl ? `${iconUrl}#${iconId}` : "";
-}
-
-function viewingFieldMarkerStyleScale() {
-  return clamp(fieldRenderer.getViewZoom(), CANVAS_ZOOM_MIN, 1.75);
-}
-
-function scaledPlanFieldNodeSize(basePx, maxIn) {
-  return Math.min(basePx * Math.max(fieldRenderer.getViewZoom(), CANVAS_ZOOM_MIN), maxIn * fieldRenderer.getScale());
 }
 
 const viewingDom = ViewingDom.from(document);

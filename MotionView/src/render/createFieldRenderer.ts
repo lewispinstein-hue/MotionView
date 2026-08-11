@@ -2,6 +2,7 @@ import { getMode } from "../app/modeController";
 import { setStatus } from "../app/status";
 import { isTauriRuntime, readImageData, resolveResourcePath, saveRobotImage } from "../tauri/commands";
 import { configureFieldTransform } from "./fieldTransform";
+import { FieldSizeScaler } from "./FieldSizeScaler";
 import { requestDrawAll } from "./renderScheduler";
 
 export interface FieldBounds {
@@ -59,6 +60,7 @@ export interface PlanningFieldLayer {
 export interface FieldRenderer {
   readonly canvas: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
+  readonly sizes: FieldSizeScaler;
   registerViewingLayer(layer: ViewingFieldLayer): void;
   registerPlanningLayer(layer: PlanningFieldLayer): void;
   draw(): void;
@@ -142,6 +144,10 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
   let suppressNextClick = false;
   let viewingLayer: ViewingFieldLayer | null = null;
   let planningLayer: PlanningFieldLayer | null = null;
+  const sizes = new FieldSizeScaler({
+    getScale: () => scale,
+    getViewZoom: () => viewZoom,
+  });
 
   function computeTransform() {
     const w = canvas.getBoundingClientRect().width;
@@ -443,6 +449,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
   const renderer: FieldRenderer = {
     canvas,
     ctx,
+    sizes,
     registerViewingLayer(layer) {
       viewingLayer = layer;
     },
