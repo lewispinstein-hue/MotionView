@@ -1,6 +1,6 @@
 import { setStatus } from "../../app/status";
 import type { LogEntry } from "../../state/models";
-import type { ViewingDom } from "../ViewingDom";
+import type { ViewingListsDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
 import { createVirtualList, type VirtualList } from "../virtualList";
 import { escapeHtml, formatNumber, levelSortRank, levelStyle } from "../viewingPresentation";
@@ -11,7 +11,7 @@ export class LogListView {
 
   constructor(
     private readonly viewing: ViewingFeature,
-    private readonly dom: ViewingDom,
+    private readonly dom: ViewingListsDom,
   ) {
     const list = createVirtualList<Readonly<LogEntry>>(dom.logList, {
       estimateRowHeight: 70,

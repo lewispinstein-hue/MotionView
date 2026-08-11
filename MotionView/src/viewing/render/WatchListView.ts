@@ -4,11 +4,13 @@ import visibleWatchIconUrl from "../../assets/svg/viewing/visibleWatch.svg?url";
 import watchGraphIconUrl from "../../assets/svg/viewing/watchGraph.svg?url";
 import { setStatus } from "../../app/status";
 import type { WatchEntry } from "../../state/models";
-import type { ViewingDom } from "../ViewingDom";
+import type { ViewingListsDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
 import type { WatchMarker } from "../viewingTypes";
 import { createVirtualList, type VirtualList } from "../virtualList";
 import { escapeHtml, formatNumber, isGraphableWatchValue, levelSortRank, levelStyle, watchGraphKey, watchKey } from "../viewingPresentation";
+import type { FloatingInfoView } from "./FloatingInfoView";
+import type { WatchGraphView } from "./WatchGraphView";
 
 export class WatchListView {
   readonly #list: VirtualList<Readonly<WatchMarker>>;
@@ -16,7 +18,9 @@ export class WatchListView {
 
   constructor(
     private readonly viewing: ViewingFeature,
-    private readonly dom: ViewingDom,
+    private readonly dom: ViewingListsDom,
+    private readonly floatingInfo: FloatingInfoView,
+    private readonly watchGraph: WatchGraphView,
   ) {
     const list = createVirtualList<Readonly<WatchMarker>>(dom.watchList, {
       estimateRowHeight: 62,
@@ -158,14 +162,14 @@ export class WatchListView {
     for (const button of element.querySelectorAll<HTMLButtonElement>(".watchPinBtn")) {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
-        this.dom.watchList.dispatchEvent(new CustomEvent("viewing-pin-watch", { bubbles: true, detail: { watch } }));
+        this.floatingInfo.toggleWatch(watch.id ?? null);
         this.closeActionsMenu();
       });
     }
     for (const button of element.querySelectorAll<HTMLButtonElement>(".watchGraphBtn")) {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
-        this.dom.watchList.dispatchEvent(new CustomEvent("viewing-open-watch-graph", { bubbles: true, detail: { marker } }));
+        this.watchGraph.open(marker);
         this.closeActionsMenu();
       });
     }

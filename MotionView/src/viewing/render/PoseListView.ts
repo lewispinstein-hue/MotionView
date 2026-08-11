@@ -1,6 +1,6 @@
 import type { Pose } from "../../state/models";
 import type { ViewingFeature } from "../ViewingFeature";
-import type { ViewingDom } from "../ViewingDom";
+import type { ViewingListsDom } from "../ViewingDom";
 import { createVirtualList, type VirtualList } from "../virtualList";
 import { escapeHtml, formatNumber } from "../viewingPresentation";
 
@@ -9,7 +9,7 @@ export class PoseListView {
 
   constructor(
     private readonly viewing: ViewingFeature,
-    private readonly dom: ViewingDom,
+    private readonly dom: ViewingListsDom,
   ) {
     const list = createVirtualList<Readonly<Pose>>(dom.poseList, {
       estimateRowHeight: 64,

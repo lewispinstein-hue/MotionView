@@ -1,5 +1,5 @@
 import { captureScrollAnchor, restoreScrollAnchor } from "../scrollAnchor";
-import type { ViewingDom } from "../ViewingDom";
+import type { ViewingListsDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
 import type { WaypointEventView, WaypointView } from "../viewingTypes";
 import { escapeHtml, formatNumber } from "../viewingPresentation";
@@ -32,7 +32,7 @@ function eventLines(event: WaypointEventView): string[] {
 export class WaypointListView {
   constructor(
     private readonly viewing: ViewingFeature,
-    private readonly dom: ViewingDom,
+    private readonly dom: ViewingListsDom,
   ) {}
 
   bind(): void {

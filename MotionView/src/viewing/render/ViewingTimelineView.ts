@@ -1,41 +1,43 @@
 import { requestDrawAll } from "../../render/renderScheduler";
-import type { ViewingDom } from "../ViewingDom";
+import type { ViewingRenderLayer } from "../../render/renderScheduler";
+import type { ViewingTimelineDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
 import type { WatchMarker } from "../viewingTypes";
 import { heatColorFromNorm, levelFillWithAlpha } from "../viewingPresentation";
 import type { WatchListView } from "./WatchListView";
 import type { WatchTooltipView } from "./WatchTooltipView";
+import { watchTooltipRows } from "./watchTooltipRows";
 
-export class TimelineView {
+export class ViewingTimelineView implements ViewingRenderLayer {
   readonly #context: CanvasRenderingContext2D;
 
   constructor(
     private readonly viewing: ViewingFeature,
-    private readonly dom: ViewingDom,
+    private readonly dom: ViewingTimelineDom,
     private readonly watchList: WatchListView,
     private readonly watchTooltip: WatchTooltipView,
   ) {
-    const context = dom.timelineCanvas.getContext("2d");
+    const context = dom.canvas.getContext("2d");
     if (!context) throw new Error("MotionView could not initialize the Viewing timeline canvas.");
     this.#context = context;
   }
 
   bind(): void {
-    this.dom.timelineCanvas.addEventListener("mousemove", (event) => {
+    this.dom.canvas.addEventListener("mousemove", (event) => {
       if (!this.viewing.data.hasData || this.viewing.playback.isPlaying) return;
-      const rect = this.dom.timelineCanvas.getBoundingClientRect();
+      const rect = this.dom.canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const hit = this.pickWatch(x, event.clientY - rect.top);
-      this.dom.timelineCanvas.style.cursor = hit ? "pointer" : "crosshair";
+      this.dom.canvas.style.cursor = hit ? "pointer" : "crosshair";
       this.viewing.navigation.setTimelineHover(this.xToTime(x));
     });
-    this.dom.timelineCanvas.addEventListener("mouseleave", () => {
+    this.dom.canvas.addEventListener("mouseleave", () => {
       this.viewing.navigation.setTimelineHover(null);
-      this.dom.timelineCanvas.style.cursor = "default";
+      this.dom.canvas.style.cursor = "default";
     });
-    this.dom.timelineCanvas.addEventListener("mousedown", (event) => {
+    this.dom.canvas.addEventListener("mousedown", (event) => {
       if (!this.viewing.data.hasData || this.viewing.playback.isPlaying || this.viewing.navigation.livestreaming) return;
-      const rect = this.dom.timelineCanvas.getBoundingClientRect();
+      const rect = this.dom.canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const marker = this.pickWatch(x, event.clientY - rect.top);
       this.viewing.navigation.clearTrackLock();
@@ -47,7 +49,7 @@ export class TimelineView {
         const pose = this.viewing.projection.interpolatePose(marker.t) ?? marker.pose;
         if (index >= 0 && pose) this.viewing.navigation.lockTrack(pose, index);
         this.viewing.navigation.selectWatch(marker);
-        this.watchTooltip.show(marker, { x: event.clientX, y: event.clientY });
+        this.watchTooltip.show(watchTooltipRows(marker, pose), { x: event.clientX, y: event.clientY });
       } else {
         this.watchTooltip.hide();
         const time = this.xToTime(x);
@@ -63,21 +65,21 @@ export class TimelineView {
   }
 
   resize(): void {
-    if (this.dom.timelineBar.classList.contains("isCollapsed")) return;
-    const barHeight = this.dom.timelineBar.getBoundingClientRect().height;
-    const topHeight = this.dom.timelineTop?.getBoundingClientRect().height ?? 0;
-    this.dom.timelineCanvas.style.height = `${Math.max(144, barHeight - topHeight - 20)}px`;
+    if (this.dom.bar.classList.contains("isCollapsed")) return;
+    const barHeight = this.dom.bar.getBoundingClientRect().height;
+    const topHeight = this.dom.top?.getBoundingClientRect().height ?? 0;
+    this.dom.canvas.style.height = `${Math.max(144, barHeight - topHeight - 20)}px`;
     const ratio = window.devicePixelRatio || 1;
-    const rect = this.dom.timelineCanvas.getBoundingClientRect();
-    this.dom.timelineCanvas.width = Math.max(1, Math.floor(rect.width * ratio));
-    this.dom.timelineCanvas.height = Math.max(1, Math.floor(rect.height * ratio));
+    const rect = this.dom.canvas.getBoundingClientRect();
+    this.dom.canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+    this.dom.canvas.height = Math.max(1, Math.floor(rect.height * ratio));
     this.#context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    this.draw();
+    this.drawTimeline();
   }
 
-  draw(): void {
+  drawTimeline(): void {
     const context = this.#context;
-    const rect = this.dom.timelineCanvas.getBoundingClientRect();
+    const rect = this.dom.canvas.getBoundingClientRect();
     const width = rect.width;
     const height = rect.height;
     context.clearRect(0, 0, width, height);
@@ -161,13 +163,13 @@ export class TimelineView {
 
   timeToX(time: number): number {
     const range = this.viewing.projection.timeRange();
-    const width = this.dom.timelineCanvas.getBoundingClientRect().width;
+    const width = this.dom.canvas.getBoundingClientRect().width;
     return range ? ((time - range.start) / (range.end - range.start)) * width : 0;
   }
 
   xToTime(x: number): number {
     const range = this.viewing.projection.timeRange();
-    const width = this.dom.timelineCanvas.getBoundingClientRect().width || 1;
+    const width = this.dom.canvas.getBoundingClientRect().width || 1;
     return range ? range.start + Math.max(0, Math.min(1, x / width)) * (range.end - range.start) : 0;
   }
 

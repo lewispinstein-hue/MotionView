@@ -104,8 +104,6 @@ window.__live = window.__live || { connected: false, streaming: false };
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
-const timelineCanvas = document.getElementById("timelineCanvas");
-const tctx = timelineCanvas.getContext("2d");
 
 const btnFile = document.getElementById("btnFile");
 const btnLeftStop = document.getElementById("btnLeftStop");
@@ -238,7 +236,6 @@ const DEFAULT_PLAN_EXPORT_TEMPLATE = "moveToPoint(${x}, ${y}, ${theta});";
 
 const MAX_OFFSET_THETA = 359;
 
-const WATCH_TOL_MS = 60; // Controls the ± time that determines which pose a watch attaches to
 const COLLAPSE_PX_TIMELINE = 130; // When the timeline collapses away
 const COLLAPSE_PX_SIDEBAR = 282;  // When the right sidebar collapses away
 const COLLAPSE_WAYPOINTLIST_PX = 5;
@@ -250,19 +247,6 @@ const MAX_PX_LIVEWIN = 800; // Max width for left live window panel
 const MAX_TIMELINE_H_PX = 350; // Height at which timeline stops growing
 const MAX_SIDEBAR_W_PX = 550;  // Width at which sidebar stops growing
 const MAX_PLAN_UNDO = 50;      // Max number of undo steps
-
-const HOVER_PIXEL_TOL = 14;
-const TRACK_HOVER_PAD_PX = 12; // How close to the track before snapping on
-
-const WAYPOINT_OFFSET_PILL_MAX_W_PX = 150;
-
-// FLOATING INFO WINDOW SIZE
-const floatingWindowBounds = {
-  minWidth: 30,
-  minHeight: 49,
-  maxWidth: 400,
-  maxHeight: 600
-}
 
 let showPreviousYearFields = true;
 let fieldCompetition = "all";
@@ -378,7 +362,7 @@ subscribeMode((mode) => {
   app.planning.selection.clear();
   topBar.syncMode(mode);
   fieldRenderer.updateFieldLayout(true);
-  viewingView?.resizeTimeline();
+  viewingView?.resize();
   planningView?.resizeTimeline();
   app.planning.playback.setDistance(app.planning.playback.distance);
   void appTelemetry.modeChanged({
@@ -521,7 +505,7 @@ function applySavedLayout(settings) {
   if (layoutChanged) {
     syncTimelineBarCollapsedForMode();
     fieldRenderer.updateFieldLayout(true);
-    viewingView?.resizeTimeline();
+    viewingView?.resize();
     planningView?.resizeTimeline();
   }
 }
@@ -965,11 +949,12 @@ function scaledPlanFieldNodeSize(basePx, maxIn) {
 
 const viewingDom = ViewingDom.from(document);
 viewingView = new ViewingView(app.viewing, fieldRenderer, viewingDom);
-viewingInput = new ViewingInput(app.viewing);
+viewingInput = new ViewingInput(app.viewing, viewingView);
 viewingView.bind();
+viewingInput.bind();
 viewingView.render();
-fieldRenderer.registerViewingLayer(viewingView);
-registerViewingRenderLayer(viewingView);
+fieldRenderer.registerViewingLayer(viewingView.fieldLayer);
+registerViewingRenderLayer(viewingView.timelineLayer);
 app.viewing.events.playbackChanged.subscribe((change) => {
   if (change.kind === "started") syncTopBarPlayback("⏸");
   else if (change.kind === "paused") syncTopBarPlayback("▶");
@@ -988,24 +973,6 @@ configureRenderScheduler({
 
 // -------- view controls (square maximize + pan/zoom) --------
 canvas.addEventListener("wheel", (event) => fieldRenderer.handleWheel(event), { passive: false });
-canvas.addEventListener("pointerdown", (event) => {
-  if (getMode() !== "viewing" || event.button !== 0) return;
-  const rect = canvas.getBoundingClientRect();
-  fieldRenderer.beginPan(event.pointerId, event.clientX - rect.left, event.clientY - rect.top);
-  canvas.setPointerCapture(event.pointerId);
-});
-canvas.addEventListener("pointermove", (event) => {
-  if (getMode() !== "viewing") return;
-  const rect = canvas.getBoundingClientRect();
-  fieldRenderer.movePan(event.clientX - rect.left, event.clientY - rect.top, {
-    onStart: () => app.viewing.navigation.setTrackHover(null),
-  });
-});
-const endViewingPan = (event) => {
-  if (getMode() === "viewing") fieldRenderer.endPan(event.pointerId);
-};
-canvas.addEventListener("pointerup", endViewingPan);
-canvas.addEventListener("pointercancel", endViewingPan);
 canvas.addEventListener("contextmenu", (event) => { if (getMode() === "planning") event.preventDefault(); });
 
 // -------- Left sidebar controls (Stop / Connect / Refresh) --------
@@ -1750,7 +1717,7 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
       }
       setLeftSidebarW(next);
       fieldRenderer.resizeCanvas();
-      viewingView.resizeTimeline();
+      viewingView.resize();
     }
 
     if (draggingV) {
@@ -1774,7 +1741,7 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
       if (getMode() === "planning") setRightSidebarWPlanning(next);
       else setRightSidebarWViewing(next);
       fieldRenderer.resizeCanvas();
-      viewingView.resizeTimeline();
+      viewingView.resize();
     }
 
     if (draggingH) {
@@ -1791,7 +1758,7 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
       }
 
       setTimelineH(next);
-      viewingView.resizeTimeline();
+      viewingView.resize();
       fieldRenderer.resizeCanvas();
     }
 
@@ -1837,7 +1804,7 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
       }
       syncTimelineBarCollapsedForMode();
       fieldRenderer.resizeCanvas();
-      viewingView.resizeTimeline();
+      viewingView.resize();
       void saveSettings();
     }
   });
@@ -1856,7 +1823,7 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
       rowGrid && rowGrid.classList.add("leftCollapsed");
     }
     fieldRenderer.resizeCanvas();
-    viewingView.resizeTimeline();
+    viewingView.resize();
   });
 
   vSplit.addEventListener("dblclick", () => {
@@ -1883,7 +1850,7 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
     }
     fieldRenderer.resetFieldPosition();
     fieldRenderer.resizeCanvas();
-    viewingView.resizeTimeline();
+    viewingView.resize();
   });
 
   hSplit.addEventListener("dblclick", () => {
@@ -1896,7 +1863,7 @@ function syncTimelineBarCollapsedForMode(mode = getMode()) {
       setTimelineH(0);
       timelineBar.classList.add("isCollapsed");
     }
-    viewingView.resizeTimeline();
+    viewingView.resize();
     fieldRenderer.resetFieldPosition();
     fieldRenderer.resizeCanvas();
   });
@@ -3215,10 +3182,7 @@ window.addEventListener("keydown", (e) => {
   else if (exportOpen) closeExportModal();
   else if (routeInfoOpen) closeRouteInfoModal();
   else if (planningDialogs.cancelOpen()) { /* Planning dialog resolved by its owner. */ }
-  else if (app.viewing.navigation.selectedWaypointId != null) {
-    viewingView.clearWaypointSelection();
-    requestDrawAll();
-  }
+  else return;
   e.preventDefault();
   e.stopPropagation();
 }, true);
@@ -3858,23 +3822,6 @@ function handleGlobalKeydown(e) {
       return;
     }
 
-    if (e.key === "t" || e.key === "T") {
-      viewingView.toggleFloatingInfo();
-      return;
-    }
-
-    if (e.key === "g" || e.key === "G") {
-      e.preventDefault();
-      if (getMode() !== "viewing") return;
-      viewingView.toggleWatchGraph();
-      return;
-    }
-  }
-
-  if (!e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && (e.key === "N" || e.key === "n")) {
-    e.preventDefault();
-    viewingView.openFloatingWatch(null);
-    return;
   }
 
   if (e.key === "f" || e.key === "F") {
@@ -3882,8 +3829,6 @@ function handleGlobalKeydown(e) {
     fieldRenderer.resetFieldPosition();
     return;
   }
-
-  if (viewingInput.handleKeydown(e)) return;
 }
 
 sanitizeExportFilename();
@@ -4008,14 +3953,13 @@ const bridgeReadyPoll = setInterval(() => {
 }, 250);
 window.addEventListener("resize", () => {
   fieldRenderer.updateFieldLayout(true); // keep bounds, recompute square sizing
-  viewingView.resizeTimeline();
+  viewingView.resize();
   planningView.resizeTimeline();
-  viewingView.resizeWatchGraph();
   topBar.scheduleLayout();
 });
 
 fieldRenderer.updateFieldLayout(false);
-viewingView.resizeTimeline();
+viewingView.resize();
 planningView.resizeTimeline();
 topBar.bindEvents();
 topBar.scheduleLayout();

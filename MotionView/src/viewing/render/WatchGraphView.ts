@@ -1,6 +1,6 @@
 import Chart from "chart.js/auto";
 import type { ChartDataset } from "chart.js";
-import type { ViewingDom } from "../ViewingDom";
+import type { ViewingGraphDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
 import type { WatchMarker } from "../viewingTypes";
 import { formatNumber, isGraphableWatchValue, watchGraphKey } from "../viewingPresentation";
@@ -35,31 +35,31 @@ export class WatchGraphView {
 
   constructor(
     private readonly viewing: ViewingFeature,
-    private readonly dom: ViewingDom,
+    private readonly dom: ViewingGraphDom,
   ) {}
 
   bind(): void {
-    this.dom.closeWatchGraph.addEventListener("click", () => this.hide());
-    this.dom.watchGraphCompareSelect.addEventListener("change", () => this.render());
-    this.dom.watchGraphHeader.addEventListener("pointerdown", (event) => {
+    this.dom.close.addEventListener("click", () => this.hide());
+    this.dom.compareSelect.addEventListener("change", () => this.render());
+    this.dom.header.addEventListener("pointerdown", (event) => {
       if (event.button !== 0 || (event.target instanceof Element && event.target.closest("button,select"))) return;
-      const rect = this.dom.watchGraphPanel.getBoundingClientRect();
+      const rect = this.dom.panel.getBoundingClientRect();
       this.#dragOffset = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-      this.dom.watchGraphHeader.setPointerCapture?.(event.pointerId);
+      this.dom.header.setPointerCapture?.(event.pointerId);
     });
-    this.dom.watchGraphResizer.addEventListener("pointerdown", (event) => {
+    this.dom.resizer.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
       event.preventDefault();
-      const rect = this.dom.watchGraphPanel.getBoundingClientRect();
+      const rect = this.dom.panel.getBoundingClientRect();
       this.#resizeStart = { x: event.clientX, y: event.clientY, width: rect.width, height: rect.height };
-      this.dom.watchGraphResizer.setPointerCapture?.(event.pointerId);
+      this.dom.resizer.setPointerCapture?.(event.pointerId);
     });
     window.addEventListener("pointermove", (event) => this.handlePointerMove(event));
     window.addEventListener("pointerup", () => {
       this.#dragOffset = null;
       this.#resizeStart = null;
     });
-    this.dom.watchGraphCanvas.addEventListener("wheel", (event) => {
+    this.dom.canvas.addEventListener("wheel", (event) => {
       if (!this.#chart) return;
       event.preventDefault();
       const scale = this.#chart.scales.x;
@@ -85,17 +85,17 @@ export class WatchGraphView {
       this.#chart.options.scales!.x!.max = maximum;
       this.#chart.update("none");
     }, { passive: false });
-    this.dom.watchGraphCanvas.addEventListener("mousemove", (event) => {
+    this.dom.canvas.addEventListener("mousemove", (event) => {
       if (!this.#chart || this.viewing.playback.isPlaying) return;
       const marker = this.nearestMarkerAtPixel(event.offsetX);
-      this.dom.watchGraphCanvas.style.cursor = marker ? "crosshair" : "default";
+      this.dom.canvas.style.cursor = marker ? "crosshair" : "default";
       this.viewing.navigation.setTimelineHover(marker?.t ?? null);
     });
-    this.dom.watchGraphCanvas.addEventListener("mouseleave", () => {
-      this.dom.watchGraphCanvas.style.cursor = "default";
+    this.dom.canvas.addEventListener("mouseleave", () => {
+      this.dom.canvas.style.cursor = "default";
       this.viewing.navigation.setTimelineHover(null);
     });
-    this.dom.watchGraphCanvas.addEventListener("mousedown", (event) => {
+    this.dom.canvas.addEventListener("mousedown", (event) => {
       if (!this.#chart || this.viewing.playback.isPlaying || this.viewing.navigation.livestreaming) return;
       const marker = this.nearestMarkerAtPixel(event.offsetX);
       if (!marker) return;
@@ -111,12 +111,12 @@ export class WatchGraphView {
   open(marker: Readonly<WatchMarker>): void {
     const key = watchGraphKey(marker.watch);
     if (!isGraphableWatchValue(marker.watch.value)) return;
-    if (this.#key === key && !this.dom.watchGraphPanel.classList.contains("hidden")) {
+    if (this.#key === key && !this.dom.panel.classList.contains("hidden")) {
       this.hide();
       return;
     }
     this.#key = key;
-    this.dom.watchGraphPanel.classList.remove("hidden");
+    this.dom.panel.classList.remove("hidden");
     this.render();
   }
 
@@ -126,12 +126,12 @@ export class WatchGraphView {
       if (marker) this.open(marker);
       return;
     }
-    this.dom.watchGraphPanel.classList.toggle("hidden");
-    if (!this.dom.watchGraphPanel.classList.contains("hidden")) this.render();
+    this.dom.panel.classList.toggle("hidden");
+    if (!this.dom.panel.classList.contains("hidden")) this.render();
   }
 
   hide(): void {
-    this.dom.watchGraphPanel.classList.add("hidden");
+    this.dom.panel.classList.add("hidden");
   }
 
   resize(): void {
@@ -139,20 +139,20 @@ export class WatchGraphView {
   }
 
   updatePlayhead(): void {
-    if (!this.#key || this.dom.watchGraphPanel.classList.contains("hidden")) return;
+    if (!this.#key || this.dom.panel.classList.contains("hidden")) return;
     this.renderLatestValues(this.viewing.playback.currentDisplayPose()?.t ?? null);
   }
 
   render(): void {
-    if (!this.#key || this.dom.watchGraphPanel.classList.contains("hidden")) return;
+    if (!this.#key || this.dom.panel.classList.contains("hidden")) return;
     const primary = this.markersForKey(this.#key);
-    const compareKey = this.dom.watchGraphCompareSelect.value;
+    const compareKey = this.dom.compareSelect.value;
     const comparison = compareKey ? this.markersForKey(compareKey) : [];
     this.#primaryMarkers = primary;
     this.#comparisonMarkers = comparison;
     const representative = primary[primary.length - 1]?.watch;
-    this.dom.watchGraphTitle.textContent = representative?.label || "Watch";
-    this.dom.watchGraphSubtitle.textContent = representative?.id == null ? "ID: —" : `ID: ${representative.id}`;
+    this.dom.title.textContent = representative?.label || "Watch";
+    this.dom.subtitle.textContent = representative?.id == null ? "ID: —" : `ID: ${representative.id}`;
     this.renderCompareOptions();
     this.renderStats(primary, comparison);
     const datasets: ChartDataset<"line", Array<{ x: number; y: number }>>[] = [];
@@ -168,9 +168,9 @@ export class WatchGraphView {
     const maximumTime = times.length ? Math.max(...times) : 0;
     this.#xBounds = times.length ? { minimum: minimumTime, maximum: maximumTime } : null;
     const allBoolean = datasets.length > 0 && (!primaryData.length || primaryBoolean) && (!compareData.length || comparisonBoolean);
-    this.dom.watchGraphEmpty.classList.toggle("hidden", datasets.length > 0);
+    this.dom.empty.classList.toggle("hidden", datasets.length > 0);
     this.#chart?.destroy();
-    this.#chart = datasets.length ? new Chart(this.dom.watchGraphCanvas, {
+    this.#chart = datasets.length ? new Chart(this.dom.canvas, {
       type: "line",
       data: { datasets },
       options: {
@@ -246,12 +246,12 @@ export class WatchGraphView {
   }
 
   private renderCompareOptions(): void {
-    const current = this.dom.watchGraphCompareSelect.value;
-    this.dom.watchGraphCompareSelect.replaceChildren();
+    const current = this.dom.compareSelect.value;
+    this.dom.compareSelect.replaceChildren();
     const none = document.createElement("option");
     none.value = "";
     none.textContent = "Compare…";
-    this.dom.watchGraphCompareSelect.appendChild(none);
+    this.dom.compareSelect.appendChild(none);
     const keys = new Map<string, string>();
     for (const watch of this.viewing.data.watches) {
       const key = watchGraphKey(watch);
@@ -261,9 +261,9 @@ export class WatchGraphView {
       const option = document.createElement("option");
       option.value = key;
       option.textContent = label;
-      this.dom.watchGraphCompareSelect.appendChild(option);
+      this.dom.compareSelect.appendChild(option);
     }
-    this.dom.watchGraphCompareSelect.value = keys.has(current) ? current : "";
+    this.dom.compareSelect.value = keys.has(current) ? current : "";
   }
 
   private renderStats(primary: readonly Readonly<WatchMarker>[], comparison: readonly Readonly<WatchMarker>[]): void {
@@ -274,8 +274,8 @@ export class WatchGraphView {
       minimum.textContent = values.length ? formatNumber(Math.min(...values), 3) : "—";
       maximum.textContent = values.length ? formatNumber(Math.max(...values), 3) : "—";
     };
-    write(primary, this.dom.watchGraphCount, this.dom.watchGraphAverage, this.dom.watchGraphMinimum, this.dom.watchGraphMaximum);
-    write(comparison, this.dom.watchGraphCompareCount, this.dom.watchGraphCompareAverage, this.dom.watchGraphCompareMinimum, this.dom.watchGraphCompareMaximum);
+    write(primary, this.dom.count, this.dom.average, this.dom.minimum, this.dom.maximum);
+    write(comparison, this.dom.compareCount, this.dom.compareAverage, this.dom.compareMinimum, this.dom.compareMaximum);
     this.renderLatestValues(this.viewing.playback.currentDisplayPose()?.t ?? null);
   }
 
@@ -285,8 +285,8 @@ export class WatchGraphView {
       const value = numericValue(marker?.watch.value);
       element.textContent = value == null ? "—" : formatNumber(value, 3);
     };
-    write(this.#primaryMarkers, this.dom.watchGraphLatest);
-    write(this.#comparisonMarkers, this.dom.watchGraphCompareLatest);
+    write(this.#primaryMarkers, this.dom.latest);
+    write(this.#comparisonMarkers, this.dom.compareLatest);
   }
 
   private latestMarkerAtOrBefore(markers: readonly Readonly<WatchMarker>[], time: number): Readonly<WatchMarker> | null {
@@ -330,13 +330,13 @@ export class WatchGraphView {
 
   private handlePointerMove(event: PointerEvent): void {
     if (this.#dragOffset) {
-      const maxLeft = Math.max(12, window.innerWidth - this.dom.watchGraphPanel.offsetWidth - 12);
-      const maxTop = Math.max(12, window.innerHeight - this.dom.watchGraphPanel.offsetHeight - 12);
-      this.dom.watchGraphPanel.style.left = `${Math.max(12, Math.min(maxLeft, event.clientX - this.#dragOffset.x))}px`;
-      this.dom.watchGraphPanel.style.top = `${Math.max(12, Math.min(maxTop, event.clientY - this.#dragOffset.y))}px`;
+      const maxLeft = Math.max(12, window.innerWidth - this.dom.panel.offsetWidth - 12);
+      const maxTop = Math.max(12, window.innerHeight - this.dom.panel.offsetHeight - 12);
+      this.dom.panel.style.left = `${Math.max(12, Math.min(maxLeft, event.clientX - this.#dragOffset.x))}px`;
+      this.dom.panel.style.top = `${Math.max(12, Math.min(maxTop, event.clientY - this.#dragOffset.y))}px`;
     } else if (this.#resizeStart) {
-      this.dom.watchGraphPanel.style.width = `${Math.max(420, Math.min(980, this.#resizeStart.width + event.clientX - this.#resizeStart.x))}px`;
-      this.dom.watchGraphPanel.style.height = `${Math.max(260, Math.min(window.innerHeight - 24, this.#resizeStart.height + event.clientY - this.#resizeStart.y))}px`;
+      this.dom.panel.style.width = `${Math.max(420, Math.min(980, this.#resizeStart.width + event.clientX - this.#resizeStart.x))}px`;
+      this.dom.panel.style.height = `${Math.max(260, Math.min(window.innerHeight - 24, this.#resizeStart.height + event.clientY - this.#resizeStart.y))}px`;
       this.resize();
     }
   }

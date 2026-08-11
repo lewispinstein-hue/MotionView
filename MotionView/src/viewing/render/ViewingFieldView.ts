@@ -1,19 +1,20 @@
-import type { FieldPose, FieldRenderer } from "../../render/createFieldRenderer";
+import type { FieldPose, FieldRenderer, ViewingFieldLayer } from "../../render/createFieldRenderer";
 import { getMode } from "../../app/modeController";
-import type { ViewingDom } from "../ViewingDom";
+import type { ViewingFieldDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
 import type { WatchMarker, WaypointView } from "../viewingTypes";
 import { levelFillWithAlpha } from "../viewingPresentation";
 import type { WatchListView } from "./WatchListView";
 import type { WaypointListView } from "./WaypointListView";
 import type { WatchTooltipView } from "./WatchTooltipView";
+import { watchTooltipRows } from "./watchTooltipRows";
 
-export class FieldOverlayView {
+export class ViewingFieldView implements ViewingFieldLayer {
   #hoverWatch: Readonly<WatchMarker> | null = null;
 
   constructor(
     private readonly viewing: ViewingFeature,
-    private readonly dom: ViewingDom,
+    private readonly dom: ViewingFieldDom,
     private readonly field: FieldRenderer,
     private readonly watchList: WatchListView,
     private readonly waypointList: WaypointListView,
@@ -21,6 +22,24 @@ export class FieldOverlayView {
   ) {}
 
   bind(): void {
+    this.dom.canvas.addEventListener("pointerdown", (event) => {
+      if (getMode() !== "viewing" || event.button !== 0) return;
+      const rect = this.dom.canvas.getBoundingClientRect();
+      this.field.beginPan(event.pointerId, event.clientX - rect.left, event.clientY - rect.top);
+      this.dom.canvas.setPointerCapture(event.pointerId);
+    });
+    this.dom.canvas.addEventListener("pointermove", (event) => {
+      if (getMode() !== "viewing") return;
+      const rect = this.dom.canvas.getBoundingClientRect();
+      this.field.movePan(event.clientX - rect.left, event.clientY - rect.top, {
+        onStart: () => this.viewing.navigation.setTrackHover(null),
+      });
+    });
+    const endPan = (event: PointerEvent) => {
+      if (getMode() === "viewing") this.field.endPan(event.pointerId);
+    };
+    this.dom.canvas.addEventListener("pointerup", endPan);
+    this.dom.canvas.addEventListener("pointercancel", endPan);
     this.dom.canvas.addEventListener("mousemove", (event) => this.handleMouseMove(event));
     this.dom.canvas.addEventListener("mouseleave", () => {
       if (getMode() !== "viewing") return;
@@ -31,7 +50,19 @@ export class FieldOverlayView {
     this.dom.canvas.addEventListener("click", (event) => this.handleClick(event));
   }
 
-  draw(): void {
+  get pathLength(): number {
+    return this.viewing.data.poses.length;
+  }
+
+  pathPoseAt(index: number): FieldPose | null {
+    return this.viewing.projection.poseAt(index);
+  }
+
+  currentPose(): FieldPose | null {
+    return this.viewing.playback.currentDisplayPose();
+  }
+
+  drawOverlay(): void {
     this.drawWaypoints();
     this.drawWatches();
   }
@@ -131,7 +162,7 @@ export class FieldOverlayView {
       const poseIndex = trackHit?.index ?? index;
       if (poseIndex >= 0 && pose) this.viewing.navigation.lockTrack(pose, poseIndex);
       this.viewing.navigation.selectWatch(watch);
-      this.watchTooltip.show(watch, { x: event.clientX, y: event.clientY });
+      this.watchTooltip.show(watchTooltipRows(watch, pose), { x: event.clientX, y: event.clientY });
       return;
     }
     this.watchTooltip.hide();

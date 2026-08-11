@@ -1,62 +1,65 @@
-import type { FieldPose, FieldRenderer, ViewingFieldLayer } from "../render/createFieldRenderer";
-import type { ViewingRenderLayer } from "../render/renderScheduler";
+import type { FieldRenderer } from "../render/createFieldRenderer";
 import { requestDrawAll } from "../render/renderScheduler";
 import type { ViewingDom } from "./ViewingDom";
 import type { ViewingFeature } from "./ViewingFeature";
+import { FloatingInfoView } from "./render/FloatingInfoView";
+import { PoseReadoutView } from "./render/PoseReadoutView";
+import { ViewingFieldView } from "./render/ViewingFieldView";
+import { ViewingSidebarView } from "./render/ViewingSidebarView";
+import { ViewingTimelineView } from "./render/ViewingTimelineView";
+import { WatchGraphView } from "./render/WatchGraphView";
+import { WatchTooltipView } from "./render/WatchTooltipView";
 import type { ViewingDataChangedEvent } from "./viewingTypes";
-import { FieldOverlayView } from "./views/FieldOverlayView";
-import { FloatingInfoView } from "./views/FloatingInfoView";
-import { PoseReadoutView } from "./views/PoseReadoutView";
-import { TimelineView } from "./views/TimelineView";
-import { WatchGraphView } from "./views/WatchGraphView";
-import { ViewingListsView } from "./views/ViewingListsView";
-import { WatchTooltipView } from "./views/WatchTooltipView";
 
-/** Owns Viewing DOM and canvas presentation. It only reads feature state. */
-export class ViewingView implements ViewingFieldLayer, ViewingRenderLayer {
-  readonly #lists: ViewingListsView;
+/** Composes Viewing presentation and translates feature events into focused updates. */
+export class ViewingView {
+  readonly fieldLayer: ViewingFieldView;
+  readonly timelineLayer: ViewingTimelineView;
+  readonly #sidebar: ViewingSidebarView;
   readonly #watchGraph: WatchGraphView;
   readonly #floatingInfo: FloatingInfoView;
   readonly #readout: PoseReadoutView;
-  readonly #fieldOverlay: FieldOverlayView;
-  readonly #timeline: TimelineView;
   readonly #watchTooltip: WatchTooltipView;
   #bound = false;
 
   constructor(
     readonly viewing: ViewingFeature,
-    readonly field: FieldRenderer,
+    field: FieldRenderer,
     readonly dom: ViewingDom,
   ) {
-    this.#lists = new ViewingListsView(viewing, dom);
-    this.#watchGraph = new WatchGraphView(viewing, dom);
-    this.#floatingInfo = new FloatingInfoView(viewing, dom);
-    this.#readout = new PoseReadoutView(viewing, dom, this.#floatingInfo);
-    this.#watchTooltip = new WatchTooltipView(viewing, dom);
-    this.#fieldOverlay = new FieldOverlayView(viewing, dom, field, this.#lists.watches, this.#lists.waypoints, this.#watchTooltip);
-    this.#timeline = new TimelineView(viewing, dom, this.#lists.watches, this.#watchTooltip);
+    this.#watchGraph = new WatchGraphView(viewing, dom.graph);
+    this.#floatingInfo = new FloatingInfoView(viewing, dom.floating);
+    this.#sidebar = new ViewingSidebarView(viewing, dom.lists, this.#floatingInfo, this.#watchGraph);
+    this.#readout = new PoseReadoutView(viewing, dom.readout, this.#floatingInfo);
+    this.#watchTooltip = new WatchTooltipView(dom.tooltip);
+    this.fieldLayer = new ViewingFieldView(
+      viewing,
+      dom.field,
+      field,
+      this.#sidebar.watches,
+      this.#sidebar.waypoints,
+      this.#watchTooltip,
+    );
+    this.timelineLayer = new ViewingTimelineView(
+      viewing,
+      dom.timeline,
+      this.#sidebar.watches,
+      this.#watchTooltip,
+    );
   }
 
   bind(): void {
     if (this.#bound) return;
     this.#bound = true;
-    this.#lists.bind();
+    this.#sidebar.bind();
     this.#watchGraph.bind();
     this.#floatingInfo.bind();
     this.#watchTooltip.bind();
-    this.#fieldOverlay.bind();
-    this.#timeline.bind();
-    this.dom.watchList.addEventListener("viewing-pin-watch", (event) => {
-      const watch = (event as CustomEvent).detail?.watch;
-      this.#floatingInfo.toggleWatch(watch?.id ?? null);
-    });
-    this.dom.watchList.addEventListener("viewing-open-watch-graph", (event) => {
-      const marker = (event as CustomEvent).detail?.marker;
-      if (marker) this.#watchGraph.open(marker);
-    });
+    this.fieldLayer.bind();
+    this.timelineLayer.bind();
     this.viewing.events.dataChanged.subscribe((change) => this.handleDataChanged(change));
     this.viewing.events.navigationChanged.subscribe(() => {
-      this.#lists.highlight();
+      this.#sidebar.highlight();
       this.#readout.render();
       this.#watchGraph.updatePlayhead();
       requestDrawAll();
@@ -70,40 +73,13 @@ export class ViewingView implements ViewingFieldLayer, ViewingRenderLayer {
   }
 
   render(): void {
-    this.#lists.render();
+    this.#sidebar.render();
     this.#floatingInfo.refreshPinnedPanels();
     this.#readout.render();
   }
 
-  get pathLength(): number {
-    return this.viewing.data.poses.length;
-  }
-
-  pathPoseAt(index: number): FieldPose | null {
-    return this.viewing.projection.poseAt(index);
-  }
-
-  currentPose(): FieldPose | null {
-    return this.viewing.playback.currentDisplayPose();
-  }
-
-  drawOverlay(): void {
-    this.#fieldOverlay.draw();
-  }
-
-  drawWaypointOffset(pose: FieldPose): void {
-    this.#fieldOverlay.drawWaypointOffset(pose);
-  }
-
-  drawTimeline(): void {
-    this.#timeline.draw();
-  }
-
-  resizeTimeline(): void {
-    this.#timeline.resize();
-  }
-
-  resizeWatchGraph(): void {
+  resize(): void {
+    this.timelineLayer.resize();
     this.#watchGraph.resize();
   }
 
@@ -130,22 +106,22 @@ export class ViewingView implements ViewingFieldLayer, ViewingRenderLayer {
       this.render();
     } else if (change.kind === "appended") {
       if (change.result.watchesAdded) {
-        this.#lists.watches.renderFilter();
-        this.#lists.watches.render();
+        this.#sidebar.watches.renderFilter();
+        this.#sidebar.watches.render();
         this.#floatingInfo.refreshPinnedPanels();
         this.#watchGraph.render();
       }
-      if (change.result.logsAdded) this.#lists.logs.render();
+      if (change.result.logsAdded) this.#sidebar.logs.render();
       if (change.result.waypointsAdded) {
-        this.#lists.waypoints.renderFilter();
-        this.#lists.waypoints.render();
+        this.#sidebar.waypoints.renderFilter();
+        this.#sidebar.waypoints.render();
       }
-      if (change.result.posesAdded) this.#lists.poses.render();
+      if (change.result.posesAdded) this.#sidebar.poses.render();
       this.#readout.render();
     } else if (change.kind === "watch-visibility") {
-      this.#lists.watches.render();
+      this.#sidebar.watches.render();
     } else if (change.kind === "speed-range") {
-      this.#lists.poses.render();
+      this.#sidebar.poses.render();
       this.#readout.render();
     }
     requestDrawAll();
