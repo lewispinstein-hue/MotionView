@@ -8,7 +8,6 @@ export class LivePreferences {
   ) {}
 
   get refreshIntervalMs(): number { return this.session.refreshIntervalMs; }
-  get debugEnabled(): boolean { return this.session.debugEnabled; }
 
   setRefreshInterval(milliseconds: number): void {
     const parsed = Number(milliseconds);
@@ -18,18 +17,9 @@ export class LivePreferences {
     this.emit();
   }
 
-  setDebugEnabled(enabled: boolean): void {
-    const next = !!enabled;
-    if (next === this.session.debugEnabled) return;
-    this.session.debugEnabled = next;
-    this.emit();
-  }
-
   private emit(): void {
     this.events.preferencesChanged.emit({
       refreshIntervalMs: this.refreshIntervalMs,
-      debugEnabled: this.debugEnabled,
     });
   }
 }
-

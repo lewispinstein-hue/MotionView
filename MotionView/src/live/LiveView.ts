@@ -41,9 +41,6 @@ export class LiveView {
     this.dom.refreshInterval?.addEventListener("change", () => {
       this.live.preferences.setRefreshInterval(Number(this.dom.refreshInterval?.value ?? 0));
     });
-    this.dom.debugToggle?.addEventListener("change", () => {
-      this.live.preferences.setDebugEnabled(!!this.dom.debugToggle?.checked);
-    });
     this.dom.projectInput?.addEventListener("input", () => {
       if (this.#projectInputTimer) clearTimeout(this.#projectInputTimer);
       this.live.project.restore(this.dom.projectInput?.value ?? "");
@@ -93,7 +90,6 @@ export class LiveView {
 
   private renderPreferences(): void {
     if (this.dom.refreshInterval) this.dom.refreshInterval.value = String(this.live.preferences.refreshIntervalMs);
-    if (this.dom.debugToggle) this.dom.debugToggle.checked = this.live.preferences.debugEnabled;
   }
 
   private async discoverProjects(): Promise<void> {

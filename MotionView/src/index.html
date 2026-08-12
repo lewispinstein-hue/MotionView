@@ -416,24 +416,6 @@
           </div>
         </div>
 
-        <div class="divider settingsViewing" style="margin:10px 0;"></div>
-
-        <!-- Developer Section -->
-        <div class="settingsSection settingsViewing settingsGroup"
-          title="Advanced debug tools for troubleshooting livestreaming issues">
-          <div class="settingsGroupHeader">
-            <div class="settingsGroupIcon">🛠️</div>
-            <div class="settingsGroupTitle">Developer</div>
-          </div>
-          <div class="settingsGroupBody">
-            <div class="settingsRow" style="align-items:center !important;">
-              <label class="settingsLabel">Livestreaming Debug</label>
-              <input id="settingsLiveDebug" type="checkbox" style="width:18px;height:18px;cursor:pointer"
-                title="Shows extra livestreaming logs in the Live window." />
-            </div>
-          </div>
-        </div>
-
         <div class="divider settingsPlanning" style="margin:10px 0;"></div>
 
         <!-- Planning Section -->
@@ -693,7 +675,8 @@
           <div class="statsPanel planWaypointPanel">
             <div class="statsHeader">
               <div class="statsTitle">Waypoints</div>
-              <div class="statsHint" id="planCount">0</div>
+              <button id="btnPlanEditTemplate" class="iconBtn secondaryBtn planEditTemplateBtn"
+                type="button">Edit Template</button>
             </div>
             <div id="planList" class="planList"></div>
             <div class="planSelectedPanel">
@@ -731,9 +714,9 @@
             </div>
             <div class="planningExportActions">
               <button id="btnPlanCopyCode" class="iconBtn secondaryBtn" type="button">Copy Code</button>
-              <button id="btnPlanEditTemplate" class="iconBtn secondaryBtn" type="button">Edit Template</button>
+              <button id="btnPlanExportCode" class="iconBtn secondaryBtn" type="button">Export Code</button>
               <button id="btnPlanExport" class="iconBtn secondaryBtn planExportIconBtn" type="button"
-                aria-label="Export Route">
+                title="Export Route" aria-label="Export Route">
                 <svg width="18" height="18">
                   <use href="./assets/svg/export/exportPath.svg#icon-exportPath"></use>
                 </svg>
@@ -918,6 +901,64 @@
                   Settings</button>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="planCodeExportModal" class="modal" hidden>
+      <div class="modalBackdrop"></div>
+      <div class="modalCard settingsCard planCodeExportCard" role="dialog" aria-modal="true"
+        aria-labelledby="planCodeExportTitle" tabindex="-1">
+        <div class="modalHeader">
+          <div class="modalHeaderContent">
+            <div id="planCodeExportTitle" class="settingsMainTitle">Export Code</div>
+            <div class="settingsSubtitle">Write the generated planned path to a source file.</div>
+          </div>
+          <button id="btnPlanCodeExportClose" class="iconBtn closeBtn" title="Close">✕</button>
+        </div>
+        <div class="modalBody settingsBody">
+          <div class="settingsSection settingsGroup">
+            <div class="settingsGroupHeader">
+              <div class="settingsGroupIcon">&lt;/&gt;</div>
+              <div class="settingsGroupTitle" style="font-size: 20px;">Code File</div>
+            </div>
+            <div class="settingsGroupBody">
+              <div>
+                <label class="fieldLabel" for="planCodeExportHeader">Header</label>
+                <label class="settingsDescription" for="planCodeExportHeader">Inserted before the generated path.</label>
+                <textarea id="planCodeExportHeader" class="settingsInput planCodeExportAffix" spellcheck="false"
+                  placeholder="void autonomous() {"></textarea>
+              </div>
+              <div>
+                <label class="fieldLabel" for="planCodeExportFooter">Footer</label>
+                <label class="settingsDescription" for="planCodeExportFooter">Inserted after the generated path.</label>
+                <textarea id="planCodeExportFooter" class="settingsInput planCodeExportAffix" spellcheck="false"
+                  placeholder="}"></textarea>
+              </div>
+              <div>
+                <label class="fieldLabel" for="planCodeExportTarget">Target</label>
+                <select id="planCodeExportTarget" class="settingsSelect">
+                  <option value="downloads">Downloads</option>
+                  <option value="desktop">Desktop</option>
+                  <option value="documents">Documents</option>
+                  <option value="project">PROS Project</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              <div>
+                <label class="fieldLabel" for="planCodeExportPath">Export Path</label>
+                <label class="settingsDescription" for="planCodeExportPath">Full path including the filename and extension.</label>
+                <input id="planCodeExportPath" type="text" class="settingsInput"
+                  placeholder="/path/to/autonomous.cpp" autocomplete="off" spellcheck="false" />
+              </div>
+              <div id="planCodeExportValidation" class="muted exportValidationMessage" aria-live="polite"></div>
+              <div id="planCodeExportSuccess" class="exportSuccessMessage" aria-live="polite" hidden></div>
+            </div>
+          </div>
+          <div class="exportFooter">
+            <button id="btnPlanCodeExportCancel" class="iconBtn secondaryBtn" type="button">Cancel</button>
+            <button id="btnPlanCodeExportConfirm" class="iconBtn secondaryBtn" type="button">Export</button>
           </div>
         </div>
       </div>

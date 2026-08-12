@@ -105,3 +105,53 @@ pub fn export_motionview_json(
         path: export_path.to_string_lossy().to_string(),
     })
 }
+
+#[tauri::command]
+pub fn resolve_export_directory(
+    app: AppHandle,
+    location: String,
+    project_path: Option<String>,
+) -> Result<String, String> {
+    let custom_path = if location.trim().eq_ignore_ascii_case("project") {
+        project_path.as_deref()
+    } else {
+        None
+    };
+    resolve_export_dir(&app, &location, custom_path).map(|path| path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn export_planning_code(path: String, contents: String) -> Result<ExportResult, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("export path is required".to_string());
+    }
+    let export_path = PathBuf::from(trimmed);
+    if export_path.file_name().is_none() {
+        return Err("export path must include a filename".to_string());
+    }
+    let parent = export_path
+        .parent()
+        .ok_or_else(|| "export path must include a parent folder".to_string())?;
+    if !parent.exists() {
+        return Err(format!(
+            "export folder does not exist: {}",
+            parent.display()
+        ));
+    }
+    if !parent.is_dir() {
+        return Err(format!(
+            "export parent is not a folder: {}",
+            parent.display()
+        ));
+    }
+    std::fs::write(&export_path, contents).map_err(|e| {
+        format!(
+            "failed to write planning code {}: {e}",
+            export_path.display()
+        )
+    })?;
+    Ok(ExportResult {
+        path: export_path.to_string_lossy().to_string(),
+    })
+}

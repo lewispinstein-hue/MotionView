@@ -8,7 +8,8 @@ import type { PlanningDialogs } from "../PlanningDialogs";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningFeature } from "../PlanningFeature";
 import { getPlanNodeEffectiveMethod } from "../planningObjects";
-import { buildPlanExportCode, getUtf8ByteLength } from "../planningTemplate";
+import { getUtf8ByteLength } from "../planningTemplate";
+import { generatePlanningCode } from "../planningCode";
 import { getContrastTextColor, getDefaultPlanObjectColor, getDefaultPlanObjectName } from "../planningState";
 import type { PlanningDragCoordinator } from "./PlanningDragCoordinator";
 
@@ -57,8 +58,8 @@ export class PlanningSidebarView {
 
   renderWaypoints(): void {
     this.dom.list.replaceChildren();
-    this.dom.count.textContent = String(this.planning.route.length);
     this.dom.copyCode.disabled = this.planning.route.length === 0;
+    this.dom.exportCode.disabled = this.planning.route.length === 0;
     this.planning.route.waypoints.forEach((point, index) => {
       const row = document.createElement("div");
       row.className = `planItem${this.planning.selection.isWaypointSelected(index) ? " selected" : ""}`;
@@ -263,16 +264,7 @@ export class PlanningSidebarView {
 
   private async copyCode(): Promise<void> {
     const data = this.planning.exportData();
-    const code = buildPlanExportCode({
-      template: data.template,
-      waypoints: data.waypoints,
-      nodes: data.nodes,
-      objects: data.objects,
-      readPlanSpeed: (value) => Number.isFinite(Number(value)) ? Number(value) : 127,
-      formatTemplateNumber: (value, decimals = 3) => format(value, decimals),
-      planThetaDegAt: (index) => Number(data.waypoints[index]?.theta) || 0,
-      getSortedPlanNodes: () => [...data.nodes].sort((a, b) => a.beforeWaypoint - b.beforeWaypoint || a.index - b.index),
-    });
+    const code = generatePlanningCode(this.planning);
     if (!code) {
       setStatus("Add at least one waypoint and a template before copying code.");
       return;

@@ -603,6 +603,8 @@ fn main() {
             settings::read_saved_paths,
             settings::write_saved_paths,
             export::export_motionview_json,
+            export::resolve_export_directory,
+            export::export_planning_code,
             set_windows_fullscreen,
             get_window_fullscreen_state,
             get_system_info,

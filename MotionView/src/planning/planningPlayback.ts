@@ -2,7 +2,7 @@ import type { PlanningEvents } from "./planningEvents";
 import type { PlanningProjection } from "./PlanningProjection";
 import type { PlanningSession } from "./planningSession";
 
-const PLANNING_SPEED_SCALE = 0.25;
+const PLANNING_SPEED_SCALE = 0.35;
 
 export class PlanningPlayback {
   #playing = false;

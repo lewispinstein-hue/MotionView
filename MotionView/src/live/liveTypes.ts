@@ -28,7 +28,6 @@ export interface LiveProjectChangedEvent {
 
 export interface LivePreferencesChangedEvent {
   readonly refreshIntervalMs: number;
-  readonly debugEnabled: boolean;
 }
 
 export type LiveConsoleEvent =
@@ -61,4 +60,3 @@ export interface LiveApiResponse {
   readonly ok?: boolean;
   readonly status?: string;
 }
-

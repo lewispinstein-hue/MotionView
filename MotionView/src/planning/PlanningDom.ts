@@ -21,7 +21,6 @@ export class PlanningDom {
   readonly cursorPill: HTMLElement;
   readonly nodeTooltip: HTMLElement;
   readonly list: HTMLElement;
-  readonly count: HTMLElement;
   readonly selectedIndex: HTMLElement;
   readonly selectedXLabel: HTMLElement;
   readonly selectedYLabel: HTMLElement;
@@ -32,6 +31,7 @@ export class PlanningDom {
   readonly objectList: HTMLElement;
   readonly addObject: HTMLButtonElement;
   readonly copyCode: HTMLButtonElement;
+  readonly exportCode: HTMLButtonElement;
   readonly editTemplate: HTMLButtonElement;
   readonly exportButton: HTMLButtonElement;
   readonly templateModal: HTMLElement;
@@ -53,6 +53,16 @@ export class PlanningDom {
   readonly confirmClose: HTMLButtonElement;
   readonly confirmCancel: HTMLButtonElement;
   readonly confirmButton: HTMLButtonElement;
+  readonly codeExportModal: HTMLElement;
+  readonly codeExportClose: HTMLButtonElement;
+  readonly codeExportCancel: HTMLButtonElement;
+  readonly codeExportConfirm: HTMLButtonElement;
+  readonly codeExportHeader: HTMLTextAreaElement;
+  readonly codeExportFooter: HTMLTextAreaElement;
+  readonly codeExportTarget: HTMLSelectElement;
+  readonly codeExportPath: HTMLInputElement;
+  readonly codeExportValidation: HTMLElement;
+  readonly codeExportSuccess: HTMLElement;
 
   private constructor(document: Document) {
     this.canvas = requiredElement(document, "c");
@@ -70,7 +80,6 @@ export class PlanningDom {
     this.cursorPill = requiredElement(document, "planCursorPill");
     this.nodeTooltip = requiredElement(document, "planNodeTooltip");
     this.list = requiredElement(document, "planList");
-    this.count = requiredElement(document, "planCount");
     this.selectedIndex = requiredElement(document, "planSelIndex");
     this.selectedXLabel = requiredElement(document, "planSelXLabel");
     this.selectedYLabel = requiredElement(document, "planSelYLabel");
@@ -81,6 +90,7 @@ export class PlanningDom {
     this.objectList = requiredElement(document, "planObjectList");
     this.addObject = requiredElement(document, "btnPlanAddObject");
     this.copyCode = requiredElement(document, "btnPlanCopyCode");
+    this.exportCode = requiredElement(document, "btnPlanExportCode");
     this.editTemplate = requiredElement(document, "btnPlanEditTemplate");
     this.exportButton = requiredElement(document, "btnPlanExport");
     this.templateModal = requiredElement(document, "planTemplateModal");
@@ -102,6 +112,16 @@ export class PlanningDom {
     this.confirmClose = requiredElement(document, "btnPlanObjectDeleteClose");
     this.confirmCancel = requiredElement(document, "btnPlanObjectDeleteCancel");
     this.confirmButton = requiredElement(document, "btnPlanObjectDeleteConfirm");
+    this.codeExportModal = requiredElement(document, "planCodeExportModal");
+    this.codeExportClose = requiredElement(document, "btnPlanCodeExportClose");
+    this.codeExportCancel = requiredElement(document, "btnPlanCodeExportCancel");
+    this.codeExportConfirm = requiredElement(document, "btnPlanCodeExportConfirm");
+    this.codeExportHeader = requiredElement(document, "planCodeExportHeader");
+    this.codeExportFooter = requiredElement(document, "planCodeExportFooter");
+    this.codeExportTarget = requiredElement(document, "planCodeExportTarget");
+    this.codeExportPath = requiredElement(document, "planCodeExportPath");
+    this.codeExportValidation = requiredElement(document, "planCodeExportValidation");
+    this.codeExportSuccess = requiredElement(document, "planCodeExportSuccess");
   }
 
   static from(document: Document): PlanningDom {

@@ -2824,13 +2824,28 @@ body:not(.mode-planning) #rightPlanning {
   font-size: 13px;
 }
 
-.planExportIconBtn {
-  flex: 0 0 34px !important;
+.planningExportActions .planExportIconBtn {
+  flex: 0 0 34px;
   width: 34px;
-  min-width: 34px !important;
-  height: 34px !important;
+  min-width: 34px;
   padding: 0;
   color: var(--text);
+}
+
+.planEditTemplateBtn {
+  height: 28px;
+  padding-inline: 9px;
+  font-size: 12px;
+}
+
+.planCodeExportCard {
+  width: min(680px, calc(100vw - 32px));
+}
+
+.planCodeExportAffix {
+  min-height: 86px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .planExportIconBtn svg {
@@ -3113,6 +3128,12 @@ body:not(.mode-planning) #rightPlanning {
   color: #9ef0b5;
   font-size: 13px;
   font-weight: 600;
+}
+
+.exportSuccessMessage.isError {
+  border-color: rgba(255, 105, 105, 0.45);
+  background: rgba(170, 45, 55, 0.22);
+  color: #ffb0b7;
 }
 
 .exportFooter {

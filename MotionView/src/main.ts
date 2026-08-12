@@ -31,6 +31,7 @@ import {
   getUtf8ByteLength,
   serializePlanNode,
   PlanningDialogs,
+  PlanningCodeExportDialog,
   PlanningDom,
   PlanningInput,
   PlanningView,
@@ -270,9 +271,14 @@ const fieldRenderer = createFieldRenderer({
 
 const planningDom = PlanningDom.from(document);
 const planningDialogs = new PlanningDialogs(planningDom);
+const planningCodeExportDialog = new PlanningCodeExportDialog(app.planning, planningDom);
 const planningView = new PlanningView(app.planning, fieldRenderer, planningDom, planningDialogs);
 const planningInput = new PlanningInput(app.planning, fieldRenderer, planningDialogs);
 planningDialogs.bind();
+planningCodeExportDialog.bind();
+planningCodeExportDialog.changed.subscribe(() => {
+  if (settingsLoaded) void saveSettings();
+});
 planningView.bind();
 planningInput.bind();
 planningView.render();
@@ -763,6 +769,7 @@ app.live.events.streamChanged.subscribe(() => {
 });
 app.live.events.projectChanged.subscribe(() => {
   syncProjectExportLocationOption();
+  planningCodeExportDialog.setProjectPath(app.live.project.valid ? app.live.project.path : "");
   if (settingsLoaded && app.core.tauri.isTauriRuntime()) void saveSettings();
 });
 app.live.events.preferencesChanged.subscribe(() => {
@@ -1023,10 +1030,10 @@ async function loadSettings() {
       if (settings.planExportTemplate !== undefined) {
         app.planning.setExportTemplate(settings.planExportTemplate);
       }
+      planningCodeExportDialog.applySettings(settings.planningCodeExport);
       if (settings.refreshIntervalMs !== undefined) {
         app.live.preferences.setRefreshInterval(Number(settings.refreshIntervalMs));
       }
-      app.live.preferences.setDebugEnabled(!!settings.liveDebug);
       if (settings.robotImageEnabled !== undefined) {
         fieldRenderer.setRobotImageEnabled(!!settings.robotImageEnabled);
       }
@@ -1160,8 +1167,8 @@ async function saveSettings() {
       planThetaSnapStep: settingsPlanThetaSnapStep ? settingsPlanThetaSnapStep.value : "0",
       planLimitBounds: settingsPlanLimitBounds ? settingsPlanLimitBounds.checked : true,
       planExportTemplate: app.planning.exportTemplate,
+      planningCodeExport: planningCodeExportDialog.settings,
       refreshIntervalMs: String(app.live.preferences.refreshIntervalMs),
-      liveDebug: app.live.preferences.debugEnabled,
       showPreviousYearFields,
       fieldCompetition,
       playbackSpeed: String(topBar.getPlaybackSpeed()),

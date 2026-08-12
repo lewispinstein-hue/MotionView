@@ -7,7 +7,6 @@ export class LiveSession {
   connectionState: LiveConnectionState = "disconnected";
   streamState: LiveStreamState = "idle";
   refreshIntervalMs = 500;
-  debugEnabled = false;
   lastPoseTimestamp: number | null = null;
   refreshTimer: ReturnType<typeof setInterval> | null = null;
   refreshInFlight = false;
@@ -21,4 +20,3 @@ export class LiveSession {
     this.pending.clear();
   }
 }
-

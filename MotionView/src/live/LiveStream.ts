@@ -103,7 +103,6 @@ export class LiveStream {
     }
     const pending = this.session.pending.batch();
     if (!pending) return EMPTY_APPEND_RESULT;
-    const startedAt = performance.now();
     try {
       const parsed = this.parser.parse(pending, this.viewing.data, this.session.lastPoseTimestamp);
       const result = this.viewing.appendLiveBatch(parsed.batch);
@@ -113,13 +112,8 @@ export class LiveStream {
       if (result.hasNewData) {
         this.events.batchAccepted.emit({ result, pendingLineCount: this.pendingLineCount });
       }
-      const duration = performance.now() - startedAt;
-      if (duration > 100) {
-        this.debug(`refresh: ${duration.toFixed(1)}ms (poses=${this.viewing.data.poses.length}, watches=${this.viewing.data.watches.length}, pending=${this.pendingLineCount})`);
-      }
       return result;
-    } catch (error) {
-      this.debug(`refresh failed: ${error instanceof Error ? error.message : String(error)}`);
+    } catch {
       return EMPTY_APPEND_RESULT;
     }
   }
@@ -182,12 +176,6 @@ export class LiveStream {
 
   private appendConsole(line: string): void {
     this.events.consoleChanged.emit({ kind: "append", line });
-  }
-
-  private debug(message: string): void {
-    if (!this.session.debugEnabled) return;
-    this.appendConsole(`[DBG] ${message}`);
-    void this.bridge.log("DEBUG", message, "live");
   }
 
   private serialize<T>(command: () => Promise<T>): Promise<T> {

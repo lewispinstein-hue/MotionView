@@ -24,3 +24,18 @@ export function saveRobotImage(dataUrl: string): Promise<string | null> {
 export function finalizeAppQuit(): Promise<void> {
   return invokeCommand<void>("finalize_app_quit");
 }
+
+export interface FileExportResult {
+  readonly path: string;
+}
+
+export function resolveExportDirectory(location: string, projectPath?: string): Promise<string> {
+  return invokeCommand<string>("resolve_export_directory", {
+    location,
+    projectPath: projectPath || null,
+  });
+}
+
+export function exportPlanningCode(path: string, contents: string): Promise<FileExportResult> {
+  return invokeCommand<FileExportResult>("export_planning_code", { path, contents });
+}

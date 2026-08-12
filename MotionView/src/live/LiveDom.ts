@@ -15,7 +15,6 @@ export class LiveDom {
     readonly projectStatus: HTMLElement | null,
     readonly autoStatus: HTMLElement | null,
     readonly autoResults: HTMLElement | null,
-    readonly debugToggle: HTMLInputElement | null,
   ) {}
 
   static from(root: Document): LiveDom {
@@ -31,7 +30,6 @@ export class LiveDom {
       element(root, "prosDirStatus"),
       element(root, "prosDirAutoStatus"),
       element(root, "prosDirAutoResults"),
-      element(root, "settingsLiveDebug"),
     );
   }
 }
