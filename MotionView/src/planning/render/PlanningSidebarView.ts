@@ -7,6 +7,7 @@ import { planningTelemetry } from "../../telemetry/createTelemetry";
 import type { PlanningDialogs } from "../PlanningDialogs";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningFeature } from "../PlanningFeature";
+import { getPlanNodeEffectiveMethod } from "../planningObjects";
 import { buildPlanExportCode, getUtf8ByteLength } from "../planningTemplate";
 import { getContrastTextColor, getDefaultPlanObjectColor, getDefaultPlanObjectName } from "../planningState";
 import type { PlanningDragCoordinator } from "./PlanningDragCoordinator";
@@ -291,11 +292,10 @@ export class PlanningSidebarView {
   }
 
   private latestMethodName(objectId: string): string {
-    const nodes = this.planning.timeline.nodes.filter((node) => node.objectId === objectId).sort((a, b) => a.beforeWaypoint - b.beforeWaypoint || a.index - b.index);
     let latest = "—";
-    for (const node of nodes) {
-      const threshold = node.beforeWaypoint >= this.planning.route.length ? this.planning.projection.totalLength : this.planning.projection.distances[node.beforeWaypoint] ?? 0;
-      if (threshold <= this.planning.playback.distance) latest = this.planning.objects.method(node.objectId, node.methodId)?.name || "—";
+    for (const placement of this.planning.projection.nodePlacements) {
+      if (placement.node.objectId !== objectId || placement.distance > this.planning.playback.distance) continue;
+      latest = getPlanNodeEffectiveMethod(this.planning.objects.items, placement.node)?.name || "—";
     }
     return latest;
   }

@@ -27,7 +27,6 @@ const NODE_LONG = 12;
 const NODE_THICK = 3.75;
 const NODE_TICK = 10;
 const NODE_BORDER = 1.5;
-const NODE_CLEARANCE_IN = 5.5;
 
 function normalizeDegrees(value: number): number {
   return ((value % 360) + 360) % 360;
@@ -446,41 +445,13 @@ export class PlanningFieldView {
   }
 
   private nodeMarkers(): readonly NodeMarker[] {
-    const waypoints = this.planning.route.waypoints;
-    if (waypoints.length < 2) return [];
-    const buckets = new Map<number, typeof this.planning.timeline.nodes[number][]>();
-    for (const node of this.planning.timeline.nodes) {
-      const bucket = buckets.get(node.beforeWaypoint) ?? [];
-      bucket.push(node);
-      buckets.set(node.beforeWaypoint, bucket);
-    }
-    const markers: NodeMarker[] = [];
-    for (const [beforeWaypoint, nodes] of buckets) {
-      if (beforeWaypoint <= 0 || beforeWaypoint > waypoints.length) continue;
-      const endIndex = Math.min(beforeWaypoint, waypoints.length - 1);
-      const start = waypoints[Math.max(0, endIndex - 1)];
-      const end = waypoints[endIndex];
-      if (!start || !end) continue;
-      const dx = end.x - start.x;
-      const dy = end.y - start.y;
-      const length = Math.hypot(dx, dy);
-      if (length <= 0) continue;
-      const clearance = Math.min(length, NODE_CLEARANCE_IN);
-      const usableLength = Math.max(0, length - clearance);
-      nodes.sort((a, b) => a.index - b.index || a.id.localeCompare(b.id));
-      nodes.forEach((node, order) => {
-        const rawDistance = length * (order / Math.max(1, nodes.length));
-        const along = clearance + (rawDistance / length) * usableLength;
-        markers.push({
-          node,
-          x: start.x + dx * along / length,
-          y: start.y + dy * along / length,
-          tx: dx / length,
-          ty: dy / length,
-        });
-      });
-    }
-    return markers;
+    return this.planning.projection.nodePlacements.map((placement) => ({
+      node: placement.node,
+      x: placement.x,
+      y: placement.y,
+      tx: placement.tangentX,
+      ty: placement.tangentY,
+    }));
   }
 
   private showNodeTooltip(nodeId: string, clientX: number, clientY: number): void {

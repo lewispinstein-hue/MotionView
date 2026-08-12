@@ -2,6 +2,8 @@ import type { PlanningEvents } from "./planningEvents";
 import type { PlanningProjection } from "./PlanningProjection";
 import type { PlanningSession } from "./planningSession";
 
+const PLANNING_SPEED_SCALE = 0.25;
+
 export class PlanningPlayback {
   #playing = false;
   #rate = 1;
@@ -53,7 +55,8 @@ export class PlanningPlayback {
     if (this.#lastWallTime == null) this.#lastWallTime = now;
     const elapsedSeconds = (now - this.#lastWallTime) / 1000;
     this.#lastWallTime = now;
-    const next = this.distance + elapsedSeconds * this.projection.speedAt(this.distance) * (this.#rate / 2);
+    const next = this.distance
+      + elapsedSeconds * this.projection.speedAt(this.distance) * this.#rate * PLANNING_SPEED_SCALE;
     this.setDistance(next);
     if (this.distance >= this.projection.totalLength) this.pause();
     else this.#frame = requestAnimationFrame(this.tick);
