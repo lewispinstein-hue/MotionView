@@ -11,8 +11,8 @@ function eventStyle(type: string): Readonly<{ fill: string; text: string }> {
 }
 
 function eventLines(event: WaypointEventView): string[] {
-  const params = event.params;
   if (event.type === "CREATED") {
+    const params = event.params;
     const target = [`X: ${formatNumber(params.tarX)}`, `Y: ${formatNumber(params.tarY)}`];
     if (params.tarT != null) target.push(`θ: ${formatNumber(params.tarT)}`);
     const lines = [`Target: ${target.join(", ")}`];
@@ -21,10 +21,11 @@ function eventLines(event: WaypointEventView): string[] {
     if (params.thetaTol != null) tolerances.push(`Angular: ${formatNumber(params.thetaTol)}`);
     if (tolerances.length) lines.push(`Tolerances: ${tolerances.join(", ")}`);
     if (params.timeoutMs != null) lines.push(`Timeout: ${formatNumber(Number(params.timeoutMs) / 1000, 2)}s`);
+    lines.push(`Retriggerable: ${params.retriggerable ? "Yes" : "No"}`);
     return lines;
   }
-  if (event.type === "REACHED" && params.remainingTime != null) {
-    return [`Time Left: ${formatNumber(Number(params.remainingTime) / 1000, 2)}s`];
+  if (event.type === "REACHED" && event.params.remainingTime != null) {
+    return [`Time Left: ${formatNumber(Number(event.params.remainingTime) / 1000, 2)}s`];
   }
   return [];
 }

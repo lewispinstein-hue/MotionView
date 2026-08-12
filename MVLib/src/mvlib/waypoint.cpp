@@ -132,6 +132,7 @@ WaypointHandle Logger::internalRegisterWaypoint(std::string name, WaypointParams
     pkt.linTol = details.linearTol;
     pkt.thetaTol = details.thetaTol.value_or(std::numeric_limits<float>::quiet_NaN());
     pkt.timeout = details.timeoutMs.value_or(0);
+    pkt.retriggerable = details.retriggerable ? 1 : 0;
     detail::Telemetry::getInstance().sendWaypointCreated(pkt);
   }
 

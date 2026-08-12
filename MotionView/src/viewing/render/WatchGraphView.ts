@@ -69,10 +69,15 @@ export class WatchGraphView {
       const dataRange = bounds.maximum - bounds.minimum;
       if (dataRange <= 0) return;
       const factor = Math.exp(event.deltaY * 0.0012);
-      const midpoint = (Number(scale.max) + Number(scale.min)) / 2;
+      const currentMinimum = Number(scale.min);
+      const cursorValue = Number(scale.getValueForPixel(event.offsetX));
+      const anchor = Number.isFinite(cursorValue)
+        ? Math.max(Number(scale.min), Math.min(Number(scale.max), cursorValue))
+        : (Number(scale.max) + currentMinimum) / 2;
+      const anchorRatio = Math.max(0, Math.min(1, (anchor - currentMinimum) / range));
       const nextRange = Math.min(dataRange, Math.max(Math.min(0.1, dataRange), range * factor));
-      let minimum = midpoint - nextRange / 2;
-      let maximum = midpoint + nextRange / 2;
+      let minimum = anchor - nextRange * anchorRatio;
+      let maximum = minimum + nextRange;
       if (minimum < bounds.minimum) {
         minimum = bounds.minimum;
         maximum = minimum + nextRange;
@@ -145,6 +150,8 @@ export class WatchGraphView {
 
   render(): void {
     if (!this.#key || this.dom.panel.classList.contains("hidden")) return;
+    const previousViewport = this.captureViewport();
+    const previousBounds = this.#xBounds;
     const primary = this.markersForKey(this.#key);
     const compareKey = this.dom.compareSelect.value;
     const comparison = compareKey ? this.markersForKey(compareKey) : [];
@@ -167,6 +174,7 @@ export class WatchGraphView {
     const minimumTime = times.length ? Math.min(...times) : 0;
     const maximumTime = times.length ? Math.max(...times) : 0;
     this.#xBounds = times.length ? { minimum: minimumTime, maximum: maximumTime } : null;
+    const viewport = this.nextViewport(previousViewport, previousBounds, this.#xBounds);
     const allBoolean = datasets.length > 0 && (!primaryData.length || primaryBoolean) && (!compareData.length || comparisonBoolean);
     this.dom.empty.classList.toggle("hidden", datasets.length > 0);
     this.#chart?.destroy();
@@ -185,8 +193,8 @@ export class WatchGraphView {
         scales: {
           x: {
             type: "linear",
-            min: minimumTime === maximumTime ? undefined : minimumTime,
-            max: minimumTime === maximumTime ? undefined : maximumTime,
+            min: minimumTime === maximumTime ? undefined : viewport?.minimum ?? minimumTime,
+            max: minimumTime === maximumTime ? undefined : viewport?.maximum ?? maximumTime,
             grid: { color: "rgba(255,255,255,.08)" },
             border: { color: "rgba(255,255,255,.18)" },
             ticks: { color: "rgba(255,255,255,.62)", callback: (value) => `${formatNumber(Number(value), 2)}s` },
@@ -206,6 +214,44 @@ export class WatchGraphView {
         },
       },
     }) : null;
+  }
+
+  private captureViewport(): Readonly<{ minimum: number; maximum: number }> | null {
+    const scale = this.#chart?.scales.x;
+    if (!scale) return null;
+    const minimum = Number(scale.min);
+    const maximum = Number(scale.max);
+    return Number.isFinite(minimum) && Number.isFinite(maximum) && maximum > minimum
+      ? { minimum, maximum }
+      : null;
+  }
+
+  private nextViewport(
+    viewport: Readonly<{ minimum: number; maximum: number }> | null,
+    previousBounds: Readonly<{ minimum: number; maximum: number }> | null,
+    nextBounds: Readonly<{ minimum: number; maximum: number }> | null,
+  ): Readonly<{ minimum: number; maximum: number }> | null {
+    if (!viewport || !previousBounds || !nextBounds) return nextBounds;
+    const dataRange = previousBounds.maximum - previousBounds.minimum;
+    const viewRange = viewport.maximum - viewport.minimum;
+    const epsilon = Math.max(0.0001, dataRange * 0.001);
+    if (viewRange >= dataRange - epsilon) return nextBounds;
+
+    const followsLatest = Math.abs(viewport.maximum - previousBounds.maximum) <= epsilon;
+    let maximum = followsLatest ? nextBounds.maximum : viewport.maximum;
+    let minimum = followsLatest ? maximum - viewRange : viewport.minimum;
+    if (minimum < nextBounds.minimum) {
+      minimum = nextBounds.minimum;
+      maximum = minimum + viewRange;
+    }
+    if (maximum > nextBounds.maximum) {
+      maximum = nextBounds.maximum;
+      minimum = maximum - viewRange;
+    }
+    return {
+      minimum: Math.max(nextBounds.minimum, minimum),
+      maximum: Math.min(nextBounds.maximum, maximum),
+    };
   }
 
   private markersForKey(key: string): Readonly<WatchMarker>[] {

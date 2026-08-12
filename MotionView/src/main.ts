@@ -9,9 +9,7 @@ import { initializeMotionViewApp } from "./app/appRuntime";
 import { createTopBar } from "./app/createTopBar";
 import { getMode, setMode, subscribeMode } from "./app/modeController";
 import { setStatus } from "./app/status";
-import { applyLiveButtonState } from "./live/liveDomAdapter";
-import { LiveActionGate, LivePendingBuffer, LiveWebSocketClient, stripToTag } from "./live/liveCore";
-import { LiveConsoleBuffer } from "./live/liveConsole";
+import { LiveDom, LiveInput, LiveView } from "./live";
 import { createFieldRenderer, FIELD_BOUNDS_IN } from "./render/createFieldRenderer";
 import { configureRenderScheduler, registerPlanningRenderLayer, registerViewingRenderLayer, requestDrawAll } from "./render/renderScheduler";
 import {
@@ -37,7 +35,7 @@ import {
   PlanningInput,
   PlanningView,
 } from "./planning";
-import { appTelemetry, exportTelemetry, liveTelemetry, planningTelemetry, viewingTelemetry } from "./telemetry/createTelemetry";
+import { appTelemetry, exportTelemetry, planningTelemetry, viewingTelemetry } from "./telemetry/createTelemetry";
 import {
   buildWaypointState,
   ViewingDom,
@@ -45,11 +43,7 @@ import {
   ViewingView,
   normalizeLogs,
   normalizePoses,
-  normalizeSystemLogMessage,
   normalizeWatches,
-  normalizeWaypointType,
-  parseWaypointNumber,
-  parseWaypointParams,
   waypointEventCount,
 } from "./viewing";
 
@@ -94,21 +88,14 @@ if (isWindowsPlatform) {
   });
 }
 
-let ORIGIN = window.__BRIDGE_ORIGIN__ ?? null;
-let WS_ORIGIN = ORIGIN ? ORIGIN.replace(/^http/, "ws") : null;
-
 const root = document.documentElement;
 let persistedAppState = null;
-// Live streaming state shared across handlers (avoids TDZ issues)
-window.__live = window.__live || { connected: false, streaming: false };
+let settingsLoaded = false;
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
 const btnFile = document.getElementById("btnFile");
-const btnLeftStop = document.getElementById("btnLeftStop");
-const btnLeftConnect = document.getElementById("btnLeftConnect");
-const btnLeftRefresh = document.getElementById("btnLeftRefresh");
 const btnTogglePlanOverlay = document.getElementById("btnTogglePlanOverlay");
 const helpModal = document.getElementById("helpModal");
 const btnHelpClose = document.getElementById("btnHelpClose");
@@ -185,8 +172,6 @@ const btnPlanExport = document.getElementById("btnPlanExport");
 // Settings modal elements
 const settingsModal = document.getElementById("settingsModal");
 const btnSettingsClose = document.getElementById("btnSettingsClose");
-const prosDirInput = document.getElementById("prosDirInput");
-const btnProsDirAuto = document.getElementById("btnProsDirAuto");
 const btnUploadRobotImage = document.getElementById("btnUploadRobotImage");
 const robotImageToggle = document.getElementById("robotImageToggle");
 const settingsRobotImgControls = document.getElementById("settingsRobotImgControls");
@@ -206,7 +191,6 @@ const settingsOffY = document.getElementById("settingsOffY");
 const settingsOffTheta = document.getElementById("settingsOffTheta");
 const settingsMinSpeed = document.getElementById("settingsMinSpeed");
 const settingsMaxSpeed = document.getElementById("settingsMaxSpeed");
-const settingsLiveDebug = document.getElementById("settingsLiveDebug");
 const settingsPlanSnapStepLabel = document.getElementById("settingsPlanSnapStepLabel");
 const settingsPlanMoveStepLabel = document.getElementById("settingsPlanMoveStepLabel");
 const settingsPlanMoveStep = document.getElementById("settingsPlanMoveStep");
@@ -220,17 +204,6 @@ app.core.events.versionChanged.subscribe(({ version }) => {
   if (versionDisplayEl) versionDisplayEl.textContent = version;
 });
 
-const prosDirStatusEl = document.getElementById("prosDirStatus");
-const prosDirAutoStatusEl = document.getElementById("prosDirAutoStatus");
-const prosDirAutoResultsEl = document.getElementById("prosDirAutoResults");
-let prosDirValid = false;
-let prosDirRetryTimer = null;
-let prosDirRetryAttempts = 0;
-let prosDirFromSettings = false;
-let backendReady = false;
-let backendReadyAt = 0;
-let backendReadyProbeInFlight = null;
-let backendReadyLastCheckAt = 0;
 
 const DEFAULT_PLAN_EXPORT_TEMPLATE = "moveToPoint(${x}, ${y}, ${theta});";
 
@@ -275,12 +248,6 @@ function getValidFieldKey(fieldKey) {
 let viewingView;
 let viewingInput;
 
-const telemetryMetrics = {
-  totalPosesReceived: 0,
-  totalLogsReceived: 0,
-  totalWatchesReceived: 0,
-  totalWaypointsReceived: 0,
-};
 let pendingExportRequest = null;
 
 let playRate = 1;
@@ -308,10 +275,10 @@ export const topBar = createTopBar({
 
 function syncTopBarPlayback(label = playButtonLabel) {
   playButtonLabel = label;
-  const liveConnected = !!window.__live?.connected;
+  const livestreaming = app.live.stream.streaming || app.live.stream.state === "stopping";
   const mode = getMode();
   const planningWaypointCount = app.planning.route.length;
-  const enabled = !liveConnected && (mode === "planning" ? planningWaypointCount >= 2 : app.viewing.data.poses.length >= 2);
+  const enabled = !livestreaming && (mode === "planning" ? planningWaypointCount >= 2 : app.viewing.data.poses.length >= 2);
   const playing = label === "⏸";
   topBar.syncPlayback({ enabled, playing, label });
 }
@@ -804,66 +771,6 @@ function heatColorFromNorm(n) {
   return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},0.88)`;
 }
 
-function refreshBridgeOrigin() {
-  const next = window.__BRIDGE_ORIGIN__ ?? null;
-  if (next && next !== ORIGIN) {
-    ORIGIN = next;
-    WS_ORIGIN = ORIGIN ? ORIGIN.replace(/^http/, "ws") : null;
-  }
-  return ORIGIN;
-}
-
-async function ensureBridgeOriginReady() {
-  if (refreshBridgeOrigin()) return true;
-  try {
-    const origin = await invoke("get_bridge_origin");
-    if (origin) {
-      ORIGIN = origin;
-      WS_ORIGIN = ORIGIN.replace(/^http/, "ws");
-      return true;
-    }
-  } catch (e) { }
-  return !!refreshBridgeOrigin();
-}
-
-async function ensureBackendReady() {
-  if (!(await ensureBridgeOriginReady())) return false;
-  const origin = ORIGIN;
-  const now = Date.now();
-  if (backendReady && now - backendReadyAt < 2000) return true;
-  if (backendReadyProbeInFlight) return backendReadyProbeInFlight;
-  if (now - backendReadyLastCheckAt < 1000) return false;
-  backendReadyLastCheckAt = now;
-  backendReadyProbeInFlight = (async () => {
-    try {
-      const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), 1000);
-      const res = await fetch(`${origin}/api/status`, { signal: controller.signal });
-      clearTimeout(t);
-      if (!res.ok) return false;
-      const json = await res.json().catch(() => null);
-      if (!json) return false;
-      backendReady = true;
-      backendReadyAt = now;
-      return true;
-    } catch (e) {
-      return false;
-    } finally {
-      backendReadyProbeInFlight = null;
-    }
-  })();
-  return backendReadyProbeInFlight;
-}
-
-async function waitForBackendReady(maxWaitMs = 8000, pollMs = 200) {
-  const deadline = Date.now() + maxWaitMs;
-  while (Date.now() < deadline) {
-    if (await ensureBackendReady()) return true;
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
-  }
-  return false;
-}
-
 function formatLogArgs(args) {
   return args.map((a) => {
     if (typeof a === "string") return a;
@@ -871,42 +778,24 @@ function formatLogArgs(args) {
   }).join(" ");
 }
 
-async function logToBackend(level, message, tag) {
-  const origin = refreshBridgeOrigin();
-  if (!origin) return;
-  // Avoid status-probe storms from console logging paths.
-  if (!backendReady) return;
-  try {
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), 800);
-    await fetch(`${origin}/api/log`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ level, message, tag }),
-      signal: controller.signal,
-    });
-    clearTimeout(t);
-  } catch (e) { }
-}
-
 // Mirror key console errors into the backend log for shipped apps
 const _consoleError = console.error.bind(console);
 console.error = (...args) => {
   _consoleError(...args);
-  void logToBackend("ERROR", formatLogArgs(args), "console");
+  void app.core.bridge.log("ERROR", formatLogArgs(args), "console");
 };
 const _consoleWarn = console.warn.bind(console);
 console.warn = (...args) => {
   _consoleWarn(...args);
-  void logToBackend("WARN", formatLogArgs(args), "console");
+  void app.core.bridge.log("WARN", formatLogArgs(args), "console");
 };
 window.addEventListener("error", (e) => {
   const msg = `${e.message || "Script error"} @ ${e.filename || "unknown"}:${e.lineno || 0}:${e.colno || 0}`;
-  void logToBackend("ERROR", msg, "window");
+  void app.core.bridge.log("ERROR", msg, "window");
 });
 window.addEventListener("unhandledrejection", (e) => {
   const reason = e.reason?.stack || e.reason?.message || String(e.reason);
-  void logToBackend("ERROR", `Unhandled rejection: ${reason}`, "window");
+  void app.core.bridge.log("ERROR", `Unhandled rejection: ${reason}`, "window");
 });
 
 // -------- canvas/readout helpers --------
@@ -967,573 +856,30 @@ configureRenderScheduler({
 canvas.addEventListener("wheel", (event) => fieldRenderer.handleWheel(event), { passive: false });
 canvas.addEventListener("contextmenu", (event) => { if (getMode() === "planning") event.preventDefault(); });
 
-// -------- Left sidebar controls (Stop / Connect / Refresh) --------
-// Live streaming model:
-// - Connect toggles the WebSocket connection (/ws)
-// - Start/Stop is the existing "Stop" button (it becomes a toggle)
-//   * When disconnected: disabled, tooltip "Starts streaming. Connect to start."
-//   * When connected & idle: shows "Start"
-//   * When streaming: shows "Stop"
-//   * Cmd/Ctrl + click Stop => force kill (/api/kill), if server supports it
-//
-// Output always appends into #liveWin.
+// -------- Live streaming presentation --------
+const liveDom = LiveDom.from(document);
+const liveView = new LiveView(app.live, liveDom);
+const liveInput = new LiveInput(app.live);
+liveView.bind();
+liveInput.bind();
 
-const liveWinEl = document.getElementById("liveWin");
-document.addEventListener("keydown", handleGlobalKeydown);
-
-const btnLeftStopEl = document.getElementById("btnLeftStop");
-const btnLeftConnectEl = document.getElementById("btnLeftConnect");
-const btnLeftRefreshEl = document.getElementById("btnLeftRefresh");
-const leftRefreshIntervalEl = document.getElementById("leftRefreshInterval");
-
-let leftConnected = false;
-let leftStreaming = false;
-const liveSocket = new LiveWebSocketClient();
-const livePendingBuffer = new LivePendingBuffer();
-const liveConsole = new LiveConsoleBuffer(liveWinEl);
-const liveActionGate = new LiveActionGate(400, 6000, () => {
-  setLeftUi();
-  liveAppendLine("[UI] Action timed out; UI unlocked.");
-});
-
-function setLeftActionInFlight(v) {
-  liveActionGate.setInFlight(v);
-}
-
-function withTimeout(promise, ms, label) {
-  let t = null;
-  const timeout = new Promise((_, reject) => {
-    t = setTimeout(() => reject(new Error(`${label} timeout`)), ms);
-  });
-  return Promise.race([
-    promise.finally(() => { if (t) clearTimeout(t); }),
-    timeout,
-  ]);
-}
-
-let leftRefreshTimer = null;
-let leftRefreshMs = parseInt(leftRefreshIntervalEl?.value || "500", 10) || 500;
-
-// --- Live incremental processing ---
-// Buffer incoming WS lines until Viewing accepts a parsed batch.
-let liveLastPoseT = null; // last pose timestamp integrated
-let liveDebugEnabled = false;
-let liveReqId = 0;
-
-function dbgLive(msg) {
-  if (!liveDebugEnabled) return;
-  liveAppendLine(`[DBG] ${msg}`);
-  void logToBackend("DEBUG", msg, "live");
-}
-
-function clearLivePending() {
-  livePendingBuffer.clear();
-}
-
-function createParsedLiveViewingBatch() {
-  return { poses: [], watches: [], logs: [], waypointEvents: [] };
-}
-
-function appendParsedLiveRecords(batch, targetBatch = null) {
-  if (targetBatch) {
-    if (batch.poses?.length) targetBatch.poses.push(...batch.poses);
-    if (batch.watches?.length) targetBatch.watches.push(...batch.watches);
-    if (batch.logs?.length) targetBatch.logs.push(...batch.logs);
-    if (batch.waypointEvents?.length) targetBatch.waypointEvents.push(...batch.waypointEvents);
-    return {
-      posesAdded: batch.poses?.length || 0,
-      watchesAdded: batch.watches?.length || 0,
-      logsAdded: batch.logs?.length || 0,
-      waypointsAdded: batch.waypointEvents?.length || 0,
-      hasNewData: !!(batch.poses?.length || batch.watches?.length || batch.logs?.length || batch.waypointEvents?.length),
-    };
-  }
-
-  return app.viewing.appendLiveBatch(batch);
-}
-
-function viewingWillAcceptWaypointEvent(event, targetBatch = null) {
-  if (event.type === "CREATED") return true;
-  if (app.viewing.data.waypointById.has(event.id)) return true;
-  return !!targetBatch?.waypointEvents?.some((queuedEvent) => queuedEvent.type === "CREATED" && queuedEvent.id === event.id);
-}
-
-function parseLiveLineIntoState(line, targetBatch = null) {
-  const s = stripToTag(line);
-  if (!s) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-
-  // POSE DATA: [POSE],millis,x,y,theta,l_vel,r_vel
-  if (s.startsWith("[POSE],")) {
-    const parts = s.split(",");
-    if (parts.length < 7) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-    const t = toNumMaybe(parts[1]);
-    const x = toNumMaybe(parts[2]);
-    const y = toNumMaybe(parts[3]);
-    const theta = toNumMaybe(parts[4]);
-    const l_vel = toNumMaybe(parts[5]);
-    const r_vel = toNumMaybe(parts[6]);
-    if (t == null || x == null || y == null) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-
-    // De-dup / monotonic guard (common if stream repeats)
-    if (liveLastPoseT != null && t <= liveLastPoseT) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-
-    // Derive a "speed" (raw) from wheel velocities if present
-    const lv = (typeof l_vel === "number" && isFinite(l_vel)) ? l_vel : 0;
-    const rv = (typeof r_vel === "number" && isFinite(r_vel)) ? r_vel : 0;
-    const speed_raw = (Math.abs(lv) + Math.abs(rv)) / 2;
-
-    const pose = {
-      t, x, y,
-      theta: (theta == null) ? 0 : theta,
-      l_vel: (l_vel == null) ? null : l_vel,
-      r_vel: (r_vel == null) ? null : r_vel,
-      speed_raw,
-      speed_norm: 0,
-    };
-    telemetryMetrics.totalPosesReceived += 1;
-    liveLastPoseT = t;
-    return appendParsedLiveRecords({ poses: [pose] }, targetBatch);
-  }
-
-  // WATCH (new): [WATCH],millis,level,id,label,value (value may contain commas)
-  if (s.startsWith("[WATCH],")) {
-    const parts = s.split(",");
-    if (parts.length < 5) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-    const t = toNumMaybe(parts[1]);
-    if (t == null) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-    const level = parts[2] ?? "INFO";
-    let id = null;
-    let label = "";
-    let value = "";
-
-    // Prefer the new schema when an integer id is present in field 4.
-    if (parts.length >= 6) {
-      const idCandidate = Number(parts[3]);
-      if (Number.isInteger(idCandidate)) {
-        id = idCandidate;
-        label = parts[4] ?? "";
-        value = parts.slice(5).join(",");
-      } else {
-        label = parts[3] ?? "";
-        value = parts.slice(4).join(",");
-      }
-    } else {
-      label = parts[3] ?? "";
-      value = parts.slice(4).join(",");
-    }
-
-    label = label.replaceAll(":", "");
-    const nextWatch = { t, id, level, label, value };
-    telemetryMetrics.totalWatchesReceived += 1;
-    return appendParsedLiveRecords({ watches: [nextWatch] }, targetBatch);
-  }
-
-  if (s.startsWith("[LOG],")) {
-    const parts = s.split(",");
-    if (parts.length < 4) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-    const t = toNumMaybe(parts[1]);
-    if (t == null) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-    const parsed = normalizeSystemLogMessage(parts.slice(3).join(","));
-    if (!parsed.message) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-    const logEntry = {
-      t,
-      level: normalizeLogLevel(parts[2]),
-      label: "",
-      value: parsed.message,
-      message: parsed.message,
-      isSystem: parsed.isSystem,
-    };
-    telemetryMetrics.totalLogsReceived += 1;
-    return appendParsedLiveRecords({ logs: [logEntry] }, targetBatch);
-  }
-
-  if (s.startsWith("[WPOINT],")) {
-    const parsed = parseWaypointLine(s);
-    if (!parsed.ok) return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-    const event = parsed.waypointEvent;
-    if (!viewingWillAcceptWaypointEvent(event, targetBatch)) {
-      return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-    }
-    telemetryMetrics.totalWaypointsReceived += 1;
-    return appendParsedLiveRecords({ waypointEvents: [event] }, targetBatch);
-  }
-
-  return { posesAdded: 0, watchesAdded: 0, logsAdded: 0, waypointsAdded: 0 };
-}
-
-function liveAppendLine(s) {
-  liveConsole.appendLine(String(s));
-}
-
-function resetLiveWin() {
-  liveConsole.reset();
-}
-
-function parseWaypointLine(s) {
-  if (!s.startsWith("[WPOINT],")) return { ok: false, malformed: false };
-  const commas = [];
-  for (let i = 0; i < s.length; i += 1) {
-    if (s[i] === ",") commas.push(i);
-  }
-  if (commas.length < 4) return { ok: false, malformed: true };
-
-  const fields = [];
-  let start = 0;
-  const headerFieldCount = 5;
-  const splitCount = Math.min(commas.length, headerFieldCount);
-  for (let i = 0; i < splitCount; i += 1) {
-    const end = commas[i];
-    fields.push(s.slice(start, end));
-    start = end + 1;
-  }
-  if (fields.length < headerFieldCount) {
-    fields.push(s.slice(start));
-    while (fields.length < headerFieldCount) fields.push("");
-  } else {
-    fields.push(s.slice(start));
-  }
-
-  const [, tRaw, typeRaw, idRaw, nameRaw, paramsText] = fields;
-  const t = toNumMaybe(tRaw);
-  const type = normalizeWaypointType(typeRaw);
-  const id = Number(idRaw);
-  const name = String(nameRaw || "").trim();
-  if (t == null || !type || !Number.isInteger(id) || !name) return { ok: false, malformed: true };
-
-  const params = parseWaypointParams(type, paramsText);
-  if (!params) return { ok: false, malformed: true };
-
-  return {
-    ok: true,
-    malformed: false,
-    waypointEvent: { t, type, id, name, params },
-  };
-}
-
-function setLeftUi() {
-  applyLiveButtonState({
-    connectButton: btnLeftConnect,
-    startStopButton: btnLeftStop,
-    refreshButton: btnLeftRefreshEl,
-    playButton: null,
-    fileButton: btnFile,
-  }, {
-    connected: leftConnected,
-    streaming: leftStreaming,
-    actionInFlight: liveActionGate.active,
-  });
+app.live.events.connectionChanged.subscribe(() => {
   syncTopBarPlayback();
-  updateConnectButtonState();
   updateExportButtonAvailability();
-}
-
-function leftSetUI(reason) {
-  setLeftUi();
-  app.viewing.navigation.setLiveState(!!leftConnected, !!leftStreaming);
-  if (window.__live) { window.__live.connected = !!leftConnected; window.__live.streaming = !!leftStreaming; }
-  if (reason) liveAppendLine(`[UI] ${reason}`);
-}
-
-function canRunLeftAction() {
-  return liveActionGate.canRun();
-}
-
-async function apiPost(path, timeoutMs = 5000) {
-  if (!path) return;
-  if (path === "/no HTTP/1.1" || path === "/ HTTP/1.1") return;
-
-  // ensure leading slash
-  const p = path.startsWith("/") ? path : `/${path}`;
-  if (!(await ensureBridgeOriginReady())) {
-    dbgLive(`apiPost: ${p} blocked (origin not ready)`);
-    return { ok: false, status: 0, json: { status: "bridge origin not ready" } };
-  }
-  if (!(await waitForBackendReady(4000, 200))) {
-    dbgLive(`apiPost: ${p} blocked (backend not ready)`);
-    return { ok: false, status: 0, json: { status: "backend not ready" } };
-  }
-  const origin = ORIGIN;
-  const url = `${origin}${p}`;
-  const reqId = ++liveReqId;
-  dbgLive(`apiPost#${reqId}: POST ${url}`);
-
-  try {
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(url, { method: "POST", signal: controller.signal });
-    clearTimeout(t);
-    // Best-effort JSON; don"t crash UI if server returns non-JSON or 404
-    let json = null;
-    try { json = await res.json(); } catch (e) { }
-    dbgLive(`apiPost#${reqId}: response ${res.status}`);
-    return { ok: res.ok, status: res.status, json };
-  } catch (e) {
-    const msg = (e?.name === "AbortError") ? "request timeout" : (e?.message || "request failed");
-    dbgLive(`apiPost#${reqId}: error ${msg}`);
-    return { ok: false, status: 0, json: { status: msg } };
-  }
-}
-
-async function connectLeft() {
-  dbgLive("connectLeft: begin");
-  if (prosDirInput && prosDirInput.value) {
-    await updateProsDir(prosDirInput.value);
-  }
-
-  if (!prosDirValid) {
-    liveAppendLine("Something went wrong. Try restarting the application or waiting.");
-    setStatus("Cannot connect: set a valid PROS directory in Settings first.");
-    return;
-  }
-  if (!(await ensureBridgeOriginReady()) || ORIGIN == null || WS_ORIGIN == null) {
-    leftSetUI("Child process Bridge.py was not given a port. Live streaming cannot start.");
-    return;
-  }
-  if (!(await waitForBackendReady(6000, 200))) {
-    leftSetUI("Backend is still starting. Please try again in a moment.");
-    return;
-  }
-  app.viewing.playback.pause();
-  if (leftStreaming) {
-    await stopStreaming(false, false);
-  }
-
-  if (liveSocket.connected) return;
-  liveSocket.connect(`${WS_ORIGIN}/ws`, {
-    onOpen: () => {
-      leftConnected = true;
-      leftSetUI("Connected");
-      startLeftRefresh();
-    },
-    onMessage: (raw) => {
-      const trimmed = stripToTag(raw);
-      const isStreamData = !!trimmed;
-      if (trimmed) {
-        livePendingBuffer.push(trimmed);
-      }
-
-      if (!isStreamData) {
-        liveAppendLine("\x1b[31m|\x1b[0m " + raw);
-      } else {
-        const malformedWaypoint = parseWaypointLine(trimmed).malformed;
-        if (!malformedWaypoint) {
-          liveAppendLine("\x1b[32m|\x1b[0m " + raw);
-        } else {
-          liveAppendLine("\x1b[31m|\x1b[0m " + raw);
-        }
-      }
-    },
-    onClose: () => {
-      const wasStreaming = leftStreaming;
-      leftConnected = false;
-      leftStreaming = false;
-      if (wasStreaming) liveTelemetry.streamingStopped();
-      else liveTelemetry.resetCurrentStreamingSession();
-      if (window.__live) { window.__live.connected = false; window.__live.streaming = false; }
-      stopLeftRefresh();
-      leftSetUI("Disconnected");
-      dbgLive("ws: close");
-    },
-    onError: () => {
-      // Errors often precede close; keep it gentle.
-      liveAppendLine("[WS] error");
-    },
-  });
-
-  leftSetUI("Connecting...");
-}
-
-async function disconnectLeft() {
-  dbgLive("disconnectLeft: begin");
-  const wasStreaming = leftStreaming;
-  let stopHandled = false;
-  if (wasStreaming) {
-    stopHandled = await stopStreaming(false, false);
-  }
-  liveSocket.close();
-  leftConnected = false;
-  leftStreaming = false;
-  if (wasStreaming && !stopHandled) await liveTelemetry.streamingStopped();
-  else liveTelemetry.resetCurrentStreamingSession();
-  stopLeftRefresh();
-  leftSetUI("Disconnected");
-}
-
-function stopLeftRefresh() {
-  if (leftRefreshTimer) {
-    clearInterval(leftRefreshTimer);
-    leftRefreshTimer = null;
-  }
-}
-
-function startLeftRefresh() {
-  stopLeftRefresh();
-  if (!leftConnected) return;
-  if (!leftRefreshMs || leftRefreshMs <= 0) return;
-  dbgLive(`startLeftRefresh: ${leftRefreshMs}ms`);
-  leftRefreshTimer = setInterval(() => {
-    doLeftRefresh();
-  }, leftRefreshMs);
-}
-
-async function doLeftRefresh() {
-  // During live mode, refresh means: integrate any pending WS lines into
-  // Parse pending transport lines and transfer ownership to Viewing.
-  if (!leftConnected) return;
-  if (!leftStreaming) {
-    // "Stop" pauses drawing; do not let WS backlog grow unbounded.
-    clearLivePending();
-    return;
-  }
-
-  const t0 = performance.now();
-
-  const batch = livePendingBuffer.batch();
-  if (!batch) {
-    return;
-  }
-
-  const parsedViewingBatch = createParsedLiveViewingBatch();
-
-  for (let i = batch.startIndex; i < batch.endIndex; i++) {
-    parseLiveLineIntoState(batch.lines[i], parsedViewingBatch);
-  }
-  const { posesAdded, watchesAdded, logsAdded, waypointsAdded } = app.viewing.appendLiveBatch(parsedViewingBatch);
-  livePendingBuffer.markConsumed(batch.endIndex);
-
-  const hasNewData = posesAdded > 0 || watchesAdded > 0 || logsAdded > 0 || waypointsAdded > 0;
-  if (!hasNewData) return;
-
-  const t1 = performance.now();
-  const dt = t1 - t0;
-  if (dt > 100) {
-    dbgLive(`doLeftRefresh: ${formatNumberString(dt, 1, "0")}ms (poses=${app.viewing.data.poses.length}, watches=${app.viewing.data.watches.length}, pending=${livePendingBuffer.pendingCount()})`);
-  }
-}
-
-
-async function startStreaming() {
-  dbgLive("startStreaming: begin");
-  liveTelemetry.resetCurrentStreamingSession();
-  let r;
-  try {
-    r = await withTimeout(apiPost("/api/start"), 5000, "start");
-  } catch (e) {
-    liveAppendLine(`[api] start failed (${e?.message || e})`);
-    // Retry once after reconnecting
-    try {
-      await disconnectLeft();
-      await connectLeft();
-      r = await withTimeout(apiPost("/api/start"), 5000, "start");
-    } catch (e2) {
-      return false;
-    }
-    if (!r || !r.ok) return false;
-    leftStreaming = true;
-    liveTelemetry.streamingStarted();
-    leftSetUI("Streaming started");
-    dbgLive("startStreaming: ok (retry)");
-    return true;
-  }
-  if (!r.ok) {
-    liveAppendLine(`[api] start failed (${r.status})`);
-    liveAppendLine("Backend may not be working. Try restarting the application.");
-    dbgLive(`startStreaming: failed status=${r.status}`);
-    return false;
-  }
-  // New session: allow timestamps to restart from 0 without being dropped.
-  liveLastPoseT = null;
-  leftStreaming = true;
-  liveTelemetry.streamingStarted();
-  leftSetUI("Streaming started");
-  dbgLive(`startStreaming: ok (status=${r.status || "n/a"})`);
-  return true;
-}
-
-async function stopStreaming(forceKill = false, doMsg = true) {
-  dbgLive(`stopStreaming: begin (force=${forceKill})`);
-  const path = forceKill ? "/api/kill" : "/api/stop";
-  let r;
-  try {
-    r = await withTimeout(apiPost(path), 5000, "stop");
-  } catch (e) {
-    liveAppendLine(`[api] stop/kill failed (${e?.message || e})`);
-    dbgLive(`stopStreaming: failed (${e?.message || e})`);
-    return false;
-  }
-  if (!r.ok) {
-    liveAppendLine(`[api] stop/kill failed (${r.status})`);
-    // Even if kill endpoint doesn"t exist, still fall back to /api/stop
-    if (forceKill && r.status === 404) {
-      let r2;
-      try {
-        r2 = await withTimeout(apiPost("/api/stop"), 5000, "stop");
-      } catch (e) {
-        return false;
-      }
-      if (!r2.ok) return false;
-    } else {
-      return false;
-    }
-  }
-  leftStreaming = false;
-  clearLivePending();
-  await liveTelemetry.streamingStopped();
-  if (doMsg) leftSetUI(forceKill ? "Force-killed" : "Streaming stopped");
-  dbgLive("stopStreaming: ok");
-  return true;
-}
-
-// Connect toggle
-btnLeftConnectEl?.addEventListener("click", async () => {
-  if (!canRunLeftAction()) return;
-  setLeftActionInFlight(true);
-  setLeftUi();
-  try {
-    if (leftConnected) await disconnectLeft();
-    else await connectLeft();
-  } finally {
-    setLeftActionInFlight(false);
-    setLeftUi();
-  }
+});
+app.live.events.streamChanged.subscribe(() => {
+  syncTopBarPlayback();
+  updateExportButtonAvailability();
+});
+app.live.events.projectChanged.subscribe(() => {
+  syncProjectExportLocationOption();
+  if (settingsLoaded && app.core.tauri.isTauriRuntime()) void saveSettings();
+});
+app.live.events.preferencesChanged.subscribe(() => {
+  if (settingsLoaded && app.core.tauri.isTauriRuntime()) void saveSettings();
 });
 
-// Start/Stop toggle (+ cmd/ctrl click => force kill)
-btnLeftStopEl?.addEventListener("click", async (e) => {
-  if (!leftConnected) return;
-  if (!canRunLeftAction()) return;
-  setLeftActionInFlight(true);
-  setLeftUi();
-
-  try {
-    const forceKill = (e?.metaKey || e?.ctrlKey);
-    if (forceKill) {
-      await stopStreaming(true);
-      return;
-    }
-
-    if (!leftStreaming) await startStreaming();
-    else await stopStreaming(false);
-    btnLeftConnectEl.title = leftConnected ? "Disconnect" : "Connect";
-  } finally {
-    setLeftActionInFlight(false);
-    setLeftUi();
-  }
-});
-
-// Manual refresh button
-btnLeftRefreshEl?.addEventListener("click", () => {
-  doLeftRefresh();
-});
-
-leftRefreshIntervalEl?.addEventListener("change", () => {
-  leftRefreshMs = parseInt(leftRefreshIntervalEl.value || "0", 10) || 0;
-  startLeftRefresh();
-  saveSettings();
-});
-
-// Initialize UI on load
-leftSetUI("");
+document.addEventListener("keydown", handleGlobalKeydown);
 planningView.render();
 
 
@@ -1896,14 +1242,7 @@ function setData(obj, options = {}) {
 
 function setDataFromStreamText(text) {
   app.planning.clear();
-  liveLastPoseT = null;
-
-  const parsedViewingBatch = createParsedLiveViewingBatch();
-  const lines = String(text ?? "").split(/\r?\n/);
-  for (const line of lines) {
-    parseLiveLineIntoState(line, parsedViewingBatch);
-  }
-  app.viewing.loadParsedBatch(parsedViewingBatch);
+  app.live.loadCapture(text);
 
   if (!hasLoadedData()) {
     setStatus("No poses, watches, logs, waypoints, or planning data found in file.");
@@ -2078,10 +1417,7 @@ async function loadSettings() {
       if (settings.appState && typeof settings.appState === "object" && !Array.isArray(settings.appState)) {
         persistedAppState = { ...settings.appState };
       }
-      if (settings.prosDir && prosDirInput) {
-        prosDirInput.value = settings.prosDir;
-        prosDirFromSettings = true;
-      }
+      if (settings.prosDir) app.live.project.restore(settings.prosDir);
       if (settings.units) {
         if (settingsUnitsSelect) settingsUnitsSelect.value = settings.units;
         if (unitsSelect) unitsSelect.value = settings.units;
@@ -2130,17 +1466,10 @@ async function loadSettings() {
       if (settings.planExportTemplate !== undefined) {
         app.planning.setExportTemplate(settings.planExportTemplate);
       }
-      if (settings.refreshIntervalMs !== undefined && leftRefreshIntervalEl) {
-        leftRefreshIntervalEl.value = String(settings.refreshIntervalMs);
-        leftRefreshMs = parseInt(leftRefreshIntervalEl.value || "0", 10) || 0;
-        startLeftRefresh();
+      if (settings.refreshIntervalMs !== undefined) {
+        app.live.preferences.setRefreshInterval(Number(settings.refreshIntervalMs));
       }
-      if (settings.liveDebug !== undefined) {
-        liveDebugEnabled = !!settings.liveDebug;
-        if (settingsLiveDebug) settingsLiveDebug.checked = liveDebugEnabled;
-      } else if (settingsLiveDebug) {
-        settingsLiveDebug.checked = false;
-      }
+      app.live.preferences.setDebugEnabled(!!settings.liveDebug);
       if (settings.robotImageEnabled !== undefined) {
         fieldRenderer.setRobotImageEnabled(!!settings.robotImageEnabled);
       }
@@ -2259,7 +1588,7 @@ async function saveSettings() {
   try {
     const robotImageTransform = fieldRenderer.getRobotImageTransform();
     const settings = {
-      prosDir: prosDirInput ? prosDirInput.value : "",
+      prosDir: app.live.project.path,
       robotImageEnabled: fieldRenderer.isRobotImageEnabled(),
       units: settingsUnitsSelect ? settingsUnitsSelect.value : (unitsSelect ? unitsSelect.value : "in"),
       robotW: robotWEl ? robotWEl.value : "12",
@@ -2274,8 +1603,8 @@ async function saveSettings() {
       planThetaSnapStep: settingsPlanThetaSnapStep ? settingsPlanThetaSnapStep.value : "0",
       planLimitBounds: settingsPlanLimitBounds ? settingsPlanLimitBounds.checked : true,
       planExportTemplate: app.planning.exportTemplate,
-      refreshIntervalMs: leftRefreshIntervalEl ? leftRefreshIntervalEl.value : "0",
-      liveDebug: settingsLiveDebug ? settingsLiveDebug.checked : liveDebugEnabled,
+      refreshIntervalMs: String(app.live.preferences.refreshIntervalMs),
+      liveDebug: app.live.preferences.debugEnabled,
       showPreviousYearFields,
       fieldCompetition,
       playbackSpeed: String(topBar.getPlaybackSpeed()),
@@ -2440,9 +1769,7 @@ function openSettings() {
   } catch (e) {
     console.error("Error syncing settings:", e);
   }
-  if (prosDirInput && prosDirInput.value && prosDirInput.value.trim()) {
-    updateProsDir(prosDirInput.value);
-  }
+  if (app.live.project.path) void app.live.project.validate();
 
   // Update robot image controls visibility
   if (settingsRobotImgControls) {
@@ -2503,8 +1830,8 @@ function exportLocationLabel(value) {
 }
 
 function prosProjectExportDir() {
-  if (!prosDirValid) return "";
-  const rawDir = prosDirInput ? prosDirInput.value.trim() : "";
+  if (!app.live.project.valid) return "";
+  const rawDir = app.live.project.path.trim();
   if (!rawDir || rawDir === "None") return "";
   const separator = rawDir.includes("\\") && !rawDir.includes("/") ? "\\" : "/";
   return `${rawDir.replace(/[\\/]+$/, "")}${separator}MotionView-Routes`;
@@ -2669,7 +1996,7 @@ function hasAnyExportData() {
 
 function updateExportButtonAvailability() {
   if (!btnExport) return;
-  btnExport.disabled = (leftConnected && leftStreaming) || !hasAnyExportData();
+  btnExport.disabled = app.live.stream.state !== "idle" || !hasAnyExportData();
 }
 
 function buildExportPayload() {
@@ -3247,12 +2574,6 @@ if (settingsMaxSpeed) {
     syncSettingsToMain();
   });
 }
-if (settingsLiveDebug) {
-  settingsLiveDebug.addEventListener("change", () => {
-    liveDebugEnabled = settingsLiveDebug.checked;
-    saveSettings();
-  });
-}
 if (settingsPlanMoveStep) {
   settingsPlanMoveStep.addEventListener("input", () => {
     syncSettingsToMain();
@@ -3292,228 +2613,6 @@ if (settingsRobotImgRot) {
   settingsRobotImgRot.addEventListener("input", () => {
     syncSettingsToMain();
   });
-}
-
-function setProsDirStatus(message, kind = "info") {
-  if (!prosDirStatusEl) return;
-  prosDirStatusEl.textContent = message;
-  if (kind === "error") prosDirStatusEl.style.color = "#ff9b9b";
-  else if (kind === "ok") prosDirStatusEl.style.color = "#9fddb0";
-  else prosDirStatusEl.style.color = "var(--muted)";
-}
-
-function setAutoStatus(message, kind = "info") {
-  if (!prosDirAutoStatusEl) return;
-  prosDirAutoStatusEl.textContent = message;
-  if (kind === "error") {
-    prosDirAutoStatusEl.style.color = "#ff9b9b";
-  } else if (kind === "ok") {
-    prosDirAutoStatusEl.style.color = "#9fddb0";
-  } else {
-    prosDirAutoStatusEl.style.color = "var(--muted)";
-  }
-}
-
-function renderAutoResults(candidates) {
-  if (!prosDirAutoResultsEl) {
-    prosDirAutoResultsEl.hidden = true;
-    return;
-  }
-  prosDirAutoResultsEl.innerHTML = "";
-  prosDirAutoResultsEl.hidden = false;
-  if (!candidates || !candidates.length) {
-    prosDirAutoResultsEl.textContent = "";
-    prosDirAutoResultsEl.style.color = "var(--muted)";
-    return;
-  }
-  for (const dir of candidates) {
-    const row = document.createElement("div");
-    row.style.display = "flex";
-    row.style.gap = "8px";
-    row.style.alignItems = "center";
-    row.style.marginBottom = "6px";
-
-    const pathEl = document.createElement("div");
-    pathEl.textContent = dir;
-    pathEl.style.flex = "1";
-    pathEl.style.fontFamily = "monospace";
-    pathEl.style.fontSize = "12px";
-
-    const useBtn = document.createElement("button");
-    useBtn.className = "iconBtn";
-    useBtn.style.fontSize = "11px";
-    useBtn.textContent = "Use";
-    useBtn.addEventListener("click", () => {
-      if (!prosDirInput) return;
-      prosDirInput.value = dir;
-      prosDirFromSettings = true;
-      updateProsDir(dir);
-      saveSettings();
-      renderAutoResults([]);
-      setAutoStatus("Applied.", "ok");
-      prosDirAutoResultsEl.hidden = true;
-    });
-
-    row.appendChild(pathEl);
-    row.appendChild(useBtn);
-    prosDirAutoResultsEl.appendChild(row);
-  }
-}
-
-function refreshWS() {
-  if (!ensureBackendReady) return;
-  refreshBridgeOrigin();
-  updateConnectButtonState();
-
-  if (prosDirInput && prosDirInput.value && prosDirInput.value.trim()) updateProsDir(prosDirInput.value);
-  else setProsDirStatus("PROS directory not set. Live viewing disabled.", "error");
-
-  // Best-effort refresh from backend
-  loadProsDirFromAPI();
-}
-
-async function validateConfiguredProsDirWhenReady() {
-  const configuredDir = prosDirInput?.value?.trim();
-  if (configuredDir) {
-    await updateProsDir(configuredDir);
-    return;
-  }
-  await loadProsDirFromAPI();
-}
-
-// PROS directory input
-async function updateProsDir(dir) {
-  if (!dir) {
-    prosDirValid = false;
-    setProsDirStatus("PROS directory not set. Live viewing disabled.", "error");
-    saveSettings();
-    updateConnectButtonState();
-    updateExportUiState();
-    return;
-  }
-
-  if (dir === "None" /*None is default state */) { return; }
-  try {
-    const origin = refreshBridgeOrigin();
-    if (!origin || !(await ensureBackendReady())) {
-      prosDirValid = false;
-      setProsDirStatus("Bridge not ready yet. Retrying...", "error");
-      updateConnectButtonState();
-      updateExportUiState();
-      if (prosDirRetryTimer) clearTimeout(prosDirRetryTimer);
-      if (prosDirRetryAttempts < 5) {
-        prosDirRetryAttempts += 1;
-        prosDirRetryTimer = setTimeout(() => updateProsDir(dir), 500);
-      } else {
-        setProsDirStatus("Bridge not ready yet. Try again in a moment.", "error");
-      }
-      return;
-    }
-    prosDirRetryAttempts = 0;
-    const response = await fetch(`${origin}/api/pros-dir`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dir: dir })
-    });
-    const result = await response.json();
-    if (result.ok) {
-      prosDirValid = true;
-      setStatus(`PROS directory set to: ${result.dir}`);
-      setProsDirStatus(`Using PROS project: ${result.dir}`, "ok");
-      saveSettings();
-      updateConnectButtonState();
-      updateExportUiState();
-    } else {
-      prosDirValid = false;
-      setStatus(`Failed to set PROS directory: ${result.status}`);
-      setProsDirStatus(`Invalid PROS directory: ${result.status}`, "error");
-      updateConnectButtonState();
-      updateExportUiState();
-    }
-  } catch (e) {
-    prosDirValid = false;
-    console.error("Error updating PROS directory:", e);
-    setStatus(`Error updating PROS directory: ${e.message || e}`);
-    setProsDirStatus(`Error validating PROS directory: ${e.message || e}`, "error");
-    updateConnectButtonState();
-    updateExportUiState();
-  }
-}
-
-if (prosDirInput) {
-  let prosDirTimeout = null;
-  prosDirInput.addEventListener("input", () => {
-    prosDirValid = false;
-    updateConnectButtonState();
-    updateExportUiState();
-    // Debounce API calls
-    if (prosDirTimeout) clearTimeout(prosDirTimeout);
-    prosDirTimeout = setTimeout(() => {
-      updateProsDir(prosDirInput.value);
-    }, 500);
-    saveSettings();
-  });
-}
-
-// PROS directory browse button (placeholder - could use Tauri dialog API)
-if (btnProsDirAuto) {
-  btnProsDirAuto.addEventListener("click", async () => {
-    if (!refreshBridgeOrigin() || !(await ensureBackendReady())) {
-      setAutoStatus("Backend not ready.", "error");
-      return;
-    }
-    setAutoStatus("Scanning…");
-    try {
-      const response = await fetch(`${ORIGIN}/api/pros-dir/auto`);
-      const result = await response.json();
-      if (!result.ok) {
-        setAutoStatus(result.status || "Auto-detect failed.", "error");
-        renderAutoResults([]);
-        return;
-      }
-      renderAutoResults(result.candidates || []);
-      setAutoStatus(`Found ${result.candidates?.length || 0} project(s).`, "ok");
-    } catch (e) {
-      console.error("Auto-detect failed:", e);
-      setAutoStatus("Auto-detect failed.", "error");
-      renderAutoResults([]);
-    }
-    refreshWS();
-  });
-}
-
-// Load PROS directory from API on startup
-async function loadProsDirFromAPI() {
-  if (!refreshBridgeOrigin() || !(await ensureBackendReady())) return;
-  try {
-    const response = await fetch(`${ORIGIN}/api/pros-dir`);
-    const result = await response.json();
-    if (result.ok && result.dir && prosDirInput && result.dir !== "None") {
-      const hasUserDir = prosDirFromSettings || (prosDirInput.value && prosDirInput.value.trim());
-      if (hasUserDir) return;
-      prosDirInput.value = result.dir;
-      prosDirValid = true;
-      setProsDirStatus(`Using PROS project: ${result.dir}`, "ok");
-      saveSettings();
-      if (btnLeftConnect) btnLeftConnect.disabled = false;
-      updateExportUiState();
-    } else {
-      prosDirValid = false;
-      updateExportUiState();
-    }
-  } catch (e) {
-    prosDirValid = false;
-    console.error("Error loading PROS directory from API:", e);
-    updateExportUiState();
-  }
-}
-
-// Check PROS dir and enable/disable connect button
-function updateConnectButtonState() {
-  if (!btnLeftConnect) return;
-  // Connect button should be enabled only after the PROS dir has been validated,
-  // unless we are already connected and need to allow disconnect.
-  btnLeftConnect.disabled = (!prosDirValid && !leftConnected) || liveActionGate.active;
 }
 
 // Robot image upload
@@ -3687,9 +2786,7 @@ offThetaEl.addEventListener("input", () => {
 
 function clearAllPosesAndWatches() {
   app.viewing.clear();
-  try { watchByLabel = {}; } catch { }
-  liveLastPoseT = null;
-  try { livePendingBuffer.clear(); } catch { }
+  app.live.reset();
 }
 
 async function confirmPlanningClear(message, clear): Promise<void> {
@@ -3702,7 +2799,6 @@ function handleClearFieldClick(event) {
     // Clear everything across modes
     const clearAll = () => {
       clearAllPosesAndWatches();
-      resetLiveWin();
       app.planning.clear();
       requestDrawAll();
       setStatus("Cleared Field and Planned Path");
@@ -3720,7 +2816,6 @@ function handleClearFieldClick(event) {
     void confirmPlanningClear("Are you sure you want to clear Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearPlanOnly);
   } else {
     clearAllPosesAndWatches();
-    resetLiveWin();
     setStatus("Cleared Field");
   }
 }
@@ -3729,7 +2824,7 @@ function handleClearFieldClick(event) {
 function handleGlobalKeydown(e) {
   const mouseTag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
   const isTypingTarget = (mouseTag === "input" || mouseTag === "textarea" || (e.target && e.target.isContentEditable));
-  if (isTypingTarget && e.target !== liveWinEl) return;
+  if (isTypingTarget) return;
 
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
     if (e.key === "1") {
@@ -3750,31 +2845,6 @@ function handleGlobalKeydown(e) {
       return;
     }
 
-    if (e.key === "r" || e.key === "R") {
-      if (getMode() !== "viewing") return;
-      e.preventDefault();
-      btnLeftRefresh?.click();
-      return;
-    }
-
-    if (e.key === "c" || e.key === "C") {
-      e.preventDefault();
-      if (getMode() !== "viewing") return;
-      if (leftConnected) void disconnectLeft();
-      else void connectLeft();
-      return;
-    }
-    if (e.key === "s" || e.key === "S") {
-      e.preventDefault();
-      if (getMode() !== "viewing") return;
-
-      if (leftConnected) {
-        if (!leftStreaming) void startStreaming();
-        else void stopStreaming(false);
-      }
-      return;
-    }
-
     if (e.key === "k" || e.key === "K") {
       e.preventDefault();
       if (getMode() === "planning") {
@@ -3786,7 +2856,6 @@ function handleGlobalKeydown(e) {
         void confirmPlanningClear("Are you sure you want to clear Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearPlanOnly);
       } else {
         clearAllPosesAndWatches();
-        resetLiveWin();
         setStatus("Cleared Field");
       }
       return;
@@ -3798,7 +2867,6 @@ function handleGlobalKeydown(e) {
     // Clear everything across modes
     const clearAll = () => {
       clearAllPosesAndWatches();
-      resetLiveWin();
       app.planning.clear();
       requestDrawAll();
       setStatus("Cleared Field and Planned Path");
@@ -3827,6 +2895,8 @@ sanitizeExportFilename();
 // -------- init --------
 loadFieldOptions();
 await loadSettings();
+settingsLoaded = true;
+void app.live.initialize();
 syncPlanningProjectionConfiguration();
 await loadSavedPaths();
 await loadDemoRouteIfUpgraded();
@@ -3850,14 +2920,7 @@ async function prepareAppExit() {
     await saveSettings();
   } catch (err) { }
 
-  await liveTelemetry.totalStreamingDuration();
-
-  await liveTelemetry.livestreamMetrics({
-    totalPosesReceived: telemetryMetrics.totalPosesReceived,
-    totalLogsReceived: telemetryMetrics.totalLogsReceived,
-    totalWatchesReceived: telemetryMetrics.totalWatchesReceived,
-    totalWaypointsReceived: telemetryMetrics.totalWaypointsReceived,
-  });
+  await app.live.finalizeTelemetry();
 
   const uptime = fmtNum(performance.now() / 1000, 2) > 60
     ? fmtNum(performance.now() / 1000 / 60, 2)
@@ -3920,29 +2983,6 @@ if (settingsModal) {
   settingsModal.setAttribute("hidden", "");
   settingsModal.style.display = "none";
 }
-// Load PROS dir from backend after a short delay to ensure ORIGIN is set
-setTimeout(() => {
-  try {
-    validateConfiguredProsDirWhenReady();
-    updateConnectButtonState();
-  } catch (e) {
-    console.error("Error loading PROS dir:", e);
-  }
-}, 500);
-
-let bridgeReadyInitInFlight = false;
-const bridgeReadyPoll = setInterval(() => {
-  if (bridgeReadyInitInFlight) return;
-  bridgeReadyInitInFlight = true;
-  void (async () => {
-    if (!(await ensureBridgeOriginReady())) return;
-    if (!(await waitForBackendReady(8000, 250))) return;
-    clearInterval(bridgeReadyPoll);
-    await validateConfiguredProsDirWhenReady();
-  })().finally(() => {
-    bridgeReadyInitInFlight = false;
-  });
-}, 250);
 window.addEventListener("resize", () => {
   fieldRenderer.updateFieldLayout(true); // keep bounds, recompute square sizing
   viewingView.resize();

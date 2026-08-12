@@ -1,4 +1,14 @@
-import type { LogEntry, Pose, WatchEntry, Waypoint, WaypointEvent } from "../state/models";
+import type {
+  LogEntry,
+  Pose,
+  WatchEntry,
+  Waypoint,
+  WaypointCreatedEvent,
+  WaypointEvent,
+  WaypointEventType,
+  WaypointReachedEvent,
+  WaypointTimedOutEvent,
+} from "../state/models";
 
 type NumberParser = (value: unknown) => number | null;
 type LogLevelNormalizer = (value: unknown) => string;
@@ -112,10 +122,10 @@ export function normalizeSystemLogMessage(rawMessage: unknown) {
   return { message: text, isSystem: false };
 }
 
-export function normalizeWaypointType(typeRaw: unknown) {
+export function normalizeWaypointType(typeRaw: unknown): WaypointEventType | null {
   const type = String(typeRaw || "").trim().toUpperCase();
   if (type === "CREATED" || type === "REACHED" || type === "TIMEDOUT") return type;
-  return "";
+  return null;
 }
 
 export function parseWaypointNumber(raw: unknown) {
@@ -125,7 +135,13 @@ export function parseWaypointNumber(raw: unknown) {
   return Number.isFinite(num) ? num : null;
 }
 
-export function parseWaypointParams(type: string, paramsText: unknown) {
+export function parseWaypointParams(type: "CREATED", paramsText: unknown): WaypointCreatedEvent["params"] | null;
+export function parseWaypointParams(type: "REACHED", paramsText: unknown): WaypointReachedEvent["params"] | null;
+export function parseWaypointParams(type: "TIMEDOUT", paramsText: unknown): WaypointTimedOutEvent["params"] | null;
+export function parseWaypointParams(
+  type: WaypointEventType,
+  paramsText: unknown,
+): WaypointEvent["params"] | null {
   const text = String(paramsText ?? "").trim();
   const parts = text ? text.split(",").map((part) => part.trim()) : [];
   if (type === "CREATED") {
@@ -167,6 +183,72 @@ export function parseWaypointParams(type: string, paramsText: unknown) {
   return null;
 }
 
+function finiteNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function waypointBoolean(value: unknown): boolean {
+  if (value === true || value === 1) return true;
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "true" || normalized === "1";
+}
+
+function normalizeWaypointEvent(
+  value: unknown,
+  fallbackId: number,
+  fallbackName: string,
+): WaypointEvent | null {
+  if (!value || typeof value !== "object") return null;
+  const event = value as Record<string, unknown>;
+  const type = normalizeWaypointType(event.type);
+  const t = finiteNumber(event.t);
+  const idValue = Number(event.id);
+  const id = Number.isInteger(idValue) ? idValue : fallbackId;
+  const name = String(event.name ?? fallbackName).trim();
+  const params = event.params && typeof event.params === "object"
+    ? event.params as Record<string, unknown>
+    : {};
+  if (!type || t == null) return null;
+
+  if (type === "CREATED") {
+    const tarX = finiteNumber(params.tarX);
+    const tarY = finiteNumber(params.tarY);
+    const linearTol = finiteNumber(params.linearTol) ?? 0;
+    if (tarX == null || tarY == null) return null;
+    const timeoutMs = params.timeoutMs == null ? null : finiteNumber(params.timeoutMs);
+    return {
+      t,
+      type,
+      id,
+      name,
+      params: {
+        tarX,
+        tarY,
+        tarT: params.tarT == null ? null : finiteNumber(params.tarT),
+        timeoutMs,
+        linearTol,
+        thetaTol: params.thetaTol == null ? null : finiteNumber(params.thetaTol),
+        retriggerable: waypointBoolean(params.retriggerable),
+      },
+    };
+  }
+
+  if (type === "REACHED") {
+    const remainingTime = params.remainingTime == null ? null : finiteNumber(params.remainingTime);
+    return {
+      t,
+      type,
+      id,
+      name,
+      params: remainingTime == null ? {} : { remainingTime },
+    };
+  }
+
+  return { t, type, id, name, params: {} };
+}
+
 export function buildWaypointState(value: unknown): { waypoints: Waypoint[]; waypointsById: Map<number, Waypoint> } {
   const waypointsById = new Map<number, Waypoint>();
   const source = Array.isArray(value) ? value : [];
@@ -176,25 +258,15 @@ export function buildWaypointState(value: unknown): { waypoints: Waypoint[]; way
     const entry = rawEntry as Record<string, any>;
     const id = Number(entry.id);
     if (!Number.isInteger(id)) continue;
-    const createdEvent = entry.createdEvent && typeof entry.createdEvent === "object"
-      ? entry.createdEvent
-      : (Array.isArray(entry.events) ? entry.events.find((event: any) => event?.type === "CREATED") : null);
-    if (!createdEvent?.params || createdEvent.params.tarX == null || createdEvent.params.tarY == null) continue;
-
-    const events = Array.isArray(entry.events)
-      ? entry.events
-        .filter((event: any) => event && typeof event === "object" && typeof event.t === "number")
-        .map((event: any) => ({
-          t: event.t,
-          type: normalizeWaypointType(event.type),
-          id: Number.isInteger(event.id) ? event.id : id,
-          name: String(event.name ?? entry.name ?? createdEvent.name ?? ""),
-          params: event.params || {},
-        }))
-        .filter((event: WaypointEvent): event is WaypointEvent => !!event.type)
-        .sort((a: WaypointEvent, b: WaypointEvent) => (a.t ?? 0) - (b.t ?? 0))
-      : [];
-    if (!events.length) continue;
+    const fallbackName = String(entry.name ?? entry.createdEvent?.name ?? "");
+    const rawEvents = Array.isArray(entry.events) ? [...entry.events] : [];
+    if (entry.createdEvent && !rawEvents.includes(entry.createdEvent)) rawEvents.push(entry.createdEvent);
+    const events = rawEvents
+      .map((event) => normalizeWaypointEvent(event, id, fallbackName))
+      .filter((event): event is WaypointEvent => event != null)
+      .sort((left, right) => left.t - right.t);
+    const createdEvent = events.find((event): event is WaypointCreatedEvent => event.type === "CREATED");
+    if (!createdEvent) continue;
 
     const isRetriggerable = !!createdEvent?.params?.retriggerable;
     let terminalEvent: WaypointEvent | null = null;

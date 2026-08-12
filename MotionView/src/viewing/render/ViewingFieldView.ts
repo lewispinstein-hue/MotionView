@@ -8,6 +8,7 @@ import type { WatchListView } from "./WatchListView";
 import type { WaypointListView } from "./WaypointListView";
 import type { WatchTooltipView } from "./WatchTooltipView";
 import { watchTooltipRows } from "./watchTooltipRows";
+import { formatDistanceFromInches } from "../../shared/units";
 
 export class ViewingFieldView implements ViewingFieldLayer {
   #hoverWatch: Readonly<WatchMarker> | null = null;
@@ -45,6 +46,7 @@ export class ViewingFieldView implements ViewingFieldLayer {
       if (getMode() !== "viewing") return;
       this.#hoverWatch = null;
       this.viewing.navigation.setTrackHover(null);
+      this.setCursorReadout(null);
       this.dom.canvas.style.cursor = "";
     });
     this.dom.canvas.addEventListener("click", (event) => this.handleClick(event));
@@ -72,7 +74,8 @@ export class ViewingFieldView implements ViewingFieldLayer {
     if (!pose || !waypoint) return;
     const context = this.field.ctx;
     const start = this.field.worldToScreen(pose.x, pose.y);
-    const end = this.field.worldToScreen(waypoint.target.x, waypoint.target.y);
+    const target = this.viewing.projection.waypointTarget(waypoint);
+    const end = this.field.worldToScreen(target.x, target.y);
     context.save();
     context.strokeStyle = "rgba(218,250,255,.85)";
     context.setLineDash([7, 6]);
@@ -82,7 +85,7 @@ export class ViewingFieldView implements ViewingFieldLayer {
     context.stroke();
     context.setLineDash([]);
     context.fillStyle = "rgba(30,30,30,.9)";
-    const distance = Math.hypot(pose.x - waypoint.target.x, pose.y - waypoint.target.y);
+    const distance = Math.hypot(pose.x - target.x, pose.y - target.y);
     const x = (start.x + end.x) / 2;
     const y = (start.y + end.y) / 2;
     context.fillRect(x - 34, y - 12, 68, 24);
@@ -113,7 +116,8 @@ export class ViewingFieldView implements ViewingFieldLayer {
     const context = this.field.ctx;
     for (const waypoint of this.viewing.data.waypoints) {
       if (!this.waypointList.filterMatches(waypoint)) continue;
-      const point = this.field.worldToScreen(waypoint.target.x, waypoint.target.y);
+      const target = this.viewing.projection.waypointTarget(waypoint);
+      const point = this.field.worldToScreen(target.x, target.y);
       const selected = String(this.viewing.navigation.selectedWaypointId) === String(waypoint.id);
       context.beginPath();
       context.fillStyle = waypoint.active ? "rgba(0,150,230,.85)" : "rgba(120,135,150,.75)";
@@ -126,6 +130,7 @@ export class ViewingFieldView implements ViewingFieldLayer {
 
   private handleMouseMove(event: MouseEvent): void {
     if (getMode() !== "viewing") return;
+    this.updateCursorReadout(event.clientX, event.clientY);
     if (this.viewing.playback.isPlaying || this.field.isPanning()) return;
     const trackHit = this.hitTrack(event.clientX, event.clientY);
     this.#hoverWatch = this.hitWatch(event.clientX, event.clientY);
@@ -206,7 +211,8 @@ export class ViewingFieldView implements ViewingFieldLayer {
     let distance = 144;
     for (const waypoint of this.viewing.data.waypoints) {
       if (!this.waypointList.filterMatches(waypoint)) continue;
-      const point = this.field.worldToScreen(waypoint.target.x, waypoint.target.y);
+      const target = this.viewing.projection.waypointTarget(waypoint);
+      const point = this.field.worldToScreen(target.x, target.y);
       const next = (point.x - (clientX - rect.left)) ** 2 + (point.y - (clientY - rect.top)) ** 2;
       if (next <= distance) {
         distance = next;
@@ -272,5 +278,17 @@ export class ViewingFieldView implements ViewingFieldLayer {
     return this.viewing.data.waypointById.get(Number(id))
       ?? this.viewing.data.waypoints.find((waypoint) => String(waypoint.id) === String(id))
       ?? null;
+  }
+
+  private updateCursorReadout(clientX: number, clientY: number): void {
+    const rect = this.dom.canvas.getBoundingClientRect();
+    const point = this.field.screenToWorld(clientX - rect.left, clientY - rect.top);
+    this.setCursorReadout(`Cursor: X ${formatDistanceFromInches(point.x, 2)} Y ${formatDistanceFromInches(point.y, 2)}`);
+  }
+
+  private setCursorReadout(text: string | null): void {
+    const value = text ?? "Cursor: —";
+    this.dom.cursor.textContent = value;
+    this.dom.planCursor.textContent = value;
   }
 }

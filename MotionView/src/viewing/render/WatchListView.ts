@@ -8,13 +8,16 @@ import type { ViewingListsDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
 import type { WatchMarker } from "../viewingTypes";
 import { createVirtualList, type VirtualList } from "../virtualList";
-import { escapeHtml, formatNumber, isGraphableWatchValue, levelSortRank, levelStyle, watchGraphKey, watchKey } from "../viewingPresentation";
+import { escapeHtml, formatNumber, isGraphableWatchValue, levelSortRank, levelStyle, watchGraphKey } from "../viewingPresentation";
 import type { FloatingInfoView } from "./FloatingInfoView";
 import type { WatchGraphView } from "./WatchGraphView";
 
 export class WatchListView {
   readonly #list: VirtualList<Readonly<WatchMarker>>;
+  readonly #keys = new WeakMap<object, string>();
+  #nextKey = 1;
   #openActionsMenu: Readonly<{ button: HTMLButtonElement; menu: HTMLElement }> | null = null;
+  #openActionsKey: string | null = null;
 
   constructor(
     private readonly viewing: ViewingFeature,
@@ -25,7 +28,7 @@ export class WatchListView {
     const list = createVirtualList<Readonly<WatchMarker>>(dom.watchList, {
       estimateRowHeight: 62,
       overscanPx: 320,
-      getKey: (marker, index) => `${marker.t}:${watchKey(marker.watch)}:${index}`,
+      getKey: (marker) => this.keyFor(marker),
       renderItem: (marker) => this.createItem(marker),
       syncRowLayout: (row) => this.syncActionLayout(row),
     });
@@ -34,8 +37,14 @@ export class WatchListView {
   }
 
   bind(): void {
-    this.dom.watchSort.addEventListener("change", () => this.render());
-    this.dom.watchFilter.addEventListener("change", () => this.render());
+    this.dom.watchSort.addEventListener("change", () => {
+      this.closeActionsMenu();
+      this.render();
+    });
+    this.dom.watchFilter.addEventListener("change", () => {
+      this.closeActionsMenu();
+      this.render();
+    });
     document.addEventListener("pointerdown", (event) => {
       const target = event.target;
       if (!(target instanceof Element) || !this.isOpenMenuTarget(target)) this.closeActionsMenu();
@@ -74,7 +83,6 @@ export class WatchListView {
   }
 
   render(): void {
-    this.closeActionsMenu();
     const items = this.viewing.projection.watchMarkers.filter((marker) => this.filterMatches(marker.watch));
     const mode = this.dom.watchSort.value;
     items.sort((left, right) => {
@@ -84,6 +92,9 @@ export class WatchListView {
       if (mode === "value") return String(left.watch.value ?? "").localeCompare(String(right.watch.value ?? ""), undefined, { numeric: true });
       return 0;
     });
+    if (this.#openActionsKey && !items.some((marker) => this.keyFor(marker) === this.#openActionsKey)) {
+      this.closeActionsMenu();
+    }
     this.dom.watchCount.textContent = String(items.length);
     this.#list.setItems(items);
   }
@@ -105,6 +116,7 @@ export class WatchListView {
   }
 
   private createItem(marker: Readonly<WatchMarker>): HTMLElement {
+    const itemKey = this.keyFor(marker);
     const watch = marker.watch;
     const style = levelStyle(watch.level);
     const visible = watch.visible !== false;
@@ -144,7 +156,7 @@ export class WatchListView {
     moreButton?.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (compactMenu) this.toggleActionsMenu(moreButton, compactMenu);
+      if (compactMenu) this.toggleActionsMenu(itemKey, moreButton, compactMenu);
     });
     compactMenu?.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
@@ -173,25 +185,43 @@ export class WatchListView {
         this.closeActionsMenu();
       });
     }
+    if (this.#openActionsKey === itemKey && moreButton && compactMenu) {
+      compactMenu.hidden = false;
+      moreButton.setAttribute("aria-expanded", "true");
+      this.#openActionsMenu = { button: moreButton, menu: compactMenu };
+    }
     return element;
   }
 
-  private toggleActionsMenu(button: HTMLButtonElement, menu: HTMLElement): void {
-    const wasOpen = this.#openActionsMenu?.menu === menu && !menu.hidden;
+  private keyFor(marker: Readonly<WatchMarker>): string {
+    const watch = marker.watch as object;
+    let key = this.#keys.get(watch);
+    if (!key) {
+      key = `watch:${this.#nextKey}`;
+      this.#nextKey += 1;
+      this.#keys.set(watch, key);
+    }
+    return key;
+  }
+
+  private toggleActionsMenu(key: string, button: HTMLButtonElement, menu: HTMLElement): void {
+    const wasOpen = this.#openActionsKey === key && !menu.hidden;
     this.closeActionsMenu();
     if (wasOpen) return;
     menu.hidden = false;
     button.setAttribute("aria-expanded", "true");
+    this.#openActionsKey = key;
     this.#openActionsMenu = { button, menu };
   }
 
   private closeActionsMenu(restoreFocus = false): void {
-    if (!this.#openActionsMenu) return;
-    const { button, menu } = this.#openActionsMenu;
-    menu.hidden = true;
-    button.setAttribute("aria-expanded", "false");
+    const current = this.#openActionsMenu;
+    this.#openActionsKey = null;
     this.#openActionsMenu = null;
-    if (restoreFocus) button.focus();
+    if (!current) return;
+    current.menu.hidden = true;
+    current.button.setAttribute("aria-expanded", "false");
+    if (restoreFocus) current.button.focus();
   }
 
   private isOpenMenuTarget(target: Element): boolean {

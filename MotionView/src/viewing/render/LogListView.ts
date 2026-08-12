@@ -7,6 +7,8 @@ import { escapeHtml, formatNumber, levelSortRank, levelStyle } from "../viewingP
 
 export class LogListView {
   readonly #list: VirtualList<Readonly<LogEntry>>;
+  readonly #keys = new WeakMap<object, string>();
+  #nextKey = 1;
   #indexByTime = new Map<number, number>();
 
   constructor(
@@ -16,7 +18,7 @@ export class LogListView {
     const list = createVirtualList<Readonly<LogEntry>>(dom.logList, {
       estimateRowHeight: 70,
       overscanPx: 320,
-      getKey: (entry, index) => `${entry.t}:${index}`,
+      getKey: (entry) => this.keyFor(entry),
       renderItem: (entry) => this.createItem(entry),
     });
     if (!list) throw new Error("MotionView could not initialize the log virtual list.");
@@ -51,15 +53,15 @@ export class LogListView {
   private createItem(entry: Readonly<LogEntry>): HTMLElement {
     const style = levelStyle(entry.level);
     const element = document.createElement("div");
-    element.className = "watchItem";
+    element.className = "watchItem logItem";
     if (entry.t === this.viewing.navigation.selectedLogTime) element.classList.add("selected");
     element.dataset.t = String(entry.t);
-    element.innerHTML = `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+    element.innerHTML = `<div class="watchItemContent logItemContent"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span class="pill level" style="background:${style.fill};color:${style.text}">${style.name}</span>
         ${entry.isSystem ? '<span class="pill logSystemPill">SYSTEM</span>' : ""}
       </div><div class="muted">${formatNumber(entry.t / 1000, 2)}s</div>
-    </div><div class="bigValue selectableText">${escapeHtml(entry.message ?? entry.value ?? "")}</div>`;
+    </div><div class="bigValue selectableText">${escapeHtml(entry.message ?? entry.value ?? "")}</div></div>`;
     element.addEventListener("pointerdown", (event) => {
       if (event.button !== 0 || (event.target instanceof Element && event.target.closest(".selectableText"))) return;
       event.preventDefault();
@@ -76,5 +78,16 @@ export class LogListView {
       this.highlight(true);
     }, { passive: false });
     return element;
+  }
+
+  private keyFor(entry: Readonly<LogEntry>): string {
+    const object = entry as object;
+    let key = this.#keys.get(object);
+    if (!key) {
+      key = `log:${this.#nextKey}`;
+      this.#nextKey += 1;
+      this.#keys.set(object, key);
+    }
+    return key;
   }
 }

@@ -27,19 +27,46 @@ export interface LogEntry {
   isSystem: boolean;
 }
 
-export interface WaypointEvent {
+export type WaypointEventType = "CREATED" | "REACHED" | "TIMEDOUT";
+
+interface WaypointEventBase {
   t: number;
-  type: string;
   id: number;
   name: string;
-  params: Record<string, number | boolean | string | null>;
 }
+
+export interface WaypointCreatedEvent extends WaypointEventBase {
+  type: "CREATED";
+  params: {
+    tarX: number;
+    tarY: number;
+    tarT: number | null;
+    timeoutMs: number | null;
+    linearTol: number;
+    thetaTol: number | null;
+    retriggerable: boolean;
+  };
+}
+
+export interface WaypointReachedEvent extends WaypointEventBase {
+  type: "REACHED";
+  params: {
+    remainingTime?: number;
+  };
+}
+
+export interface WaypointTimedOutEvent extends WaypointEventBase {
+  type: "TIMEDOUT";
+  params: Record<string, never>;
+}
+
+export type WaypointEvent = WaypointCreatedEvent | WaypointReachedEvent | WaypointTimedOutEvent;
 
 export interface Waypoint {
   id: number;
   name: string;
   createdTime: number | null;
-  createdEvent: WaypointEvent;
+  createdEvent: WaypointCreatedEvent;
   target: {
     x: number;
     y: number;

@@ -1,18 +1,24 @@
-import type { LogEntry, Pose, WatchEntry, Waypoint, WaypointEvent } from "../state/models";
+import type { LogEntry, Pose, WatchEntry, Waypoint, WaypointCreatedEvent, WaypointEvent } from "../state/models";
 import type { PoseReader } from "../state/poseStore";
 
 export type WatchEntryView = Readonly<WatchEntry>;
 export type LogEntryView = Readonly<LogEntry>;
-export type WaypointEventView = Readonly<Omit<WaypointEvent, "params">> & {
-  readonly params: Readonly<WaypointEvent["params"]>;
+type ReadonlyWaypointEvent<T extends WaypointEvent> = Readonly<Omit<T, "params">> & {
+  readonly params: Readonly<T["params"]>;
 };
+
+type ToReadonlyWaypointEvent<Event> = Event extends WaypointEvent
+  ? ReadonlyWaypointEvent<Event>
+  : never;
+
+export type WaypointEventView = ToReadonlyWaypointEvent<WaypointEvent>;
 export type WaypointView = Readonly<Omit<
   Waypoint,
   "target" | "events" | "createdEvent" | "terminalEvent" | "latestEvent" | "latestActiveEvent"
 >> & {
   readonly target: Readonly<Waypoint["target"]>;
   readonly events: readonly WaypointEventView[];
-  readonly createdEvent: WaypointEventView;
+  readonly createdEvent: ReadonlyWaypointEvent<WaypointCreatedEvent>;
   readonly terminalEvent: WaypointEventView | null;
   readonly latestEvent: WaypointEventView;
   readonly latestActiveEvent: WaypointEventView;

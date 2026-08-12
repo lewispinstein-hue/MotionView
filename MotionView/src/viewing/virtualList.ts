@@ -246,7 +246,9 @@ export function createVirtualList<T>(
     }
 
     if (layoutDirty) {
+      const anchor = captureScrollAnchor();
       recomputeLayout();
+      restoreScrollAnchor(anchor);
       requestRender();
     }
   }
@@ -258,11 +260,13 @@ export function createVirtualList<T>(
   }
 
   function captureScrollAnchor() {
+    const nearTop = listContainer.scrollTop <= 12;
     const nearBottom = listContainer.scrollTop + listContainer.clientHeight >= listContainer.scrollHeight - 12;
     const index = Math.max(0, Math.min(store.length - 1, lowerBoundTop(listContainer.scrollTop)));
     const item = store.get(index);
     if (item == null) {
       return {
+        nearTop,
         nearBottom,
         key: null,
         offset: 0,
@@ -270,6 +274,7 @@ export function createVirtualList<T>(
       };
     }
     return {
+      nearTop,
       nearBottom,
       key: getKey(item, index),
       offset: listContainer.scrollTop - (tops[index] ?? 0),
@@ -279,6 +284,10 @@ export function createVirtualList<T>(
 
   function restoreScrollAnchor(anchor: ReturnType<typeof captureScrollAnchor> | null) {
     if (!anchor) return;
+    if (anchor.nearTop) {
+      listContainer.scrollTop = 0;
+      return;
+    }
     if (anchor.nearBottom) {
       listContainer.scrollTop = Math.max(0, totalHeight - listContainer.clientHeight);
       return;
@@ -311,7 +320,13 @@ export function createVirtualList<T>(
     const anchor = preserveScroll && !resetScroll ? captureScrollAnchor() : null;
     if (nextItems && typeof nextItems.length === "number") store.setItems(nextItems);
     else store.clear();
-    measuredHeights.clear();
+    const nextKeys = new Set<string>();
+    for (let index = 0; index < store.length; index += 1) {
+      nextKeys.add(getKey(store.get(index) as T, index));
+    }
+    for (const key of measuredHeights.keys()) {
+      if (!nextKeys.has(key)) measuredHeights.delete(key);
+    }
     recomputeLayout();
     if (resetScroll) listContainer.scrollTop = 0;
     else restoreScrollAnchor(anchor);

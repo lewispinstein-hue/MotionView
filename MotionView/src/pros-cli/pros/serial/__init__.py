@@ -168,7 +168,7 @@ def _render_pending_event(event: Tuple[object, ...], label: str) -> str:
         return _csv_line("[WATCH]", ts, level_name, watch_id, label, value)
 
     if kind == "wpoint_created":
-        _, ts, wp_id, tar_x, tar_y, tar_theta_raw, lin_tol, theta_tol, timeout = event
+        _, ts, wp_id, tar_x, tar_y, tar_theta_raw, lin_tol, theta_tol, timeout, retriggerable = event
         has_theta = not math.isnan(theta_tol)
         tar_theta = f"{_decode_theta(tar_theta_raw):.2f}" if has_theta else "NA"
         theta_tol_str = f"{theta_tol:.2f}" if has_theta else "NA"
@@ -185,6 +185,7 @@ def _render_pending_event(event: Tuple[object, ...], label: str) -> str:
             timeout_str,
             f"{lin_tol:.2f}",
             theta_tol_str,
+            1 if retriggerable else 0,
         )
 
     if kind == "wpoint_status":
@@ -252,9 +253,16 @@ def _handle_pose(payload: bytes) -> str:
 
 def _handle_waypoint(payload: bytes, subtype: int) -> str:
     if subtype == WPOINT_CREATED:
-        ts, wp_id, tar_x, tar_y, tar_theta_raw, lin_tol, theta_tol, timeout = struct.unpack("<HHffHffI", payload)
+        legacy_size = struct.calcsize("<HHffHffI")
+        ts, wp_id, tar_x, tar_y, tar_theta_raw, lin_tol, theta_tol, timeout = struct.unpack(
+            "<HHffHffI", payload[:legacy_size]
+        )
+        retriggerable = len(payload) > legacy_size and payload[legacy_size] != 0
         ts = _expand_timestamp(ts)
-        event = ("wpoint_created", ts, wp_id, tar_x, tar_y, tar_theta_raw, lin_tol, theta_tol, timeout)
+        event = (
+            "wpoint_created", ts, wp_id, tar_x, tar_y, tar_theta_raw,
+            lin_tol, theta_tol, timeout, retriggerable,
+        )
         return _emit_rostered_event(wp_id, False, event)
 
     if subtype in (WPOINT_REACHED, WPOINT_TIMEDOUT):
@@ -355,6 +363,9 @@ def _parse_binary_frame(frame: bytes) -> Optional[str]:
 
     if msg_type in (MSG_TYPE_WATCH, MSG_TYPE_LOG):
         if len(payload) < expected_len:
+            return None
+    elif msg_type == MSG_TYPE_WPOINT and subtype == WPOINT_CREATED:
+        if len(payload) not in (expected_len, expected_len + 1):
             return None
     elif len(payload) != expected_len:
         return None

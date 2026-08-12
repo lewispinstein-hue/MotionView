@@ -7,6 +7,7 @@ import type { PlanningDialogs } from "../PlanningDialogs";
 import { getPlanMethodTooltipName, getPlanNodeEffectiveMethod } from "../planningObjects";
 import { planningTelemetry } from "../../telemetry/createTelemetry";
 import { getUtf8ByteLength } from "../planningTemplate";
+import { formatDistanceFromInches } from "../../shared/units";
 
 interface SelectionRect { x0: number; y0: number; x1: number; y1: number }
 interface DragPoint { index: number; x: number; y: number }
@@ -57,6 +58,7 @@ export class PlanningFieldView {
     this.dom.canvas.addEventListener("pointerup", (event) => this.pointerEnd(event));
     this.dom.canvas.addEventListener("pointercancel", (event) => this.pointerEnd(event));
     this.dom.canvas.addEventListener("pointerleave", () => {
+      if (getMode() === "planning") this.dom.cursorPill.textContent = "Cursor: —";
       if (this.#pointerId == null) {
         this.#hoverNodeId = null;
         this.hideNodeTooltip();
@@ -239,6 +241,8 @@ export class PlanningFieldView {
   private pointerMove(event: PointerEvent): void {
     if (getMode() !== "planning") return;
     const point = this.canvasPoint(event);
+    const world = this.field.screenToWorld(point.x, point.y);
+    this.dom.cursorPill.textContent = `Cursor: X ${formatDistanceFromInches(world.x, 2)} Y ${formatDistanceFromInches(world.y, 2)}`;
     if (this.#pointerId !== event.pointerId) {
       const node = this.hitNode(point.x, point.y);
       const nextId = node?.id ?? null;
@@ -261,7 +265,6 @@ export class PlanningFieldView {
       return;
     }
     if (this.#dragStart) {
-      const world = this.field.screenToWorld(point.x, point.y);
       const dx = world.x - this.#dragStart.x;
       const dy = world.y - this.#dragStart.y;
       this.planning.route.updateMany(this.#dragPoints.map((entry) => {

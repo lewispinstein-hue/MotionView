@@ -10,6 +10,8 @@ function requiredElement<T extends HTMLElement>(document: Document, id: string):
 
 export interface ViewingFieldDom {
   readonly canvas: HTMLCanvasElement;
+  readonly cursor: HTMLElement;
+  readonly planCursor: HTMLElement;
 }
 
 export interface ViewingTimelineDom {
@@ -101,6 +103,8 @@ export class ViewingDom {
   private constructor(document: Document) {
     this.field = {
       canvas: requiredElement(document, "c"),
+      cursor: requiredElement(document, "cursorPill"),
+      planCursor: requiredElement(document, "planCursorPill"),
     };
     this.timeline = {
       canvas: requiredElement(document, "timelineCanvas"),

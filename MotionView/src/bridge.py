@@ -334,6 +334,17 @@ def resolve_extracted_pros_exe() -> Optional[str]:
 def resolve_pros_exe() -> Optional[str]:
     return resolve_extracted_pros_exe() or resolve_bundled_pros_exe()
 
+def resolve_pros_command() -> Optional[List[str]]:
+    if not getattr(sys, "frozen", False):
+        repo_root = Path(__file__).resolve().parent.parent
+        entry = repo_root / "src" / "pros-cli" / "motionview_terminal_entry.py"
+        if entry.is_file():
+            venv_python = repo_root / ".venv" / ("Scripts/python.exe" if platform.system() == "Windows" else "bin/python")
+            python = venv_python if venv_python.is_file() else Path(sys.executable).resolve()
+            return [str(python), str(entry)]
+    executable = resolve_pros_exe()
+    return [executable] if executable else None
+
 def current_bridge_exe() -> str:
     if getattr(sys, "frozen", False):
         try:
@@ -345,11 +356,12 @@ def current_bridge_exe() -> str:
     except Exception:
         return str(__file__)
 
-# MotionView must use the bundled MVLib-compatible PROS fork.
-PROS_EXE = resolve_pros_exe()
+# Development runs the checked-in fork directly so parser edits do not require
+# rebuilding PyInstaller. Packaged applications use the bundled executable.
+PROS_COMMAND = resolve_pros_command()
 _bridge_log(f"bridge executable: {current_bridge_exe()}")
-_bridge_log(f"resolved motionview-pros: {PROS_EXE}")
-if not PROS_EXE:
+_bridge_log(f"resolved motionview-pros command: {PROS_COMMAND}")
+if not PROS_COMMAND:
     _bridge_log("Bundled MotionView PROS CLI not found. Live streaming may not work.")
 # Resource paths (PyInstaller-friendly)
 # ----------------------------
@@ -679,9 +691,11 @@ class ProsTerminalRunner:
             pros_dir = str(PROS_PROJECT_DIR)
         env = _pros_launch_env()
         # Spawn `pros terminal` with stdio attached to PTY slave
-        _bridge_log(f"launching motionview-pros (pty): {PROS_EXE}")
+        if not PROS_COMMAND:
+            raise RuntimeError("MotionView PROS terminal is unavailable")
+        _bridge_log(f"launching motionview-pros (pty): {PROS_COMMAND}")
         self.proc = await asyncio.create_subprocess_exec(
-            PROS_EXE, "terminal", "--no-banner",
+            *PROS_COMMAND, "terminal", "--no-banner",
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,
@@ -737,9 +751,11 @@ class ProsTerminalRunner:
         async with lock:
             pros_dir = str(PROS_PROJECT_DIR)
         env = _pros_launch_env()
-        _bridge_log(f"launching motionview-pros (pipes): {PROS_EXE}")
+        if not PROS_COMMAND:
+            raise RuntimeError("MotionView PROS terminal is unavailable")
+        _bridge_log(f"launching motionview-pros (pipes): {PROS_COMMAND}")
         self.proc = await asyncio.create_subprocess_exec(
-            PROS_EXE, "terminal", "--no-banner",
+            *PROS_COMMAND, "terminal", "--no-banner",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             stdin=asyncio.subprocess.DEVNULL,

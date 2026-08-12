@@ -2,6 +2,7 @@ export interface ScrollAnchor {
   key: string | null;
   offset: number;
   scrollTop: number;
+  nearTop: boolean;
   nearBottom: boolean;
 }
 
@@ -13,6 +14,7 @@ export function captureScrollAnchor(
   if (!container) return null;
   const containerRect = container.getBoundingClientRect();
   const items = Array.from(container.querySelectorAll<HTMLElement>(itemSelector));
+  const nearTop = container.scrollTop <= 12;
   const nearBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 12;
 
   for (const item of items) {
@@ -22,6 +24,7 @@ export function captureScrollAnchor(
       key: getKey(item),
       offset: rect.top - containerRect.top,
       scrollTop: container.scrollTop,
+      nearTop,
       nearBottom,
     };
   }
@@ -30,6 +33,7 @@ export function captureScrollAnchor(
     key: null,
     offset: 0,
     scrollTop: container.scrollTop,
+    nearTop,
     nearBottom,
   };
 }
@@ -41,6 +45,10 @@ export function restoreScrollAnchor(
   getKey: (element: HTMLElement) => string | null,
 ) {
   if (!container || !anchor) return;
+  if (anchor.nearTop) {
+    container.scrollTop = 0;
+    return;
+  }
   if (anchor.nearBottom) {
     container.scrollTop = container.scrollHeight;
     return;

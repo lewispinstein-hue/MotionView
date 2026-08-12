@@ -18,6 +18,7 @@ export class PlanningDom {
   readonly timelineDropLine: HTMLElement;
   readonly timePill: HTMLElement;
   readonly pointPill: HTMLElement;
+  readonly cursorPill: HTMLElement;
   readonly nodeTooltip: HTMLElement;
   readonly list: HTMLElement;
   readonly count: HTMLElement;
@@ -66,6 +67,7 @@ export class PlanningDom {
     this.timelineDropLine = requiredElement(document, "planningTimelineDropLine");
     this.timePill = requiredElement(document, "planTimePill");
     this.pointPill = requiredElement(document, "planPointPill");
+    this.cursorPill = requiredElement(document, "planCursorPill");
     this.nodeTooltip = requiredElement(document, "planNodeTooltip");
     this.list = requiredElement(document, "planList");
     this.count = requiredElement(document, "planCount");

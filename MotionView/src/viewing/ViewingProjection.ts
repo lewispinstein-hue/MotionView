@@ -9,6 +9,12 @@ export interface ViewingTransform {
   readonly offsetThetaDegrees: number;
 }
 
+export interface ViewingFieldPoint {
+  readonly x: number;
+  readonly y: number;
+  readonly theta: number | null;
+}
+
 const DEFAULT_TRANSFORM: ViewingTransform = {
   unitsToInches: 1,
   offsetXInches: 0,
@@ -98,6 +104,17 @@ export class ViewingProjection {
   poseAt(index: number): Readonly<Pose> | null {
     const pose = this.data.poses[index];
     return pose ? this.transformPose(pose) : null;
+  }
+
+  waypointTarget(waypoint: WaypointView): Readonly<ViewingFieldPoint> {
+    const transform = this.#transform;
+    return {
+      x: waypoint.target.x * transform.unitsToInches + transform.offsetXInches,
+      y: waypoint.target.y * transform.unitsToInches + transform.offsetYInches,
+      theta: waypoint.target.theta == null
+        ? null
+        : normalizeDegrees(waypoint.target.theta + transform.offsetThetaDegrees),
+    };
   }
 
   interpolatePose(timeMs: number | null): Readonly<Pose> | null {
