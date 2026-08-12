@@ -100,7 +100,7 @@ export function getPlanMethodById(objects: readonly PlanningObjectView[], object
 }
 
 export function hasPlanNodeMethodOverride(node: PlanningNode | null | undefined): boolean {
-  return !!node && (Object.prototype.hasOwnProperty.call(node, "name") || Object.prototype.hasOwnProperty.call(node, "code"));
+  return !!node && Object.prototype.hasOwnProperty.call(node, "code");
 }
 
 export function getPlanNodeEffectiveMethod(
@@ -111,7 +111,7 @@ export function getPlanNodeEffectiveMethod(
   const method = getPlanMethodById(objects, node.objectId, node.methodId);
   if (!method) return null;
   return {
-    name: Object.prototype.hasOwnProperty.call(node, "name") ? String(node.name || "") : method.name,
+    name: method.name,
     code: Object.prototype.hasOwnProperty.call(node, "code") ? String(node.code || "") : method.code,
     hostName: method.name,
     hostCode: method.code,
@@ -128,13 +128,11 @@ export function setPlanNodeCodeOverride(
   const method = getPlanMethodById(objects, node.objectId, node.methodId);
   if (!method) return false;
   const nextCode = String(codeValue || "");
-  const hadNameOverride = Object.prototype.hasOwnProperty.call(node, "name");
   const hadCodeOverride = Object.prototype.hasOwnProperty.call(node, "code");
   const currentCode = hadCodeOverride ? node.code : method.code;
   const matchesHost = nextCode === String(method.code || "");
-  const changed = hadNameOverride || nextCode !== String(currentCode || "") || (hadCodeOverride && matchesHost);
+  const changed = nextCode !== String(currentCode || "") || (hadCodeOverride && matchesHost);
   if (!changed) return false;
-  delete node.name;
   if (matchesHost) delete node.code;
   else node.code = nextCode;
   return true;
@@ -145,7 +143,6 @@ export function serializePlanNode(node: PlanningNode): PlanningNode {
     id: node.id, objectId: node.objectId, methodId: node.methodId,
     beforeWaypoint: node.beforeWaypoint, index: node.index,
   };
-  if (Object.prototype.hasOwnProperty.call(node, "name")) serialized.name = node.name;
   if (Object.prototype.hasOwnProperty.call(node, "code")) serialized.code = node.code;
   return serialized;
 }

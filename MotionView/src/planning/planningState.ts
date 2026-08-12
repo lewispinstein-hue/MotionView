@@ -67,7 +67,6 @@ export function normalizePlanNodes(value: unknown): PlanningNode[] {
       beforeWaypoint: Math.max(0, Number(node?.beforeWaypoint) || 0),
       index: Math.max(0, Number(node?.index) || 0),
     };
-    if (Object.prototype.hasOwnProperty.call(node || {}, "name")) normalized.name = typeof node?.name === "string" ? node.name : "";
     if (Object.prototype.hasOwnProperty.call(node || {}, "code")) normalized.code = typeof node?.code === "string" ? node.code : "";
     return normalized;
   });

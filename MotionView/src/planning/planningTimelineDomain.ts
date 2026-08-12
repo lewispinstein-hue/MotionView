@@ -64,11 +64,10 @@ export class PlanningTimeline {
     const hadOverride = hasPlanNodeMethodOverride(node);
     const currentCode = Object.prototype.hasOwnProperty.call(node, "code") ? String(node.code || "") : method.code;
     const matchesHost = nextCode === String(method.code || "");
-    if (!Object.prototype.hasOwnProperty.call(node, "name") && currentCode === nextCode && !(matchesHost && hadOverride)) {
+    if (currentCode === nextCode && !(matchesHost && hadOverride)) {
       return { changed: false, hadOverride, hasOverride: hadOverride };
     }
     this.session.mutate("node", () => {
-      delete node.name;
       if (matchesHost) delete node.code;
       else node.code = nextCode;
     });

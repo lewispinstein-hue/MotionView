@@ -106,7 +106,6 @@ export interface PlanNode {
   methodId: string;
   beforeWaypoint: number;
   index: number;
-  name?: string;
   code?: string;
 }
 

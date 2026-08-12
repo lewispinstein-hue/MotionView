@@ -19,6 +19,8 @@ const NODE_END_OFFSET = 18;
 const EDGE_INSET = 14;
 const INSERT_HALF = (NODE_WIDTH + NODE_GAP) / 2;
 const WAYPOINT_MIN_GAP = 48;
+
+// Animation timings
 const NODE_SHIFT_MS = 320;
 const NODE_ENTER_MS = 240;
 const NODE_EXIT_MS = 220;

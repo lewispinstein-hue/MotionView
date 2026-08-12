@@ -10,10 +10,7 @@ export interface PlanningObject extends PlanObject {
   methods: PlanningMethod[];
 }
 
-export interface PlanningNode extends PlanNode {
-  name?: string;
-  code?: string;
-}
+export type PlanningNode = PlanNode;
 
 export interface PlanningWaypoint extends PlanWaypoint {
   x: number;
