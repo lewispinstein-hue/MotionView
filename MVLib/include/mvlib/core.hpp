@@ -302,7 +302,7 @@ public:
    * @endcode
    */
   bool setLoggingLocation(const char *location,
-                          MissingFolderPolicy folderPolicy = MissingFolderPolicy::disable,
+                          MissingFolderPolicy folderPolicy = MissingFolderPolicy::useRoot,
                           ExistingFilePolicy filePolicy = ExistingFilePolicy::automatic);
 
   // ------------------------------------------------------------------------
