@@ -8,7 +8,7 @@ To bypass this message, click "More Info" in the middle-left area of the popup, 
 
 **Note:** This project is completely open-source, but you may still choose to not trust it. 
 <p align="left">
-    <img src="./../../assets/Install/Windows/UnrecognizedApp1.png" alt="Icon" width="400" />
+    <img src="assets/Install/Windows/UnrecognizedApp1.png" alt="Icon" width="400" />
 </p>
 
 ## Guide
@@ -16,29 +16,29 @@ To bypass this message, click "More Info" in the middle-left area of the popup, 
 ### 1. Step 1
 Opening the installer
 <p align="left">
-    <img src="./../../assets/Install/Windows/Step1.png" alt="Icon" width="400" />
+    <img src="assets/Install/Windows/Step1.png" alt="Icon" width="400" />
 </p>
 
 ### 2. Step 2
 Choose between `Uninstall` and `Reinstall`. You typically want to uninstall before reinstalling if your experiencing issues
 <p align="left">
-    <img src="./../../assets/Install/Windows/Step2.png" alt="Icon" width="400" />
+    <img src="assets/Install/Windows/Step2.png" alt="Icon" width="400" />
 </p>
 
 ### 3. Step 3
 Choosing output destination
 <p align="left">
-    <img src="./../../assets/Install/Windows/Step3.png" alt="Icon" width="400" />
+    <img src="assets/Install/Windows/Step3.png" alt="Icon" width="400" />
 </p>
 
 ### 3.5. Step 3 Error. 
 This error may not occur, but in the case that it does, just ignoring it has worked for me.
 <p align="left">
-    <img src="./../../assets/Install/Windows/Step3Error.png" alt="Icon" width="400" />
+    <img src="assets/Install/Windows/Step3Error.png" alt="Icon" width="400" />
 </p>
 
 ### 4. Step 4
 Running and making a shortcut for MotionView
 <p align="left">
-    <img src="./../../assets/Install/Windows/Finish.png" alt="Icon" width="400" />
+    <img src="assets/Install/Windows/Finish.png" alt="Icon" width="400" />
 </p>
