@@ -272,7 +272,10 @@ export class PlanningSidebarView {
     try {
       await navigator.clipboard.writeText(code);
       setStatus(`Copied generated code for ${data.waypoints.length} waypoint${data.waypoints.length === 1 ? "" : "s"}.`);
-      void planningTelemetry.templateExported(this.planning.telemetryProperties({ export_surface: "clipboard", exported_chars: code.length, exported_bytes: getUtf8ByteLength(code) }));
+      void planningTelemetry.templateExported(this.planning.templateExportTelemetryProperties({
+        export_surface: "clipboard",
+        exported_chars: code.length,
+      }));
     } catch (error) {
       setStatus(`Failed to copy code: ${error instanceof Error ? error.message : String(error)}`);
     }

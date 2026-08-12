@@ -5,7 +5,6 @@ import { planningTelemetry } from "../telemetry/createTelemetry";
 import type { PlanningDom } from "./PlanningDom";
 import type { PlanningFeature } from "./PlanningFeature";
 import { generatePlanningCode } from "./planningCode";
-import { getUtf8ByteLength } from "./planningTemplate";
 
 export type PlanningCodeExportTarget = "downloads" | "desktop" | "documents" | "project" | "custom";
 
@@ -144,10 +143,9 @@ export class PlanningCodeExportDialog {
       this.dom.codeExportValidation.textContent = "";
       setStatus(`Exported planning code to ${result.path}`);
       this.emitChanged();
-      void planningTelemetry.templateExported(this.planning.telemetryProperties({
+      void planningTelemetry.templateExported(this.planning.templateExportTelemetryProperties({
         export_surface: "file",
         exported_chars: contents.length,
-        exported_bytes: getUtf8ByteLength(contents),
       }));
     } catch (error) {
       this.dom.codeExportSuccess.textContent = `Failed to export file: ${error instanceof Error ? error.message : String(error)}`;

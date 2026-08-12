@@ -7,7 +7,7 @@ import { PlanningRoute } from "./PlanningRoute";
 import { PlanningSelection } from "./PlanningSelection";
 import { PlanningTimeline } from "./planningTimelineDomain";
 import { PlanningSession } from "./planningSession";
-import type { PlanningExportView, PlanningTelemetrySnapshot } from "./planningTypes";
+import type { PlanningExportView, PlanningTelemetrySnapshot, PlanningTemplateExportTelemetrySnapshot } from "./planningTypes";
 
 const DEFAULT_EXPORT_TEMPLATE = "moveToPoint(${x}, ${y}, ${theta});";
 
@@ -83,6 +83,23 @@ export class PlanningFeature {
       plan_methods: this.objects.methodCount,
       plan_nodes: this.timeline.length,
       template_chars: this.exportTemplate.length,
+      ...extra,
+    };
+  }
+
+  templateExportTelemetryProperties(
+    extra: Record<string, unknown> = {},
+  ): PlanningTemplateExportTelemetrySnapshot {
+    return {
+      plan_waypoints: this.route.length,
+      template: this.exportTemplate,
+      plan_objects: this.objects.items.map((object) => ({
+        name: object.name,
+        methods: object.methods.map((method) => ({
+          name: method.name,
+          code: method.code,
+        })),
+      })),
       ...extra,
     };
   }
