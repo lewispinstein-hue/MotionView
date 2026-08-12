@@ -14,6 +14,7 @@ export interface PlanningEditorOptions {
   readonly description?: string;
   readonly placeholder?: string;
   readonly code: string;
+  readonly showCode?: boolean;
   readonly name?: string;
   readonly nameDescription?: string;
   readonly confirmLabel?: string;
@@ -29,6 +30,7 @@ export class PlanningDialogs {
   #confirmResolver: ((confirmed: boolean) => void) | null = null;
   #editorResolver: ((result: PlanningEditorResult | null) => void) | null = null;
   #editorUsesName = false;
+  #editorUsesCode = true;
   #bound = false;
 
   constructor(private readonly dom: PlanningDom) {}
@@ -65,12 +67,15 @@ export class PlanningDialogs {
     this.closeEditor(null);
     this.#editorResolver = null;
     this.#editorUsesName = options.name !== undefined;
+    this.#editorUsesCode = options.showCode !== false;
     this.dom.templateTitle.textContent = options.title;
     this.dom.templateSubtitle.textContent = options.subtitle ?? "";
     this.dom.templateGroupTitle.textContent = options.groupTitle ?? "Editor";
     this.dom.templateDescription.textContent = options.description ?? "";
     this.dom.templateCode.value = options.code;
     this.dom.templateCode.placeholder = options.placeholder ?? "";
+    this.dom.templateCode.hidden = !this.#editorUsesCode;
+    this.dom.templateDescription.hidden = false;
     this.dom.templateNameField.hidden = !this.#editorUsesName;
     this.dom.templateName.value = options.name ?? "";
     this.dom.templateNameDescription.textContent = options.nameDescription ?? "Name";
@@ -114,6 +119,7 @@ export class PlanningDialogs {
     const resolve = this.#editorResolver;
     this.#editorResolver = null;
     this.#editorUsesName = false;
+    this.#editorUsesCode = true;
     this.hide(this.dom.templateModal);
     resolve?.(result);
   }

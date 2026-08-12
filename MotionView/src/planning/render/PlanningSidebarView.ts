@@ -34,7 +34,7 @@ export class PlanningSidebarView {
   bind(): void {
     if (this.#bound) return;
     this.#bound = true;
-    this.dom.addObject.addEventListener("click", () => this.addObject());
+    this.dom.addObject.addEventListener("click", () => void this.addObject());
     this.dom.editTemplate.addEventListener("click", () => void this.editTemplate());
     this.dom.copyCode.addEventListener("click", () => void this.copyCode());
     this.bindSelectionField(this.dom.selectedX, "x");
@@ -196,10 +196,21 @@ export class PlanningSidebarView {
     });
   }
 
-  private addObject(): void {
-    const id = this.planning.objects.add();
-    this.#editingObjectId = id;
-    this.#selectObjectName = true;
+  private async addObject(): Promise<void> {
+    const defaultName = getDefaultPlanObjectName(this.planning.objects.length);
+    const result = await this.dialogs.edit({
+      title: "Add Object",
+      subtitle: "Create a new Planning object.",
+      groupTitle: "Object",
+      description: "Enter an object name.",
+      nameDescription: "Object name",
+      name: defaultName,
+      code: "",
+      showCode: false,
+      confirmLabel: "Create",
+    });
+    if (!result) return;
+    this.planning.objects.add({ name: result.name });
     void planningTelemetry.objectCreated(this.planning.telemetryProperties());
   }
 
