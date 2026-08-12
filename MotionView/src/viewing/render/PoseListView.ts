@@ -1,7 +1,7 @@
 import type { Pose } from "../../state/models";
 import type { ViewingFeature } from "../ViewingFeature";
 import type { ViewingListsDom } from "../ViewingDom";
-import { createVirtualList, type VirtualList } from "../virtualList";
+import { createVirtualList, type VirtualList } from "./virtualList";
 import { escapeHtml, formatNumber } from "../viewingPresentation";
 
 export class PoseListView {

@@ -2,7 +2,7 @@ import { setStatus } from "../../app/status";
 import type { LogEntry } from "../../state/models";
 import type { ViewingListsDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
-import { createVirtualList, type VirtualList } from "../virtualList";
+import { createVirtualList, type VirtualList } from "./virtualList";
 import { escapeHtml, formatNumber, levelSortRank, levelStyle } from "../viewingPresentation";
 
 export class LogListView {

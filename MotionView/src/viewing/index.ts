@@ -8,6 +8,6 @@ export * from "./ViewingView";
 export * from "./viewingEvents";
 export * from "./routeNormalization";
 export * from "./watchMarkers";
-export * from "./virtualList";
+export * from "./render/virtualList";
 export * from "./ViewingInput";
 export * from "./viewingPresentation";

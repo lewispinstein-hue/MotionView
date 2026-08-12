@@ -7,7 +7,7 @@ import type { WatchEntry } from "../../state/models";
 import type { ViewingListsDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
 import type { WatchMarker } from "../viewingTypes";
-import { createVirtualList, type VirtualList } from "../virtualList";
+import { createVirtualList, type VirtualList } from "./virtualList";
 import { escapeHtml, formatNumber, isGraphableWatchValue, levelSortRank, levelStyle, watchGraphKey } from "../viewingPresentation";
 import type { FloatingInfoView } from "./FloatingInfoView";
 import type { WatchGraphView } from "./WatchGraphView";

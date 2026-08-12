@@ -35,6 +35,7 @@ import {
   PlanningInput,
   PlanningView,
 } from "./planning";
+import { PlanningLayoutView } from "./planning/render/PlanningLayoutView";
 import { appTelemetry, exportTelemetry, planningTelemetry, viewingTelemetry } from "./telemetry/createTelemetry";
 import {
   buildWaypointState,
@@ -46,6 +47,7 @@ import {
   normalizeWatches,
   waypointEventCount,
 } from "./viewing";
+import { ViewingLayoutView } from "./viewing/render/ViewingLayoutView";
 
 const app = initializeMotionViewApp();
 void app.start();
@@ -102,26 +104,6 @@ const btnHelpClose = document.getElementById("btnHelpClose");
 const btnHelpKeybinds = document.getElementById("btnHelpKeybinds");
 const keybindsModal = document.getElementById("keybindsModal");
 const btnKeybindsClose = document.getElementById("btnKeybindsClose");
-const vSplit = document.getElementById("vSplit");
-const hSplit = document.getElementById("hSplit");
-const planningTimelineSplit = document.getElementById("planningTimelineSplit");
-
-const rightViewingEl = document.getElementById("rightViewing");
-const rightPlanningEl = document.getElementById("rightPlanning");
-const leftEl = document.getElementById("left");
-const vSplitL = document.getElementById("vSplitL");
-const rowGrid = document.querySelector(".row");
-
-const timelineBar = document.getElementById("timelineBar");
-const timelineTop = document.getElementById("timelineTop");
-
-const layoutState = {
-  lastLeftSidebarW: 360,
-  lastRightSidebarW: 360,
-  lastTimelineH: 260,
-  lastPlanningTimelineH: 144,
-};
-
 function parseLayoutNumber(value) {
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
@@ -197,7 +179,6 @@ const settingsPlanMoveStep = document.getElementById("settingsPlanMoveStep");
 const settingsPlanSnapStep = document.getElementById("settingsPlanSnapStep");
 const settingsPlanThetaSnapStep = document.getElementById("settingsPlanThetaSnapStep");
 const settingsPlanLimitBounds = document.getElementById("settingsPlanLimitBounds");
-const planSplit = document.getElementById("planSplit");
 const versionDisplayEl = document.getElementById("versionDisplay");
 if (versionDisplayEl) versionDisplayEl.textContent = app.version;
 app.core.events.versionChanged.subscribe(({ version }) => {
@@ -205,20 +186,8 @@ app.core.events.versionChanged.subscribe(({ version }) => {
 });
 
 
-const DEFAULT_PLAN_EXPORT_TEMPLATE = "moveToPoint(${x}, ${y}, ${theta});";
-
 const MAX_OFFSET_THETA = 359;
 
-const COLLAPSE_PX_TIMELINE = 130; // When the timeline collapses away
-const COLLAPSE_PX_SIDEBAR = 282;  // When the right sidebar collapses away
-const COLLAPSE_WAYPOINTLIST_PX = 5;
-const COLLAPSE_PX_PLANNING_TIMELINE = 24;
-
-const COLLAPSE_PX_LEFTSIDEBAR = 210; // When the left sidebar collapses away
-const MAX_PX_LIVEWIN = 800; // Max width for left live window panel
-
-const MAX_TIMELINE_H_PX = 350; // Height at which timeline stops growing
-const MAX_SIDEBAR_W_PX = 550;  // Width at which sidebar stops growing
 const MAX_PLAN_UNDO = 50;      // Max number of undo steps
 
 let showPreviousYearFields = true;
@@ -323,14 +292,13 @@ app.planning.events.documentChanged.subscribe(() => {
 
 subscribeMode((mode) => {
   document.body.classList.toggle("mode-planning", mode === "planning");
-  syncTimelineBarCollapsedForMode(mode);
   if (mode === "planning" && app.viewing.playback.isPlaying) app.viewing.playback.pause();
   if (mode === "viewing" && app.planning.playback.isPlaying) app.planning.playback.pause();
   app.planning.selection.clear();
   topBar.syncMode(mode);
   fieldRenderer.updateFieldLayout(true);
-  viewingView?.resize();
-  planningView?.resizeTimeline();
+  if (mode === "planning") planningLayout.activate();
+  else viewingLayout.activate();
   app.planning.playback.setDistance(app.planning.playback.distance);
   void appTelemetry.modeChanged({
     mode,
@@ -338,8 +306,6 @@ subscribeMode((mode) => {
 });
 
 let savedPathsSaveTimer = null;
-const DEFAULT_PLANNING_TIMELINE_H_PX = 144;
-const LEGACY_PLANNING_TIMELINE_H_PX = 156;
 
 function currentPlanFieldBounds() {
   const bounds = fieldRenderer.getBounds();
@@ -383,98 +349,17 @@ function confirmPlanningImportOverride() {
 
 function applySavedLayout(settings) {
   if (!settings) return;
-  let layoutChanged = false;
+  viewingLayout.applyPersistedLayout({
+    leftSidebarWidth: settings.layoutLeftSidebarWidth,
+    sidebarWidth: settings.layoutRightSidebarWidthViewing,
+    timelineHeight: settings.layoutTimelineHeight,
+  });
+  planningLayout.applyPersistedLayout({
+    sidebarWidth: settings.layoutRightSidebarWidthPlanning,
+    waypointListHeight: settings.layoutPlanningWaypointHeight,
+    timelineHeight: settings.layoutPlanningTimelineHeight,
+  });
 
-  const leftWidth = parseLayoutNumber(settings.layoutLeftSidebarWidth);
-  if (leftWidth !== null) {
-    const next = clamp(leftWidth, 0, MAX_PX_LIVEWIN);
-    root.style.setProperty("--leftSidebarW", `${next}px`);
-    layoutChanged = true;
-    if (next <= COLLAPSE_PX_LEFTSIDEBAR) {
-      leftEl?.classList?.add("isCollapsed");
-      rowGrid?.classList?.add("leftCollapsed");
-    } else {
-      leftEl?.classList?.remove("isCollapsed");
-      rowGrid?.classList?.remove("leftCollapsed");
-      layoutState.lastLeftSidebarW = next;
-    }
-  }
-
-  const rightViewingWidth = parseLayoutNumber(settings.layoutRightSidebarWidthViewing);
-  if (rightViewingWidth !== null) {
-    const next = clamp(rightViewingWidth, 0, MAX_SIDEBAR_W_PX);
-    root.style.setProperty("--rightSidebarWViewing", `${next}px`);
-    layoutChanged = true;
-    if (next <= COLLAPSE_PX_SIDEBAR) {
-      rightViewingEl?.classList?.add("isCollapsed");
-    } else {
-      rightViewingEl?.classList?.remove("isCollapsed");
-      layoutState.lastRightSidebarW = next;
-    }
-  }
-
-  const rightPlanningWidth = parseLayoutNumber(settings.layoutRightSidebarWidthPlanning);
-  if (rightPlanningWidth !== null) {
-    const next = clamp(rightPlanningWidth, 0, MAX_SIDEBAR_W_PX);
-    root.style.setProperty("--rightSidebarWPlanning", `${next}px`);
-    layoutChanged = true;
-    if (next <= COLLAPSE_PX_SIDEBAR) {
-      rightPlanningEl?.classList?.add("isCollapsed");
-    } else {
-      rightPlanningEl?.classList?.remove("isCollapsed");
-      layoutState.lastRightSidebarWPlanning = next;
-    }
-  }
-
-  const timelineHeight = parseLayoutNumber(settings.layoutTimelineHeight);
-  if (timelineHeight !== null) {
-    const next = clamp(timelineHeight, 0, MAX_TIMELINE_H_PX);
-    root.style.setProperty("--timelineH", `${next}px`);
-    layoutChanged = true;
-    if (next <= COLLAPSE_PX_TIMELINE) {
-      timelineBar?.classList?.add("isCollapsed");
-    } else {
-      timelineBar?.classList?.remove("isCollapsed");
-      layoutState.lastTimelineH = next;
-    }
-  }
-
-  const planHeight = parseLayoutNumber(settings.layoutPlanningWaypointHeight);
-  if (planHeight !== null) {
-    const rightH = rightPlanningEl?.getBoundingClientRect().height || window.innerHeight;
-    const maxPlanH = Math.max(COLLAPSE_WAYPOINTLIST_PX, rightH - 180);
-    const next = clamp(planHeight, 0, maxPlanH);
-    root.style.setProperty("--planListH", `${next}px`);
-    layoutChanged = true;
-    if (next <= COLLAPSE_WAYPOINTLIST_PX) {
-      rightPlanningEl?.classList?.add("planListCollapsed");
-    } else {
-      rightPlanningEl?.classList?.remove("planListCollapsed");
-    }
-  }
-
-  const planningTimelineHeight = parseLayoutNumber(settings.layoutPlanningTimelineHeight);
-  if (planningTimelineHeight !== null) {
-    const migratedPlanningTimelineHeight =
-      Math.abs(planningTimelineHeight - LEGACY_PLANNING_TIMELINE_H_PX) < 2
-        ? DEFAULT_PLANNING_TIMELINE_H_PX
-        : planningTimelineHeight;
-    const next = migratedPlanningTimelineHeight <= COLLAPSE_PX_PLANNING_TIMELINE
-      ? 0
-      : DEFAULT_PLANNING_TIMELINE_H_PX;
-    root.style.setProperty("--planningTimelineH", `${next}px`);
-    layoutChanged = true;
-    if (next > COLLAPSE_PX_PLANNING_TIMELINE) {
-      layoutState.lastPlanningTimelineH = DEFAULT_PLANNING_TIMELINE_H_PX;
-    }
-  }
-
-  if (layoutChanged) {
-    syncTimelineBarCollapsedForMode();
-    fieldRenderer.updateFieldLayout(true);
-    viewingView?.resize();
-    planningView?.resizeTimeline();
-  }
 }
 
 async function loadSavedPaths() {
@@ -863,6 +748,11 @@ const liveInput = new LiveInput(app.live);
 liveView.bind();
 liveInput.bind();
 
+const viewingLayout = new ViewingLayoutView(document, fieldRenderer, viewingView, () => void saveSettings());
+const planningLayout = new PlanningLayoutView(document, fieldRenderer, planningView, () => void saveSettings());
+viewingLayout.bind();
+planningLayout.bind();
+
 app.live.events.connectionChanged.subscribe(() => {
   syncTopBarPlayback();
   updateExportButtonAvailability();
@@ -882,339 +772,6 @@ app.live.events.preferencesChanged.subscribe(() => {
 document.addEventListener("keydown", handleGlobalKeydown);
 planningView.render();
 
-
-function getTimelineH() {
-  const v = getComputedStyle(root).getPropertyValue("--timelineH").trim();
-  const n = parseFloat(v);
-  return isFinite(n) ? n : 260;
-};
-
-function getPlanningTimelineH() {
-  const v = getComputedStyle(root).getPropertyValue("--planningTimelineH").trim();
-  const n = parseFloat(v);
-  return isFinite(n) ? n : DEFAULT_PLANNING_TIMELINE_H_PX;
-};
-
-function isPlanningTimelineCollapsed() {
-  return getPlanningTimelineH() <= COLLAPSE_PX_PLANNING_TIMELINE;
-}
-
-function syncTimelineBarCollapsedForMode(mode = getMode()) {
-  if (!timelineBar) return;
-  const collapsed = mode === "planning"
-    ? isPlanningTimelineCollapsed()
-    : getTimelineH() <= COLLAPSE_PX_TIMELINE;
-  timelineBar.classList.toggle("isCollapsed", collapsed);
-}
-
-// -------- splitters with collapse --------
-(function setupSplitters() {
-  let draggingV = false;
-  let startX = 0;
-  let startW = 0;
-  // ensure grid state matches persisted widths on load
-  try {
-    if (getLeftSidebarW() <= 1) leftEl.classList.add("isCollapsed"); rowGrid && rowGrid.classList.add("leftCollapsed");
-  } catch (e) { }
-
-
-  const getRightSidebarWViewing = () => {
-    const v = getComputedStyle(root).getPropertyValue("--rightSidebarWViewing").trim();
-    const n = parseFloat(v);
-    return isFinite(n) ? n : 360;
-  };
-  const setRightSidebarWViewing = (px) => {
-    px = Math.min(px, MAX_SIDEBAR_W_PX);
-    root.style.setProperty("--rightSidebarWViewing", `${px}px`);
-  };
-
-  const getRightSidebarWPlanning = () => {
-    const v = getComputedStyle(root).getPropertyValue("--rightSidebarWPlanning").trim();
-    const n = parseFloat(v);
-    return isFinite(n) ? n : 360;
-  };
-  const setRightSidebarWPlanning = (px) => {
-    px = Math.min(px, MAX_SIDEBAR_W_PX);
-    root.style.setProperty("--rightSidebarWPlanning", `${px}px`);
-  };
-
-  const getLeftSidebarW = () => {
-    const v = getComputedStyle(root).getPropertyValue("--leftSidebarW").trim();
-    const n = parseFloat(v);
-    return isFinite(n) ? n : 360;
-  };
-  const setLeftSidebarW = (px) => {
-    px = Math.min(px, MAX_PX_LIVEWIN);
-    root.style.setProperty("--leftSidebarW", `${px}px`);
-  };
-
-  let draggingVL = false;
-  let startXL = 0;
-  let startWL = 0;
-
-  vSplitL.addEventListener("mousedown", (e) => {
-    draggingVL = true;
-    startXL = e.clientX;
-    startWL = getLeftSidebarW();
-    document.body.style.cursor = "col-resize";
-    e.preventDefault();
-  });
-
-  vSplit.addEventListener("mousedown", (e) => {
-    draggingV = true;
-    startX = e.clientX;
-    startW = (getMode() === "planning") ? getRightSidebarWPlanning() : getRightSidebarWViewing();
-    document.body.style.cursor = "col-resize";
-    e.preventDefault();
-  });
-
-  let draggingH = false;
-  let startY = 0;
-  let startH = 0;
-  let draggingPlanningTimeline = false;
-  let startPlanningTimelineY = 0;
-  let startPlanningTimelineH = 0;
-  let draggingPlanList = false;
-  let startPlanY = 0;
-  let startPlanH = 0;
-
-  const setTimelineH = (px) => {
-    px = Math.min(px, MAX_TIMELINE_H_PX);
-    root.style.setProperty("--timelineH", `${px}px`);
-  }
-
-  const setPlanningTimelineH = (px) => {
-    px = px <= COLLAPSE_PX_PLANNING_TIMELINE ? 0 : DEFAULT_PLANNING_TIMELINE_H_PX;
-    root.style.setProperty("--planningTimelineH", `${px}px`);
-  };
-
-  const setPlanningTimelineCollapsed = (collapsed) => {
-    if (collapsed) {
-      setPlanningTimelineH(0);
-      timelineBar?.classList?.add("isCollapsed");
-    } else {
-      layoutState.lastPlanningTimelineH = DEFAULT_PLANNING_TIMELINE_H_PX;
-      setPlanningTimelineH(DEFAULT_PLANNING_TIMELINE_H_PX);
-      timelineBar?.classList?.remove("isCollapsed");
-    }
-  };
-
-  hSplit.addEventListener("mousedown", (e) => {
-    draggingH = true;
-    startY = e.clientY;
-    startH = getTimelineH();
-    document.body.style.cursor = "row-resize";
-    e.preventDefault();
-
-  });
-
-  if (planningTimelineSplit) {
-    planningTimelineSplit.addEventListener("mousedown", (e) => {
-      if (getMode() !== "planning") return;
-      draggingPlanningTimeline = true;
-      startPlanningTimelineY = e.clientY;
-      startPlanningTimelineH = getPlanningTimelineH();
-      document.body.style.cursor = "row-resize";
-      e.preventDefault();
-    });
-  }
-  const getPlanListH = () => {
-    const v = getComputedStyle(root).getPropertyValue("--planListH").trim();
-    const n = parseFloat(v);
-    return isFinite(n) ? n : 240;
-  };
-  const setPlanListH = (px) => {
-    root.style.setProperty("--planListH", `${px}px`);
-  };
-
-  if (planSplit) {
-    planSplit.addEventListener("mousedown", (e) => {
-      if (getMode() !== "planning") return;
-      draggingPlanList = true;
-      startPlanY = e.clientY;
-      startPlanH = getPlanListH();
-      document.body.style.cursor = "row-resize";
-      e.preventDefault();
-    });
-  }
-
-  window.addEventListener("mousemove", (e) => {
-    if (draggingVL) {
-      const dx = e.clientX - startXL;
-      const w = window.innerWidth;
-      let next = clamp(startWL + dx, 0, Math.max(0, w - 240));
-
-      if (next <= COLLAPSE_PX_LEFTSIDEBAR) {
-        next = 0;
-        leftEl.classList.add("isCollapsed");
-        rowGrid && rowGrid.classList.add("leftCollapsed");
-      } else {
-        leftEl.classList.remove("isCollapsed");
-        rowGrid && rowGrid.classList.remove("leftCollapsed");
-        layoutState.lastLeftSidebarW = next;
-      }
-      setLeftSidebarW(next);
-      fieldRenderer.resizeCanvas();
-      viewingView.resize();
-    }
-
-    if (draggingV) {
-      const dx = e.clientX - startX;
-      const w = window.innerWidth;
-      let next = clamp(startW - dx, 0, Math.max(0, w - 240));
-
-      if (next <= COLLAPSE_PX_SIDEBAR) {
-        next = 0;
-        if (getMode() === "planning") rightPlanningEl?.classList?.add("isCollapsed");
-        else rightViewingEl?.classList?.add("isCollapsed");
-      } else {
-        if (getMode() === "planning") {
-          rightPlanningEl?.classList?.remove("isCollapsed");
-          layoutState.lastRightSidebarWPlanning = next;
-        } else {
-          rightViewingEl?.classList?.remove("isCollapsed");
-          layoutState.lastRightSidebarW = next;
-        }
-      }
-      if (getMode() === "planning") setRightSidebarWPlanning(next);
-      else setRightSidebarWViewing(next);
-      fieldRenderer.resizeCanvas();
-      viewingView.resize();
-    }
-
-    if (draggingH) {
-      const dy = e.clientY - startY;
-      const h = window.innerHeight;
-      let next = clamp(startH - dy, 0, Math.max(0, Math.floor(h * 0.80)));
-
-      if (next <= COLLAPSE_PX_TIMELINE) {
-        next = 0;
-        timelineBar.classList.add("isCollapsed");
-      } else {
-        timelineBar.classList.remove("isCollapsed");
-        layoutState.lastTimelineH = next;
-      }
-
-      setTimelineH(next);
-      viewingView.resize();
-      fieldRenderer.resizeCanvas();
-    }
-
-    if (draggingPlanningTimeline) {
-      const nearBottom = e.clientY >= window.innerHeight - COLLAPSE_PX_PLANNING_TIMELINE;
-      const draggedDownPastHeight = e.clientY - startPlanningTimelineY >= Math.max(startPlanningTimelineH, DEFAULT_PLANNING_TIMELINE_H_PX) * 0.5;
-      setPlanningTimelineCollapsed(nearBottom || draggedDownPastHeight);
-      planningView.resizeTimeline();
-      fieldRenderer.resizeCanvas();
-    }
-
-    if (draggingPlanList) {
-      const dy = e.clientY - startPlanY;
-      const rightH = rightPlanningEl?.getBoundingClientRect().height || window.innerHeight;
-      const minH = 120;
-      const maxH = Math.max(COLLAPSE_WAYPOINTLIST_PX, rightH - 180);
-      let next = clamp(startPlanH + dy, 0, maxH);
-      if (next <= COLLAPSE_WAYPOINTLIST_PX) {
-        next = 0;
-        rightPlanningEl?.classList.add("planListCollapsed");
-      } else {
-        if (next < minH) next = minH;
-        rightPlanningEl?.classList.remove("planListCollapsed");
-      }
-      setPlanListH(next);
-    }
-  });
-
-  window.addEventListener("mouseup", () => {
-    const wasDragging = draggingV || draggingH || draggingVL || draggingPlanList || draggingPlanningTimeline;
-    if (wasDragging) {
-      draggingV = false;
-      draggingH = false;
-      draggingVL = false;
-      draggingPlanList = false;
-      draggingPlanningTimeline = false;
-      document.body.style.cursor = "";
-      // If user re-expands from collapsed by dragging, restore visibility automatically
-      if (getMode() === "planning") {
-        if (getRightSidebarWPlanning() > COLLAPSE_PX_SIDEBAR) rightPlanningEl?.classList?.remove("isCollapsed");
-      } else {
-        if (getRightSidebarWViewing() > COLLAPSE_PX_SIDEBAR) rightViewingEl?.classList?.remove("isCollapsed");
-      }
-      syncTimelineBarCollapsedForMode();
-      fieldRenderer.resizeCanvas();
-      viewingView.resize();
-      void saveSettings();
-    }
-  });
-
-  // double-click splitters to toggle collapse/restore
-  vSplitL.addEventListener("dblclick", () => {
-    const cur = getLeftSidebarW();
-    if (cur <= COLLAPSE_PX_LEFTSIDEBAR) {
-      setLeftSidebarW(Math.max(1, layoutState.lastLeftSidebarW));
-      leftEl.classList.remove("isCollapsed");
-      rowGrid && rowGrid.classList.remove("leftCollapsed");
-    } else {
-      layoutState.lastLeftSidebarW = cur;
-      setLeftSidebarW(0);
-      leftEl.classList.add("isCollapsed");
-      rowGrid && rowGrid.classList.add("leftCollapsed");
-    }
-    fieldRenderer.resizeCanvas();
-    viewingView.resize();
-  });
-
-  vSplit.addEventListener("dblclick", () => {
-    if (getMode() === "planning") {
-      const cur = getRightSidebarWPlanning();
-      if (cur <= COLLAPSE_PX_SIDEBAR) {
-        setRightSidebarWPlanning(Math.max(1, layoutState.lastRightSidebarWPlanning || 360));
-        rightPlanningEl?.classList?.remove("isCollapsed");
-      } else {
-        layoutState.lastRightSidebarWPlanning = cur;
-        setRightSidebarWPlanning(0);
-        rightPlanningEl?.classList?.add("isCollapsed");
-      }
-    } else {
-      const cur = getRightSidebarWViewing();
-      if (cur <= COLLAPSE_PX_SIDEBAR) {
-        setRightSidebarWViewing(Math.max(1, layoutState.lastRightSidebarW));
-        rightViewingEl?.classList?.remove("isCollapsed");
-      } else {
-        layoutState.lastRightSidebarW = cur;
-        setRightSidebarWViewing(0);
-        rightViewingEl?.classList?.add("isCollapsed");
-      }
-    }
-    fieldRenderer.resetFieldPosition();
-    fieldRenderer.resizeCanvas();
-    viewingView.resize();
-  });
-
-  hSplit.addEventListener("dblclick", () => {
-    const cur = getTimelineH();
-    if (cur <= COLLAPSE_PX_TIMELINE) {
-      setTimelineH(Math.max(160, layoutState.lastTimelineH));
-      timelineBar.classList.remove("isCollapsed");
-    } else {
-      layoutState.lastTimelineH = cur;
-      setTimelineH(0);
-      timelineBar.classList.add("isCollapsed");
-    }
-    viewingView.resize();
-    fieldRenderer.resetFieldPosition();
-    fieldRenderer.resizeCanvas();
-  });
-
-  if (planningTimelineSplit) {
-    planningTimelineSplit.addEventListener("dblclick", () => {
-      setPlanningTimelineCollapsed(!isPlanningTimelineCollapsed());
-      planningView.resizeTimeline();
-      fieldRenderer.resizeCanvas();
-      void saveSettings();
-    });
-  }
-})();
 
 // -------- data load --------
 function setData(obj, options = {}) {
@@ -2827,6 +2384,20 @@ function handleGlobalKeydown(e) {
   if (isTypingTarget) return;
 
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+    if (e.key === "m" || e.key === "M") {
+      e.preventDefault();
+      if (getMode() === "planning") planningLayout.toggleTimeline();
+      else viewingLayout.toggleTimeline();
+      return;
+    }
+
+    if (e.key === "b" || e.key === "B") {
+      if (getMode() !== "viewing") return;
+      e.preventDefault();
+      viewingLayout.toggleLeftSidebar();
+      return;
+    }
+
     if (e.key === "1") {
       e.preventDefault();
       setMode("viewing");
@@ -2860,6 +2431,13 @@ function handleGlobalKeydown(e) {
       }
       return;
     }
+  }
+
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && (e.key === "b" || e.key === "B")) {
+    e.preventDefault();
+    if (getMode() === "planning") planningLayout.toggleRightSidebar();
+    else viewingLayout.toggleRightSidebar();
+    return;
   }
 
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && (e.key === "k" || e.key === "K")) {
@@ -2983,16 +2561,8 @@ if (settingsModal) {
   settingsModal.setAttribute("hidden", "");
   settingsModal.style.display = "none";
 }
-window.addEventListener("resize", () => {
-  fieldRenderer.updateFieldLayout(true); // keep bounds, recompute square sizing
-  viewingView.resize();
-  planningView.resizeTimeline();
-  topBar.scheduleLayout();
-});
-
 fieldRenderer.updateFieldLayout(false);
-viewingView.resize();
-planningView.resizeTimeline();
+viewingLayout.activate();
 topBar.bindEvents();
 topBar.scheduleLayout();
 if (robotImgControlsEl) robotImgControlsEl.hidden = true;

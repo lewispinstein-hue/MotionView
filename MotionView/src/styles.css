@@ -194,7 +194,6 @@ canvas#c {
 
 /* Sidebar: flexible width, wraps content, no horizontal scroll */
 .rightSidebar {
-  flex: 0 0 clamp(260px, 26vw, 420px);
   border-left: 1px solid var(--line);
   background: rgba(16, 23, 32, .7);
   backdrop-filter: blur(6px);
