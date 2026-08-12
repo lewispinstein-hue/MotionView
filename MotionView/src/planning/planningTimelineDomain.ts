@@ -35,8 +35,7 @@ export class PlanningTimeline {
     const node = this.session.nodes.find((entry) => entry.id === id);
     if (!node) return null;
     const bucket = Math.max(0, Math.min(this.session.waypoints.length, Math.round(beforeWaypoint || 0)));
-    let insertionIndex = Math.max(0, Math.round(index || 0));
-    if (node.beforeWaypoint === bucket && insertionIndex > node.index) insertionIndex -= 1;
+    const insertionIndex = Math.max(0, Math.round(index || 0));
     this.session.mutate("node", () => {
       this.session.nodes.splice(this.session.nodes.indexOf(node), 1);
       const bucketNodes = this.session.nodes

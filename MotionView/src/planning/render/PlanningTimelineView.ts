@@ -19,6 +19,10 @@ const NODE_END_OFFSET = 18;
 const EDGE_INSET = 14;
 const INSERT_HALF = (NODE_WIDTH + NODE_GAP) / 2;
 const WAYPOINT_MIN_GAP = 48;
+const NODE_SHIFT_MS = 320;
+const NODE_ENTER_MS = 240;
+const NODE_EXIT_MS = 220;
+const NODE_MOVE_EPSILON = 0.5;
 
 interface TimelineBucketLayout {
   readonly beforeWaypoint: number;
@@ -39,6 +43,23 @@ interface ActiveDrag extends PlanningMethodDrag {
   started: boolean;
 }
 
+interface TimelineNodeSnapshot {
+  readonly left: number;
+  readonly background: string;
+  readonly className: string;
+  readonly color: string;
+  readonly text: string;
+}
+
+type TimelineNodeAnimation =
+  | Readonly<{ kind: "enter"; start: number; duration: number }>
+  | Readonly<{ kind: "shift"; fromLeft: number; toLeft: number; start: number; duration: number }>;
+
+interface TimelineExitAnimation extends TimelineNodeSnapshot {
+  readonly start: number;
+  readonly duration: number;
+}
+
 export class PlanningTimelineView {
   readonly #context: CanvasRenderingContext2D;
   #activeDrag: ActiveDrag | null = null;
@@ -48,6 +69,10 @@ export class PlanningTimelineView {
   #layout: TimelineLayout | null = null;
   #renderedRouteRevision = -1;
   #bound = false;
+  #hasRenderedNodes = false;
+  #nodeSnapshots = new Map<string, TimelineNodeSnapshot>();
+  #nodeAnimations = new Map<string, TimelineNodeAnimation>();
+  #exitAnimations = new Map<string, TimelineExitAnimation>();
 
   constructor(
     private readonly planning: PlanningFeature,
@@ -88,6 +113,11 @@ export class PlanningTimelineView {
   render(): void {
     const nodes = [...this.planning.timeline.nodes].sort((a, b) => a.beforeWaypoint - b.beforeWaypoint || a.index - b.index || a.id.localeCompare(b.id));
     const layout = this.buildLayout(nodes);
+    const previousSnapshots = this.#nodeSnapshots;
+    const nextSnapshots = new Map<string, TimelineNodeSnapshot>();
+    const animateChanges = this.#hasRenderedNodes && this.shouldAnimateNodes();
+    const now = performance.now();
+    this.pruneNodeAnimations(now);
     this.#layout = layout;
     this.#renderedRouteRevision = this.planning.route.revision;
     this.dom.timelineNodeLayer.replaceChildren();
@@ -110,10 +140,18 @@ export class PlanningTimelineView {
       element.dataset.nodeId = node.id;
       const bucket = layout.buckets[node.beforeWaypoint];
       if (!bucket) continue;
-      element.style.left = `${bucket.nodeStart + node.index * NODE_SLOT}px`;
+      const left = bucket.nodeStart + node.index * NODE_SLOT;
+      element.style.left = `${left}px`;
       element.style.background = object.color || getDefaultPlanObjectColor(0);
       element.style.color = getContrastTextColor(object.color);
       element.textContent = String(getPlanMethodNumber(this.planning.objects.items, node.objectId, node.methodId) ?? "");
+      nextSnapshots.set(node.id, {
+        left,
+        background: element.style.background,
+        className: element.className,
+        color: element.style.color,
+        text: element.textContent || "",
+      });
       element.addEventListener("click", (event) => { event.stopPropagation(); this.planning.selection.selectNode(node.id); });
       element.addEventListener("dblclick", (event) => { event.stopPropagation(); void this.editNode(node.id); });
       element.addEventListener("pointerdown", (event) => {
@@ -124,7 +162,13 @@ export class PlanningTimelineView {
       element.addEventListener("pointermove", (event) => this.positionTooltip(event.clientX, event.clientY));
       element.addEventListener("pointerleave", () => this.hideTooltip());
       this.dom.timelineNodeLayer.appendChild(element);
+      if (animateChanges) this.prepareNodeAnimation(node.id, previousSnapshots.get(node.id), left, now);
+      this.playNodeAnimation(node.id, element, now);
     }
+    if (animateChanges) this.prepareRemovedNodeAnimations(previousSnapshots, nextSnapshots, now);
+    this.renderRemovedNodeAnimations(now);
+    this.#nodeSnapshots = nextSnapshots;
+    this.#hasRenderedNodes = true;
     this.updateDropLine();
     this.draw();
   }
@@ -261,6 +305,93 @@ export class PlanningTimelineView {
     if (this.#drop) this.dom.timelineDropLine.style.left = `${this.#drop.x}px`;
   }
 
+  private shouldAnimateNodes(): boolean {
+    return !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  private prepareNodeAnimation(id: string, previous: TimelineNodeSnapshot | undefined, left: number, now: number): void {
+    if (this.#nodeAnimations.has(id)) return;
+    if (!previous) {
+      this.#nodeAnimations.set(id, { kind: "enter", start: now, duration: NODE_ENTER_MS });
+      return;
+    }
+    const deltaX = previous.left - left;
+    if (Math.abs(deltaX) <= NODE_MOVE_EPSILON) return;
+    this.#nodeAnimations.set(id, { kind: "shift", fromLeft: previous.left, toLeft: left, start: now, duration: NODE_SHIFT_MS });
+  }
+
+  private playNodeAnimation(id: string, element: HTMLElement, now: number): void {
+    const animation = this.#nodeAnimations.get(id);
+    if (!animation) return;
+    const elapsed = Math.max(0, now - animation.start);
+    if (elapsed >= animation.duration) {
+      this.#nodeAnimations.delete(id);
+      return;
+    }
+    if (animation.kind === "enter") {
+      element.animate(
+        [
+          { opacity: 0, transform: "translateY(-7px) scale(0.82)" },
+          { opacity: 1, transform: "translateY(0) scale(1)" },
+        ],
+        { duration: animation.duration, delay: -elapsed, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+      );
+      return;
+    }
+    const deltaX = animation.fromLeft - animation.toLeft;
+    element.animate(
+      [
+        { transform: `translateX(${deltaX}px)` },
+        { transform: "translateX(0)" },
+      ],
+      { duration: animation.duration, delay: -elapsed, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+    );
+  }
+
+  private prepareRemovedNodeAnimations(previous: ReadonlyMap<string, TimelineNodeSnapshot>, next: ReadonlyMap<string, TimelineNodeSnapshot>, now: number): void {
+    previous.forEach((snapshot, id) => {
+      if (next.has(id)) return;
+      if (this.#exitAnimations.has(id)) return;
+      this.#nodeAnimations.delete(id);
+      this.#exitAnimations.set(id, { ...snapshot, start: now, duration: NODE_EXIT_MS });
+    });
+  }
+
+  private renderRemovedNodeAnimations(now: number): void {
+    this.#exitAnimations.forEach((snapshot, id) => {
+      const elapsed = Math.max(0, now - snapshot.start);
+      if (elapsed >= snapshot.duration) {
+        this.#exitAnimations.delete(id);
+        return;
+      }
+      const element = document.createElement("div");
+      element.className = `${snapshot.className} isExiting`;
+      element.style.left = `${snapshot.left}px`;
+      element.style.background = snapshot.background;
+      element.style.color = snapshot.color;
+      element.textContent = snapshot.text;
+      this.dom.timelineNodeLayer.appendChild(element);
+      element.animate(
+        [
+          { opacity: 1, transform: "translateY(0) scale(1)" },
+          { opacity: 0, transform: "translateY(5px) scale(0.82)" },
+        ],
+        { duration: snapshot.duration, delay: -elapsed, easing: "cubic-bezier(0.4, 0, 1, 1)" },
+      ).finished
+        .catch(() => undefined)
+        .finally(() => element.remove());
+    });
+  }
+
+  private pruneNodeAnimations(now: number): void {
+    this.#nodeAnimations.forEach((animation, id) => {
+      if (now - animation.start >= animation.duration) this.#nodeAnimations.delete(id);
+    });
+    this.#exitAnimations.forEach((animation, id) => {
+      if (now - animation.start >= animation.duration) this.#exitAnimations.delete(id);
+    });
+  }
+
   private buildLayout(nodes: readonly PlanningNodeView[]): TimelineLayout {
     const waypointCount = this.planning.route.length;
     const viewportWidth = Math.max(1, this.dom.timelineViewport.clientWidth || this.dom.timelineViewport.getBoundingClientRect().width || 1);
@@ -329,11 +460,21 @@ export class PlanningTimelineView {
     }
     if (!bucket) return null;
     const dragId = this.#activeDrag?.nodeId;
-    const count = bucket.nodes.filter((node) => node.id !== dragId).length;
-    const local = x - bucket.nodeStart;
-    const index = Math.max(0, Math.min(count, count ? Math.floor((local + NODE_SLOT / 2) / NODE_SLOT) : 0));
-    const lineX = Math.max(PAD + 2, Math.min(layout.contentWidth - PAD - 2, bucket.nodeStart + index * NODE_SLOT - INSERT_HALF));
+    const remainingNodes = bucket.nodes.filter((node) => node.id !== dragId);
+    const index = remainingNodes.length
+      ? remainingNodes.filter((node) => x > bucket.nodeStart + node.index * NODE_SLOT).length
+      : 0;
+    const lineX = Math.max(PAD + 2, Math.min(layout.contentWidth - PAD - 2, this.dropLineX(bucket, remainingNodes, index)));
     return { beforeWaypoint: bucket.beforeWaypoint, index, x: lineX };
+  }
+
+  private dropLineX(bucket: TimelineBucketLayout, nodes: readonly PlanningNodeView[], index: number): number {
+    if (!nodes.length) return bucket.nodeStart - INSERT_HALF;
+    if (index <= 0) return bucket.nodeStart + nodes[0]!.index * NODE_SLOT - INSERT_HALF;
+    const previous = nodes[Math.min(index - 1, nodes.length - 1)]!;
+    if (index >= nodes.length) return bucket.nodeStart + previous.index * NODE_SLOT + INSERT_HALF;
+    const next = nodes[index]!;
+    return bucket.nodeStart + ((previous.index + next.index) * NODE_SLOT) / 2;
   }
 
   private xForDistance(distance: number, layout: TimelineLayout): number {
