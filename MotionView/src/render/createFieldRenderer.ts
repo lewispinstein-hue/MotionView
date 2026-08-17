@@ -318,7 +318,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
       grad.addColorStop(0, deps.heatColorFromNorm(a.speed_norm ?? 0));
       grad.addColorStop(1, deps.heatColorFromNorm(b.speed_norm ?? 0));
       ctx.strokeStyle = grad;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = sizes.screen({ width: 2, height: 2 }).width;
       ctx.beginPath();
       ctx.moveTo(pa.x, pa.y);
       ctx.lineTo(pb.x, pb.y);

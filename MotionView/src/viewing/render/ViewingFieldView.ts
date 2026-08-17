@@ -10,6 +10,12 @@ import type { WatchTooltipView } from "./WatchTooltipView";
 import { watchTooltipRows } from "./watchTooltipRows";
 import { formatDistanceFromInches } from "../../shared/units";
 
+const WATCH_RADIUS = 4.2;
+const WATCH_ACTIVE_RADIUS = 5.6;
+const WAYPOINT_RADIUS = 6;
+const WAYPOINT_SELECTED_RADIUS = 7.5;
+const MARKER_STROKE_WIDTH = 1;
+
 export class ViewingFieldView implements ViewingFieldLayer {
   #hoverWatch: Readonly<WatchMarker> | null = null;
 
@@ -65,8 +71,10 @@ export class ViewingFieldView implements ViewingFieldLayer {
   }
 
   drawOverlay(): void {
+    this.field.ctx.save();
     this.drawWaypoints();
     this.drawWatches();
+    this.field.ctx.restore();
   }
 
   drawWaypointOffset(pose: Readonly<FieldPose> | null): void {
@@ -76,9 +84,14 @@ export class ViewingFieldView implements ViewingFieldLayer {
     const start = this.field.worldToScreen(pose.x, pose.y);
     const target = this.viewing.projection.waypointTarget(waypoint);
     const end = this.field.worldToScreen(target.x, target.y);
+    const line = this.field.sizes.screen({ width: 1, height: 1 }).width;
+    const dash = this.field.sizes.screen({ width: 7, height: 6 });
+    const label = this.field.sizes.screen({ width: 68, height: 24 });
+    const fontSize = this.field.sizes.screen({ width: 11, height: 11 }).height;
     context.save();
     context.strokeStyle = "rgba(218,250,255,.85)";
-    context.setLineDash([7, 6]);
+    context.lineWidth = line;
+    context.setLineDash([dash.width, dash.height]);
     context.beginPath();
     context.moveTo(start.x, start.y);
     context.lineTo(end.x, end.y);
@@ -88,11 +101,11 @@ export class ViewingFieldView implements ViewingFieldLayer {
     const distance = Math.hypot(pose.x - target.x, pose.y - target.y);
     const x = (start.x + end.x) / 2;
     const y = (start.y + end.y) / 2;
-    context.fillRect(x - 34, y - 12, 68, 24);
+    context.fillRect(x - label.width / 2, y - label.height / 2, label.width, label.height);
     context.fillStyle = "white";
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.font = "11px ui-monospace";
+    context.font = `${fontSize}px ui-monospace`;
     context.fillText(`${distance.toFixed(1)} in`, x, y);
     context.restore();
   }
@@ -103,11 +116,13 @@ export class ViewingFieldView implements ViewingFieldLayer {
       if (!marker.pose || !this.watchList.isVisible(marker)) continue;
       const point = this.field.worldToScreen(marker.pose.x, marker.pose.y);
       const selected = this.viewing.navigation.selectedWatch?.t === marker.t;
+      const radius = this.scaledRadius(selected || this.#hoverWatch === marker ? WATCH_ACTIVE_RADIUS : WATCH_RADIUS);
       context.beginPath();
       context.fillStyle = levelFillWithAlpha(marker.watch.level, 0.95);
-      context.arc(point.x, point.y, selected || this.#hoverWatch === marker ? 5.6 : 4.2, 0, Math.PI * 2);
+      context.arc(point.x, point.y, radius, 0, Math.PI * 2);
       context.fill();
       context.strokeStyle = "rgba(255,255,255,.8)";
+      context.lineWidth = this.scaledRadius(MARKER_STROKE_WIDTH);
       context.stroke();
     }
   }
@@ -119,11 +134,13 @@ export class ViewingFieldView implements ViewingFieldLayer {
       const target = this.viewing.projection.waypointTarget(waypoint);
       const point = this.field.worldToScreen(target.x, target.y);
       const selected = String(this.viewing.navigation.selectedWaypointId) === String(waypoint.id);
+      const radius = this.scaledRadius(selected ? WAYPOINT_SELECTED_RADIUS : WAYPOINT_RADIUS);
       context.beginPath();
       context.fillStyle = waypoint.active ? "rgba(0,150,230,.85)" : "rgba(120,135,150,.75)";
-      context.arc(point.x, point.y, selected ? 7.5 : 6, 0, Math.PI * 2);
+      context.arc(point.x, point.y, radius, 0, Math.PI * 2);
       context.fill();
       context.strokeStyle = "white";
+      context.lineWidth = this.scaledRadius(MARKER_STROKE_WIDTH);
       context.stroke();
     }
   }
@@ -192,7 +209,7 @@ export class ViewingFieldView implements ViewingFieldLayer {
   private hitWatch(clientX: number, clientY: number): Readonly<WatchMarker> | null {
     const rect = this.dom.canvas.getBoundingClientRect();
     let best: Readonly<WatchMarker> | null = null;
-    let distance = 100;
+    let distance = this.scaledRadius(10) ** 2;
     for (const marker of this.viewing.projection.watchMarkers) {
       if (!marker.pose || !this.watchList.isVisible(marker)) continue;
       const point = this.field.worldToScreen(marker.pose.x, marker.pose.y);
@@ -208,7 +225,7 @@ export class ViewingFieldView implements ViewingFieldLayer {
   private hitWaypoint(clientX: number, clientY: number): WaypointView | null {
     const rect = this.dom.canvas.getBoundingClientRect();
     let best: WaypointView | null = null;
-    let distance = 144;
+    let distance = this.scaledRadius(12) ** 2;
     for (const waypoint of this.viewing.data.waypoints) {
       if (!this.waypointList.filterMatches(waypoint)) continue;
       const target = this.viewing.projection.waypointTarget(waypoint);
@@ -257,7 +274,8 @@ export class ViewingFieldView implements ViewingFieldLayer {
       const previousBest = best;
       const spatiallyBetter = !previousBest || distance < previousBest.distance - distanceTieTolerance;
       const spatialTie = previousBest && Math.abs(distance - previousBest.distance) <= distanceTieTolerance;
-      if (distance <= 144 && (spatiallyBetter || (spatialTie && indexDelta < previousBest.indexDelta))) {
+      if (distance <= this.scaledRadius(12) ** 2
+        && (spatiallyBetter || (spatialTie && indexDelta < previousBest.indexDelta))) {
         best = { startIndex, amount, distance, indexDelta };
       }
     }
@@ -278,6 +296,10 @@ export class ViewingFieldView implements ViewingFieldLayer {
     return this.viewing.data.waypointById.get(Number(id))
       ?? this.viewing.data.waypoints.find((waypoint) => String(waypoint.id) === String(id))
       ?? null;
+  }
+
+  private scaledRadius(radius: number): number {
+    return this.field.sizes.screen({ width: radius * 2, height: radius * 2 }).width / 2;
   }
 
   private updateCursorReadout(clientX: number, clientY: number): void {

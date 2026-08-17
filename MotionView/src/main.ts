@@ -1333,7 +1333,7 @@ function openSettings() {
   } catch (e) {
     console.error("Error syncing settings:", e);
   }
-  if (app.live.project.path) void app.live.project.validate();
+  if (app.live.project.path && !app.live.project.valid) void app.live.project.validate();
 
   // Update robot image controls visibility
   if (settingsRobotImgControls) {
