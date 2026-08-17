@@ -1,4 +1,5 @@
 import type { PlanningDom } from "./PlanningDom";
+import { bindModalBackdropDismissal } from "./modalDismissal";
 
 export interface PlanningConfirmOptions {
   readonly title?: string;
@@ -41,15 +42,11 @@ export class PlanningDialogs {
     this.dom.confirmClose.addEventListener("click", () => this.closeConfirm(false));
     this.dom.confirmCancel.addEventListener("click", () => this.closeConfirm(false));
     this.dom.confirmButton.addEventListener("click", () => this.closeConfirm(true));
-    this.dom.confirmModal.addEventListener("click", (event) => {
-      if (event.target === this.dom.confirmModal) this.closeConfirm(false);
-    });
+    bindModalBackdropDismissal(this.dom.confirmModal, () => this.closeConfirm(false));
     this.dom.templateClose.addEventListener("click", () => this.closeEditor(null));
     this.dom.templateCancel.addEventListener("click", () => this.closeEditor(null));
     this.dom.templateConfirm.addEventListener("click", () => this.confirmEditor());
-    this.dom.templateModal.addEventListener("click", (event) => {
-      if (event.target === this.dom.templateModal) this.closeEditor(null);
-    });
+    bindModalBackdropDismissal(this.dom.templateModal, () => this.closeEditor(null));
   }
 
   confirm(options: PlanningConfirmOptions): Promise<boolean> {

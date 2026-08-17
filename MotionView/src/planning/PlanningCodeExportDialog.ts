@@ -5,6 +5,7 @@ import { planningTelemetry } from "../telemetry/createTelemetry";
 import type { PlanningDom } from "./PlanningDom";
 import type { PlanningFeature } from "./PlanningFeature";
 import { generatePlanningCode } from "./planningCode";
+import { bindModalBackdropDismissal } from "./modalDismissal";
 
 export type PlanningCodeExportTarget = "downloads" | "desktop" | "documents" | "project" | "custom";
 
@@ -34,9 +35,7 @@ export class PlanningCodeExportDialog {
     this.dom.codeExportClose.addEventListener("click", () => this.close());
     this.dom.codeExportCancel.addEventListener("click", () => this.close());
     this.dom.codeExportConfirm.addEventListener("click", () => void this.export());
-    this.dom.codeExportModal.addEventListener("click", (event) => {
-      if (event.target === this.dom.codeExportModal) this.close();
-    });
+    bindModalBackdropDismissal(this.dom.codeExportModal, () => this.close());
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && this.isOpen) {
         event.preventDefault();
