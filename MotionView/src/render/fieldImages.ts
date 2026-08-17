@@ -21,7 +21,7 @@ export const FIELD_IMAGES: readonly FieldOption[] = [
   { key: "./assets/fields/v5/field_perimeter.png", label: "Field Perimeter" },
 ];
 
-export const DEFAULT_FIELD_KEY = FIELD_IMAGES[0].key;
+export const DEFAULT_FIELD_KEY = FIELD_IMAGES[7].key; // Temporarily 7 until a demo route for override is made
 
 export function normalizeFieldCompetition(value: unknown): FieldCompetition {
   return value === "vU" || value === "v5" || value === "iq" ? value : "all";
