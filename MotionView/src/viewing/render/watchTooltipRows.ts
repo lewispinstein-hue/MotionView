@@ -1,4 +1,4 @@
-import type { FieldPose } from "../../render/createFieldRenderer";
+import type { FieldPose } from "../../render/field";
 import type { WatchMarker } from "../viewingTypes";
 import { formatNumber } from "../viewingPresentation";
 import type { WatchTooltipRow } from "./WatchTooltipView";

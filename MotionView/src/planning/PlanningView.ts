@@ -1,4 +1,4 @@
-import type { FieldPose, FieldRenderer, PlanningFieldLayer } from "../render/createFieldRenderer";
+import type { FieldPose, FieldRenderer, PlanningFieldLayer } from "../render/field";
 import type { PlanningRenderLayer } from "../render/renderScheduler";
 import { requestDrawAll } from "../render/renderScheduler";
 import { formatDistanceFromInches, getCurrentUnits } from "../shared/units";

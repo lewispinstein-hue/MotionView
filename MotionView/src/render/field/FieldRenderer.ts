@@ -1,104 +1,11 @@
-import { getMode } from "../app/modeController";
-import { setStatus } from "../app/status";
-import { isTauriRuntime, readImageData, resolveResourcePath, saveRobotImage } from "../tauri/commands";
+import { getMode } from "../../app/modeController";
+import { setStatus } from "../../app/status";
+import { isTauriRuntime, readImageData, resolveResourcePath, saveRobotImage } from "../../tauri/commands";
+import { requestDrawAll } from "../renderScheduler";
+import { FieldRendererEvents } from "./FieldRendererEvents";
 import { configureFieldTransform } from "./fieldTransform";
 import { FieldSizeScaler } from "./FieldSizeScaler";
-import { requestDrawAll } from "./renderScheduler";
-
-export interface FieldBounds {
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-  pad: number;
-}
-
-export interface ScreenPoint {
-  x: number;
-  y: number;
-}
-
-export interface FieldPose {
-  x: number;
-  y: number;
-  theta?: number | null;
-  speed_norm?: number | null;
-}
-
-export interface RobotImageTransform {
-  scale: number;
-  offXIn: number;
-  offYIn: number;
-  rotDeg: number;
-  alpha: number;
-}
-
-export interface FieldRendererDependencies {
-  canvas: HTMLCanvasElement;
-  ctx: CanvasRenderingContext2D;
-  getRobotDimensions(): { w: number; h: number };
-  fieldHeadingToCanvasRotationDeg(thetaField: number): number;
-  heatColorFromNorm(norm: number): string;
-  onRobotImageAvailabilityChanged?(available: boolean): void;
-  onFieldImageLoaded?(fieldKey: string): void | Promise<void>;
-}
-
-export interface ViewingFieldLayer {
-  readonly pathLength: number;
-  pathPoseAt(index: number): FieldPose | null;
-  currentPose(): FieldPose | null;
-  drawOverlay(): void;
-  drawWaypointOffset(pose: FieldPose): void;
-}
-
-export interface PlanningFieldLayer {
-  readonly overlayVisible: boolean;
-  currentPose(): FieldPose | null;
-  drawOverlay(force?: boolean): void;
-}
-
-export interface FieldRenderer {
-  readonly canvas: HTMLCanvasElement;
-  readonly ctx: CanvasRenderingContext2D;
-  readonly sizes: FieldSizeScaler;
-  registerViewingLayer(layer: ViewingFieldLayer): void;
-  registerPlanningLayer(layer: PlanningFieldLayer): void;
-  draw(): void;
-  resizeCanvas(): void;
-  updateFieldLayout(preserveBounds?: boolean): void;
-  resetFieldPosition(): void;
-  centerOnWorld(x: number, y: number): void;
-  worldToScreen(xIn: number, yIn: number): ScreenPoint;
-  screenToWorld(xPx: number, yPx: number): ScreenPoint;
-  getScale(): number;
-  getViewZoom(): number;
-  getFieldRotationDeg(): number;
-  getBounds(): Readonly<FieldBounds>;
-  hasFieldImage(): boolean;
-  setFieldRotationDeg(deg: number): void;
-  loadFieldImage(fieldKey: string): Promise<void>;
-  loadRobotImage(): void;
-  loadRobotImageFromPath(path: string | null): Promise<void>;
-  loadRobotImageFromDataUrl(dataUrl: string | null): void;
-  loadRobotImageFromFile(file: File): Promise<void>;
-  setRobotImageEnabled(enabled: boolean): void;
-  isRobotImageEnabled(): boolean;
-  isRobotImageReady(): boolean;
-  getRobotImagePath(): string | null;
-  setRobotImagePath(path: string | null): void;
-  getRobotImageDataUrl(): string | null;
-  setRobotImageDataUrl(dataUrl: string | null): void;
-  getRobotImageTransform(): Readonly<RobotImageTransform>;
-  setRobotImageTransform(transform: Partial<RobotImageTransform>): void;
-  handleWheel(event: WheelEvent): void;
-  beginPan(pointerId: number, canvasX: number, canvasY: number): void;
-  movePan(canvasX: number, canvasY: number, options?: { onStart?: () => void }): boolean;
-  endPan(pointerId?: number | null): boolean;
-  isPanning(): boolean;
-  getSuppressNextClick(): boolean;
-  consumeSuppressNextClick(): void;
-  setBounds(bounds: FieldBounds): void;
-}
+import type { FieldBounds, FieldPose, PlanningFieldLayer, RobotDimensions, RobotImageTransform, ScreenPoint, ViewingFieldLayer } from "./fieldTypes";
 
 export const FIELD_BOUNDS_IN: FieldBounds = { minX: -72, maxX: 72, minY: -72, maxY: 72, pad: 30 };
 export const CANVAS_ZOOM_MAX = 15;
@@ -114,8 +21,57 @@ function normalizeFieldRotation(deg: number): 0 | 90 | 180 | 270 {
   return 0;
 }
 
-export function createFieldRenderer(deps: FieldRendererDependencies): FieldRenderer {
-  const { canvas, ctx } = deps;
+export class FieldRenderer {
+  readonly events = new FieldRendererEvents();
+  readonly canvas: HTMLCanvasElement;
+  readonly ctx: CanvasRenderingContext2D;
+  readonly sizes: FieldSizeScaler;
+  #robotDimensions: RobotDimensions = { w: 12, h: 12 };
+
+  declare registerViewingLayer: (layer: ViewingFieldLayer) => void;
+  declare registerPlanningLayer: (layer: PlanningFieldLayer) => void;
+  declare draw: () => void;
+  declare resizeCanvas: () => void;
+  declare updateFieldLayout: (preserveBounds?: boolean) => void;
+  declare resetFieldPosition: () => void;
+  declare centerOnWorld: (x: number, y: number) => void;
+  declare worldToScreen: (xIn: number, yIn: number) => ScreenPoint;
+  declare screenToWorld: (xPx: number, yPx: number) => ScreenPoint;
+  declare getScale: () => number;
+  declare getViewZoom: () => number;
+  declare getFieldRotationDeg: () => number;
+  declare getBounds: () => Readonly<FieldBounds>;
+  declare hasFieldImage: () => boolean;
+  declare setFieldRotationDeg: (deg: number) => void;
+  declare loadFieldImage: (fieldKey: string) => Promise<void>;
+  declare loadRobotImage: () => void;
+  declare loadRobotImageFromPath: (path: string | null) => Promise<void>;
+  declare loadRobotImageFromDataUrl: (dataUrl: string | null) => void;
+  declare loadRobotImageFromFile: (file: File) => Promise<void>;
+  declare setRobotImageEnabled: (enabled: boolean) => void;
+  declare isRobotImageEnabled: () => boolean;
+  declare isRobotImageReady: () => boolean;
+  declare getRobotImagePath: () => string | null;
+  declare setRobotImagePath: (path: string | null) => void;
+  declare getRobotImageDataUrl: () => string | null;
+  declare setRobotImageDataUrl: (dataUrl: string | null) => void;
+  declare getRobotImageTransform: () => Readonly<RobotImageTransform>;
+  declare setRobotImageTransform: (transform: Partial<RobotImageTransform>) => void;
+  declare handleWheel: (event: WheelEvent) => void;
+  declare beginPan: (pointerId: number, canvasX: number, canvasY: number) => void;
+  declare movePan: (canvasX: number, canvasY: number, options?: { onStart?: () => void }) => boolean;
+  declare endPan: (pointerId?: number | null) => boolean;
+  declare isPanning: () => boolean;
+  declare getSuppressNextClick: () => boolean;
+  declare consumeSuppressNextClick: () => void;
+  declare setBounds: (bounds: FieldBounds) => void;
+
+  constructor(canvas: HTMLCanvasElement) {
+  this.canvas = canvas;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("MotionView requires a 2D field canvas context.");
+  const ctx: CanvasRenderingContext2D = context;
+  this.ctx = ctx;
   let bounds = { ...FIELD_BOUNDS_IN };
   let scale = 1;
   let offsetXpx = 0;
@@ -144,7 +100,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
   let suppressNextClick = false;
   let viewingLayer: ViewingFieldLayer | null = null;
   let planningLayer: PlanningFieldLayer | null = null;
-  const sizes = new FieldSizeScaler({
+  const sizes = this.sizes = new FieldSizeScaler({
     getScale: () => scale,
     getViewZoom: () => viewZoom,
   });
@@ -305,34 +261,13 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
     ctx.stroke();
   }
 
-  function drawPath() {
-    const length = viewingLayer?.pathLength ?? 0;
-    if (length < 2) return;
-    for (let i = 1; i < length; i += 1) {
-      const a = viewingLayer?.pathPoseAt(i - 1) ?? null;
-      const b = viewingLayer?.pathPoseAt(i) ?? null;
-      if (!a || !b) continue;
-      const pa = worldToScreen(a.x, a.y);
-      const pb = worldToScreen(b.x, b.y);
-      const grad = ctx.createLinearGradient(pa.x, pa.y, pb.x, pb.y);
-      grad.addColorStop(0, deps.heatColorFromNorm(a.speed_norm ?? 0));
-      grad.addColorStop(1, deps.heatColorFromNorm(b.speed_norm ?? 0));
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = sizes.screen({ width: 2, height: 2 }).width;
-      ctx.beginPath();
-      ctx.moveTo(pa.x, pa.y);
-      ctx.lineTo(pb.x, pb.y);
-      ctx.stroke();
-    }
-  }
-
   function drawRobot(pose: FieldPose | null, alpha = 1.0) {
     if (!pose) return;
-    const { w: wIn, h: hIn } = deps.getRobotDimensions();
+    const { w: wIn, h: hIn } = self.#robotDimensions;
     const center = worldToScreen(pose.x, pose.y);
     const wPx = wIn * scale;
     const hPx = hIn * scale;
-    const thetaDeg = deps.fieldHeadingToCanvasRotationDeg(pose.theta ?? 0);
+    const thetaDeg = (pose.theta ?? 0) + fieldRotationDeg - 90;
     const thetaRad = thetaDeg * Math.PI / 180;
 
     ctx.save();
@@ -395,7 +330,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
     drawField();
     drawAxes();
     if (getMode() === "viewing") {
-      drawPath();
+      viewingLayer?.drawPath();
       viewingLayer?.drawOverlay();
       if (planningLayer?.overlayVisible) planningLayer.drawOverlay(true);
       const pose = viewingLayer?.currentPose() ?? null;
@@ -434,26 +369,27 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
       robotImg = img;
       robotImgOk = true;
       robotImgLoadTried = true;
-      deps.onRobotImageAvailabilityChanged?.(true);
+      self.events.robotImageAvailabilityChanged.emit({ available: true });
       requestDrawAll();
     };
     img.onerror = () => {
       setStatus("Failed to load saved robot image.");
       robotImg = null;
       robotImgOk = false;
-      deps.onRobotImageAvailabilityChanged?.(false);
+      self.events.robotImageAvailabilityChanged.emit({ available: false });
     };
     img.src = dataUrl;
   }
 
-  const renderer: FieldRenderer = {
+  const self = this;
+  const renderer = Object.assign(this, {
     canvas,
     ctx,
     sizes,
-    registerViewingLayer(layer) {
+    registerViewingLayer(layer: ViewingFieldLayer) {
       viewingLayer = layer;
     },
-    registerPlanningLayer(layer) {
+    registerPlanningLayer(layer: PlanningFieldLayer) {
       planningLayer = layer;
     },
     draw,
@@ -484,7 +420,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
       viewPanYpx = 0;
       renderer.updateFieldLayout(false);
     },
-    centerOnWorld(x, y) {
+    centerOnWorld(x: number, y: number) {
       const rect = canvas.getBoundingClientRect();
       const cx = rect.width / 2;
       const cy = rect.height / 2;
@@ -510,12 +446,12 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
     hasFieldImage() {
       return !!fieldImg;
     },
-    setFieldRotationDeg(deg) {
+    setFieldRotationDeg(deg: number) {
       fieldRotationDeg = normalizeFieldRotation(deg);
       fieldRotationRad = fieldRotationDeg * Math.PI / 180;
       requestDrawAll();
     },
-    async loadFieldImage(fieldKey) {
+    async loadFieldImage(fieldKey: string) {
       if (!fieldKey) {
         fieldImg = null;
         draw();
@@ -546,7 +482,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
         setStatus(`Could not load field image: ${fieldKey}`);
       };
       img.src = imgSrc;
-      await deps.onFieldImageLoaded?.(fieldKey);
+      self.events.fieldImageLoaded.emit({ fieldKey });
     },
     loadRobotImage() {
       if (robotImgLoadTried) return;
@@ -555,17 +491,17 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
       img.onload = () => {
         robotImg = img;
         robotImgOk = true;
-        deps.onRobotImageAvailabilityChanged?.(true);
+        self.events.robotImageAvailabilityChanged.emit({ available: true });
         draw();
       };
       img.onerror = () => {
         robotImg = null;
         robotImgOk = false;
-        deps.onRobotImageAvailabilityChanged?.(false);
+        self.events.robotImageAvailabilityChanged.emit({ available: false });
         draw();
       };
     },
-    async loadRobotImageFromPath(path) {
+    async loadRobotImageFromPath(path: string | null) {
       if (!path) return;
       try {
         const dataUrl = await readImageData(path);
@@ -576,7 +512,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
             robotImg = img;
             robotImgOk = true;
             robotImgLoadTried = true;
-            deps.onRobotImageAvailabilityChanged?.(true);
+            self.events.robotImageAvailabilityChanged.emit({ available: true });
             requestDrawAll();
             resolve();
           };
@@ -589,7 +525,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
       }
     },
     loadRobotImageFromDataUrl,
-    async loadRobotImageFromFile(file) {
+    async loadRobotImageFromFile(file: File) {
       if (!file.type.startsWith("image/")) {
         alert("Please select an image file");
         return;
@@ -607,7 +543,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
             robotImgOk = true;
             robotImgLoadTried = true;
             robotImageDataUrl = dataUrl;
-            deps.onRobotImageAvailabilityChanged?.(true);
+            self.events.robotImageAvailabilityChanged.emit({ available: true });
             draw();
             resolve();
           };
@@ -615,7 +551,7 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
             setStatus("Failed to load uploaded robot image.");
             robotImg = null;
             robotImgOk = false;
-            deps.onRobotImageAvailabilityChanged?.(false);
+            self.events.robotImageAvailabilityChanged.emit({ available: false });
             reject(new Error("failed to load uploaded robot image"));
           };
           img.src = dataUrl;
@@ -635,9 +571,9 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
         reader.readAsDataURL(file);
       });
     },
-    setRobotImageEnabled(enabled) {
+    setRobotImageEnabled(enabled: boolean) {
       robotImageEnabled = enabled;
-      deps.onRobotImageAvailabilityChanged?.(robotImageEnabled && robotImgOk);
+      self.events.robotImageAvailabilityChanged.emit({ available: robotImageEnabled && robotImgOk });
       if (robotImageEnabled && !robotImgOk) {
         if (robotImageDataUrl) loadRobotImageFromDataUrl(robotImageDataUrl);
         else if (robotImagePath) void renderer.loadRobotImageFromPath(robotImagePath);
@@ -653,26 +589,26 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
     getRobotImagePath() {
       return robotImagePath;
     },
-    setRobotImagePath(path) {
+    setRobotImagePath(path: string | null) {
       robotImagePath = path;
     },
     getRobotImageDataUrl() {
       return robotImageDataUrl;
     },
-    setRobotImageDataUrl(dataUrl) {
+    setRobotImageDataUrl(dataUrl: string | null) {
       robotImageDataUrl = dataUrl;
     },
     getRobotImageTransform() {
       return robotImgTx;
     },
-    setRobotImageTransform(transform) {
+    setRobotImageTransform(transform: Partial<RobotImageTransform>) {
       if (transform.scale != null) robotImgTx.scale = clamp(Number(transform.scale) || 1, 0.05, 20);
       if (transform.offXIn != null) robotImgTx.offXIn = Number(transform.offXIn) || 0;
       if (transform.offYIn != null) robotImgTx.offYIn = Number(transform.offYIn) || 0;
       if (transform.rotDeg != null) robotImgTx.rotDeg = Number(transform.rotDeg) || 0;
       if (transform.alpha != null) robotImgTx.alpha = clamp(Number(transform.alpha) || 1, 0, 1);
     },
-    handleWheel(event) {
+    handleWheel(event: WheelEvent) {
       event.preventDefault();
       const rect = canvas.getBoundingClientRect();
       const mx = event.clientX - rect.left;
@@ -690,14 +626,14 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
       clampViewPanToVisibleMargin();
       requestDrawAll();
     },
-    beginPan(pointerId, canvasX, canvasY) {
+    beginPan(pointerId: number, canvasX: number, canvasY: number) {
       panArmed = true;
       isPanActive = false;
       suppressNextClick = false;
       panPointerId = pointerId;
       panStart = { x: canvasX, y: canvasY, panX: viewPanXpx, panY: viewPanYpx };
     },
-    movePan(canvasX, canvasY, options = {}) {
+    movePan(canvasX: number, canvasY: number, options: { onStart?: () => void } = {}) {
       if (!panArmed) return false;
       const dx = canvasX - panStart.x;
       const dy = canvasY - panStart.y;
@@ -739,11 +675,11 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
     consumeSuppressNextClick() {
       suppressNextClick = false;
     },
-    setBounds(nextBounds) {
+    setBounds(nextBounds: FieldBounds) {
       bounds = { ...nextBounds };
       computeTransform();
     },
-  };
+  });
 
   configureFieldTransform({
     worldToScreen,
@@ -754,5 +690,13 @@ export function createFieldRenderer(deps: FieldRendererDependencies): FieldRende
     getFieldBounds: () => bounds,
   });
 
-  return renderer;
+  }
+
+  setRobotDimensions(dimensions: Readonly<RobotDimensions>): void {
+    const w = Number(dimensions.w);
+    const h = Number(dimensions.h);
+    if (Number.isFinite(w) && w > 0) this.#robotDimensions.w = w;
+    if (Number.isFinite(h) && h > 0) this.#robotDimensions.h = h;
+    requestDrawAll();
+  }
 }

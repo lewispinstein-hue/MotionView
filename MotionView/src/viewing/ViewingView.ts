@@ -1,4 +1,4 @@
-import type { FieldRenderer } from "../render/createFieldRenderer";
+import type { FieldRenderer } from "../render/field";
 import { requestDrawAll } from "../render/renderScheduler";
 import type { ViewingDom } from "./ViewingDom";
 import type { ViewingFeature } from "./ViewingFeature";

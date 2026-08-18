@@ -5,7 +5,7 @@ import { planningTelemetry } from "../telemetry/createTelemetry";
 import type { PlanningDom } from "./PlanningDom";
 import type { PlanningFeature } from "./PlanningFeature";
 import { generatePlanningCode } from "./planningCode";
-import { bindModalBackdropDismissal } from "./modalDismissal";
+import { bindModalBackdropDismissal } from "../app/dialogs/modalDismissal";
 
 export type PlanningCodeExportTarget = "downloads" | "desktop" | "documents" | "project" | "custom";
 

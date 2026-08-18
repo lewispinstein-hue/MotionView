@@ -1,4 +1,4 @@
-import { TypedEvent } from "./typedEvent";
+import { TypedEvent } from "../typedEvent";
 
 export type TopBarActionRequestedEvent =
   | { readonly kind: "file-selected"; readonly file: File | null; readonly input: HTMLInputElement }

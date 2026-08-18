@@ -1,5 +1,5 @@
 import { getMode } from "../../app/modeController";
-import type { FieldRenderer } from "../../render/createFieldRenderer";
+import type { FieldRenderer } from "../../render/field";
 import type { ViewingView } from "../ViewingView";
 
 const COLLAPSE_SIDEBAR_PX = 282;

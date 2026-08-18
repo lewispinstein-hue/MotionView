@@ -1,4 +1,5 @@
 import { getMode } from "../app/modeController";
+import { isTypingTarget, matchesShortcut, VIEWING_SHORTCUTS } from "../app/input";
 import { setStatus } from "../app/status";
 import type { ViewingFeature } from "./ViewingFeature";
 import type { ViewingView } from "./ViewingView";
@@ -21,25 +22,23 @@ export class ViewingInput {
   }
 
   handleKeydown(event: KeyboardEvent): boolean {
-    if (getMode() !== "viewing" || event.defaultPrevented || this.isTypingTarget(event.target)) return false;
-    if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
-      if (event.key === "t" || event.key === "T") {
-        event.preventDefault();
-        this.view.toggleFloatingInfo();
-        return true;
-      }
-      if (event.key === "g" || event.key === "G") {
-        event.preventDefault();
-        this.view.toggleWatchGraph();
-        return true;
-      }
+    if (getMode() !== "viewing" || event.defaultPrevented || isTypingTarget(event.target)) return false;
+    if (matchesShortcut(event, VIEWING_SHORTCUTS.floatingInfo)) {
+      event.preventDefault();
+      this.view.toggleFloatingInfo();
+      return true;
     }
-    if (!event.metaKey && !event.ctrlKey && !event.altKey && event.shiftKey && (event.key === "n" || event.key === "N")) {
+    if (matchesShortcut(event, VIEWING_SHORTCUTS.watchGraph)) {
+      event.preventDefault();
+      this.view.toggleWatchGraph();
+      return true;
+    }
+    if (matchesShortcut(event, VIEWING_SHORTCUTS.floatingWatch)) {
       event.preventDefault();
       this.view.openFloatingWatch();
       return true;
     }
-    if (event.key === "Escape" && this.viewing.navigation.selectedWaypointId != null) {
+    if (matchesShortcut(event, VIEWING_SHORTCUTS.clearDetails) && this.viewing.navigation.selectedWaypointId != null) {
       event.preventDefault();
       this.view.clearWaypointSelection();
       return true;
@@ -47,35 +46,29 @@ export class ViewingInput {
     if (!this.viewing.data.hasData) return false;
     const { navigation, playback } = this.viewing;
 
-    if (event.code === "Space" && navigation.liveConnected) {
+    if (matchesShortcut(event, VIEWING_SHORTCUTS.playback) && navigation.liveConnected) {
       event.preventDefault();
       navigation.setAutoFollow(!navigation.autoFollow);
       setStatus(`Live View: Auto-follow head: ${navigation.autoFollow ? "ON" : "OFF"} (Space)`);
       return true;
     }
 
-    if (event.code === "Space") {
+    if (matchesShortcut(event, VIEWING_SHORTCUTS.playback)) {
       event.preventDefault();
       playback.toggle();
       return true;
     }
 
-    if (event.code === "ArrowLeft" || event.code === "ArrowRight") {
+    const previous = matchesShortcut(event, VIEWING_SHORTCUTS.previousPose);
+    if (previous || matchesShortcut(event, VIEWING_SHORTCUTS.nextPose)) {
       event.preventDefault();
       playback.pause();
       navigation.clearTrackLock();
       navigation.setTrackHover(null);
-      navigation.movePoseBy(event.code === "ArrowLeft" ? -1 : 1);
+      navigation.movePoseBy(previous ? -1 : 1);
       return true;
     }
 
     return false;
-  }
-
-  private isTypingTarget(target: EventTarget | null): boolean {
-    return target instanceof HTMLElement
-      && (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable)
-      && target.isConnected
-      && target.closest("[hidden]") == null;
   }
 }

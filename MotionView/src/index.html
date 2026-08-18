@@ -123,75 +123,7 @@
         <div id="keybindsTitle" style="font-weight:900;font-size:20px">Keybinds</div>
         <button id="btnKeybindsClose" class="iconBtn" title="Close">✕</button>
       </div>
-      <div class="modalBody">
-        <div class="keybindSection">
-          <div class="keybindHeader">Global</div>
-          <div class="keybindAction" style="padding-bottom: 8px;">These
-            keybinds work in any mode<br></div>
-          <div class="keybindRow"><span class="keybindKeys">F</span><span class="keybindAction">Fit/reset field
-              position</span></div>
-          <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl +
-              1</span><span class="keybindAction">Switch to Viewing
-              mode</span></div>
-          <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl +
-              2</span><span class="keybindAction">Switch to Planning
-              mode</span></div>
-          <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + Shift +
-              K</span><span class="keybindAction">Clear everything (field +
-              plan)</span></div>
-          <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + Shift +
-              B</span><span class="keybindAction">Toggle right sidebar</span></div>
-          <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl +
-              M</span><span class="keybindAction">Toggle timeline</span></div>
-          <div class="keybindRow"><span class="keybindKeys">T</span><span class="keybindAction">Toggle Floating Info
-              panel</span></div>
-        </div>
-        <div class="keybindSection" style="padding-bottom: 8px;">
-          <div class="keybindHeader"><br>Viewing</div>
-          <div class="keybindAction">These keybinds work in Viewing
-            mode<br></div>
-          <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl +
-              O</span><span class="keybindAction">Import a run</span></div>
-          <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl +
-              S</span><span class="keybindAction">Start/stop live streaming</span></div>
-          <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl +
-              R</span><span class="keybindAction">Refresh & sync livestream (if streaming)</span></div>
-          <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl +
-              B</span><span class="keybindAction">Toggle left sidebar</span></div>
-          <div class="keybindRow"><span class="keybindKeys">P</span><span class="keybindAction">Toggle Planned
-              Overlay</span></div>
-          <div class="keybindRow"><span class="keybindKeys">G</span><span class="keybindAction">Toggle Floating
-              Graph</span></div>
-          <div class="keybindRow"><span class="keybindKeys">Space</span><span class="keybindAction">Play/Pause playback
-              (or toggle Auto‑follow
-              Head when live‑connected)</span></div>
-          <div class="keybindRow"><span class="keybindKeys">← / →</span><span class="keybindAction">Step to
-              previous/next pose</span></div>
-        </div>
-        <div class="keybindSection" style="padding-bottom: 8px;">
-          <div class="keybindHeader"><br>Planning</div>
-          <div class="keybindAction">These keybinds work in Planning
-            mode<br></div>
-          <div class="keybindRow"><span class="keybindKeys">Space</span><span class="keybindAction">Play/Pause plan
-              playback</span></div>
-          <div class="keybindRow"><span class="keybindKeys">Delete /
-              Backspace</span><span class="keybindAction">Delete selected
-              waypoint(s)</span></div>
-          <div class="keybindRow"><span class="keybindKeys">← / → / ↑ /
-              ↓</span><span class="keybindAction">Nudge selected
-              waypoint(s)</span></div>
-          <div class="keybindRow"><span class="keybindKeys">Shift +
-              ←/→/↑/↓</span><span class="keybindAction">Nudge selected
-              waypoint(s) by 5× normal</span></div>
-          <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl +
-              Z</span><span class="keybindAction">Undo</span></div>
-          <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl + Shift +
-              Z</span><span class="keybindAction">Redo</span></div>
-          <div class="keybindRow"><span class="keybindKeys">Cmd/Ctrl +
-              K</span><span class="keybindAction">Clear Planned
-              path</span></div>
-        </div>
-      </div>
+      <div id="keybindsContent" class="modalBody"></div>
     </div>
   </div>
 

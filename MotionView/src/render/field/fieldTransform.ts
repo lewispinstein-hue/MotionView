@@ -1,4 +1,4 @@
-import type { FieldBounds, ScreenPoint } from "./createFieldRenderer";
+import type { FieldBounds, ScreenPoint } from "./fieldTypes";
 
 export interface FieldTransformAccess {
   worldToScreen(xIn: number, yIn: number): ScreenPoint;

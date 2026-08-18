@@ -1,4 +1,5 @@
-import type { FieldPose, FieldRenderer, ViewingFieldLayer } from "../../render/createFieldRenderer";
+import type { FieldPose, ViewingFieldLayer } from "../../render/field/fieldTypes";
+import type { FieldRenderer } from "../../render/field/FieldRenderer";
 import { getMode } from "../../app/modeController";
 import type { ViewingFieldDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
@@ -9,6 +10,7 @@ import type { WaypointListView } from "./WaypointListView";
 import type { WatchTooltipView } from "./WatchTooltipView";
 import { watchTooltipRows } from "./watchTooltipRows";
 import { formatDistanceFromInches } from "../../shared/units";
+import { heatColorFromNorm } from "./viewingColors";
 
 const WATCH_RADIUS = 4.2;
 const WATCH_ACTIVE_RADIUS = 5.6;
@@ -58,16 +60,32 @@ export class ViewingFieldView implements ViewingFieldLayer {
     this.dom.canvas.addEventListener("click", (event) => this.handleClick(event));
   }
 
-  get pathLength(): number {
-    return this.viewing.data.poses.length;
-  }
-
-  pathPoseAt(index: number): FieldPose | null {
-    return this.viewing.projection.poseAt(index);
-  }
-
   currentPose(): FieldPose | null {
     return this.viewing.playback.currentDisplayPose();
+  }
+
+  drawPath(): void {
+    const poses = this.viewing.data.poses;
+    if (poses.length < 2) return;
+    const context = this.field.ctx;
+    context.save();
+    context.lineWidth = this.field.sizes.screen({ width: 2, height: 2 }).width;
+    for (let index = 1; index < poses.length; index += 1) {
+      const previous = poses[index - 1];
+      const pose = poses[index];
+      if (!previous || !pose) continue;
+      const start = this.field.worldToScreen(previous.x, previous.y);
+      const end = this.field.worldToScreen(pose.x, pose.y);
+      const gradient = context.createLinearGradient(start.x, start.y, end.x, end.y);
+      gradient.addColorStop(0, heatColorFromNorm(previous.speed_norm ?? 0));
+      gradient.addColorStop(1, heatColorFromNorm(pose.speed_norm ?? 0));
+      context.strokeStyle = gradient;
+      context.beginPath();
+      context.moveTo(start.x, start.y);
+      context.lineTo(end.x, end.y);
+      context.stroke();
+    }
+    context.restore();
   }
 
   drawOverlay(): void {

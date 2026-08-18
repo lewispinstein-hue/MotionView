@@ -1,5 +1,5 @@
 import type { PlanningDom } from "./PlanningDom";
-import { bindModalBackdropDismissal } from "./modalDismissal";
+import { bindModalBackdropDismissal } from "../app/dialogs/modalDismissal";
 
 export interface PlanningConfirmOptions {
   readonly title?: string;

@@ -1,7 +1,7 @@
-import type { FieldRenderer } from "../render/createFieldRenderer";
-import type { FieldOption } from "../render/fieldImages";
-import type { MotionViewApp } from "./MotionViewApp";
-import type { AppMode } from "./modeController";
+import type { FieldRenderer } from "../../render/field";
+import type { FieldOption } from "../../render/field/fieldImages";
+import type { MotionViewApp } from "../MotionViewApp";
+import type { AppMode } from "../modeController";
 import type { TopBarDom } from "./TopBarDom";
 import { TopBarEvents } from "./topBarEvents";
 

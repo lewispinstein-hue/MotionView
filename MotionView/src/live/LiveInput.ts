@@ -1,4 +1,5 @@
 import { getMode } from "../app/modeController";
+import { isTypingTarget, LIVE_SHORTCUTS, matchesShortcut } from "../app/input";
 import type { LiveFeature } from "./LiveFeature";
 
 export class LiveInput {
@@ -13,18 +14,13 @@ export class LiveInput {
   }
 
   handleKeydown(event: KeyboardEvent): boolean {
-    if (getMode() !== "viewing" || !event.metaKey && !event.ctrlKey || event.shiftKey || event.altKey) return false;
-    const target = event.target;
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable)) {
-      return false;
-    }
-    const key = event.key.toLowerCase();
-    if (key === "r") {
+    if (getMode() !== "viewing" || event.defaultPrevented || isTypingTarget(event.target)) return false;
+    if (matchesShortcut(event, LIVE_SHORTCUTS.refresh)) {
       event.preventDefault();
       this.live.stream.refreshNow();
       return true;
     }
-    if (key === "s") {
+    if (matchesShortcut(event, LIVE_SHORTCUTS.toggleStreaming)) {
       event.preventDefault();
       if (this.live.stream.streaming) void this.live.stop();
       else void this.live.start();

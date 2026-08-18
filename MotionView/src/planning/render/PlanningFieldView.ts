@@ -1,5 +1,5 @@
 import { getMode } from "../../app/modeController";
-import type { FieldRenderer } from "../../render/createFieldRenderer";
+import type { FieldRenderer } from "../../render/field";
 import { requestDrawAll } from "../../render/renderScheduler";
 import type { PlanningFeature } from "../PlanningFeature";
 import type { PlanningDom } from "../PlanningDom";

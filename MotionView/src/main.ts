@@ -6,12 +6,13 @@ import demoRouteUrl from "./assets/demo/getting-started-route.json?url";
 import changeObjectColorIconUrl from "./assets/svg/planning/changeObjectColor.svg?url";
 import removePlanningObjectIconUrl from "./assets/svg/planning/removePlanningObject.svg?url";
 import { initializeMotionViewApp } from "./app/appRuntime";
-import { TopBarDom } from "./app/TopBarDom";
-import { TopBarView } from "./app/TopBarView";
+import { HelpDom, HelpView } from "./app/help";
+import { AppCommands, AppInput } from "./app/input";
+import { TopBarDom, TopBarView } from "./app/topBar";
 import { getMode, setMode, subscribeMode } from "./app/modeController";
 import { setStatus } from "./app/status";
 import { LiveDom, LiveInput, LiveView } from "./live";
-import { createFieldRenderer, FIELD_BOUNDS_IN } from "./render/createFieldRenderer";
+import { FieldRenderer, FIELD_BOUNDS_IN } from "./render/field";
 import { configureRenderScheduler, registerPlanningRenderLayer, registerViewingRenderLayer, requestDrawAll } from "./render/renderScheduler";
 import {
   currentUnitsToInches,
@@ -27,7 +28,7 @@ import {
   getValidFieldKey as getValidFieldKeyForOptions,
   getVisibleFieldImages as getVisibleFieldImagesForOptions,
   normalizeFieldCompetition,
-} from "./render/fieldImages";
+} from "./render/field/fieldImages";
 import {
   getUtf8ByteLength,
   serializePlanNode,
@@ -97,15 +98,9 @@ let persistedAppState = null;
 let settingsLoaded = false;
 
 const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
 
 const btnFile = document.getElementById("btnFile");
 const btnTogglePlanOverlay = document.getElementById("btnTogglePlanOverlay");
-const helpModal = document.getElementById("helpModal");
-const btnHelpClose = document.getElementById("btnHelpClose");
-const btnHelpKeybinds = document.getElementById("btnHelpKeybinds");
-const keybindsModal = document.getElementById("keybindsModal");
-const btnKeybindsClose = document.getElementById("btnKeybindsClose");
 function parseLayoutNumber(value) {
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
@@ -181,11 +176,6 @@ const settingsPlanMoveStep = document.getElementById("settingsPlanMoveStep");
 const settingsPlanSnapStep = document.getElementById("settingsPlanSnapStep");
 const settingsPlanThetaSnapStep = document.getElementById("settingsPlanThetaSnapStep");
 const settingsPlanLimitBounds = document.getElementById("settingsPlanLimitBounds");
-const versionDisplayEl = document.getElementById("versionDisplay");
-if (versionDisplayEl) versionDisplayEl.textContent = app.version;
-app.core.events.versionChanged.subscribe(({ version }) => {
-  if (versionDisplayEl) versionDisplayEl.textContent = version;
-});
 
 
 const MAX_OFFSET_THETA = 359;
@@ -221,40 +211,21 @@ let viewingInput;
 
 let pendingExportRequest = null;
 
-const fieldRenderer = createFieldRenderer({
-  canvas,
-  ctx,
-  getRobotDimensions: () => robotDimsInches(),
-  fieldHeadingToCanvasRotationDeg,
-  heatColorFromNorm,
-  onRobotImageAvailabilityChanged: (available) => {
+const fieldRenderer = new FieldRenderer(canvas);
+fieldRenderer.setRobotDimensions(robotDimsInches());
+fieldRenderer.events.robotImageAvailabilityChanged.subscribe(({ available }) => {
     if (robotImgControlsEl) robotImgControlsEl.hidden = !available;
     if (settingsRobotImgControls) settingsRobotImgControls.hidden = !(fieldRenderer.isRobotImageEnabled() && available);
-  },
-  onFieldImageLoaded: (field) => {
+});
+fieldRenderer.events.fieldImageLoaded.subscribe(({ fieldKey }) => {
     syncPlanningProjectionConfiguration();
-    viewingTelemetry.fieldImageLoaded({ field });
-  },
+    viewingTelemetry.fieldImageLoaded({ field: fieldKey });
 });
 
 const topBarDom = TopBarDom.from(document);
 const topBar = new TopBarView(app, fieldRenderer, topBarDom);
-topBar.events.actionRequested.subscribe((action) => {
-  if (action.kind === "file-selected") {
-    void openFile(action.file, action.input);
-  } else if (action.kind === "robot-image-selected") {
-    void handleRobotImageFile(action.file, action.input);
-  } else if (action.kind === "clear-requested") {
-    handleClearFieldClick(action.clearAll);
-  } else if (action.kind === "settings-requested") {
-    openSettings();
-  } else if (action.kind === "help-requested") {
-    openHelp();
-  }
-});
-topBar.events.settingsChanged.subscribe(() => {
-  void saveSettings();
-});
+const helpView = new HelpView(app, HelpDom.from(document));
+helpView.bind();
 
 const planningDom = PlanningDom.from(document);
 const planningDialogs = new PlanningDialogs(planningDom);
@@ -308,10 +279,6 @@ function syncPlanningProjectionConfiguration() {
     positionSnap: positionSnapValue > 0 ? distanceSettingToInches(positionSnapValue) : 0,
     thetaSnap: thetaSnapValue > 0 ? thetaSnapValue : 0,
   });
-}
-
-function fieldHeadingToCanvasRotationDeg(thetaField) {
-  return normalizeDeg(thetaField + fieldRenderer.getFieldRotationDeg() - 90);
 }
 
 function hasImportedPlanningWaypoints(obj) {
@@ -602,45 +569,6 @@ function getMinMaxSpeed() {
   return { minV, maxV };
 }
 
-function heatColorFromNorm(n) {
-  const t0 = clamp(n, 0, 1);
-
-  // If vel is ±127 scaled and n was made from it, then:
-  // vel<=5 corresponds to n <= 5/127.
-  const lowCut = 5 / 127;
-
-  // Force "dark red" for very low speeds
-  if (t0 <= lowCut) {
-    // dark red, slightly transparent
-    return `rgba(120, 10, 10, 0.95)`;
-  }
-
-  // 2) Remap (lowCut..1) -> (0..1) so everything above 5 has visible range
-  const t = (t0 - lowCut) / (1 - lowCut); // 0..1
-  const u = 1 - t; // u=1 red, u=0 green
-
-  let r, g, b;
-
-  if (u <= 0.15) {
-    const a = u / 0.33;
-    r = 40 + a * (255 - 40);
-    g = 220;
-    b = 80;
-  } else if (u <= 0.66) {
-    const a = (u - 0.33) / 0.33;
-    r = 255;
-    g = 220 - a * 140;
-    b = 80 - a * 40;
-  } else {
-    const a = (u - 0.66) / 0.34;
-    r = 255;
-    g = 80 - a * 70;
-    b = 40 - a * 30;
-  }
-
-  return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},0.88)`;
-}
-
 function formatLogArgs(args) {
   return args.map((a) => {
     if (typeof a === "string") return a;
@@ -733,6 +661,18 @@ const viewingLayout = new ViewingLayoutView(document, fieldRenderer, viewingView
 const planningLayout = new PlanningLayoutView(document, fieldRenderer, planningView, () => void saveSettings());
 viewingLayout.bind();
 planningLayout.bind();
+const appCommands = new AppCommands(app, fieldRenderer, topBar, planningDialogs, planningLayout, viewingLayout, btnTogglePlanOverlay);
+const appInput = new AppInput(appCommands);
+appCommands.bind();
+appInput.bind();
+topBar.events.actionRequested.subscribe((action) => {
+  if (action.kind === "file-selected") void openFile(action.file, action.input);
+  else if (action.kind === "robot-image-selected") void handleRobotImageFile(action.file, action.input);
+  else if (action.kind === "clear-requested") void (action.clearAll ? appCommands.clearAll() : appCommands.clearCurrent());
+  else if (action.kind === "settings-requested") openSettings();
+  else if (action.kind === "help-requested") helpView.open();
+});
+topBar.events.settingsChanged.subscribe(() => { void saveSettings(); });
 
 app.live.events.connectionChanged.subscribe(() => {
   updateExportButtonAvailability();
@@ -749,7 +689,6 @@ app.live.events.preferencesChanged.subscribe(() => {
   if (settingsLoaded && app.core.tauri.isTauriRuntime()) void saveSettings();
 });
 
-document.addEventListener("keydown", handleGlobalKeydown);
 planningView.render();
 
 
@@ -877,64 +816,6 @@ async function openFile(file, inputEl) {
 // -------- controls wiring --------
 btnFile.addEventListener("click", () => topBar.openFilePicker());
 
-
-// Help modal
-function openHelp() {
-  if (!helpModal) {
-    console.warn("helpModal not found");
-    return;
-  }
-  helpModal.removeAttribute("hidden");
-  helpModal.style.display = "flex";
-}
-function closeHelp() {
-  if (!helpModal) return;
-  helpModal.setAttribute("hidden", "");
-  helpModal.style.display = "none";
-}
-function openKeybinds() {
-  if (!keybindsModal) return;
-  keybindsModal.removeAttribute("hidden");
-  keybindsModal.style.display = "flex";
-}
-function closeKeybinds() {
-  if (!keybindsModal) return;
-  keybindsModal.setAttribute("hidden", "");
-  keybindsModal.style.display = "none";
-}
-if (btnHelpClose) {
-  btnHelpClose.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    closeHelp();
-  });
-} else console.warn("btnHelpClose not found");
-
-if (btnHelpKeybinds) {
-  btnHelpKeybinds.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    openKeybinds();
-  });
-}
-if (btnKeybindsClose) {
-  btnKeybindsClose.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    closeKeybinds();
-  });
-}
-if (helpModal) {
-  helpModal.addEventListener("click", (e) => {
-    if (e.target && (e.target.classList.contains("modalBackdrop"))) closeHelp();
-  });
-} else console.warn("helpModal not found");
-
-if (keybindsModal) {
-  keybindsModal.addEventListener("click", (e) => {
-    if (e.target && (e.target.classList.contains("modalBackdrop"))) closeKeybinds();
-  });
-}
 
 // Settings modal and JSON persistence
 async function loadSettings() {
@@ -1190,8 +1071,8 @@ function syncSettingsToMain() {
   }
   if (settingsRobotH && robotHEl && settingsRobotH.value !== robotHEl.value) {
     robotHEl.value = settingsRobotH.value;
-    requestDrawAll();
   }
+  fieldRenderer.setRobotDimensions(robotDimsInches());
   if (settingsOffX && offXEl && settingsOffX.value !== offXEl.value) {
     offXEl.value = settingsOffX.value;
     updateOffsetsFromInputs();
@@ -1687,6 +1568,7 @@ async function applyImportedRunSettings() {
   if (robotDimensions) {
     if (robotWEl) robotWEl.value = String(toNumMaybe(robotDimensions.Width) ?? robotWEl.value ?? 12);
     if (robotHEl) robotHEl.value = String(toNumMaybe(robotDimensions.Height) ?? robotHEl.value ?? 12);
+    fieldRenderer.setRobotDimensions(robotDimsInches());
   }
 
   const speedNorm = (viewing.SpeedNorm && typeof viewing.SpeedNorm === "object") ? viewing.SpeedNorm : null;
@@ -1925,7 +1807,6 @@ if (btnExportConfirm) {
         includes_viewing: includesViewing,
         export_location: pendingExportRequest.destination.kind,
         exported_chars: pendingExportRequest.json.length,
-        exported_bytes: getUtf8ByteLength(pendingExportRequest.json),
         exported_planning_template_bytes: includesPlanning ? getUtf8ByteLength(app.planning.exportTemplate) : 0,
         exported_viewing_poses: includesViewing ? app.viewing.data.poses.length : 0,
         exported_viewing_watches: includesViewing ? app.viewing.data.watches.length : 0,
@@ -2025,12 +1906,10 @@ if (routeInfoModal) {
 // Global Escape handler: close modals and prevent window-level behavior
 window.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  const helpOpen = helpModal && helpModal.style.display !== "none" && !helpModal.hasAttribute("hidden");
   const settingsOpen = settingsModal && settingsModal.style.display !== "none" && !settingsModal.hasAttribute("hidden");
   const exportOpen = exportModal && exportModal.style.display !== "none" && !exportModal.hasAttribute("hidden");
   const routeInfoOpen = routeInfoModal && routeInfoModal.style.display !== "none" && !routeInfoModal.hasAttribute("hidden");
-  if (helpOpen) closeHelp();
-  else if (settingsOpen) closeSettings();
+  if (settingsOpen) closeSettings();
   else if (exportOpen) closeExportModal();
   else if (routeInfoOpen) closeRouteInfoModal();
   else if (planningDialogs.cancelOpen()) { /* Planning dialog resolved by its owner. */ }
@@ -2180,18 +2059,6 @@ if (robotImageToggle) {
   });
 }
 
-if (btnTogglePlanOverlay) {
-  btnTogglePlanOverlay.addEventListener("click", () => {
-    const visible = app.planning.toggleOverlay();
-    btnTogglePlanOverlay.classList.toggle("isOn", visible);
-    requestDrawAll();
-    viewingTelemetry.planOverlayToggled({
-      enabled: visible,
-    }).catch(err => console.error(err));
-  });
-  btnTogglePlanOverlay.classList.toggle("isOn", app.planning.overlayVisible);
-}
-
 if (unitsSelect) {
   unitsSelect.addEventListener("change", (e) => {
     if (e.target.value !== getCurrentUnits()) {
@@ -2205,13 +2072,13 @@ if (unitsSelect) {
 }
 
 robotWEl.addEventListener("input", () => {
-  requestDrawAll();
+  fieldRenderer.setRobotDimensions(robotDimsInches());
   syncMainToSettings();
   saveSettings();
 });
 
 robotHEl.addEventListener("input", () => {
-  requestDrawAll();
+  fieldRenderer.setRobotDimensions(robotDimsInches());
   syncMainToSettings();
   saveSettings();
 });
@@ -2304,137 +2171,11 @@ offThetaEl.addEventListener("input", () => {
   saveSettings();
 });
 
-function clearAllPosesAndWatches() {
-  app.viewing.clear();
-  app.live.reset();
-}
-
-async function confirmPlanningClear(message, clear): Promise<void> {
-  if (!app.planning.hasData || await planningDialogs.confirm({ message })) clear();
-}
-
-function handleClearFieldClick(clearAllModes) {
-  if (clearAllModes) {
-    // Clear everything across modes
-    const clearAll = () => {
-      clearAllPosesAndWatches();
-      app.planning.clear();
-      requestDrawAll();
-      setStatus("Cleared Field and Planned Path");
-    };
-    void confirmPlanningClear("Are you sure you want to clear the field and Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearAll);
-    return;
-  }
-
-  if (getMode() === "planning") {
-    const clearPlanOnly = () => {
-      app.planning.clear();
-      requestDrawAll();
-      setStatus("Cleared Planned Path");
-    };
-    void confirmPlanningClear("Are you sure you want to clear Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearPlanOnly);
-  } else {
-    clearAllPosesAndWatches();
-    setStatus("Cleared Field");
-  }
-}
-
-
-function handleGlobalKeydown(e) {
-  const mouseTag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
-  const isTypingTarget = (mouseTag === "input" || mouseTag === "textarea" || (e.target && e.target.isContentEditable));
-  if (isTypingTarget) return;
-
-  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
-    if (e.key === "m" || e.key === "M") {
-      e.preventDefault();
-      if (getMode() === "planning") planningLayout.toggleTimeline();
-      else viewingLayout.toggleTimeline();
-      return;
-    }
-
-    if (e.key === "b" || e.key === "B") {
-      if (getMode() !== "viewing") return;
-      e.preventDefault();
-      viewingLayout.toggleLeftSidebar();
-      return;
-    }
-
-    if (e.key === "1") {
-      e.preventDefault();
-      setMode("viewing");
-      return;
-    }
-
-    if (e.key === "2") {
-      e.preventDefault();
-      setMode("planning");
-      return;
-    }
-
-    if (e.key === "o" || e.key === "O") {
-      e.preventDefault();
-      topBar.openFilePicker();
-      return;
-    }
-
-    if (e.key === "k" || e.key === "K") {
-      e.preventDefault();
-      if (getMode() === "planning") {
-        const clearPlanOnly = () => {
-          app.planning.clear();
-          requestDrawAll();
-          setStatus("Cleared Planned Path");
-        };
-        void confirmPlanningClear("Are you sure you want to clear Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearPlanOnly);
-      } else {
-        clearAllPosesAndWatches();
-        setStatus("Cleared Field");
-      }
-      return;
-    }
-  }
-
-  if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && (e.key === "b" || e.key === "B")) {
-    e.preventDefault();
-    if (getMode() === "planning") planningLayout.toggleRightSidebar();
-    else viewingLayout.toggleRightSidebar();
-    return;
-  }
-
-  if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && (e.key === "k" || e.key === "K")) {
-    e.preventDefault();
-    // Clear everything across modes
-    const clearAll = () => {
-      clearAllPosesAndWatches();
-      app.planning.clear();
-      requestDrawAll();
-      setStatus("Cleared Field and Planned Path");
-    };
-    void confirmPlanningClear("Are you sure you want to clear the field and Planning mode? This will remove all waypoints, objects, methods, and nodes.", clearAll);
-    return;
-  }
-
-  if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-    if (e.key === "p" || e.key === "P") {
-      e.preventDefault();
-      if (getMode() === "viewing" && btnTogglePlanOverlay) btnTogglePlanOverlay.click();
-      return;
-    }
-
-  }
-
-  if (e.key === "f" || e.key === "F") {
-    e.preventDefault();
-    fieldRenderer.resetFieldPosition();
-    return;
-  }
-}
-
 sanitizeExportFilename();
 // -------- init --------
 loadFieldOptions();
 await loadSettings();
+fieldRenderer.setRobotDimensions(robotDimsInches());
 settingsLoaded = true;
 void app.live.initialize();
 syncPlanningProjectionConfiguration();
@@ -2511,14 +2252,6 @@ const setupExitHandler = async () => {
 };
 
 // Ensure modals start hidden
-if (helpModal) {
-  helpModal.setAttribute("hidden", "");
-  helpModal.style.display = "none";
-}
-if (keybindsModal) {
-  keybindsModal.setAttribute("hidden", "");
-  keybindsModal.style.display = "none";
-}
 if (settingsModal) {
   settingsModal.setAttribute("hidden", "");
   settingsModal.style.display = "none";
