@@ -43,7 +43,7 @@ MotionView's creation was inspired by other visualizers such as [Grafana](https:
 3. **Connect your Robot:** Install [MVLib](MVLib/README.md) into your PROS project to start streaming your own live data.
 
 ## Launching From Source
-Install Node.js, pnpm, Python 3, and Rust/Tauri prerequisites for your platform. Then run the repository initializer:
+Install Node.js 20 or newer, pnpm 10, Python 3, and Rust/Tauri prerequisites for your platform. An active Node.js LTS release is recommended. Then run the repository initializer:
 
 ```sh
 ./MotionView-initialize.sh
@@ -52,6 +52,8 @@ pnpm dev
 ```
 
 Use `./MotionView-initialize.sh --build-sidecars` if you also want to prebuild the Python sidecars that `pnpm dev` normally builds before launch.
+
+On Linux, if `node` fails with a `GLIBC_... not found` error, the installed Node.js binary was built for a newer glibc than your distribution provides. Update the Linux system packages together, or install a distro-compatible Node.js 20+ binary from a source such as your package manager, `nvm`, `fnm`, or Volta, then rerun the initializer. On Arch-based systems, avoid partial upgrades; use a full system upgrade instead of pulling only `nodejs`.
 
 ## Docs
 - [MotionView Docs](Docs/MotionView)

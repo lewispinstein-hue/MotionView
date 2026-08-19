@@ -8,6 +8,7 @@ VENV_DIR="$APP_DIR/.venv"
 BUILD_SIDECARS=0
 SKIP_NODE=0
 SKIP_PYTHON=0
+NODE_BIN="${NODE:-node}"
 
 usage() {
   cat <<'USAGE'
@@ -79,8 +80,30 @@ if [ "$SKIP_PYTHON" -eq 0 ] && [ -z "$PYTHON_BIN" ]; then
   fi
 fi
 
-if { [ "$SKIP_NODE" -eq 0 ] || [ "$BUILD_SIDECARS" -eq 1 ]; } && ! command_exists node; then
-  die "Node.js is required. Install Node.js, then rerun this script."
+if [ "$SKIP_NODE" -eq 0 ] || [ "$BUILD_SIDECARS" -eq 1 ]; then
+  if ! command_exists "$NODE_BIN"; then
+    die "Node.js 20 or newer is required. Install Node.js, then rerun this script."
+  fi
+
+  if ! NODE_VERSION_OUTPUT="$("$NODE_BIN" --version 2>&1)"; then
+    if printf '%s\n' "$NODE_VERSION_OUTPUT" | grep -q 'GLIBC_'; then
+      die "Node.js failed to start because its binary requires a newer glibc than this Linux system provides. Update the Linux system packages together, or install a distro-compatible Node.js 20+ binary from a source such as your package manager, nvm, fnm, or Volta, then rerun this script. Details: $NODE_VERSION_OUTPUT"
+    fi
+    die "Node.js is installed but failed to run: $NODE_VERSION_OUTPUT"
+  fi
+
+  NODE_VERSION="${NODE_VERSION_OUTPUT#v}"
+  NODE_MAJOR="${NODE_VERSION%%.*}"
+  case "$NODE_MAJOR" in
+    ''|*[!0-9]*)
+      warn "Could not parse Node.js version: $NODE_VERSION_OUTPUT"
+      ;;
+    *)
+      if [ "$NODE_MAJOR" -lt 20 ]; then
+        die "Node.js 20 or newer is required. Found $NODE_VERSION_OUTPUT."
+      fi
+      ;;
+  esac
 fi
 
 PNPM_BIN="${PNPM:-}"

@@ -3,6 +3,10 @@
   "private": true,
   "version": "1.3.0",
   "type": "module",
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "py:clean": "node scripts/clean_py.js",
     "py:build": "node scripts/build_py.js",
