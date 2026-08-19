@@ -18,13 +18,13 @@
     "tauri": "tauri"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2",
+    "@tauri-apps/cli": "^2.11.4",
     "dotenv-cli": "^11.0.0",
     "typescript": "^6.0.3",
-    "vite": "^5.4.19"
+    "vite": "^5.4.21"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/api": "^2.11.1",
     "chart.js": "^4.5.1"
   }
 }
