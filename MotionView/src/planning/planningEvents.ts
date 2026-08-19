@@ -23,6 +23,7 @@ export interface PlanningProjectionChangedEvent {
 
 export class PlanningEvents {
   readonly documentChanged = new TypedEvent<PlanningDocumentChangedEvent>();
+  readonly documentPreviewChanged = new TypedEvent<PlanningDocumentChangedEvent>();
   readonly selectionChanged = new TypedEvent<PlanningSelectionChangedEvent>();
   readonly playbackChanged = new TypedEvent<PlanningPlaybackChangedEvent>();
   readonly projectionChanged = new TypedEvent<PlanningProjectionChangedEvent>();

@@ -48,6 +48,7 @@ import {
   ViewingView,
   normalizeLogs,
   normalizePoses,
+  normalizeWaypointType,
   normalizeWatches,
   waypointEventCount,
 } from "./viewing";
@@ -751,8 +752,6 @@ function finalizeLoadedData() {
   // Sync to settings modal and save
   syncMainToSettings();
   saveSettings();
-
-  fieldRenderer.setBounds(FIELD_BOUNDS_IN);
 
   topBar.setFieldEnabled(true);
   updateExportButtonAvailability();

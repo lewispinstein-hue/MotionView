@@ -41,6 +41,9 @@ export class PlanningProjection {
         this.#nodePlacementsDirty = true;
       }
     });
+    events.documentPreviewChanged.subscribe(({ kind }) => {
+      if (kind === "route" || kind === "node") this.#nodePlacementsDirty = true;
+    });
   }
   get configuration(): Readonly<PlanningProjectionConfiguration> { return this.#configuration; }
 

@@ -22,6 +22,14 @@ export class ViewingPlayback {
     events.dataChanged.subscribe((change) => {
       if (change.kind === "replaced" || change.kind === "cleared") this.pause();
     });
+    events.navigationChanged.subscribe(({ kind }) => {
+      if (this.#playing || kind === "hover" || kind === "live-state") return;
+      const time = this.navigation.trackLockPose?.t
+        ?? this.projection.poseAt(this.navigation.selectedIndex)?.t
+        ?? null;
+      this.#timeMs = time;
+      this.#pose = this.projection.interpolatePose(time);
+    });
   }
 
   get isPlaying(): boolean { return this.#playing; }
@@ -61,6 +69,9 @@ export class ViewingPlayback {
     this.#lastWallTime = null;
     if (!this.#playing) return;
     this.#playing = false;
+    if (this.#pose && this.#timeMs != null) {
+      this.navigation.lockTrack(this.#pose, this.projection.findFloorIndex(this.#timeMs));
+    }
     this.events.playbackChanged.emit({ kind: "paused" });
   }
 

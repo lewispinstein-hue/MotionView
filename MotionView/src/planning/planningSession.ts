@@ -56,6 +56,7 @@ export class PlanningSession {
     if (this.#transaction) {
       this.#transaction.changed = true;
       this.#transaction.kind = kind;
+      this.events.documentPreviewChanged.emit({ kind });
       return;
     }
     if (before) this.pushUndoSnapshot(before);

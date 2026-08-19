@@ -3,6 +3,7 @@ import { setStatus } from "../../app/status";
 import { isTauriRuntime, readImageData, resolveResourcePath, saveRobotImage } from "../../tauri/commands";
 import { requestDrawAll } from "../renderScheduler";
 import { FieldRendererEvents } from "./FieldRendererEvents";
+import { getFieldBounds } from "./fieldImages";
 import { configureFieldTransform } from "./fieldTransform";
 import { FieldSizeScaler } from "./FieldSizeScaler";
 import type { FieldBounds, FieldPose, PlanningFieldLayer, RobotDimensions, RobotImageTransform, ScreenPoint, ViewingFieldLayer } from "./fieldTypes";
@@ -73,6 +74,7 @@ export class FieldRenderer {
   const ctx: CanvasRenderingContext2D = context;
   this.ctx = ctx;
   let bounds = { ...FIELD_BOUNDS_IN };
+  let fieldBounds = { ...FIELD_BOUNDS_IN };
   let scale = 1;
   let offsetXpx = 0;
   let offsetYpx = 0;
@@ -86,7 +88,6 @@ export class FieldRenderer {
   const robotImgTx: RobotImageTransform = { scale: 1, offXIn: 0, offYIn: 0, rotDeg: 0, alpha: 1 };
   let fieldRotationDeg = 0;
   let fieldRotationRad = 0;
-  let squareMode = true;
   let viewZoom = 1;
   let viewPanXpx = 0;
   let viewPanYpx = 0;
@@ -112,14 +113,18 @@ export class FieldRenderer {
     const worldW = (bounds.maxX - bounds.minX) || 1;
     const worldH = (bounds.maxY - bounds.minY) || 1;
 
-    baseScale = Math.min((w - pad * 2) / worldW, (h - pad * 2) / worldH);
+    const quarterTurn = fieldRotationDeg === 90 || fieldRotationDeg === 270;
+    const fitW = quarterTurn ? worldH : worldW;
+    const fitH = quarterTurn ? worldW : worldH;
+    baseScale = Math.min(
+      Math.max(1, w - pad * 2) / fitW,
+      Math.max(1, h - pad * 2) / fitH,
+    );
 
-    const side = squareMode ? Math.min(w, h) : null;
-    const vx = squareMode && side != null ? (w - side) / 2 : 0;
-    const vy = squareMode && side != null ? (h - side) / 2 : 0;
-
-    baseOffsetXpx = vx + pad - bounds.minX * baseScale;
-    baseOffsetYpx = vy + pad + bounds.maxY * baseScale;
+    const centerWorldX = (bounds.minX + bounds.maxX) * 0.5;
+    const centerWorldY = (bounds.minY + bounds.maxY) * 0.5;
+    baseOffsetXpx = w / 2 - centerWorldX * baseScale;
+    baseOffsetYpx = h / 2 + centerWorldY * baseScale;
 
     scale = baseScale * viewZoom;
     offsetXpx = baseOffsetXpx * viewZoom + viewPanXpx;
@@ -128,16 +133,7 @@ export class FieldRenderer {
 
   function canvasViewportRect() {
     const rect = canvas.getBoundingClientRect();
-    if (!squareMode) {
-      return { x: 0, y: 0, width: rect.width || 1, height: rect.height || 1 };
-    }
-    const side = Math.min(rect.width || 1, rect.height || 1);
-    return {
-      x: ((rect.width || 1) - side) / 2,
-      y: ((rect.height || 1) - side) / 2,
-      width: side,
-      height: side,
-    };
+    return { x: 0, y: 0, width: rect.width || 1, height: rect.height || 1 };
   }
 
   function canvasViewportCenter() {
@@ -409,7 +405,7 @@ export class FieldRenderer {
       canvas.style.top = "";
       canvas.style.width = "100%";
       canvas.style.height = "100%";
-      if (!preserveBounds) bounds = { ...FIELD_BOUNDS_IN };
+      if (!preserveBounds) bounds = { ...fieldBounds };
       renderer.resizeCanvas();
       computeTransform();
       requestDrawAll();
@@ -449,6 +445,7 @@ export class FieldRenderer {
     setFieldRotationDeg(deg: number) {
       fieldRotationDeg = normalizeFieldRotation(deg);
       fieldRotationRad = fieldRotationDeg * Math.PI / 180;
+      computeTransform();
       requestDrawAll();
     },
     async loadFieldImage(fieldKey: string) {
@@ -474,7 +471,14 @@ export class FieldRenderer {
       const img = new Image();
       img.onload = () => {
         fieldImg = img;
-        draw();
+        const configuredBounds = getFieldBounds(fieldKey);
+        fieldBounds = configuredBounds
+          ? { ...configuredBounds, pad: FIELD_BOUNDS_IN.pad }
+          : { ...FIELD_BOUNDS_IN };
+        bounds = { ...fieldBounds };
+        renderer.resizeCanvas();
+        requestDrawAll();
+        self.events.fieldImageLoaded.emit({ fieldKey });
       };
       img.onerror = () => {
         fieldImg = null;
@@ -482,7 +486,6 @@ export class FieldRenderer {
         setStatus(`Could not load field image: ${fieldKey}`);
       };
       img.src = imgSrc;
-      self.events.fieldImageLoaded.emit({ fieldKey });
     },
     loadRobotImage() {
       if (robotImgLoadTried) return;

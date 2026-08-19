@@ -38,6 +38,7 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
     this.#sidebar.bind();
     this.#timeline.bind();
     this.planning.events.documentChanged.subscribe(() => this.render());
+    this.planning.events.documentPreviewChanged.subscribe(() => this.render());
     this.planning.events.selectionChanged.subscribe(() => this.render());
     this.planning.events.projectionChanged.subscribe(() => { this.#timeline.render(); requestDrawAll(); });
     this.planning.events.playbackChanged.subscribe((event) => {
