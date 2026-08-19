@@ -8,6 +8,7 @@ import removePlanningObjectIconUrl from "./assets/svg/planning/removePlanningObj
 import { initializeMotionViewApp } from "./app/appRuntime";
 import { HelpDom, HelpView } from "./app/help";
 import { AppCommands, AppInput } from "./app/input";
+import { SettingsDom, SettingsRepository, SettingsView } from "./app/settings";
 import { TopBarDom, TopBarView } from "./app/topBar";
 import { getMode, setMode, subscribeMode } from "./app/modeController";
 import { setStatus } from "./app/status";
@@ -149,9 +150,6 @@ const routeInfoList = document.getElementById("routeInfoList");
 const btnApplyRunSettings = document.getElementById("btnApplyRunSettings");
 const btnPlanExport = document.getElementById("btnPlanExport");
 // Settings modal elements
-const settingsModal = document.getElementById("settingsModal");
-const btnSettingsClose = document.getElementById("btnSettingsClose");
-const btnUploadRobotImage = document.getElementById("btnUploadRobotImage");
 const robotImageToggle = document.getElementById("robotImageToggle");
 const settingsRobotImgControls = document.getElementById("settingsRobotImgControls");
 const settingsRobotImgScale = document.getElementById("settingsRobotImgScale");
@@ -212,6 +210,9 @@ let viewingInput;
 let pendingExportRequest = null;
 
 const fieldRenderer = new FieldRenderer(canvas);
+const settingsRepository = new SettingsRepository();
+const settingsView = new SettingsView(fieldRenderer, SettingsDom.from(document));
+settingsView.bind();
 fieldRenderer.setRobotDimensions(robotDimsInches());
 fieldRenderer.events.robotImageAvailabilityChanged.subscribe(({ available }) => {
     if (robotImgControlsEl) robotImgControlsEl.hidden = !available;
@@ -226,6 +227,11 @@ const topBarDom = TopBarDom.from(document);
 const topBar = new TopBarView(app, fieldRenderer, topBarDom);
 const helpView = new HelpView(app, HelpDom.from(document));
 helpView.bind();
+settingsView.closing.subscribe(() => {
+  syncSettingsToMain();
+  void saveSettings();
+});
+settingsView.robotImageRequested.subscribe(() => topBar.openRobotImagePicker());
 
 const planningDom = PlanningDom.from(document);
 const planningDialogs = new PlanningDialogs(planningDom);
@@ -669,7 +675,11 @@ topBar.events.actionRequested.subscribe((action) => {
   if (action.kind === "file-selected") void openFile(action.file, action.input);
   else if (action.kind === "robot-image-selected") void handleRobotImageFile(action.file, action.input);
   else if (action.kind === "clear-requested") void (action.clearAll ? appCommands.clearAll() : appCommands.clearCurrent());
-  else if (action.kind === "settings-requested") openSettings();
+  else if (action.kind === "settings-requested") {
+    syncMainToSettings();
+    if (app.live.project.path && !app.live.project.valid) void app.live.project.validate();
+    settingsView.open();
+  }
   else if (action.kind === "help-requested") helpView.open();
 });
 topBar.events.settingsChanged.subscribe(() => { void saveSettings(); });
@@ -820,15 +830,8 @@ btnFile.addEventListener("click", () => topBar.openFilePicker());
 // Settings modal and JSON persistence
 async function loadSettings() {
   try {
-    let settings = null;
-    if (invoke) {
-      const saved = await invoke("read_settings");
-      if (saved) settings = JSON.parse(saved);
-      else {
-        // Create defaults on first run so the app data dir/file exists.
-        await saveSettings();
-      }
-    } else console.warn("Settings persistence is unavailable (Tauri invoke missing).");
+    const settings = await settingsRepository.read();
+    if (!settings && app.core.tauri.isTauriRuntime()) await saveSettings();
 
     if (settings) {
       if (settings.appState && typeof settings.appState === "object" && !Array.isArray(settings.appState)) {
@@ -1043,12 +1046,7 @@ async function saveSettings() {
     if (persistedAppState && typeof persistedAppState === "object" && !Array.isArray(persistedAppState)) {
       settings.appState = { ...persistedAppState };
     }
-    const payload = JSON.stringify(settings);
-    if (invoke) {
-      await invoke("write_settings", { contents: payload });
-    } else {
-      console.warn("Settings persistence is unavailable (Tauri invoke missing).");
-    }
+    await settingsRepository.write(settings);
   } catch (e) {
     console.error("Failed to save settings:", e);
   }
@@ -1171,51 +1169,6 @@ function syncMainToSettings() {
   if (settingsFieldCompetition) {
     settingsFieldCompetition.value = fieldCompetition;
   }
-}
-
-function openSettings() {
-  if (!settingsModal) {
-    console.error("Settings modal not found");
-    return;
-  }
-  try {
-    syncMainToSettings(); // Load current values into settings modal
-  } catch (e) {
-    console.error("Error syncing settings:", e);
-  }
-  if (app.live.project.path && !app.live.project.valid) void app.live.project.validate();
-
-  // Update robot image controls visibility
-  if (settingsRobotImgControls) {
-    settingsRobotImgControls.hidden = !(fieldRenderer.isRobotImageEnabled() && fieldRenderer.isRobotImageReady());
-  }
-  if (robotImageToggle) {
-    robotImageToggle.checked = fieldRenderer.isRobotImageEnabled();
-  }
-  settingsModal.removeAttribute("hidden");
-  settingsModal.style.display = "flex"; // Ensure flex display
-  // Focus the modal card for accessibility
-  requestAnimationFrame(() => {
-    const modalCard = settingsModal.querySelector(".modalCard");
-    if (modalCard) modalCard.focus();
-  });
-}
-
-function closeSettings() {
-  if (!settingsModal) return;
-  try {
-    void saveSettings();
-  } catch (e) {
-    console.error("Error saving settings:", e);
-  }
-
-  try {
-    syncSettingsToMain(); // Save settings modal values to main inputs
-  } catch (e) {
-    console.error("Error syncing settings:", e);
-  }
-  settingsModal.setAttribute("hidden", "");
-  settingsModal.style.display = "none"; // Force hide
 }
 
 function sanitizeExportFilename(value) {
@@ -1726,16 +1679,6 @@ if (btnRouteInfo) {
   console.warn("btnRouteInfo element not found");
 }
 
-if (btnSettingsClose) {
-  btnSettingsClose.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    closeSettings();
-  });
-} else {
-  console.warn("btnSettingsClose element not found");
-}
-
 if (btnExportClose) {
   btnExportClose.addEventListener("click", (e) => {
     e.preventDefault();
@@ -1885,12 +1828,6 @@ if (exportCustomPathInput) {
   });
 }
 
-if (settingsModal) {
-  settingsModal.addEventListener("click", (e) => {
-    if (e.target && (e.target.classList.contains("modalBackdrop"))) closeSettings();
-  });
-} else console.warn("settingsModal element not found");
-
 if (exportModal) {
   exportModal.addEventListener("click", (e) => {
     if (e.target && e.target.classList.contains("modalBackdrop")) closeExportModal();
@@ -1906,11 +1843,9 @@ if (routeInfoModal) {
 // Global Escape handler: close modals and prevent window-level behavior
 window.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  const settingsOpen = settingsModal && settingsModal.style.display !== "none" && !settingsModal.hasAttribute("hidden");
   const exportOpen = exportModal && exportModal.style.display !== "none" && !exportModal.hasAttribute("hidden");
   const routeInfoOpen = routeInfoModal && routeInfoModal.style.display !== "none" && !routeInfoModal.hasAttribute("hidden");
-  if (settingsOpen) closeSettings();
-  else if (exportOpen) closeExportModal();
+  if (exportOpen) closeExportModal();
   else if (routeInfoOpen) closeRouteInfoModal();
   else if (planningDialogs.cancelOpen()) { /* Planning dialog resolved by its owner. */ }
   else return;
@@ -2024,13 +1959,6 @@ if (settingsRobotImgOffY) {
 if (settingsRobotImgRot) {
   settingsRobotImgRot.addEventListener("input", () => {
     syncSettingsToMain();
-  });
-}
-
-// Robot image upload
-if (btnUploadRobotImage) {
-  btnUploadRobotImage.addEventListener("click", () => {
-    topBar.openRobotImagePicker();
   });
 }
 
@@ -2251,11 +2179,6 @@ const setupExitHandler = async () => {
   });
 };
 
-// Ensure modals start hidden
-if (settingsModal) {
-  settingsModal.setAttribute("hidden", "");
-  settingsModal.style.display = "none";
-}
 fieldRenderer.updateFieldLayout(false);
 viewingLayout.activate();
 topBar.bind();

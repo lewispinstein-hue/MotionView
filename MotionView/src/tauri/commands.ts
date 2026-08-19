@@ -25,6 +25,14 @@ export function finalizeAppQuit(): Promise<void> {
   return invokeCommand<void>("finalize_app_quit");
 }
 
+export function readSettings(): Promise<string | null> {
+  return invokeCommand<string | null>("read_settings");
+}
+
+export function writeSettings(contents: string): Promise<void> {
+  return invokeCommand<void>("write_settings", { contents });
+}
+
 export interface FileExportResult {
   readonly path: string;
 }
