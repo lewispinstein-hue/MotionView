@@ -104,8 +104,9 @@ void Logger::start() {
         continue;
       }
 
-      try { this->update(); }
-      catch (std::exception& e) {
+      try {
+        this->update();
+      } catch (std::exception& e) {
         _MVLIB_FORWARD_ERROR("MVLib Update loop exception: %s", e.what());
       }
 
