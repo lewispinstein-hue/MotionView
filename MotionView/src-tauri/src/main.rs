@@ -1,15 +1,17 @@
+use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
+#[cfg(not(unix))]
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     fs,
+    io::Read,
     net::TcpListener,
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
     time::Duration,
 };
-#[cfg(not(unix))]
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{Emitter, Manager, RunEvent, State, Window};
 use tauri_plugin_posthog::{init as posthog_init, PostHogConfig, PostHogOptions};
@@ -34,8 +36,8 @@ fn load_posthog_config() -> Option<PostHogConfig> {
     Some(PostHogConfig {
         api_key,
         options: Some(PostHogOptions {
-        disable_session_recording: Some(false),
-        ..Default::default()
+            disable_session_recording: Some(false),
+            ..Default::default()
         }),
         ..Default::default()
     })
@@ -63,12 +65,20 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
         names.push(format!(
             "motionview-py-{}{}",
             triple,
-            if cfg!(target_os = "windows") { ".exe" } else { "" }
+            if cfg!(target_os = "windows") {
+                ".exe"
+            } else {
+                ""
+            }
         ));
     }
     names.push(format!(
         "motionview-py{}",
-        if cfg!(target_os = "windows") { ".exe" } else { "" }
+        if cfg!(target_os = "windows") {
+            ".exe"
+        } else {
+            ""
+        }
     ));
 
     // Allow an explicit override for diagnostics or custom deployments.
@@ -98,7 +108,10 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
         .resolve("", tauri::path::BaseDirectory::Resource)
         .map(|p| {
             let mut roots = vec![
-                p.join("_up_").join("src-tauri").join("bin").join("motionview-bridge"),
+                p.join("_up_")
+                    .join("src-tauri")
+                    .join("bin")
+                    .join("motionview-bridge"),
                 p.join("src-tauri").join("bin").join("motionview-bridge"),
                 p.join("src-tauri").join("bin"),
                 p.join("bin"),
@@ -114,14 +127,23 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
     if let Ok(exe_dir) = std::env::current_exe().and_then(|p| {
         p.parent()
             .map(|p| p.to_path_buf())
-            .ok_or(std::io::Error::new(std::io::ErrorKind::Other, "no exe parent"))
+            .ok_or(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "no exe parent",
+            ))
     }) {
         // Where the main exe lives (e.g., Contents/MacOS or AppData/Local/MotionView/__up__)
         roots.push(exe_dir.clone());
 
         // A bin/ next to the exe (some installers flatten to a bin folder)
         roots.push(exe_dir.join("bin"));
-        roots.push(exe_dir.join("_up_").join("src-tauri").join("bin").join("motionview-bridge"));
+        roots.push(
+            exe_dir
+                .join("_up_")
+                .join("src-tauri")
+                .join("bin")
+                .join("motionview-bridge"),
+        );
         roots.push(exe_dir.join("_up_").join("src-tauri").join("bin"));
 
         // Also look one level up, because Windows installers sometimes place
@@ -129,7 +151,13 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
         if let Some(parent) = exe_dir.parent() {
             roots.push(parent.to_path_buf());
             roots.push(parent.join("bin"));
-            roots.push(parent.join("_up_").join("src-tauri").join("bin").join("motionview-bridge"));
+            roots.push(
+                parent
+                    .join("_up_")
+                    .join("src-tauri")
+                    .join("bin")
+                    .join("motionview-bridge"),
+            );
             roots.push(parent.join("_up_"));
             roots.push(parent.join("_up_").join("bin"));
             roots.push(parent.join("_up_").join("src-tauri").join("bin"));
@@ -341,7 +369,9 @@ fn write_bridge_pid(app: &tauri::AppHandle, pid: u32) {
 
 #[cfg(debug_assertions)]
 fn dev_bridge_python_and_script() -> Option<(PathBuf, PathBuf)> {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent()?.to_path_buf();
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()?
+        .to_path_buf();
     let python = if cfg!(target_os = "windows") {
         root.join(".venv").join("Scripts").join("python.exe")
     } else {
@@ -395,24 +425,39 @@ fn stage_bridge_bin_for_runtime(
         ))
     })?;
 
-    let runtime_dir = app
-        .path()
-        .app_data_dir()
-        .map(|dir| dir.join("Runtime").join("motionview-bridge"))?;
+    let mut source_file = fs::File::open(source).map_err(tauri::Error::Io)?;
+    let mut source_hash = Sha256::new();
+    let mut buffer = [0_u8; 1024 * 1024];
+    loop {
+        let count = source_file.read(&mut buffer).map_err(tauri::Error::Io)?;
+        if count == 0 {
+            break;
+        }
+        source_hash.update(&buffer[..count]);
+    }
+    let source_id = format!("{:x}", source_hash.finalize());
+
+    let runtime_dir = app.path().app_data_dir().map(|dir| {
+        dir.join("Runtime")
+            .join("motionview-bridge")
+            .join(source_id)
+    })?;
     fs::create_dir_all(&runtime_dir).map_err(tauri::Error::Io)?;
 
     let staged = runtime_dir.join(file_name);
-    let needs_copy = match (fs::metadata(source), fs::metadata(&staged)) {
-        (Ok(src_meta), Ok(dst_meta)) => {
-            src_meta.len() != dst_meta.len()
-                || src_meta.modified().ok() != dst_meta.modified().ok()
+    if !staged.exists() {
+        let temporary = runtime_dir.join(format!(
+            ".{}.{}.tmp",
+            file_name.to_string_lossy(),
+            std::process::id()
+        ));
+        fs::copy(source, &temporary).map_err(tauri::Error::Io)?;
+        if let Err(err) = fs::rename(&temporary, &staged) {
+            let _ = fs::remove_file(&temporary);
+            if !staged.exists() {
+                return Err(tauri::Error::Io(err));
+            }
         }
-        (Ok(_), Err(_)) => true,
-        (Err(err), _) => return Err(tauri::Error::Io(err)),
-    };
-
-    if needs_copy {
-        fs::copy(source, &staged).map_err(tauri::Error::Io)?;
     }
 
     Ok(staged)
@@ -483,10 +528,10 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child
 
     #[cfg(windows)]
     {
-      const CREATE_NO_WINDOW: u32 = 0x08000000;
-      cmd.creation_flags(CREATE_NO_WINDOW);
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    
+
     // Apply Unix-specific process grouping (ignored on Windows)
     #[cfg(unix)]
     {
@@ -588,7 +633,7 @@ fn persist_window_state(_: &tauri::AppHandle) {}
 
 fn main() {
     println!("DO NOT CLOSE THIS WINDOW. MotionView runs off of it and cannot function without this window open.");
-    
+
     maybe_add_posthog_plugin(tauri::Builder::default())
         .plugin(tauri_plugin_shell::init())
         .manage(BridgeState(Mutex::new(None)))

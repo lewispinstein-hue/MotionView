@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import hashlib
 import os
 import signal
 import sys
@@ -299,23 +300,34 @@ def motionview_support_dir() -> Path:
 def extract_bundled_pros_archive(archive_path: Path) -> Optional[str]:
     exe_ext = ".exe" if platform.system() == "Windows" else ""
     runtime_root = motionview_support_dir() / "Runtime"
-    extract_root = runtime_root / "motionview-pros"
-    stamp_path = extract_root / ".archive-mtime"
+    archive_hash = hashlib.sha256()
+    with archive_path.open("rb") as archive_file:
+        for chunk in iter(lambda: archive_file.read(1024 * 1024), b""):
+            archive_hash.update(chunk)
+    archive_id = archive_hash.hexdigest()
+
+    # The runtime is a cache of the bundled archive. Keep each archive in its
+    # own content-addressed directory so a newly installed bundle can never be
+    # mistaken for a prior extraction because of installer timestamps.
+    runtime_dir = runtime_root / "motionview-pros"
+    extract_root = runtime_dir / archive_id
     expected_exe = extract_root / "motionview-pros" / f"motionview-pros{exe_ext}"
-    archive_mtime = str(int(archive_path.stat().st_mtime))
 
     try:
-        current_stamp = stamp_path.read_text(encoding="utf-8").strip() if stamp_path.exists() else None
-        needs_extract = current_stamp != archive_mtime or not expected_exe.exists()
-        if needs_extract:
-            if extract_root.exists():
-                shutil.rmtree(extract_root, ignore_errors=True)
-            extract_root.mkdir(parents=True, exist_ok=True)
+        if not expected_exe.exists():
+            runtime_dir.mkdir(parents=True, exist_ok=True)
+            temporary_root = runtime_dir / f".{archive_id}.tmp"
+            shutil.rmtree(temporary_root, ignore_errors=True)
+            temporary_root.mkdir(parents=True)
             with zipfile.ZipFile(archive_path) as zf:
-                zf.extractall(extract_root)
-            stamp_path.write_text(archive_mtime, encoding="utf-8")
+                zf.extractall(temporary_root)
+            temporary_exe = temporary_root / "motionview-pros" / f"motionview-pros{exe_ext}"
+            if not temporary_exe.exists():
+                raise RuntimeError("bundled PROS archive is missing its executable")
+            temporary_root.rename(extract_root)
         return _ensure_executable(expected_exe)
     except Exception:
+        shutil.rmtree(runtime_dir / f".{archive_id}.tmp", ignore_errors=True)
         return None
 
 def resolve_extracted_pros_exe() -> Optional[str]:
@@ -332,7 +344,9 @@ def resolve_extracted_pros_exe() -> Optional[str]:
     return None
 
 def resolve_pros_exe() -> Optional[str]:
-    return resolve_extracted_pros_exe() or resolve_bundled_pros_exe()
+    # The packaged archive is authoritative. Only use an old Runtime extraction
+    # as a fallback when no bundled archive can be located.
+    return resolve_bundled_pros_exe() or resolve_extracted_pros_exe()
 
 def resolve_pros_command() -> Optional[List[str]]:
     if not getattr(sys, "frozen", False):
