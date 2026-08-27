@@ -11,7 +11,7 @@ export class PoseReadoutView {
   ) {}
 
   render(): void {
-    const pose = this.viewing.playback.currentDisplayPose();
+    const pose = this.viewing.projection.displayPose(this.viewing.playback.currentDisplayPose());
     const index = this.viewing.playback.currentDisplayIndex();
     const deltaMs = this.viewing.playback.currentDisplayDeltaMs();
     if (!pose) {

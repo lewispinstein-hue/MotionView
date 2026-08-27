@@ -19,6 +19,8 @@ const NODE_END_OFFSET = 18;
 const EDGE_INSET = 14;
 const INSERT_HALF = (NODE_WIDTH + NODE_GAP) / 2;
 const WAYPOINT_MIN_GAP = 48;
+const PLAN_PIXELS_PER_INCH = 2;
+const MAX_PLAN_LENGTH_WIDTH = 8_000;
 
 // Animation timings
 const NODE_SHIFT_MS = 320;
@@ -128,7 +130,7 @@ export class PlanningTimelineView {
     this.dom.timelineContent.style.width = `${layout.contentWidth}px`;
     this.planning.route.waypoints.forEach((_point, index) => {
       const marker = document.createElement("div");
-      marker.className = "planningTimelineWaypointConnector";
+      marker.className = `planningTimelineWaypointConnector${this.planning.selection.isWaypointSelected(index) ? " isSelected" : ""}`;
       marker.style.left = `${layout.waypointX[index] ?? PAD}px`;
       this.dom.timelineWaypointLayer.appendChild(marker);
     });
@@ -397,8 +399,13 @@ export class PlanningTimelineView {
   private buildLayout(nodes: readonly PlanningNodeView[]): TimelineLayout {
     const waypointCount = this.planning.route.length;
     const viewportWidth = Math.max(1, this.dom.timelineViewport.clientWidth || this.dom.timelineViewport.getBoundingClientRect().width || 1);
+    const routeWidth = Math.min(
+      MAX_PLAN_LENGTH_WIDTH,
+      this.planning.projection.totalLength * PLAN_PIXELS_PER_INCH,
+    );
     const baseContentWidth = Math.max(
       viewportWidth,
+      PAD * 2 + EDGE_INSET * 2 + routeWidth,
       PAD * 2 + EDGE_INSET * 2 + Math.max(0, waypointCount - 1) * WAYPOINT_MIN_GAP,
       PAD * 2 + 120,
     );

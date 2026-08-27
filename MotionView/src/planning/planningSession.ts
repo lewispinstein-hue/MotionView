@@ -216,7 +216,7 @@ export class PlanningSession {
     for (let index = this.nodes.length - 1; index >= 0; index -= 1) {
       const node = this.nodes[index];
       const object = node ? objects.get(node.objectId) : null;
-      if (!node || maxBucket === 0 || !object?.methods.some((method) => method.id === node.methodId)) {
+      if (!node || maxBucket < 2 || !object?.methods.some((method) => method.id === node.methodId)) {
         this.nodes.splice(index, 1);
         continue;
       }

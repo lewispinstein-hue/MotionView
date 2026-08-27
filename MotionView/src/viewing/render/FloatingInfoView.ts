@@ -47,7 +47,8 @@ export class FloatingInfoView {
   }
 
   update(): void {
-    const pose = this.viewing.playback.currentDisplayPose();
+    const fieldPose = this.viewing.playback.currentDisplayPose();
+    const pose = this.viewing.projection.displayPose(fieldPose);
     const index = this.viewing.playback.currentDisplayIndex();
     const deltaMs = this.viewing.playback.currentDisplayDeltaMs();
     const values = this.dom.values;
@@ -72,7 +73,7 @@ export class FloatingInfoView {
       values.deltaTime.textContent = deltaMs == null ? "—" : `${formatNumber(deltaMs / 1000, 3)}s`;
       values.pointCount.textContent = `Point: ${index + 1}/${this.viewing.data.poses.length}`;
     }
-    const reference = pose?.t ?? null;
+    const reference = fieldPose?.t ?? null;
     const closest = this.closestWatch(reference);
     values.watchTime.textContent = closest ? `${formatNumber(closest.t / 1000, 2)}s` : "—";
     values.watchLabel.textContent = closest?.label || "—";

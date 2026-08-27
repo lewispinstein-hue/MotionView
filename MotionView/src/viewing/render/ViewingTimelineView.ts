@@ -50,7 +50,10 @@ export class ViewingTimelineView implements ViewingRenderLayer {
         const pose = this.viewing.projection.interpolatePose(marker.t) ?? marker.pose;
         if (index >= 0 && pose) this.viewing.navigation.lockTrack(pose, index);
         this.viewing.navigation.selectWatch(marker);
-        this.watchTooltip.show(watchTooltipRows(marker, pose), { x: event.clientX, y: event.clientY });
+        this.watchTooltip.show(
+          watchTooltipRows(marker, this.viewing.projection.displayPose(pose)),
+          { x: event.clientX, y: event.clientY },
+        );
       } else {
         this.watchTooltip.hide();
         const time = this.xToTime(x);

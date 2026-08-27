@@ -974,7 +974,7 @@ async function loadSettings() {
   }
 }
 
-async function loadDemoRouteIfUpgraded() {
+async function loadDemoRouteIfNeeded() {
   if (!invoke) return false;
 
   try {
@@ -983,7 +983,9 @@ async function loadDemoRouteIfUpgraded() {
       ...(persistedAppState && typeof persistedAppState === "object" ? persistedAppState : {}),
       lastSeenAppVersion: upgradeState.currentVersion,
     };
-    if (!upgradeState?.wasPreviousVersionOlder) return false;
+    const hasNoPreviousVersion = upgradeState?.previousVersion == null;
+    const isUpgradeWithoutSavedRoute = upgradeState?.wasPreviousVersionOlder && !hasLoadedData();
+    if (!hasNoPreviousVersion && !isUpgradeWithoutSavedRoute) return false;
 
     const response = await fetch(demoRouteUrl, { cache: "no-store" });
     if (!response.ok) {
@@ -992,10 +994,10 @@ async function loadDemoRouteIfUpgraded() {
 
     const obj = await response.json();
     setData(obj);
-    setStatus("Loaded getting started demo route after app upgrade.");
+    setStatus("Loaded getting started demo route.");
     return true;
   } catch (e) {
-    console.warn("Failed to load upgrade demo route:", e);
+    console.warn("Failed to load getting started demo route:", e);
     return false;
   }
 }
@@ -2107,7 +2109,7 @@ settingsLoaded = true;
 void app.live.initialize();
 syncPlanningProjectionConfiguration();
 await loadSavedPaths();
-await loadDemoRouteIfUpgraded();
+await loadDemoRouteIfNeeded();
 setMode("viewing");
 void app.markReady({
   plan_saved: app.planning.route.length > 0,

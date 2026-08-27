@@ -69,7 +69,14 @@ export class ViewingView {
       this.#watchGraph.updatePlayhead();
       requestDrawAll();
     });
-    this.viewing.events.projectionChanged.subscribe(() => requestDrawAll());
+    this.viewing.events.projectionChanged.subscribe((change) => {
+      if (change.kind === "transform") {
+        this.#watchTooltip.hide();
+        this.#sidebar.poses.render();
+        this.#readout.render();
+      }
+      requestDrawAll();
+    });
   }
 
   render(): void {

@@ -811,6 +811,15 @@ label {
   box-shadow: 0 0 0 1px rgba(12, 18, 24, 0.22);
 }
 
+.planningTimelineWaypointConnector.isSelected {
+  background: rgba(150, 200, 255, 0.95);
+}
+
+.planningTimelineWaypointConnector.isSelected::before {
+  border-color: rgba(180, 220, 255, 1);
+  background: rgba(150, 200, 255, 0.95);
+}
+
 .planningTimelineNode {
   position: absolute;
   top: 100%;

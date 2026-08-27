@@ -303,18 +303,23 @@ export class FieldRenderer {
       ctx.stroke();
     }
 
-    const arrowLen = Math.max(wPx, hPx) * 0.85;
+    const arrowSize = sizes.world({
+      width: wIn * 0.36,
+      height: Math.min(wIn, hIn) * 0.28,
+    });
+    const arrowHeadLength = arrowSize.height * 0.8;
+    const arrowHeadHalfWidth = arrowSize.height / 2;
     ctx.strokeStyle = "rgba(255,255,255,0.95)";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = Math.min(wPx, hPx) * 0.04;
     ctx.beginPath();
     ctx.moveTo(0, 0);
-    ctx.lineTo(arrowLen / 2, 0);
+    ctx.lineTo(arrowSize.width, 0);
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.moveTo(arrowLen / 2, 0);
-    ctx.lineTo(arrowLen / 2 - 8, -5);
-    ctx.lineTo(arrowLen / 2 - 8, 5);
+    ctx.moveTo(arrowSize.width, 0);
+    ctx.lineTo(arrowSize.width - arrowHeadLength, -arrowHeadHalfWidth);
+    ctx.lineTo(arrowSize.width - arrowHeadLength, arrowHeadHalfWidth);
     ctx.closePath();
     ctx.fillStyle = "rgba(255,255,255,0.95)";
     ctx.fill();

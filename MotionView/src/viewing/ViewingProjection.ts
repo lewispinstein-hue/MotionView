@@ -106,6 +106,13 @@ export class ViewingProjection {
     return pose ? this.transformPose(pose) : null;
   }
 
+  /** Converts a field-space pose back into the selected source unit for display. */
+  displayPose(pose: Readonly<Pose> | null): Readonly<Pose> | null {
+    if (!pose) return null;
+    const factor = this.#transform.unitsToInches || 1;
+    return { ...pose, x: pose.x / factor, y: pose.y / factor };
+  }
+
   waypointTarget(waypoint: WaypointView): Readonly<ViewingFieldPoint> {
     const transform = this.#transform;
     return {

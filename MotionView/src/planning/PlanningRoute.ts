@@ -56,11 +56,23 @@ export class PlanningRoute {
   }
 
   remove(indices: Iterable<number>): void {
-    const sorted = [...indices].filter(Number.isInteger).sort((a, b) => b - a);
-    if (!sorted.length) return;
+    const deleted = [...new Set(indices)]
+      .filter((index) => Number.isInteger(index) && index >= 0 && index < this.session.waypoints.length)
+      .sort((a, b) => a - b);
+    if (!deleted.length) return;
     this.session.mutate("route", () => {
-      for (const index of sorted) {
-        if (index >= 0 && index < this.session.waypoints.length) this.session.waypoints.splice(index, 1);
+      const bucketCounts = new Map<number, number>();
+      const orderedNodes = [...this.session.nodes]
+        .sort((a, b) => a.beforeWaypoint - b.beforeWaypoint || a.index - b.index || a.id.localeCompare(b.id));
+      let deletedCursor = 0;
+      for (const node of orderedNodes) {
+        while (deletedCursor < deleted.length && deleted[deletedCursor]! < node.beforeWaypoint) deletedCursor += 1;
+        node.beforeWaypoint -= deletedCursor;
+        node.index = bucketCounts.get(node.beforeWaypoint) ?? 0;
+        bucketCounts.set(node.beforeWaypoint, node.index + 1);
+      }
+      for (let offset = deleted.length - 1; offset >= 0; offset -= 1) {
+        this.session.waypoints.splice(deleted[offset]!, 1);
       }
       this.session.selectedWaypoints.clear();
       this.session.selectedWaypoint = -1;

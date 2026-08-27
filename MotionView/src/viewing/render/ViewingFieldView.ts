@@ -9,7 +9,7 @@ import type { WatchListView } from "./WatchListView";
 import type { WaypointListView } from "./WaypointListView";
 import type { WatchTooltipView } from "./WatchTooltipView";
 import { watchTooltipRows } from "./watchTooltipRows";
-import { formatDistanceFromInches } from "../../shared/units";
+import { formatDistanceFromInches, getCurrentUnits } from "../../shared/units";
 import { heatColorFromNorm } from "./viewingColors";
 
 const WATCH_RADIUS = 4.2;
@@ -68,14 +68,21 @@ export class ViewingFieldView implements ViewingFieldLayer {
     const poses = this.viewing.data.poses;
     if (poses.length < 2) return;
     const context = this.field.ctx;
+    const transform = this.viewing.projection.transform;
     context.save();
     context.lineWidth = this.field.sizes.screen({ width: 2, height: 2 }).width;
     for (let index = 1; index < poses.length; index += 1) {
       const previous = poses[index - 1];
       const pose = poses[index];
       if (!previous || !pose) continue;
-      const start = this.field.worldToScreen(previous.x, previous.y);
-      const end = this.field.worldToScreen(pose.x, pose.y);
+      const start = this.field.worldToScreen(
+        previous.x * transform.unitsToInches + transform.offsetXInches,
+        previous.y * transform.unitsToInches + transform.offsetYInches,
+      );
+      const end = this.field.worldToScreen(
+        pose.x * transform.unitsToInches + transform.offsetXInches,
+        pose.y * transform.unitsToInches + transform.offsetYInches,
+      );
       const gradient = context.createLinearGradient(start.x, start.y, end.x, end.y);
       gradient.addColorStop(0, heatColorFromNorm(previous.speed_norm ?? 0));
       gradient.addColorStop(1, heatColorFromNorm(pose.speed_norm ?? 0));
@@ -124,7 +131,7 @@ export class ViewingFieldView implements ViewingFieldLayer {
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.font = `${fontSize}px ui-monospace`;
-    context.fillText(`${distance.toFixed(1)} in`, x, y);
+    context.fillText(`${formatDistanceFromInches(distance, 1)} ${getCurrentUnits()}`, x, y);
     context.restore();
   }
 
@@ -202,7 +209,10 @@ export class ViewingFieldView implements ViewingFieldLayer {
       const poseIndex = trackHit?.index ?? index;
       if (poseIndex >= 0 && pose) this.viewing.navigation.lockTrack(pose, poseIndex);
       this.viewing.navigation.selectWatch(watch);
-      this.watchTooltip.show(watchTooltipRows(watch, pose), { x: event.clientX, y: event.clientY });
+      this.watchTooltip.show(
+        watchTooltipRows(watch, this.viewing.projection.displayPose(pose)),
+        { x: event.clientX, y: event.clientY },
+      );
       return;
     }
     this.watchTooltip.hide();

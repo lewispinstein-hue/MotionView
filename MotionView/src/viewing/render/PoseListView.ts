@@ -3,6 +3,7 @@ import type { ViewingFeature } from "../ViewingFeature";
 import type { ViewingListsDom } from "../ViewingDom";
 import { createVirtualList, type VirtualList } from "./virtualList";
 import { escapeHtml, formatNumber } from "../viewingPresentation";
+import { getCurrentUnits } from "../../shared/units";
 
 export class PoseListView {
   readonly #list: VirtualList<Readonly<Pose>>;
@@ -34,10 +35,10 @@ export class PoseListView {
 
   private createItem(index: number): HTMLElement {
     const rawPose = this.viewing.data.poses[index];
-    const pose = this.viewing.projection.poseAt(index);
+    const pose = this.viewing.projection.displayPose(this.viewing.projection.poseAt(index));
     const time = typeof rawPose?.t === "number" ? Math.round(rawPose.t) : null;
     const summary = pose
-      ? `X: ${formatNumber(pose.x, 1, "0")}in, Y: ${formatNumber(pose.y, 1, "0")}in, θ: ${formatNumber(pose.theta, 1, "0")}°`
+      ? `X: ${formatNumber(pose.x, 1, "0")}${getCurrentUnits()}, Y: ${formatNumber(pose.y, 1, "0")}${getCurrentUnits()}, θ: ${formatNumber(pose.theta, 1, "0")}°`
       : "—";
     const element = document.createElement("div");
     element.className = "poseItem";
