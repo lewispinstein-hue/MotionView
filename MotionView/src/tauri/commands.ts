@@ -47,3 +47,21 @@ export function resolveExportDirectory(location: string, projectPath?: string): 
 export function exportPlanningCode(path: string, contents: string): Promise<FileExportResult> {
   return invokeCommand<FileExportResult>("export_planning_code", { path, contents });
 }
+
+export function readSavedPaths(): Promise<string | null> { return invokeCommand<string | null>("read_saved_paths"); }
+export function writeSavedPaths(contents: string): Promise<void> { return invokeCommand<void>("write_saved_paths", { contents }); }
+
+export interface MotionViewJsonExportRequest {
+  readonly filenameBase: string;
+  readonly location: string;
+  readonly customPath: string | null;
+  readonly jsonContents: string;
+}
+export function exportMotionViewJson(request: Readonly<MotionViewJsonExportRequest>): Promise<FileExportResult> {
+  return invokeCommand<FileExportResult>("export_motionview_json", request);
+}
+
+export interface UpgradeState { readonly previousVersion: string | null; readonly currentVersion: string; readonly wasPreviousVersionOlder: boolean }
+export function readUpgradeState(): Promise<UpgradeState> { return invokeCommand<UpgradeState>("was_previous_version_old"); }
+export function getWindowFullscreenState(): Promise<boolean> { return invokeCommand<boolean>("get_window_fullscreen_state"); }
+export function setWindowFullscreen(enable: boolean): Promise<boolean> { return invokeCommand<boolean>("set_windows_fullscreen", { enable }); }

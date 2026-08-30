@@ -4,12 +4,14 @@ import { PlanningFeature } from "../planning/PlanningFeature";
 import { LiveFeature } from "../live/LiveFeature";
 import type { AppExitReason, AppLifecycleState } from "./appEvents";
 import { CoreServices } from "./coreServices";
+import { SettingsFeature } from "./settings/SettingsFeature";
 
 export class MotionViewApp {
   readonly core = new CoreServices();
   readonly viewing = new ViewingFeature();
   readonly planning = new PlanningFeature();
   readonly live = new LiveFeature(this.viewing, this.core.bridge);
+  readonly settings = new SettingsFeature();
 
   #lifecycle: AppLifecycleState = "created";
   #lifecycleBeforeExit: AppLifecycleState = "created";

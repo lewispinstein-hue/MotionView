@@ -6,10 +6,12 @@ import type { ViewingLayoutView } from "../../viewing/render/ViewingLayoutView";
 import type { FieldRenderer } from "../../render/field";
 import { requestDrawAll } from "../../render/renderScheduler";
 import { viewingTelemetry } from "../../telemetry/createTelemetry";
+import { requiredElement } from "../../dom/elements";
 
 /** Executes application-wide commands that coordinate more than one feature. */
 export class AppCommands {
   #bound = false;
+  readonly #planOverlayButton: HTMLButtonElement;
   constructor(
     private readonly app: MotionViewApp,
     private readonly field: FieldRenderer,
@@ -17,14 +19,14 @@ export class AppCommands {
     private readonly planningDialogs: PlanningDialogs,
     private readonly planningLayout: PlanningLayoutView,
     private readonly viewingLayout: ViewingLayoutView,
-    private readonly planOverlayButton: HTMLButtonElement | null,
-  ) {}
+    document: Document,
+  ) { this.#planOverlayButton = requiredElement("btnTogglePlanOverlay", HTMLButtonElement, document); }
 
   bind(): void {
     if (this.#bound) return;
     this.#bound = true;
-    this.planOverlayButton?.addEventListener("click", () => this.togglePlanningOverlay());
-    this.planOverlayButton?.classList.toggle("isOn", this.app.planning.overlayVisible);
+    this.#planOverlayButton.addEventListener("click", () => this.togglePlanningOverlay());
+    this.#planOverlayButton.classList.toggle("isOn", this.app.planning.overlayVisible);
   }
 
   openRoute(): void { this.topBar.openFilePicker(); }
@@ -49,7 +51,7 @@ export class AppCommands {
   togglePlanningOverlay(): void {
     if (this.app.core.mode.getMode() !== "viewing") return;
     const visible = this.app.planning.toggleOverlay();
-    this.planOverlayButton?.classList.toggle("isOn", visible);
+    this.#planOverlayButton.classList.toggle("isOn", visible);
     void viewingTelemetry.planOverlayToggled({ enabled: visible });
     requestDrawAll();
   }

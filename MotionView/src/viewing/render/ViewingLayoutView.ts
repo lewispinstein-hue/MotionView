@@ -1,6 +1,7 @@
 import { getMode } from "../../app/modeController";
 import type { FieldRenderer } from "../../render/field";
 import type { ViewingView } from "../ViewingView";
+import { TypedEvent } from "../../app/typedEvent";
 
 const COLLAPSE_SIDEBAR_PX = 282;
 const COLLAPSE_TIMELINE_PX = 130;
@@ -23,6 +24,7 @@ function requiredElement<T extends HTMLElement>(document: Document, id: string):
 }
 
 export class ViewingLayoutView {
+  readonly changed = new TypedEvent<Record<string, never>>();
   readonly #root = document.documentElement;
   readonly #splitter: HTMLElement;
   readonly #timelineSplitter: HTMLElement;
@@ -42,7 +44,6 @@ export class ViewingLayoutView {
     document: Document,
     private readonly field: FieldRenderer,
     private readonly view: ViewingView,
-    private readonly persist: () => void,
   ) {
     this.#splitter = requiredElement(document, "vSplit");
     this.#timelineSplitter = requiredElement(document, "hSplit");
@@ -155,7 +156,7 @@ export class ViewingLayoutView {
     }
     this.field.resetFieldPosition();
     this.resize();
-    this.persist();
+    this.changed.emit({});
   }
 
   private get sidebarWidth(): number { return this.cssNumber("--rightSidebarWViewing", 360); }
@@ -204,7 +205,7 @@ export class ViewingLayoutView {
     this.#timelineDrag = null;
     document.body.style.cursor = "";
     this.activate();
-    this.persist();
+    this.changed.emit({});
   }
 
   private get maxLeftSidebarWidth(): number {
@@ -225,7 +226,7 @@ export class ViewingLayoutView {
   private finishSidebarToggle(): void {
     this.field.resetFieldPosition();
     this.resize();
-    this.persist();
+    this.changed.emit({});
   }
 
   private setSidebarWidth(width: number): void {

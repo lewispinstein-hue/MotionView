@@ -29,6 +29,7 @@ export class TopBarDom {
   readonly planningModeButton: HTMLButtonElement;
   readonly speedSelect: HTMLSelectElement;
   readonly fieldSelect: HTMLSelectElement;
+  readonly sidebarFileButton: HTMLButtonElement;
 
   private constructor(document: Document) {
     this.root = requiredElement(document, "topBar");
@@ -48,6 +49,7 @@ export class TopBarDom {
     this.planningModeButton = requiredElement(document, "modePlanning");
     this.speedSelect = requiredElement(document, "speedSelect");
     this.fieldSelect = requiredElement(document, "fieldSelect");
+    this.sidebarFileButton = requiredElement(document, "btnFile");
   }
 
   static from(document: Document): TopBarDom {

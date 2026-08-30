@@ -1,5 +1,6 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
+import { isTauriRuntime } from "../tauri/commands";
 import { TelemetryQueue } from "./telemetryQueue";
 import type { QueuedTelemetryEvent, SystemInfo, TelemetryCaptureOptions, TelemetryEventName, TelemetryProperties } from "./telemetryTypes";
 
@@ -19,7 +20,7 @@ export class TelemetryClient {
   private readonly queue = new TelemetryQueue();
 
   enabled() {
-    return true;
+    return isTauriRuntime();
   }
 
   getAppVersion() {
@@ -28,6 +29,10 @@ export class TelemetryClient {
 
   async init() {
     if (this.initialized) return this.appVersion;
+    if (!this.enabled()) {
+      this.initialized = true;
+      return this.appVersion;
+    }
 
     try {
       this.appVersion = await getVersion();

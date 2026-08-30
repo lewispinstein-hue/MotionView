@@ -28,6 +28,7 @@ export class FieldRenderer {
   readonly ctx: CanvasRenderingContext2D;
   readonly sizes: FieldSizeScaler;
   #robotDimensions: RobotDimensions = { w: 12, h: 12 };
+  #inputBound = false;
 
   declare registerViewingLayer: (layer: ViewingFieldLayer) => void;
   declare registerPlanningLayer: (layer: PlanningFieldLayer) => void;
@@ -473,24 +474,28 @@ export class FieldRenderer {
           imgSrc = fieldKey;
         }
       }
-      const img = new Image();
-      img.onload = () => {
-        fieldImg = img;
-        const configuredBounds = getFieldBounds(fieldKey);
-        fieldBounds = configuredBounds
-          ? { ...configuredBounds, pad: FIELD_BOUNDS_IN.pad }
-          : { ...FIELD_BOUNDS_IN };
-        bounds = { ...fieldBounds };
-        renderer.resizeCanvas();
-        requestDrawAll();
-        self.events.fieldImageLoaded.emit({ fieldKey });
-      };
-      img.onerror = () => {
-        fieldImg = null;
-        draw();
-        setStatus(`Could not load field image: ${fieldKey}`);
-      };
-      img.src = imgSrc;
+      await new Promise<void>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          fieldImg = img;
+          const configuredBounds = getFieldBounds(fieldKey);
+          fieldBounds = configuredBounds
+            ? { ...configuredBounds, pad: FIELD_BOUNDS_IN.pad }
+            : { ...FIELD_BOUNDS_IN };
+          bounds = { ...fieldBounds };
+          renderer.resizeCanvas();
+          requestDrawAll();
+          self.events.fieldImageLoaded.emit({ fieldKey });
+          resolve();
+        };
+        img.onerror = () => {
+          fieldImg = null;
+          draw();
+          setStatus(`Could not load field image: ${fieldKey}`);
+          resolve();
+        };
+        img.src = imgSrc;
+      });
     },
     loadRobotImage() {
       if (robotImgLoadTried) return;
@@ -706,5 +711,14 @@ export class FieldRenderer {
     if (Number.isFinite(w) && w > 0) this.#robotDimensions.w = w;
     if (Number.isFinite(h) && h > 0) this.#robotDimensions.h = h;
     requestDrawAll();
+  }
+
+  bindInput(): void {
+    if (this.#inputBound) return;
+    this.#inputBound = true;
+    this.canvas.addEventListener("wheel", (event) => this.handleWheel(event), { passive: false });
+    this.canvas.addEventListener("contextmenu", (event) => {
+      if (getMode() === "planning") event.preventDefault();
+    });
   }
 }

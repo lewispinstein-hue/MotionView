@@ -1,6 +1,7 @@
 import { getMode } from "../../app/modeController";
 import type { FieldRenderer } from "../../render/field";
 import type { PlanningView } from "../PlanningView";
+import { TypedEvent } from "../../app/typedEvent";
 
 const COLLAPSE_SIDEBAR_PX = 282;
 const COLLAPSE_TIMELINE_PX = 24;
@@ -22,6 +23,7 @@ function requiredElement<T extends HTMLElement>(document: Document, id: string):
 }
 
 export class PlanningLayoutView {
+  readonly changed = new TypedEvent<Record<string, never>>();
   readonly #root = document.documentElement;
   readonly #splitter: HTMLElement;
   readonly #timelineSplitter: HTMLElement;
@@ -37,7 +39,6 @@ export class PlanningLayoutView {
     document: Document,
     private readonly field: FieldRenderer,
     private readonly view: PlanningView,
-    private readonly persist: () => void,
   ) {
     this.#splitter = requiredElement(document, "vSplit");
     this.#timelineSplitter = requiredElement(document, "planningTimelineSplit");
@@ -125,13 +126,13 @@ export class PlanningLayoutView {
     else { this.#lastSidebarWidth = this.sidebarWidth; this.setSidebarWidth(0); }
     this.field.resetFieldPosition();
     this.resize();
-    this.persist();
+    this.changed.emit({});
   }
 
   toggleTimeline(): void {
     this.setTimelineCollapsed(this.timelineHeight > COLLAPSE_TIMELINE_PX);
     this.resize();
-    this.persist();
+    this.changed.emit({});
   }
 
   private get sidebarWidth(): number { return this.cssNumber("--rightSidebarWPlanning", 360); }
@@ -168,7 +169,7 @@ export class PlanningLayoutView {
     this.#listDrag = null;
     document.body.style.cursor = "";
     this.activate();
-    this.persist();
+    this.changed.emit({});
   }
 
   private setSidebarWidth(width: number): void {
