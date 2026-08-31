@@ -22,6 +22,7 @@ export interface ViewingTimelineDom {
 
 export interface ViewingListsDom {
   readonly sectionTabs: readonly HTMLButtonElement[];
+  readonly sectionScroller: HTMLElement;
   readonly panels: Readonly<Record<"watches" | "logs" | "waypoints" | "poses", HTMLElement>>;
   readonly scrollContainer: HTMLElement;
   readonly searchWrap: HTMLElement;
@@ -120,6 +121,7 @@ export class ViewingDom {
     };
     this.lists = {
       sectionTabs: Array.from(document.querySelectorAll<HTMLButtonElement>("[data-viewing-section]")),
+      sectionScroller: requiredElement(document, "viewingSidebarTabs"),
       panels: {
         watches: requiredElement(document, "watchPanel"),
         logs: requiredElement(document, "logPanel"),

@@ -43,6 +43,7 @@ export class FloatingInfoView {
   setVisible(visible: boolean): void {
     this.dom.panel.classList.toggle("hidden", !visible);
     this.dom.toggle.classList.toggle("active", visible);
+    this.dom.toggle.setAttribute("aria-pressed", String(visible));
     void viewingTelemetry.floatingInfoToggled({ enabled: visible });
     if (visible) this.update();
   }

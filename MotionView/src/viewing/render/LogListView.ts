@@ -12,6 +12,7 @@ export class LogListView {
   #indexByEntry = new Map<Readonly<LogEntry>, number>();
   #searchTerm = "";
   #itemCount = 0;
+  #previewKey: string | null = null;
 
   constructor(
     private readonly viewing: ViewingFeature,
@@ -64,11 +65,36 @@ export class LogListView {
     this.#list.refresh();
   }
 
+  setPreviewTime(time: number): void {
+    const items = this.#list.getItems();
+    let nearestIndex = -1;
+    let nearestDelta = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < items.length; index += 1) {
+      const entry = items[index];
+      if (!entry) continue;
+      const delta = Math.abs(entry.t - time);
+      if (delta < nearestDelta) {
+        nearestIndex = index;
+        nearestDelta = delta;
+      }
+    }
+    this.#previewKey = nearestIndex >= 0 ? this.keyFor(items[nearestIndex]!) : null;
+    if (nearestIndex >= 0) this.#list.scrollToIndex(nearestIndex, 12, "center");
+    this.#list.refresh();
+  }
+
+  clearPreview(): void {
+    if (!this.#previewKey) return;
+    this.#previewKey = null;
+    this.#list.refresh();
+  }
+
   private createItem(entry: Readonly<LogEntry>): HTMLElement {
     const style = levelStyle(entry.level);
     const element = document.createElement("div");
     element.className = "watchItem logItem";
     if (entry === this.viewing.navigation.selectedLog) element.classList.add("selected");
+    if (this.#previewKey === this.keyFor(entry)) element.classList.add("previewSelected");
     element.dataset.t = String(entry.t);
     element.innerHTML = `<div class="watchItemContent logItemContent"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">

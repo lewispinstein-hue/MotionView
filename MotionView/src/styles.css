@@ -243,21 +243,23 @@ canvas#c {
   gap: 3px;
   overflow-x: auto;
   scrollbar-width: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.viewingSidebarTabs.isDragging,
+.viewingSidebarTabs.isDragging * {
+  cursor: grabbing !important;
 }
 
 .viewingSidebarTabs::-webkit-scrollbar {
   display: none;
 }
 
-.viewingSidebarActions {
+.viewingSidebarSectionTabs {
   display: flex;
   flex: 0 0 auto;
   gap: 3px;
-}
-
-.viewingSidebarActions svg {
-  display: block;
-  color: currentColor;
 }
 
 .viewingSidebarTab {
@@ -283,6 +285,22 @@ canvas#c {
 
 .viewingSidebarTab.isActive {
   border-color: rgba(110, 168, 255, 0.22);
+}
+
+.viewingSidebarControl {
+  justify-content: center;
+  min-width: 30px;
+  padding: 6px;
+}
+
+.viewingSidebarControl:hover,
+.viewingSidebarControl:focus-visible,
+.viewingSidebarControl.active,
+.viewingSidebarControl.isOn {
+  color: #b9d9ff;
+  background: rgba(76, 149, 255, 0.15);
+  border-color: rgba(110, 168, 255, 0.22);
+  box-shadow: none;
 }
 
 .viewingSidebarTab svg,
@@ -656,8 +674,7 @@ label {
 
 .watchGraphBtn,
 .watchVisibilityBtn,
-.watchPinBtn,
-.watchActionsMoreBtn {
+.watchPinBtn {
   min-width: 28px;
   width: 28px;
   height: 28px;
@@ -680,94 +697,6 @@ label {
   border: 0;
   border-radius: 8px;
   background: transparent;
-}
-
-.watchActionsCompact {
-  display: none;
-  position: relative;
-}
-
-.watchActionsMoreBtn.iconBtn {
-  min-width: 28px;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border-radius: 8px;
-  font-size: 20px;
-  line-height: 1;
-  font-weight: 800;
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-.watchActionsCompactMenu {
-  position: absolute;
-  top: calc(100% + 5px);
-  right: 0;
-  z-index: 40;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(16, 23, 32, 0.96);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.watchActionsCompactMenu[hidden] {
-  display: none;
-}
-
-.watchActionsCompactMenu .iconBtn {
-  min-width: 30px;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border-radius: 8px;
-}
-
-.watchItem.watchActionsCollapsed .watchActionsFull {
-  display: none;
-}
-
-.watchItem.watchActionsCollapsed .watchActionsCompact {
-  display: block;
-}
-
-.watchItem.watchLabelTruncated .watchLabel {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-@container (max-width: 315px) {
-  .watchActionsFull {
-    display: none;
-  }
-
-  .watchActionsCompact {
-    display: block;
-  }
-
-  .watchItemHeader {
-    display: contents;
-  }
-
-  .watchTitleGroup {
-    display: contents;
-  }
-
-  .watchMeta {
-    gap: 8px;
-    flex: 0 0 auto;
-  }
-
-  .watchLabel {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 }
 
 .bigValue {
@@ -832,7 +761,9 @@ label {
 .viewingSidebarPanel .watchItem:hover .watchItemContent,
 .viewingSidebarPanel .watchItem:not(.virtualListRow):hover,
 .viewingSidebarPanel .watchItem.selected .watchItemContent,
-.viewingSidebarPanel .watchItem:not(.virtualListRow).selected {
+.viewingSidebarPanel .watchItem:not(.virtualListRow).selected,
+.viewingSidebarPanel .watchItem.previewSelected .watchItemContent,
+.viewingSidebarPanel .watchItem:not(.virtualListRow).previewSelected {
   outline: 0;
   background: rgba(76, 149, 255, 0.18);
 }
@@ -1860,7 +1791,8 @@ body:not(.mode-planning) #rightPlanning {
   border-bottom: none;
 }
 
-.poseItem.selected {
+.poseItem.selected,
+.poseItem.previewSelected {
   outline: 2px solid rgba(255, 255, 255, 0.35);
   outline-offset: -2px;
   background: rgba(255, 255, 255, .03);

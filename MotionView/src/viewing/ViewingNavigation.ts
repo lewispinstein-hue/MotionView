@@ -11,6 +11,8 @@ export class ViewingNavigation {
   #selectedWaypointEventTime: number | null = null;
   #selectedWaypointEvent: Readonly<WaypointEventView> | null = null;
   #hoverTimelineTime: number | null = null;
+  #timelineHoverSource: "timeline" | "sidebar" | null = null;
+  #sidebarSyncCommitId = 0;
   #trackHoverPose: Readonly<Pose> | null = null;
   #trackHoverTime: number | null = null;
   #trackLockPose: Readonly<Pose> | null = null;
@@ -41,6 +43,8 @@ export class ViewingNavigation {
   get selectedWaypointEventTime(): number | null { return this.#selectedWaypointEventTime; }
   get selectedWaypointEvent(): Readonly<WaypointEventView> | null { return this.#selectedWaypointEvent; }
   get hoverTimelineTime(): number | null { return this.#hoverTimelineTime; }
+  get timelineHoverSource(): "timeline" | "sidebar" | null { return this.#timelineHoverSource; }
+  get sidebarSyncCommitId(): number { return this.#sidebarSyncCommitId; }
   get trackHoverPose(): Readonly<Pose> | null { return this.#trackHoverPose; }
   get trackHoverTime(): number | null { return this.#trackHoverTime; }
   get trackLockPose(): Readonly<Pose> | null { return this.#trackLockPose; }
@@ -104,10 +108,17 @@ export class ViewingNavigation {
     this.emit("selection");
   }
 
-  setTimelineHover(time: number | null): void {
-    if (time === this.#hoverTimelineTime) return;
+  setTimelineHover(time: number | null, source: "timeline" | "sidebar" = "sidebar"): void {
+    if (time === this.#hoverTimelineTime && (time == null || source === this.#timelineHoverSource)) return;
     this.#hoverTimelineTime = time;
+    this.#timelineHoverSource = time == null ? null : source;
     this.emit("hover");
+  }
+
+  /** Marks a Shift timeline/field click without altering normal event selection. */
+  commitSidebarSync(): void {
+    this.#sidebarSyncCommitId += 1;
+    this.emit("selection");
   }
 
   setTrackHover(pose: Readonly<Pose> | null, time: number | null = null): void {
@@ -151,6 +162,7 @@ export class ViewingNavigation {
     this.#selectedWaypointEventTime = null;
     this.#selectedWaypointEvent = null;
     this.#hoverTimelineTime = null;
+    this.#timelineHoverSource = null;
     this.#trackHoverPose = null;
     this.#trackHoverTime = null;
     this.#trackLockPose = null;

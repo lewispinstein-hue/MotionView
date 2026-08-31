@@ -556,7 +556,8 @@
       <div id="rightViewing" class="rightSidebar">
         <div class="viewingSidebar viewingOnly">
           <div class="viewingSidebarHeader">
-            <div class="viewingSidebarTabs" role="tablist" aria-label="Viewing sidebar sections">
+            <div id="viewingSidebarTabs" class="viewingSidebarTabs" aria-label="Viewing sidebar controls">
+              <div class="viewingSidebarSectionTabs" role="tablist" aria-label="Viewing sidebar sections">
               <button class="viewingSidebarTab isActive" type="button" role="tab" aria-selected="true" aria-controls="watchPanel" data-viewing-section="watches">
                 <svg aria-hidden="true"><use href="./assets/svg/viewing/sidebarWatches.svg#icon-sidebarWatches"></use></svg>
                 <span>Watches</span><span class="viewingSidebarTabCount" id="watchTabCount">—</span>
@@ -573,12 +574,11 @@
                 <svg aria-hidden="true"><use href="./assets/svg/viewing/sidebarPoses.svg#icon-sidebarPoses"></use></svg>
                 <span>Poses</span><span class="viewingSidebarTabCount" id="poseTabCount">—</span>
               </button>
-            </div>
-            <div class="viewingSidebarActions">
-              <button id="btnToggleFloat" class="iconBtn" type="button" title="Toggle Info Window" aria-label="Toggle Info Window">
+              </div>
+              <button id="btnToggleFloat" class="viewingSidebarTab viewingSidebarControl" type="button" title="Toggle Info Window" aria-label="Toggle Info Window" aria-pressed="false">
                 <svg width="18" height="18"><use href="./assets/svg/viewing/floatingWindow.svg#icon-floatingWin"></use></svg>
               </button>
-              <button id="btnTogglePlanOverlay" class="iconBtn" type="button" title="Toggle Planning Path overlay" aria-label="Toggle Planning Path overlay">
+              <button id="btnTogglePlanOverlay" class="viewingSidebarTab viewingSidebarControl" type="button" title="Toggle Planning Path overlay" aria-label="Toggle Planning Path overlay" aria-pressed="false">
                 <svg width="18" height="18"><use href="./assets/svg/planning/planOverlay.svg#icon-planOverlay"></use></svg>
               </button>
             </div>

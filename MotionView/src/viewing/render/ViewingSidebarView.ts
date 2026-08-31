@@ -9,6 +9,18 @@ import type { WatchGraphView } from "./WatchGraphView";
 
 type SidebarSection = "watches" | "logs" | "waypoints" | "poses";
 
+interface ShiftSyncSession {
+  committed: boolean;
+  readonly initialScrollPositions: Partial<Record<SidebarSection, number>>;
+}
+
+interface SidebarTabDrag {
+  readonly pointerId: number;
+  readonly startX: number;
+  readonly startScrollLeft: number;
+  moved: boolean;
+}
+
 /** Owns the four virtualized Viewing lists and their coordinated updates. */
 export class ViewingSidebarView {
   readonly poses: PoseListView;
@@ -18,11 +30,16 @@ export class ViewingSidebarView {
   #activeSection: SidebarSection = "watches";
   #searchTerm = "";
   #sharedTimeSort: "time" | "-time" = "-time";
+  #shiftHeld = false;
+  #shiftSync: ShiftSyncSession | null = null;
+  #handledSidebarSyncCommitId = 0;
+  #tabDrag: SidebarTabDrag | null = null;
+  #suppressTabClick = false;
   readonly #scrollPositions: Record<SidebarSection, number> = { watches: 0, logs: 0, waypoints: 0, poses: 0 };
   readonly #scrollRestoreGenerations: Record<SidebarSection, number> = { watches: 0, logs: 0, waypoints: 0, poses: 0 };
 
   constructor(
-    viewing: ViewingFeature,
+    private readonly viewing: ViewingFeature,
     private readonly dom: ViewingListsDom,
     private readonly floatingInfo: FloatingInfoView,
     private readonly watchGraph: WatchGraphView,
@@ -51,15 +68,30 @@ export class ViewingSidebarView {
     for (const tab of this.dom.sectionTabs) {
       tab.addEventListener("click", () => this.setActiveSection(tab.dataset.viewingSection as SidebarSection));
     }
+    this.bindSectionGrabScroll();
     this.dom.scrollContainer.addEventListener("scroll", () => {
       this.#scrollPositions[this.#activeSection] = this.dom.scrollContainer.scrollTop;
     }, { passive: true });
+    window.addEventListener("keydown", (event) => {
+      if (event.key !== "Shift") return;
+      this.#shiftHeld = true;
+      this.startShiftSync();
+    });
+    window.addEventListener("keyup", (event) => {
+      if (event.key !== "Shift") return;
+      this.#shiftHeld = false;
+      this.finishShiftSync();
+    });
+    window.addEventListener("blur", () => {
+      this.#shiftHeld = false;
+      this.finishShiftSync();
+    });
+    this.viewing.events.navigationChanged.subscribe(({ kind }) => this.handleNavigationChanged(kind));
     this.dom.search.addEventListener("input", () => {
       this.#searchTerm = this.dom.search.value;
       this.watches.setSearch(this.#searchTerm);
       this.logs.setSearch(this.#searchTerm);
       this.waypoints.setSearch(this.#searchTerm);
-      this.poses.setSearch(this.#searchTerm);
       this.watches.render();
       this.logs.render();
       this.waypoints.render();
@@ -89,6 +121,46 @@ export class ViewingSidebarView {
     this.updateCounts();
   }
 
+  private bindSectionGrabScroll(): void {
+    const scroller = this.dom.sectionScroller;
+    scroller.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || event.pointerType !== "mouse") return;
+      this.#tabDrag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startScrollLeft: scroller.scrollLeft,
+        moved: false,
+      };
+      scroller.setPointerCapture(event.pointerId);
+    });
+    scroller.addEventListener("pointermove", (event) => {
+      const drag = this.#tabDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const distance = event.clientX - drag.startX;
+      if (!drag.moved && Math.abs(distance) < 4) return;
+      drag.moved = true;
+      scroller.scrollLeft = drag.startScrollLeft - distance;
+      scroller.classList.add("isDragging");
+      event.preventDefault();
+    });
+    const finishDrag = (event: PointerEvent) => {
+      const drag = this.#tabDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      this.#tabDrag = null;
+      scroller.classList.remove("isDragging");
+      try { scroller.releasePointerCapture(event.pointerId); } catch { /* already released */ }
+      if (drag.moved && event.type === "pointerup") this.#suppressTabClick = true;
+    };
+    scroller.addEventListener("pointerup", finishDrag);
+    scroller.addEventListener("pointercancel", finishDrag);
+    scroller.addEventListener("click", (event) => {
+      if (!this.#suppressTabClick) return;
+      this.#suppressTabClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
+  }
+
   private syncSharedTimeSort(source: HTMLSelectElement, controls: readonly HTMLSelectElement[]): void {
     if (source.value !== "time" && source.value !== "-time") return;
     this.#sharedTimeSort = source.value;
@@ -116,8 +188,10 @@ export class ViewingSidebarView {
     }
     this.dom.searchWrap.hidden = false;
     this.dom.search.value = this.#searchTerm;
-    this.dom.search.placeholder = "Search events…";
-    this.dom.search.setAttribute("aria-label", "Search events");
+    const searchDisabled = section === "poses";
+    this.dom.search.disabled = searchDisabled;
+    this.dom.search.placeholder = searchDisabled ? "Searching poses is unavailable" : "Search events…";
+    this.dom.search.setAttribute("aria-label", searchDisabled ? "Searching poses is unavailable" : "Search events");
     this.dom.watchFilter.disabled = section !== "watches";
     this.dom.watchFilter.hidden = false;
     this.dom.watchSort.hidden = section !== "watches";
@@ -155,7 +229,10 @@ export class ViewingSidebarView {
       if (section !== this.#activeSection || generation !== this.#scrollRestoreGenerations[section]) return;
       this.dom.scrollContainer.scrollTop = target;
       if (--attempts > 0) requestAnimationFrame(restore);
-      else this.#scrollPositions[section] = this.dom.scrollContainer.scrollTop;
+      else {
+        if (this.#shiftHeld && this.#shiftSync) this.syncActiveSection();
+        else this.#scrollPositions[section] = this.dom.scrollContainer.scrollTop;
+      }
     };
     requestAnimationFrame(restore);
   }
@@ -169,5 +246,84 @@ export class ViewingSidebarView {
       : this.#activeSection === "logs" ? this.logs.itemCount
         : this.#activeSection === "waypoints" ? this.waypoints.itemCount : this.poses.itemCount;
     this.dom.searchCount.textContent = String(count);
+  }
+
+  private handleNavigationChanged(kind: "selection" | "hover" | "track-lock" | "live-state"): void {
+    const commitId = this.viewing.navigation.sidebarSyncCommitId;
+    if (commitId !== this.#handledSidebarSyncCommitId) {
+      this.#handledSidebarSyncCommitId = commitId;
+      if (this.#shiftHeld) {
+        this.startShiftSync();
+        if (this.#shiftSync) this.#shiftSync.committed = true;
+      }
+    }
+    if (!this.#shiftHeld) return;
+    if (kind === "hover" && !this.inputHoverTime()) {
+      if (this.#shiftSync && !this.#shiftSync.committed) this.cancelShiftSync();
+      else if (this.#shiftSync) this.syncActiveSection();
+      return;
+    }
+    this.startShiftSync();
+    this.syncActiveSection();
+  }
+
+  private startShiftSync(): void {
+    if (this.#shiftSync) return;
+    if (this.syncTime() == null) return;
+    this.#shiftSync = { committed: false, initialScrollPositions: {} };
+    this.syncActiveSection();
+  }
+
+  private finishShiftSync(): void {
+    if (!this.#shiftSync) return;
+    if (this.#shiftSync.committed) this.clearPreviewSelections();
+    else this.cancelShiftSync();
+    this.#shiftSync = null;
+  }
+
+  private cancelShiftSync(): void {
+    const session = this.#shiftSync;
+    if (!session) return;
+    for (const [section, position] of Object.entries(session.initialScrollPositions) as Array<[SidebarSection, number]>) {
+      this.#scrollPositions[section] = position;
+    }
+    this.clearPreviewSelections();
+    this.#shiftSync = null;
+    this.restoreScrollPosition(this.#activeSection);
+  }
+
+  private syncActiveSection(): void {
+    const session = this.#shiftSync;
+    const time = this.syncTime();
+    if (!session || time == null) return;
+    if (session.initialScrollPositions[this.#activeSection] == null) {
+      session.initialScrollPositions[this.#activeSection] = this.dom.scrollContainer.scrollTop;
+    }
+    if (this.#activeSection === "watches") this.watches.setPreviewTime(time);
+    else if (this.#activeSection === "logs") this.logs.setPreviewTime(time);
+    else if (this.#activeSection === "waypoints") this.waypoints.setPreviewTime(time);
+    else this.poses.setPreviewTime(time);
+  }
+
+  private clearPreviewSelections(): void {
+    this.watches.clearPreview();
+    this.logs.clearPreview();
+    this.waypoints.clearPreview();
+    this.poses.clearPreview();
+  }
+
+  private inputHoverTime(): number | null {
+    const navigation = this.viewing.navigation;
+    if (navigation.timelineHoverSource === "timeline" && navigation.hoverTimelineTime != null) return navigation.hoverTimelineTime;
+    return navigation.trackHoverTime;
+  }
+
+  private syncTime(): number | null {
+    const hoverTime = this.inputHoverTime();
+    if (hoverTime != null) return hoverTime;
+    if (this.viewing.playback.isPlaying) return this.viewing.playback.timeMs;
+    return this.viewing.navigation.trackLockPose?.t
+      ?? this.viewing.data.poses[this.viewing.navigation.selectedIndex]?.t
+      ?? null;
   }
 }

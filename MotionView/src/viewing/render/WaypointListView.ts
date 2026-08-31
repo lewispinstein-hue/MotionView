@@ -35,6 +35,7 @@ export class WaypointListView {
   #itemCount = 0;
   readonly #eventKeys = new WeakMap<object, string>();
   #nextEventKey = 1;
+  #previewEventKey: string | null = null;
   constructor(
     private readonly viewing: ViewingFeature,
     private readonly dom: ViewingListsDom,
@@ -96,6 +97,31 @@ export class WaypointListView {
     if (scroll && selected) selected.scrollIntoView({ block: "nearest" });
   }
 
+  setPreviewTime(time: number): void {
+    let nearest: HTMLElement | null = null;
+    let nearestDelta = Number.POSITIVE_INFINITY;
+    for (const element of this.dom.waypointList.querySelectorAll<HTMLElement>(".watchItem")) {
+      const timestamp = Number(element.dataset.eventTime);
+      const delta = Math.abs(timestamp - time);
+      if (!Number.isFinite(timestamp) || delta >= nearestDelta) continue;
+      nearest = element;
+      nearestDelta = delta;
+    }
+    this.#previewEventKey = nearest?.dataset.waypointEventKey ?? null;
+    for (const element of this.dom.waypointList.querySelectorAll<HTMLElement>(".watchItem")) {
+      element.classList.toggle("previewSelected", element.dataset.waypointEventKey === this.#previewEventKey);
+    }
+    nearest?.scrollIntoView({ block: "center" });
+  }
+
+  clearPreview(): void {
+    if (!this.#previewEventKey) return;
+    this.#previewEventKey = null;
+    for (const element of this.dom.waypointList.querySelectorAll<HTMLElement>(".watchItem")) {
+      element.classList.remove("previewSelected");
+    }
+  }
+
   private createItem(waypoint: WaypointView, event: WaypointEventView): HTMLElement {
     const style = eventStyle(event.type);
     const stateLabel = waypoint.retriggerable ? "RETRIGGERABLE" : waypoint.active ? "ACTIVE" : "INACTIVE";
@@ -104,6 +130,7 @@ export class WaypointListView {
         : waypoint.terminalEvent?.type === "REACHED" ? "rgba(22, 183, 70, 0.4)" : "rgba(211, 24, 24, 0.45)";
     const element = document.createElement("div");
     element.className = "watchItem";
+    if (this.#previewEventKey === this.eventKeyFor(event)) element.classList.add("previewSelected");
     element.dataset.waypointId = String(waypoint.id);
     element.dataset.eventTime = String(event.t);
     element.dataset.waypointEventKey = this.eventKeyFor(event);

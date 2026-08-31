@@ -18,8 +18,7 @@ export class WatchListView {
   #nextKey = 1;
   #searchTerm = "";
   #itemCount = 0;
-  #openActionsMenu: Readonly<{ button: HTMLButtonElement; menu: HTMLElement }> | null = null;
-  #openActionsKey: string | null = null;
+  #previewKey: string | null = null;
 
   constructor(
     private readonly viewing: ViewingFeature,
@@ -33,7 +32,6 @@ export class WatchListView {
       scrollContainer: dom.scrollContainer,
       getKey: (marker) => this.keyFor(marker),
       renderItem: (marker) => this.createItem(marker),
-      syncRowLayout: (row) => this.syncActionLayout(row),
     });
     if (!list) throw new Error("MotionView could not initialize the watch virtual list.");
     this.#list = list;
@@ -41,16 +39,10 @@ export class WatchListView {
 
   bind(): void {
     this.dom.watchSort.addEventListener("change", () => {
-      this.closeActionsMenu();
       this.render();
     });
     this.dom.watchFilter.addEventListener("change", () => {
-      this.closeActionsMenu();
       this.render();
-    });
-    document.addEventListener("pointerdown", (event) => {
-      const target = event.target;
-      if (!(target instanceof Element) || !this.isOpenMenuTarget(target)) this.closeActionsMenu();
     });
   }
 
@@ -101,9 +93,6 @@ export class WatchListView {
       if (mode === "value") return String(left.watch.value ?? "").localeCompare(String(right.watch.value ?? ""), undefined, { numeric: true });
       return 0;
     });
-    if (this.#openActionsKey && !items.some((marker) => this.keyFor(marker) === this.#openActionsKey)) {
-      this.closeActionsMenu();
-    }
     this.#itemCount = items.length;
     this.#list.setItems(items);
   }
@@ -130,6 +119,30 @@ export class WatchListView {
     }
   }
 
+  setPreviewTime(time: number): void {
+    const items = this.#list.getItems();
+    let nearestIndex = -1;
+    let nearestDelta = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < items.length; index += 1) {
+      const marker = items[index];
+      if (!marker) continue;
+      const delta = Math.abs(marker.t - time);
+      if (delta < nearestDelta) {
+        nearestIndex = index;
+        nearestDelta = delta;
+      }
+    }
+    this.#previewKey = nearestIndex >= 0 ? this.keyFor(items[nearestIndex]!) : null;
+    if (nearestIndex >= 0) this.#list.scrollToIndex(nearestIndex, 12, "center");
+    this.#list.refresh();
+  }
+
+  clearPreview(): void {
+    if (!this.#previewKey) return;
+    this.#previewKey = null;
+    this.#list.refresh();
+  }
+
   private createItem(marker: Readonly<WatchMarker>): HTMLElement {
     const itemKey = this.keyFor(marker);
     const watch = marker.watch;
@@ -142,6 +155,7 @@ export class WatchListView {
     const element = document.createElement("div");
     element.className = "watchItem";
     if (this.viewing.navigation.selectedWatch === marker) element.classList.add("selected");
+    if (this.#previewKey === itemKey) element.classList.add("previewSelected");
     element.dataset.t = String(marker.t);
     element.dataset.watchKey = itemKey;
     const icon = (svg: string) => `<span class="watchActionIcon">${svg}</span>`;
@@ -152,11 +166,7 @@ export class WatchListView {
     element.innerHTML = `<div class="watchItemContent"><div class="watchItemHeader">
       <div class="watchTitleGroup"><span class="pill level watchLevelPill" style="background:${style.fill};color:${style.text}">${style.name}</span><span class="watchLabel eventSelectableText">${escapeHtml(watch.label)}</span></div>
       <div class="watchMeta"><div class="watchTimestamp muted"><span class="eventSelectableText">${formatNumber(marker.t / 1000, 2)}s</span></div><div class="watchActions watchActionsPill watchActionsFull pill">
-        ${pinButton}${visibilityButton}${graphButton}</div>
-        <div class="watchActionsCompact">
-          <button class="iconBtn watchActionsMoreBtn" type="button" title="More watch actions" aria-label="More watch actions" aria-expanded="false">⋮</button>
-          <div class="watchActionsCompactMenu" hidden>${pinButton}${visibilityButton}${graphButton}</div>
-        </div></div></div><div class="bigValue${booleanClass}"><span class="eventSelectableText">${escapeHtml(watch.value ?? "")}</span></div></div>`;
+        ${pinButton}${visibilityButton}${graphButton}</div></div></div><div class="bigValue${booleanClass}"><span class="eventSelectableText">${escapeHtml(watch.value ?? "")}</span></div></div>`;
     this.constrainTextSelection(element);
     element.addEventListener("pointerenter", () => {
       if (!this.viewing.playback.isPlaying) this.viewing.navigation.setTimelineHover(marker.t);
@@ -188,31 +198,16 @@ export class WatchListView {
       if (!text || text.dataset.selectionCancelled === "true" || window.getSelection()?.toString()) return;
       selectWatch();
     });
-    const moreButton = element.querySelector<HTMLButtonElement>(".watchActionsMoreBtn");
-    const compactMenu = element.querySelector<HTMLElement>(".watchActionsCompactMenu");
-    moreButton?.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (compactMenu) this.toggleActionsMenu(itemKey, moreButton, compactMenu);
-    });
-    compactMenu?.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        this.closeActionsMenu(true);
-      } else if (event.key === "Tab") this.closeActionsMenu();
-    });
     for (const button of element.querySelectorAll<HTMLButtonElement>(".watchVisibilityBtn")) {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         this.viewing.setWatchVisibility(watch, !visible);
-        this.closeActionsMenu();
       });
     }
     for (const button of element.querySelectorAll<HTMLButtonElement>(".watchPinBtn")) {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         this.floatingInfo.toggleWatch(watch.id ?? null);
-        this.closeActionsMenu();
         this.render();
       });
     }
@@ -220,14 +215,8 @@ export class WatchListView {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         this.watchGraph.open(marker);
-        this.closeActionsMenu();
         this.render();
       });
-    }
-    if (this.#openActionsKey === itemKey && moreButton && compactMenu) {
-      compactMenu.hidden = false;
-      moreButton.setAttribute("aria-expanded", "true");
-      this.#openActionsMenu = { button: moreButton, menu: compactMenu };
     }
     return element;
   }
@@ -241,38 +230,6 @@ export class WatchListView {
       this.#keys.set(watch, key);
     }
     return key;
-  }
-
-  private toggleActionsMenu(key: string, button: HTMLButtonElement, menu: HTMLElement): void {
-    const wasOpen = this.#openActionsKey === key && !menu.hidden;
-    this.closeActionsMenu();
-    if (wasOpen) return;
-    menu.hidden = false;
-    button.setAttribute("aria-expanded", "true");
-    this.#openActionsKey = key;
-    this.#openActionsMenu = { button, menu };
-  }
-
-  private closeActionsMenu(restoreFocus = false): void {
-    const current = this.#openActionsMenu;
-    this.#openActionsKey = null;
-    this.#openActionsMenu = null;
-    if (!current) return;
-    current.menu.hidden = true;
-    current.button.setAttribute("aria-expanded", "false");
-    if (restoreFocus) current.button.focus();
-  }
-
-  private isOpenMenuTarget(target: Element): boolean {
-    return !!this.#openActionsMenu
-      && (this.#openActionsMenu.button.contains(target) || this.#openActionsMenu.menu.contains(target));
-  }
-
-  private syncActionLayout(row: HTMLElement): void {
-    const label = row.querySelector<HTMLElement>(".watchLabel");
-    const timestamp = row.querySelector<HTMLElement>(".watchTimestamp");
-    if (!label || !timestamp) return;
-    row.classList.toggle("watchActionsCollapsed", label.getBoundingClientRect().right > timestamp.getBoundingClientRect().left - 4 || label.scrollWidth > label.clientWidth + 1);
   }
 
   private constrainTextSelection(item: HTMLElement): void {

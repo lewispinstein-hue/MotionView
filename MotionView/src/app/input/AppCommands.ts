@@ -27,6 +27,7 @@ export class AppCommands {
     this.#bound = true;
     this.#planOverlayButton.addEventListener("click", () => this.togglePlanningOverlay());
     this.#planOverlayButton.classList.toggle("isOn", this.app.planning.overlayVisible);
+    this.#planOverlayButton.setAttribute("aria-pressed", String(this.app.planning.overlayVisible));
   }
 
   openRoute(): void { this.topBar.openFilePicker(); }
@@ -52,6 +53,7 @@ export class AppCommands {
     if (this.app.core.mode.getMode() !== "viewing") return;
     const visible = this.app.planning.toggleOverlay();
     this.#planOverlayButton.classList.toggle("isOn", visible);
+    this.#planOverlayButton.setAttribute("aria-pressed", String(visible));
     void viewingTelemetry.planOverlayToggled({ enabled: visible });
     requestDrawAll();
   }

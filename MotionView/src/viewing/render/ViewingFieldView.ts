@@ -71,6 +71,8 @@ export class ViewingFieldView implements ViewingFieldLayer {
     const transform = this.viewing.projection.transform;
     context.save();
     context.lineWidth = this.field.sizes.screen({ width: 2, height: 2 }).width;
+    context.lineCap = "round";
+    context.lineJoin = "round";
     for (let index = 1; index < poses.length; index += 1) {
       const previous = poses[index - 1];
       const pose = poses[index];
@@ -197,6 +199,7 @@ export class ViewingFieldView implements ViewingFieldLayer {
       this.field.consumeSuppressNextClick();
       return;
     }
+    if (event.shiftKey) this.viewing.navigation.commitSidebarSync();
     const trackHit = this.hitTrack(event.clientX, event.clientY);
     const watch = this.hitWatch(event.clientX, event.clientY);
     if (watch && !this.viewing.navigation.livestreaming) {

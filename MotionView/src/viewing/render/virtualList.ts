@@ -132,7 +132,7 @@ export interface VirtualList<T> {
   clear(options?: { resetScroll?: boolean }): void;
   setItems(nextItems: ArrayLike<T>, options?: { resetScroll?: boolean; preserveScroll?: boolean }): void;
   refresh(): void;
-  scrollToIndex(index: number, pad?: number): void;
+  scrollToIndex(index: number, pad?: number, alignment?: "nearest" | "center"): void;
   getRange(index: number, elements: number): VirtualListRange<T>;
   getItems(): ArrayLike<T>;
 }
@@ -329,11 +329,16 @@ export function createVirtualList<T>(
     viewport.scrollTop = anchor.scrollTop;
   }
 
-  function scrollToIndex(index: number, pad = 12) {
+  function scrollToIndex(index: number, pad = 12, alignment: "nearest" | "center" = "nearest") {
     if (!Number.isInteger(index) || index < 0 || index >= store.length) return;
     const top = tops[index] ?? 0;
     const height = heights[index] ?? estimateRowHeight;
     const absoluteTop = listOffsetTop() + top;
+    if (alignment === "center") {
+      viewport.scrollTop = Math.max(0, absoluteTop - Math.max(0, (viewport.clientHeight - height) / 2));
+      requestRender();
+      return;
+    }
     const visibleTop = viewport.scrollTop + pad;
     const visibleBottom = viewport.scrollTop + viewport.clientHeight - pad;
     if (absoluteTop < visibleTop) viewport.scrollTop = Math.max(0, absoluteTop - pad);

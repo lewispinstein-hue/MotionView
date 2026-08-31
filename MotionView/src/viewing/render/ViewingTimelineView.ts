@@ -30,14 +30,15 @@ export class ViewingTimelineView implements ViewingRenderLayer {
       const x = event.clientX - rect.left;
       const hit = this.pickWatch(x, event.clientY - rect.top);
       this.dom.canvas.style.cursor = hit ? "pointer" : "crosshair";
-      this.viewing.navigation.setTimelineHover(this.xToTime(x));
+      this.viewing.navigation.setTimelineHover(this.xToTime(x), "timeline");
     });
     this.dom.canvas.addEventListener("mouseleave", () => {
-      this.viewing.navigation.setTimelineHover(null);
+      this.viewing.navigation.setTimelineHover(null, "timeline");
       this.dom.canvas.style.cursor = "default";
     });
     this.dom.canvas.addEventListener("mousedown", (event) => {
       if (!this.viewing.data.hasData || this.viewing.playback.isPlaying || this.viewing.navigation.livestreaming) return;
+      if (event.shiftKey) this.viewing.navigation.commitSidebarSync();
       const rect = this.dom.canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const marker = this.pickWatch(x, event.clientY - rect.top);
