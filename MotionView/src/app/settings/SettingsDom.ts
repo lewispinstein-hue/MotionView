@@ -73,5 +73,5 @@ export class SettingsDom {
     this.sidebarRobotImageAlpha = optionalElement("robotImgAlpha", HTMLInputElement, document);
   }
 
-  static from(document: Document): SettingsDom { return new SettingsDom(document); }
+  static from(documentRoot: Document = document): SettingsDom { return new SettingsDom(documentRoot); }
 }

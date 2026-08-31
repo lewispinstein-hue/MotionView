@@ -17,7 +17,7 @@ export class LiveDom {
     readonly autoResults: HTMLElement | null,
   ) {}
 
-  static from(root: Document): LiveDom {
+  static from(root: Document = document): LiveDom {
     return new LiveDom(
       element(root, "btnLeftStream"),
       element(root, "btnLeftRefresh"),

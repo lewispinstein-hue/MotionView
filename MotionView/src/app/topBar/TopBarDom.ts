@@ -52,7 +52,7 @@ export class TopBarDom {
     this.sidebarFileButton = requiredElement(document, "btnFile");
   }
 
-  static from(document: Document): TopBarDom {
-    return new TopBarDom(document);
+  static from(documentRoot: Document = document): TopBarDom {
+    return new TopBarDom(documentRoot);
   }
 }

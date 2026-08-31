@@ -41,9 +41,9 @@ export class ViewingLayoutView {
   #lastTimelineHeight = 260;
 
   constructor(
-    document: Document,
     private readonly field: FieldRenderer,
     private readonly view: ViewingView,
+    document: Document = globalThis.document,
   ) {
     this.#splitter = requiredElement(document, "vSplit");
     this.#timelineSplitter = requiredElement(document, "hSplit");

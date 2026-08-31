@@ -124,7 +124,7 @@ export class PlanningDom {
     this.codeExportSuccess = requiredElement(document, "planCodeExportSuccess");
   }
 
-  static from(document: Document): PlanningDom {
-    return new PlanningDom(document);
+  static from(documentRoot: Document = document): PlanningDom {
+    return new PlanningDom(documentRoot);
   }
 }

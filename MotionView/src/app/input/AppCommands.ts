@@ -19,7 +19,7 @@ export class AppCommands {
     private readonly planningDialogs: PlanningDialogs,
     private readonly planningLayout: PlanningLayoutView,
     private readonly viewingLayout: ViewingLayoutView,
-    document: Document,
+    document: Document = globalThis.document,
   ) { this.#planOverlayButton = requiredElement("btnTogglePlanOverlay", HTMLButtonElement, document); }
 
   bind(): void {

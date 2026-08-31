@@ -46,23 +46,23 @@ installGlobalErrorReporting(app.core.bridge);
 const fieldRenderer = new FieldRenderer(requiredElement("c", HTMLCanvasElement, document));
 fieldRenderer.bindInput();
 
-const topBar = new TopBarView(app, fieldRenderer, TopBarDom.from(document));
+const topBar = new TopBarView(app, fieldRenderer, TopBarDom.from());
 
-const planningDom = PlanningDom.from(document);
+const planningDom = PlanningDom.from();
 const planningDialogs = new PlanningDialogs(planningDom);
 const planningCodeExportDialog = new PlanningCodeExportDialog(app.planning, planningDom);
 const planningView = new PlanningView(app.planning, fieldRenderer, planningDom, planningDialogs);
 const planningInput = new PlanningInput(app.planning, fieldRenderer, planningDialogs);
 
-const viewingView = new ViewingView(app.viewing, fieldRenderer, ViewingDom.from(document));
+const viewingView = new ViewingView(app.viewing, fieldRenderer, ViewingDom.from());
 const viewingInput = new ViewingInput(app.viewing, viewingView);
-const liveView = new LiveView(app.live, LiveDom.from(document));
+const liveView = new LiveView(app.live, LiveDom.from());
 const liveInput = new LiveInput(app.live);
 
-const planningLayout = new PlanningLayoutView(document, fieldRenderer, planningView);
-const viewingLayout = new ViewingLayoutView(document, fieldRenderer, viewingView);
+const planningLayout = new PlanningLayoutView(fieldRenderer, planningView);
+const viewingLayout = new ViewingLayoutView(fieldRenderer, viewingView);
 
-const settingsDom = SettingsDom.from(document);
+const settingsDom = SettingsDom.from();
 const settingsView = new SettingsView(fieldRenderer, settingsDom);
 const fieldSettings = new FieldSettingsBinding(app.settings, fieldRenderer, topBar, settingsDom);
 const viewingSettings = new ViewingSettingsBinding(app.settings, app.viewing, settingsDom);
@@ -71,13 +71,13 @@ const liveSettings = new LiveSettingsBinding(app.settings, app.live);
 const layoutSettings = new LayoutSettingsBinding(app.settings, planningLayout, viewingLayout);
 
 const serializer = new MotionViewDocumentSerializer(app);
-const helpView = new HelpView(app, HelpDom.from(document), serializer);
+const helpView = new HelpView(app, HelpDom.from(), serializer);
 const persistence = new SessionPersistence(app, serializer);
 const importer = new RouteImportService(app, planningDialogs, topBar, demoRouteUrl);
-const exportDialog = new ExportDialog(app, ExportDom.from(document), new ExportService(app, serializer));
-const routeInfoView = new RouteInfoView(app, RouteInfoDom.from(document));
+const exportDialog = new ExportDialog(app, ExportDom.from(), new ExportService(app, serializer));
+const routeInfoView = new RouteInfoView(app, RouteInfoDom.from());
 
-const appCommands = new AppCommands(app, fieldRenderer, topBar, planningDialogs, planningLayout, viewingLayout, document);
+const appCommands = new AppCommands(app, fieldRenderer, topBar, planningDialogs, planningLayout, viewingLayout);
 const appInput = new AppInput(appCommands);
 const modeCoordinator = new ModeCoordinator(app, fieldRenderer, planningLayout, viewingLayout);
 const windowController = new WindowController();

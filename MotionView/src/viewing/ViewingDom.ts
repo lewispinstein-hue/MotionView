@@ -180,7 +180,7 @@ export class ViewingDom {
     };
   }
 
-  static from(document: Document): ViewingDom {
-    return new ViewingDom(document);
+  static from(documentRoot: Document = document): ViewingDom {
+    return new ViewingDom(documentRoot);
   }
 }

@@ -36,9 +36,9 @@ export class PlanningLayoutView {
   #lastSidebarWidth = 360;
 
   constructor(
-    document: Document,
     private readonly field: FieldRenderer,
     private readonly view: PlanningView,
+    document: Document = globalThis.document,
   ) {
     this.#splitter = requiredElement(document, "vSplit");
     this.#timelineSplitter = requiredElement(document, "planningTimelineSplit");

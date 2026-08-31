@@ -49,5 +49,5 @@ export class HelpDom {
     this.feedbackAreaTags = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-feedback-area]"));
   }
 
-  static from(document: Document): HelpDom { return new HelpDom(document); }
+  static from(documentRoot: Document = document): HelpDom { return new HelpDom(documentRoot); }
 }
