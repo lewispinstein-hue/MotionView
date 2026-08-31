@@ -51,12 +51,9 @@ export class ViewingSidebarView {
     for (const tab of this.dom.sectionTabs) {
       tab.addEventListener("click", () => this.setActiveSection(tab.dataset.viewingSection as SidebarSection));
     }
-    for (const section of ["watches", "logs", "waypoints", "poses"] as const) {
-      this.listFor(section).addEventListener("scroll", () => {
-        if (section !== this.#activeSection || this.dom.panels[section].hidden) return;
-        this.#scrollPositions[section] = this.listFor(section).scrollTop;
-      }, { passive: true });
-    }
+    this.dom.scrollContainer.addEventListener("scroll", () => {
+      this.#scrollPositions[this.#activeSection] = this.dom.scrollContainer.scrollTop;
+    }, { passive: true });
     this.dom.search.addEventListener("input", () => {
       this.#searchTerm = this.dom.search.value;
       this.watches.setSearch(this.#searchTerm);
@@ -107,7 +104,7 @@ export class ViewingSidebarView {
 
   private setActiveSection(section: SidebarSection): void {
     if (!(["watches", "logs", "waypoints", "poses"] as const).includes(section)) return;
-    this.#scrollPositions[this.#activeSection] = this.listFor(this.#activeSection).scrollTop;
+    this.#scrollPositions[this.#activeSection] = this.dom.scrollContainer.scrollTop;
     this.#activeSection = section;
     for (const tab of this.dom.sectionTabs) {
       const active = tab.dataset.viewingSection === section;
@@ -128,21 +125,12 @@ export class ViewingSidebarView {
     this.dom.waypointSort.hidden = section !== "waypoints";
     this.dom.poseSort.hidden = section !== "poses";
     const activeSort = this.sortFor(section);
-    let sortChanged = false;
     if (Array.from(activeSort.options).some((option) => option.value === this.#sharedTimeSort)) {
-      sortChanged = activeSort.value !== this.#sharedTimeSort;
       activeSort.value = this.#sharedTimeSort;
     }
-    if (sortChanged) this.renderSection(section);
+    this.renderSection(section);
     this.restoreScrollPosition(section);
     this.updateCounts();
-  }
-
-  private listFor(section: SidebarSection): HTMLElement {
-    if (section === "watches") return this.dom.watchList;
-    if (section === "logs") return this.dom.logList;
-    if (section === "waypoints") return this.dom.waypointList;
-    return this.dom.poseList;
   }
 
   private sortFor(section: SidebarSection): HTMLSelectElement {
@@ -165,10 +153,9 @@ export class ViewingSidebarView {
     let attempts = 5;
     const restore = () => {
       if (section !== this.#activeSection || generation !== this.#scrollRestoreGenerations[section]) return;
-      const list = this.listFor(section);
-      list.scrollTop = target;
+      this.dom.scrollContainer.scrollTop = target;
       if (--attempts > 0) requestAnimationFrame(restore);
-      else this.#scrollPositions[section] = list.scrollTop;
+      else this.#scrollPositions[section] = this.dom.scrollContainer.scrollTop;
     };
     requestAnimationFrame(restore);
   }

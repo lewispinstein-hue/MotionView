@@ -255,18 +255,6 @@ canvas#c {
   gap: 3px;
 }
 
-.viewingSidebarActions .iconBtn {
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
-  padding: 0;
-  color: var(--muted);
-}
-
-.viewingSidebarActions .iconBtn:hover {
-  color: var(--text);
-}
-
 .viewingSidebarActions svg {
   display: block;
   color: currentColor;
@@ -323,6 +311,12 @@ canvas#c {
   gap: 7px;
   padding: 9px 10px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.viewingSidebarScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 
 .viewingSidebarSearch {
@@ -395,10 +389,9 @@ canvas#c {
 }
 
 .viewingSidebarPanel {
-  display: flex;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
+  display: block;
+  min-height: 100%;
+  overflow: visible;
 }
 
 .viewingSidebarPanel[hidden] {
@@ -410,8 +403,9 @@ canvas#c {
 .viewingSidebarPanel > #waypointList,
 .viewingSidebarPanel > #poseList {
   flex: 1 1 0;
-  min-height: 0;
+  min-height: 100%;
   max-height: none;
+  overflow: visible;
   border: 0;
   border-radius: 0;
   background: transparent;

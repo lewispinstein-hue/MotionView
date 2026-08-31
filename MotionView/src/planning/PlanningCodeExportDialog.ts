@@ -135,12 +135,12 @@ export class PlanningCodeExportDialog {
     const contents = sections.join("\n");
     this.dom.codeExportConfirm.disabled = true;
     try {
-      const result = await exportPlanningCode(path, contents);
-      this.dom.codeExportSuccess.textContent = `Exported to ${result.path}`;
+      await exportPlanningCode(path, contents);
+      this.dom.codeExportSuccess.textContent = "Planning code exported.";
       this.dom.codeExportSuccess.classList.remove("isError");
       this.dom.codeExportSuccess.hidden = false;
       this.dom.codeExportValidation.textContent = "";
-      setStatus(`Exported planning code to ${result.path}`);
+      setStatus("Planning code exported.");
       this.emitChanged();
       void planningTelemetry.templateExported(this.planning.templateExportTelemetryProperties({
         export_surface: "file",

@@ -117,6 +117,7 @@ export function createVirtualListStore<T>(initialItems: ArrayLike<T> = []): Virt
 export interface VirtualListOptions<T> {
   estimateRowHeight?: number;
   overscanPx?: number;
+  scrollContainer?: HTMLElement;
   getKey(item: T, index: number): string;
   renderItem(item: T, index: number): HTMLElement | null;
   syncRowLayout?: (row: HTMLElement) => void;
@@ -141,6 +142,7 @@ export function createVirtualList<T>(
   {
     estimateRowHeight = 64,
     overscanPx = 320,
+    scrollContainer,
     getKey,
     renderItem,
     syncRowLayout = () => {},
@@ -148,6 +150,7 @@ export function createVirtualList<T>(
 ): VirtualList<T> | null {
   if (!container) return null;
   const listContainer = container;
+  const viewport = scrollContainer ?? listContainer;
 
   const content = document.createElement("div");
   content.className = "virtualListContent";
@@ -160,6 +163,21 @@ export function createVirtualList<T>(
   let heights: number[] = [];
   let totalHeight = 0;
   const measuredHeights = new Map<string, number>();
+
+  function isVisible() {
+    return listContainer.getClientRects().length > 0;
+  }
+
+  function listOffsetTop() {
+    if (viewport === listContainer) return 0;
+    const viewportRect = viewport.getBoundingClientRect();
+    const listRect = listContainer.getBoundingClientRect();
+    return viewport.scrollTop + listRect.top - viewportRect.top;
+  }
+
+  function localScrollTop() {
+    return Math.max(0, viewport.scrollTop - listOffsetTop());
+  }
 
   function recomputeLayout() {
     tops = new Array(store.length);
@@ -203,14 +221,15 @@ export function createVirtualList<T>(
 
   function renderNow() {
     renderQueued = false;
+    if (!isVisible()) return;
     if (!store.length) {
       content.replaceChildren();
       content.style.height = "0px";
       return;
     }
 
-    const scrollTop = listContainer.scrollTop;
-    const viewportHeight = listContainer.clientHeight || (estimateRowHeight * 8);
+    const scrollTop = localScrollTop();
+    const viewportHeight = viewport.clientHeight || (estimateRowHeight * 8);
     const startPx = Math.max(0, scrollTop - overscanPx);
     const endPx = scrollTop + viewportHeight + overscanPx;
 
@@ -265,9 +284,11 @@ export function createVirtualList<T>(
   }
 
   function captureScrollAnchor() {
-    const nearTop = listContainer.scrollTop <= 12;
-    const nearBottom = listContainer.scrollTop + listContainer.clientHeight >= listContainer.scrollHeight - 12;
-    const index = Math.max(0, Math.min(store.length - 1, lowerBoundTop(listContainer.scrollTop)));
+    if (!isVisible()) return null;
+    const scrollTop = localScrollTop();
+    const nearTop = viewport.scrollTop <= 12;
+    const nearBottom = viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 12;
+    const index = Math.max(0, Math.min(store.length - 1, lowerBoundTop(scrollTop)));
     const item = store.get(index);
     if (item == null) {
       return {
@@ -275,48 +296,49 @@ export function createVirtualList<T>(
         nearBottom,
         key: null,
         offset: 0,
-        scrollTop: listContainer.scrollTop,
+        scrollTop: viewport.scrollTop,
       };
     }
     return {
       nearTop,
       nearBottom,
       key: getKey(item, index),
-      offset: listContainer.scrollTop - (tops[index] ?? 0),
-      scrollTop: listContainer.scrollTop,
+      offset: scrollTop - (tops[index] ?? 0),
+      scrollTop: viewport.scrollTop,
     };
   }
 
   function restoreScrollAnchor(anchor: ReturnType<typeof captureScrollAnchor> | null) {
     if (!anchor) return;
     if (anchor.nearTop) {
-      listContainer.scrollTop = 0;
+      viewport.scrollTop = 0;
       return;
     }
     if (anchor.nearBottom) {
-      listContainer.scrollTop = Math.max(0, totalHeight - listContainer.clientHeight);
+      viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
       return;
     }
     if (anchor.key != null) {
       for (let i = 0; i < store.length; i += 1) {
         const item = store.get(i) as T;
         if (getKey(item, i) !== anchor.key) continue;
-        listContainer.scrollTop = Math.max(0, (tops[i] ?? 0) + anchor.offset);
+        viewport.scrollTop = Math.max(0, listOffsetTop() + (tops[i] ?? 0) + anchor.offset);
         return;
       }
     }
-    listContainer.scrollTop = anchor.scrollTop;
+    viewport.scrollTop = anchor.scrollTop;
   }
 
   function scrollToIndex(index: number, pad = 12) {
     if (!Number.isInteger(index) || index < 0 || index >= store.length) return;
     const top = tops[index] ?? 0;
     const height = heights[index] ?? estimateRowHeight;
-    const visibleTop = listContainer.scrollTop + pad;
-    const visibleBottom = listContainer.scrollTop + listContainer.clientHeight - pad;
-    if (top < visibleTop) listContainer.scrollTop = Math.max(0, top - pad);
-    else if ((top + height) > visibleBottom) {
-      listContainer.scrollTop = Math.max(0, top + height - listContainer.clientHeight + pad);
+    const absoluteTop = listOffsetTop() + top;
+    const visibleTop = viewport.scrollTop + pad;
+    const visibleBottom = viewport.scrollTop + viewport.clientHeight - pad;
+    if (absoluteTop < visibleTop) viewport.scrollTop = Math.max(0, absoluteTop - pad);
+    else if ((absoluteTop + height) > visibleBottom) {
+      viewport.scrollTop = Math.max(0, absoluteTop + height - viewport.clientHeight + pad);
     }
     requestRender();
   }
@@ -333,7 +355,7 @@ export function createVirtualList<T>(
       if (!nextKeys.has(key)) measuredHeights.delete(key);
     }
     recomputeLayout();
-    if (resetScroll) listContainer.scrollTop = 0;
+    if (resetScroll && isVisible()) viewport.scrollTop = 0;
     else restoreScrollAnchor(anchor);
     requestRender();
   }
@@ -344,14 +366,15 @@ export function createVirtualList<T>(
     recomputeLayout();
     content.replaceChildren();
     content.style.height = "0px";
-    if (resetScroll) listContainer.scrollTop = 0;
+    if (resetScroll && isVisible()) viewport.scrollTop = 0;
   }
 
-  listContainer.addEventListener("scroll", requestRender, { passive: true });
+  viewport.addEventListener("scroll", requestRender, { passive: true });
   window.addEventListener("resize", requestRender);
   if (typeof ResizeObserver === "function") {
     const resizeObserver = new ResizeObserver(requestRender);
-    resizeObserver.observe(listContainer);
+    resizeObserver.observe(viewport);
+    if (viewport !== listContainer) resizeObserver.observe(listContainer);
   }
 
   return {

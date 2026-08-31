@@ -60,9 +60,9 @@ export class LiveProject {
     if (response.ok && response.json?.ok) {
       this.#path = this.normalizePath(response.json.dir ?? next);
       this.#valid = true;
-      this.#status = { kind: "valid", message: `Using PROS project: ${this.#path}` };
+      this.#status = { kind: "valid", message: "PROS project configured." };
       this.emit();
-      this.events.notice.emit({ kind: "success", message: `PROS directory set to: ${this.#path}` });
+      this.events.notice.emit({ kind: "success", message: "PROS project configured." });
       return true;
     }
 
@@ -93,7 +93,7 @@ export class LiveProject {
     }
     this.#path = path;
     this.#valid = true;
-    this.#status = { kind: "valid", message: `Using PROS project: ${path}` };
+    this.#status = { kind: "valid", message: "PROS project configured." };
     this.emit();
   }
 
@@ -119,4 +119,3 @@ export class LiveProject {
     this.events.projectChanged.emit({ path: this.#path, valid: this.#valid, status: this.#status });
   }
 }
-

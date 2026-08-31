@@ -30,6 +30,7 @@ export class WatchListView {
     const list = createVirtualList<Readonly<WatchMarker>>(dom.watchList, {
       estimateRowHeight: 76,
       overscanPx: 320,
+      scrollContainer: dom.scrollContainer,
       getKey: (marker) => this.keyFor(marker),
       renderItem: (marker) => this.createItem(marker),
       syncRowLayout: (row) => this.syncActionLayout(row),

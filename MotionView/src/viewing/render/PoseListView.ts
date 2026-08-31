@@ -22,6 +22,7 @@ export class PoseListView {
     const list = createVirtualList<PoseListItem>(dom.poseList, {
       estimateRowHeight: 64,
       overscanPx: 320,
+      scrollContainer: dom.scrollContainer,
       getKey: (item) => String(item.index),
       renderItem: (item) => this.createItem(item.index),
     });

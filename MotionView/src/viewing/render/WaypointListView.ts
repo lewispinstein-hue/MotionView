@@ -57,7 +57,12 @@ export class WaypointListView {
   }
 
   render(): void {
-    const anchor = captureScrollAnchor(this.dom.waypointList, ".watchItem", (element) => `${element.dataset.waypointId}:${element.dataset.eventTime}`);
+    const itemSelector = "#waypointList .watchItem";
+    const anchor = this.dom.panels.waypoints.hidden ? null : captureScrollAnchor(
+      this.dom.scrollContainer,
+      itemSelector,
+      (element) => `${element.dataset.waypointId}:${element.dataset.eventTime}`,
+    );
     this.dom.waypointList.replaceChildren();
     const visible: Array<{ waypoint: WaypointView; event: WaypointEventView }> = [];
     for (const waypoint of this.viewing.data.waypoints) {
@@ -74,7 +79,12 @@ export class WaypointListView {
     this.#itemCount = visible.length;
     for (const item of visible) this.dom.waypointList.appendChild(this.createItem(item.waypoint, item.event));
     this.highlight(false);
-    restoreScrollAnchor(this.dom.waypointList, anchor, ".watchItem", (element) => `${element.dataset.waypointId}:${element.dataset.eventTime}`);
+    restoreScrollAnchor(
+      this.dom.scrollContainer,
+      anchor,
+      itemSelector,
+      (element) => `${element.dataset.waypointId}:${element.dataset.eventTime}`,
+    );
   }
 
   highlight(scroll: boolean): void {

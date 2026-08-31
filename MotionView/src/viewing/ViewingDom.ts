@@ -23,6 +23,7 @@ export interface ViewingTimelineDom {
 export interface ViewingListsDom {
   readonly sectionTabs: readonly HTMLButtonElement[];
   readonly panels: Readonly<Record<"watches" | "logs" | "waypoints" | "poses", HTMLElement>>;
+  readonly scrollContainer: HTMLElement;
   readonly searchWrap: HTMLElement;
   readonly search: HTMLInputElement;
   readonly searchCount: HTMLElement;
@@ -125,6 +126,7 @@ export class ViewingDom {
         waypoints: requiredElement(document, "waypointPanel"),
         poses: requiredElement(document, "posePanel"),
       },
+      scrollContainer: requiredElement(document, "viewingSidebarScroll"),
       searchWrap: requiredElement(document, "viewingSearchWrap"),
       search: requiredElement(document, "viewingSearch"),
       searchCount: requiredElement(document, "viewingSearchCount"),

@@ -20,6 +20,7 @@ export class LogListView {
     const list = createVirtualList<Readonly<LogEntry>>(dom.logList, {
       estimateRowHeight: 70,
       overscanPx: 320,
+      scrollContainer: dom.scrollContainer,
       getKey: (entry) => this.keyFor(entry),
       renderItem: (entry) => this.createItem(entry),
     });

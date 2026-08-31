@@ -584,43 +584,45 @@
             </div>
           </div>
 
-          <div class="viewingSidebarToolbar">
-            <label class="viewingSidebarSearch" id="viewingSearchWrap" for="viewingSearch">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
-              <input id="viewingSearch" type="search" autocomplete="off" placeholder="Search watches…" aria-label="Search watches by label or value">
-              <span id="viewingSearchCount" aria-live="polite">—</span>
-            </label>
-            <div class="viewingSidebarControls">
-              <select id="watchFilter" class="settingsSelect viewingToolbarSelect" aria-label="Filter watches by label">
-                <option value="all" selected>Filter by label</option>
-              </select>
-              <select id="watchSort" class="settingsSelect viewingToolbarSelect" aria-label="Sort watches">
-                <option value="level">Level</option>
-                <option value="time">Oldest</option>
-                <option value="-time" selected>Newest</option>
-                <option value="value">Value</option>
-              </select>
-              <select id="logSort" class="settingsSelect viewingToolbarSelect" aria-label="Sort logs" hidden>
-                <option value="level">Level</option>
-                <option value="time" selected>Oldest</option>
-                <option value="-time">Newest</option>
-              </select>
-              <select id="waypointSort" class="settingsSelect viewingToolbarSelect" aria-label="Sort waypoint events" hidden>
-                <option value="time" selected>Oldest</option>
-                <option value="-time">Newest</option>
-                <option value="name">Name</option>
-              </select>
-              <select id="poseSort" class="settingsSelect viewingToolbarSelect" aria-label="Sort poses" hidden>
-                <option value="time" selected>Oldest</option>
-                <option value="-time">Newest</option>
-              </select>
+          <div id="viewingSidebarScroll" class="viewingSidebarScroll">
+            <div class="viewingSidebarToolbar">
+              <label class="viewingSidebarSearch" id="viewingSearchWrap" for="viewingSearch">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
+                <input id="viewingSearch" type="search" autocomplete="off" placeholder="Search watches…" aria-label="Search watches by label or value">
+                <span id="viewingSearchCount" aria-live="polite">—</span>
+              </label>
+              <div class="viewingSidebarControls">
+                <select id="watchFilter" class="settingsSelect viewingToolbarSelect" aria-label="Filter watches by label">
+                  <option value="all" selected>Filter by label</option>
+                </select>
+                <select id="watchSort" class="settingsSelect viewingToolbarSelect" aria-label="Sort watches">
+                  <option value="level">Level</option>
+                  <option value="time">Oldest</option>
+                  <option value="-time" selected>Newest</option>
+                  <option value="value">Value</option>
+                </select>
+                <select id="logSort" class="settingsSelect viewingToolbarSelect" aria-label="Sort logs" hidden>
+                  <option value="level">Level</option>
+                  <option value="time" selected>Oldest</option>
+                  <option value="-time">Newest</option>
+                </select>
+                <select id="waypointSort" class="settingsSelect viewingToolbarSelect" aria-label="Sort waypoint events" hidden>
+                  <option value="time" selected>Oldest</option>
+                  <option value="-time">Newest</option>
+                  <option value="name">Name</option>
+                </select>
+                <select id="poseSort" class="settingsSelect viewingToolbarSelect" aria-label="Sort poses" hidden>
+                  <option value="time" selected>Oldest</option>
+                  <option value="-time">Newest</option>
+                </select>
+              </div>
             </div>
-          </div>
 
-          <div id="watchPanel" class="viewingSidebarPanel" role="tabpanel" data-viewing-panel="watches"><div id="watchList"></div></div>
-          <div id="logPanel" class="viewingSidebarPanel" role="tabpanel" data-viewing-panel="logs" hidden><div id="logList"></div></div>
-          <div id="waypointPanel" class="viewingSidebarPanel" role="tabpanel" data-viewing-panel="waypoints" hidden><div id="waypointList"></div></div>
-          <div id="posePanel" class="viewingSidebarPanel" role="tabpanel" data-viewing-panel="poses" hidden><div id="poseList"></div></div>
+            <div id="watchPanel" class="viewingSidebarPanel" role="tabpanel" data-viewing-panel="watches"><div id="watchList"></div></div>
+            <div id="logPanel" class="viewingSidebarPanel" role="tabpanel" data-viewing-panel="logs" hidden><div id="logList"></div></div>
+            <div id="waypointPanel" class="viewingSidebarPanel" role="tabpanel" data-viewing-panel="waypoints" hidden><div id="waypointList"></div></div>
+            <div id="posePanel" class="viewingSidebarPanel" role="tabpanel" data-viewing-panel="poses" hidden><div id="poseList"></div></div>
+          </div>
         </div>
 
       </div>
