@@ -145,8 +145,8 @@ export class WatchListView {
     element.dataset.watchKey = itemKey;
     const icon = (svg: string) => `<span class="watchActionIcon">${svg}</span>`;
     const graphButton = isGraphableWatchValue(watch.value)
-      ? `<button class="iconBtn watchGraphBtn${this.watchGraph.isOpenFor(marker) ? " isOn" : ""}" type="button" title="Open watch graph">${icon(watchGraphIconSvg)}</button>` : "";
-    const pinButton = `<button class="iconBtn watchPinBtn${this.floatingInfo.isWatchPinned(watch.id ?? null) ? " isOn" : ""}" type="button" title="Pin watch" aria-label="Pin watch">${icon(pinWatchIconSvg)}</button>`;
+      ? `<button class="iconBtn watchGraphBtn${this.watchGraph.isOpenFor(marker) ? " isOn" : ""}" type="button">${icon(watchGraphIconSvg)}</button>` : "";
+    const pinButton = `<button class="iconBtn watchPinBtn${this.floatingInfo.isWatchPinned(watch.id ?? null) ? " isOn" : ""}" type="button">${icon(pinWatchIconSvg)}</button>`;
     const visibilityButton = `<button class="iconBtn watchVisibilityBtn${visible ? "" : " isOff"}" type="button" title="${visible ? "Hide" : "Show"} watch" aria-label="${visible ? "Hide" : "Show"} watch">${icon(visible ? visibleWatchIconSvg : invisibleWatchIconSvg)}</button>`;
     element.innerHTML = `<div class="watchItemContent"><div class="watchItemHeader">
       <div class="watchTitleGroup"><span class="pill level watchLevelPill" style="background:${style.fill};color:${style.text}">${style.name}</span><span class="watchLabel eventSelectableText">${escapeHtml(watch.label)}</span></div>
@@ -156,14 +156,23 @@ export class WatchListView {
           <button class="iconBtn watchActionsMoreBtn" type="button" title="More watch actions" aria-label="More watch actions" aria-expanded="false">⋮</button>
           <div class="watchActionsCompactMenu" hidden>${pinButton}${visibilityButton}${graphButton}</div>
         </div></div></div><div class="bigValue${booleanClass}"><span class="eventSelectableText">${escapeHtml(watch.value ?? "")}</span></div></div>`;
+    this.constrainTextSelection(element);
+    element.addEventListener("pointerenter", () => {
+      if (!this.viewing.playback.isPlaying) this.viewing.navigation.setTimelineHover(marker.t);
+    });
+    element.addEventListener("pointerleave", () => {
+      if (this.viewing.navigation.hoverTimelineTime === marker.t) this.viewing.navigation.setTimelineHover(null);
+    });
     const selectWatch = () => {
       if (this.viewing.navigation.selectedWatch === marker) {
         this.viewing.navigation.clearDetails();
         return;
       }
       this.viewing.playback.pause();
-      const index = marker.idx ?? this.viewing.projection.findFloorIndex(marker.t);
-      const pose = this.viewing.projection.interpolatePose(marker.t) ?? marker.pose;
+      this.viewing.navigation.setTimelineHover(null);
+      const closest = this.viewing.projection.nearestIndex(marker.t, Number.POSITIVE_INFINITY);
+      const index = marker.idx ?? closest?.index ?? -1;
+      const pose = this.viewing.projection.interpolatePose(marker.t) ?? marker.pose ?? this.viewing.projection.poseAt(index);
       if (index >= 0 && pose) this.viewing.navigation.lockTrack(pose, index);
       this.viewing.navigation.selectWatch(marker);
       setStatus(`Watch @${formatNumber(marker.t / 1000, 2)}s selected.`);
@@ -174,7 +183,8 @@ export class WatchListView {
       selectWatch();
     }, { passive: false });
     element.addEventListener("click", (event) => {
-      if (!(event.target instanceof Element) || !event.target.closest(".eventSelectableText") || window.getSelection()?.toString()) return;
+      const text = event.target instanceof Element ? event.target.closest<HTMLElement>(".eventSelectableText") : null;
+      if (!text || text.dataset.selectionCancelled === "true" || window.getSelection()?.toString()) return;
       selectWatch();
     });
     const moreButton = element.querySelector<HTMLButtonElement>(".watchActionsMoreBtn");
@@ -262,5 +272,26 @@ export class WatchListView {
     const timestamp = row.querySelector<HTMLElement>(".watchTimestamp");
     if (!label || !timestamp) return;
     row.classList.toggle("watchActionsCollapsed", label.getBoundingClientRect().right > timestamp.getBoundingClientRect().left - 4 || label.scrollWidth > label.clientWidth + 1);
+  }
+
+  private constrainTextSelection(item: HTMLElement): void {
+    for (const text of item.querySelectorAll<HTMLElement>(".eventSelectableText")) {
+      text.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        text.dataset.selectionCancelled = "";
+        const constrain = (move: PointerEvent) => {
+          const target = document.elementFromPoint(move.clientX, move.clientY);
+          if (target && text.contains(target)) return;
+          text.dataset.selectionCancelled = "true";
+          window.getSelection()?.removeAllRanges();
+        };
+        const release = () => {
+          window.removeEventListener("pointermove", constrain);
+          window.setTimeout(() => delete text.dataset.selectionCancelled, 0);
+        };
+        window.addEventListener("pointermove", constrain, { passive: true });
+        window.addEventListener("pointerup", release, { once: true });
+      }, { passive: true });
+    }
   }
 }

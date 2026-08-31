@@ -58,8 +58,10 @@ export class ViewingView {
     this.fieldLayer.bind();
     this.timelineLayer.bind();
     this.viewing.events.dataChanged.subscribe((change) => this.handleDataChanged(change));
-    this.viewing.events.navigationChanged.subscribe(() => {
-      this.#sidebar.highlight();
+    this.viewing.events.navigationChanged.subscribe(({ kind }) => {
+      // A hover preview only affects the field, timeline, and readout. Refreshing
+      // the virtualized lists here would replace the row currently being hovered.
+      if (kind !== "hover") this.#sidebar.highlight();
       this.#readout.render();
       this.#watchGraph.updatePlayhead();
       requestDrawAll();

@@ -75,21 +75,27 @@ export class LogListView {
         ${entry.isSystem ? '<span class="pill logSystemPill">SYSTEM</span>' : ""}
       </div><div class="muted"><span class="eventSelectableText">${formatNumber(entry.t / 1000, 2)}s</span></div>
     </div><div class="bigValue selectableText"><span class="eventSelectableText">${escapeHtml(entry.message ?? entry.value ?? "")}</span></div></div>`;
+    this.constrainTextSelection(element);
+    element.addEventListener("pointerenter", () => {
+      if (!this.viewing.playback.isPlaying) this.viewing.navigation.setTimelineHover(entry.t);
+    });
+    element.addEventListener("pointerleave", () => {
+      if (this.viewing.navigation.hoverTimelineTime === entry.t) this.viewing.navigation.setTimelineHover(null);
+    });
     const selectLog = () => {
       if (this.viewing.navigation.selectedLog === entry) {
         this.viewing.navigation.clearDetails();
         return;
       }
       this.viewing.playback.pause();
+      this.viewing.navigation.setTimelineHover(null);
+      const nearest = this.viewing.projection.nearestIndex(entry.t, Number.POSITIVE_INFINITY);
+      const index = nearest?.index ?? -1;
+      const pose = this.viewing.projection.interpolatePose(entry.t) ?? this.viewing.projection.poseAt(index);
+      if (index >= 0 && pose) this.viewing.navigation.lockTrack(pose, index);
       this.viewing.navigation.selectLog(entry);
-      const near = this.viewing.projection.nearestIndex(entry.t, 60);
-      if (near) {
-        this.viewing.navigation.selectPose(near.index, { preserveDetails: true });
-        setStatus(`Log @${entry.t}ms mapped to pose @${this.viewing.data.poses[near.index]?.t}ms (Δ=${near.deltaMs}ms).`);
-      } else if (this.viewing.data.poses.length) {
-        this.viewing.navigation.selectPose(this.viewing.projection.findFloorIndex(entry.t), { preserveDetails: true });
-        setStatus(`Log @${entry.t}ms shown via interpolation (no poses loaded).`);
-      } else setStatus(`Log @${entry.t}ms selected (no poses loaded).`);
+      if (nearest) setStatus(`Log @${entry.t}ms mapped to closest pose @${this.viewing.data.poses[index]?.t}ms (Δ=${nearest.deltaMs}ms).`);
+      else setStatus(`Log @${entry.t}ms selected (no poses loaded).`);
       this.highlight(true);
     };
     element.addEventListener("pointerdown", (event) => {
@@ -98,7 +104,8 @@ export class LogListView {
       selectLog();
     }, { passive: false });
     element.addEventListener("click", (event) => {
-      if (!(event.target instanceof Element) || !event.target.closest(".eventSelectableText") || window.getSelection()?.toString()) return;
+      const text = event.target instanceof Element ? event.target.closest<HTMLElement>(".eventSelectableText") : null;
+      if (!text || text.dataset.selectionCancelled === "true" || window.getSelection()?.toString()) return;
       selectLog();
     });
     return element;
@@ -113,5 +120,26 @@ export class LogListView {
       this.#keys.set(object, key);
     }
     return key;
+  }
+
+  private constrainTextSelection(item: HTMLElement): void {
+    for (const text of item.querySelectorAll<HTMLElement>(".eventSelectableText")) {
+      text.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        text.dataset.selectionCancelled = "";
+        const constrain = (move: PointerEvent) => {
+          const target = document.elementFromPoint(move.clientX, move.clientY);
+          if (target && text.contains(target)) return;
+          text.dataset.selectionCancelled = "true";
+          window.getSelection()?.removeAllRanges();
+        };
+        const release = () => {
+          window.removeEventListener("pointermove", constrain);
+          window.setTimeout(() => delete text.dataset.selectionCancelled, 0);
+        };
+        window.addEventListener("pointermove", constrain, { passive: true });
+        window.addEventListener("pointerup", release, { once: true });
+      }, { passive: true });
+    }
   }
 }

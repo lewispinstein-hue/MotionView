@@ -105,12 +105,19 @@ export class WaypointListView {
         <div class="subValue" style="margin-top:0!important"><span class="eventSelectableText">(Id: ${waypoint.id})</span></div>
       </div><div class="muted"><span class="eventSelectableText">${formatNumber(event.t / 1000, 2)}s</span></div>
     </div>${eventLines(event).map((line) => `<div class="waypointValue"><span class="eventSelectableText">${escapeHtml(line)}</span></div>`).join("")}`;
+    element.addEventListener("pointerenter", () => {
+      if (!this.viewing.playback.isPlaying) this.viewing.navigation.setTimelineHover(event.t);
+    });
+    element.addEventListener("pointerleave", () => {
+      if (this.viewing.navigation.hoverTimelineTime === event.t) this.viewing.navigation.setTimelineHover(null);
+    });
     const selectWaypoint = () => {
       if (this.viewing.navigation.selectedWaypointEvent === event) {
         this.viewing.navigation.clearDetails();
         return;
       }
       this.viewing.playback.pause();
+      this.viewing.navigation.setTimelineHover(null);
       this.viewing.navigation.selectWaypoint(waypoint, event);
       const poseIndex = this.viewing.projection.waypointPoseIndex(waypoint, event.t);
       if (poseIndex != null) this.viewing.navigation.selectPose(poseIndex, { preserveDetails: true });

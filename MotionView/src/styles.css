@@ -535,6 +535,10 @@ label {
   display: block;
 }
 
+.logItemContent .bigValue {
+  margin-top: 7px;
+}
+
 .watchItem:hover .watchItemContent {
   background: rgba(255, 255, 255, .04);
 }
@@ -752,6 +756,9 @@ label {
   font-size: 15px;
   font-weight: 800;
   margin-top: 0;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 

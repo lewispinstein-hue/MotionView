@@ -13,6 +13,7 @@ interface PoseListItem {
 export class PoseListView {
   readonly #list: VirtualList<PoseListItem>;
   #itemCount = 0;
+  #searchTerm = "";
 
   constructor(
     private readonly viewing: ViewingFeature,
@@ -30,6 +31,10 @@ export class PoseListView {
 
   get itemCount(): number { return this.#itemCount; }
 
+  setSearch(value: string): void {
+    this.#searchTerm = value.trim().toLocaleLowerCase();
+  }
+
   bind(): void {
     this.dom.poseSort.addEventListener("change", () => this.render());
   }
@@ -38,11 +43,16 @@ export class PoseListView {
     const items: PoseListItem[] = [];
     for (let index = 0; index < this.viewing.data.poses.length; index += 1) {
       const pose = this.viewing.data.poses[index];
-      if (pose) items.push({ pose, index });
+      if (pose && this.searchMatches(pose, index)) items.push({ pose, index });
     }
     if (this.dom.poseSort.value === "-time") items.reverse();
     this.#itemCount = items.length;
     this.#list.setItems(items);
+  }
+
+  private searchMatches(pose: Readonly<Pose>, index: number): boolean {
+    if (!this.#searchTerm) return true;
+    return `#${index + 1} ${pose.t ?? ""} ${pose.x} ${pose.y} ${pose.theta}`.toLocaleLowerCase().includes(this.#searchTerm);
   }
 
   highlight(scroll = false): void {
@@ -69,10 +79,19 @@ export class PoseListView {
       <div style="font-weight:800">#${index + 1}</div>
       <div class="muted">${time != null ? formatNumber(time / 1000) : "—"}s</div>
     </div><div class="sub">${escapeHtml(summary)}</div>`;
+    if (time != null) {
+      element.addEventListener("pointerenter", () => {
+        if (!this.viewing.playback.isPlaying) this.viewing.navigation.setTimelineHover(time);
+      });
+      element.addEventListener("pointerleave", () => {
+        if (this.viewing.navigation.hoverTimelineTime === time) this.viewing.navigation.setTimelineHover(null);
+      });
+    }
     element.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
       event.preventDefault();
       this.viewing.playback.pause();
+      this.viewing.navigation.setTimelineHover(null);
       this.viewing.navigation.selectPose(index);
     }, { passive: false });
     return element;
