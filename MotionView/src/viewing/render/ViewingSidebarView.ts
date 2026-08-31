@@ -269,7 +269,7 @@ export class ViewingSidebarView {
 
   private startShiftSync(): void {
     if (this.#shiftSync) return;
-    if (this.syncTime() == null) return;
+    if (this.inputHoverTime() == null) return;
     this.#shiftSync = { committed: false, initialScrollPositions: {} };
     this.syncActiveSection();
   }
