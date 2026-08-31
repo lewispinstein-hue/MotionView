@@ -38,7 +38,7 @@ export class TopBarView {
     this.#bound = true;
 
     this.dom.fitButton.addEventListener("click", () => this.fieldRenderer.resetFieldPosition());
-    this.dom.sidebarFileButton.addEventListener("click", () => this.openFilePicker());
+    this.dom.fileButton.addEventListener("click", () => this.openFilePicker());
     this.dom.settingsButton.addEventListener("click", (event) => {
       event.stopPropagation();
       this.events.actionRequested.emit({ kind: "settings-requested" });

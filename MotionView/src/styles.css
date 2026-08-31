@@ -218,11 +218,6 @@ canvas#c {
   background: rgba(11, 16, 25, 0.88);
 }
 
-#rightViewing > .section {
-  flex: 0 0 auto;
-  border-bottom-color: rgba(255, 255, 255, 0.07);
-}
-
 .viewingSidebar {
   display: flex;
   flex: 1 1 auto;
@@ -232,18 +227,49 @@ canvas#c {
   container-type: inline-size;
 }
 
-.viewingSidebarTabs {
+.viewingSidebarHeader {
   flex: 0 0 auto;
   display: flex;
-  gap: 3px;
   padding: 8px 8px 6px;
-  overflow-x: auto;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 6px;
+  min-width: 0;
+}
+
+.viewingSidebarTabs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 3px;
+  overflow-x: auto;
   scrollbar-width: none;
 }
 
 .viewingSidebarTabs::-webkit-scrollbar {
   display: none;
+}
+
+.viewingSidebarActions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.viewingSidebarActions .iconBtn {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--muted);
+}
+
+.viewingSidebarActions .iconBtn:hover {
+  color: var(--text);
+}
+
+.viewingSidebarActions svg {
+  display: block;
+  color: currentColor;
 }
 
 .viewingSidebarTab {
@@ -1326,6 +1352,30 @@ header.topBar.isOverflowing .topBarContent {
   overflow: hidden;
   align-self: stretch;
   grid-column: 1;
+}
+
+.topBarControlGroup {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.topBarControlGroup .iconBtn {
+  width: 34px;
+  min-width: 34px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.topBarControlGroup .iconBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .topStatus {
@@ -3286,14 +3336,6 @@ body:not(.mode-planning) #rightPlanning {
   font-size: 13px;
 }
 
-.planningExportActions .planExportIconBtn {
-  flex: 0 0 34px;
-  width: 34px;
-  min-width: 34px;
-  padding: 0;
-  color: var(--text);
-}
-
 .planEditTemplateBtn {
   height: 28px;
   padding-inline: 9px;
@@ -3310,14 +3352,6 @@ body:not(.mode-planning) #rightPlanning {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-.planExportIconBtn svg {
-  display: block;
-  width: 18px;
-  height: 18px;
-  color: currentColor;
-  flex: 0 0 18px;
-  overflow: visible;
-}
 
 #rightPlanning.planListCollapsed .planList {
   display: none;

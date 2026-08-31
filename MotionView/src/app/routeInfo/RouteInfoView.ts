@@ -17,15 +17,18 @@ export class RouteInfoView {
   constructor(private readonly app: MotionViewApp, private readonly dom: RouteInfoDom) {}
   bind(): void {
     if (this.#bound) return; this.#bound = true;
-    this.dom.open.addEventListener("click", () => this.open()); this.dom.close.addEventListener("click", () => this.close()); this.dom.apply.addEventListener("click", () => this.applySettings()); bindModalBackdropDismissal(this.dom.modal, () => this.close());
+    this.dom.close.addEventListener("click", () => this.close()); this.dom.apply.addEventListener("click", () => this.applySettings()); bindModalBackdropDismissal(this.dom.modal, () => this.close());
     window.addEventListener("keydown", (event) => { if (event.key === "Escape" && this.isOpen) { event.preventDefault(); event.stopImmediatePropagation(); this.close(); } }, true);
-    this.app.viewing.events.dataChanged.subscribe((event) => { if (event.kind === "replaced" || event.kind === "cleared" || event.kind === "appended" && event.result.metadataChanged) this.render(); }); this.render();
+    this.app.viewing.events.dataChanged.subscribe((event) => {
+      if (event.kind === "replaced" || event.kind === "cleared" || event.kind === "appended" && event.result.metadataChanged) this.render();
+      if (event.kind === "replaced" && this.app.viewing.data.metadata) this.open();
+    }); this.render();
   }
   get isOpen(): boolean { return !this.dom.modal.hasAttribute("hidden"); }
   open(): void { this.render(); this.dom.modal.removeAttribute("hidden"); this.dom.modal.style.display = "flex"; }
   close(): void { this.dom.modal.setAttribute("hidden", ""); this.dom.modal.style.display = "none"; }
   render(): void {
-    const metadata = this.app.viewing.data.metadata; this.dom.open.disabled = !metadata; const viewing = metadata?.ViewingSettings; this.dom.apply.disabled = !viewing || typeof viewing !== "object";
+    const metadata = this.app.viewing.data.metadata; const viewing = metadata?.ViewingSettings; this.dom.apply.disabled = !viewing || typeof viewing !== "object";
     const entries = flatten(metadata); this.dom.list.innerHTML = entries.length ? entries.map((entry) => `<div class="routeInfoRow"><div class="routeInfoKey">${escape(entry.key)}</div><div class="routeInfoValue">${escape(entry.value)}</div></div>`).join("") : '<div class="routeInfoEmpty">No imported metadata is available for this route.</div>';
   }
   private applySettings(): void {

@@ -14,7 +14,7 @@ export class ExportDialog {
   constructor(private readonly app: MotionViewApp, private readonly dom: ExportDom, private readonly service: ExportService) {}
   bind(): void {
     if (this.#bound) return; this.#bound = true;
-    this.dom.open.addEventListener("click", () => this.open()); this.dom.planningOpen.addEventListener("click", () => this.open("planning"));
+    this.dom.open.addEventListener("click", () => this.open());
     this.dom.close.addEventListener("click", () => this.close()); this.dom.cancel.addEventListener("click", () => this.close()); this.dom.confirm.addEventListener("click", () => void this.submit());
     this.dom.pathName.addEventListener("input", () => { this.#submitError = ""; this.dom.pathName.value = pathName(this.dom.pathName.value); this.render(); });
     this.dom.filename.addEventListener("input", () => { this.#submitError = ""; this.dom.filename.value = filename(this.dom.filename.value); this.render(); });
@@ -25,7 +25,7 @@ export class ExportDialog {
     this.renderAvailability();
   }
   get isOpen(): boolean { return !this.dom.modal.hasAttribute("hidden"); }
-  open(type?: MotionViewExportType): void { if (!this.dom.pathName.value) this.dom.pathName.value = "Untitled Path"; if (!this.dom.filename.value) this.dom.filename.value = "motionview-path"; if (type) this.dom.type.value = type; this.#submitError = ""; this.dom.success.hidden = true; this.render(); this.dom.modal.removeAttribute("hidden"); this.dom.modal.style.display = "flex"; requestAnimationFrame(() => this.dom.pathName.focus()); }
+  open(type: MotionViewExportType = this.app.core.mode.getMode()): void { if (!this.dom.pathName.value) this.dom.pathName.value = "Untitled Path"; if (!this.dom.filename.value) this.dom.filename.value = "motionview-path"; this.dom.type.value = type; this.#submitError = ""; this.dom.success.hidden = true; this.render(); this.dom.modal.removeAttribute("hidden"); this.dom.modal.style.display = "flex"; requestAnimationFrame(() => this.dom.pathName.focus()); }
   close(): void { this.dom.modal.setAttribute("hidden", ""); this.dom.modal.style.display = "none"; }
   private renderAvailability(): void { this.dom.open.disabled = this.app.live.stream.state !== "idle" || !(this.app.planning.hasData || this.app.viewing.data.hasData); }
   private render(): void {

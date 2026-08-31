@@ -33,7 +33,6 @@ export class PlanningDom {
   readonly copyCode: HTMLButtonElement;
   readonly exportCode: HTMLButtonElement;
   readonly editTemplate: HTMLButtonElement;
-  readonly exportButton: HTMLButtonElement;
   readonly templateModal: HTMLElement;
   readonly templateTitle: HTMLElement;
   readonly templateSubtitle: HTMLElement;
@@ -92,7 +91,6 @@ export class PlanningDom {
     this.copyCode = requiredElement(document, "btnPlanCopyCode");
     this.exportCode = requiredElement(document, "btnPlanExportCode");
     this.editTemplate = requiredElement(document, "btnPlanEditTemplate");
-    this.exportButton = requiredElement(document, "btnPlanExport");
     this.templateModal = requiredElement(document, "planTemplateModal");
     this.templateTitle = requiredElement(document, "planTemplateTitle");
     this.templateSubtitle = requiredElement(document, "planTemplateSubtitle");
