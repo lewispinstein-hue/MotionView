@@ -1,4 +1,4 @@
-import type { Pose } from "../state/models";
+import type { LogEntry, Pose } from "../state/models";
 import type { ViewingEvents } from "./viewingEvents";
 import type { ViewingDataReader, WatchMarker, WaypointEventView, WaypointView } from "./viewingTypes";
 
@@ -6,9 +6,10 @@ import type { ViewingDataReader, WatchMarker, WaypointEventView, WaypointView } 
 export class ViewingNavigation {
   #selectedIndex = 0;
   #selectedWatch: Readonly<WatchMarker> | null = null;
-  #selectedLogTime: number | null = null;
+  #selectedLog: Readonly<LogEntry> | null = null;
   #selectedWaypointId: number | string | null = null;
   #selectedWaypointEventTime: number | null = null;
+  #selectedWaypointEvent: Readonly<WaypointEventView> | null = null;
   #hoverTimelineTime: number | null = null;
   #trackHoverPose: Readonly<Pose> | null = null;
   #trackHoverTime: number | null = null;
@@ -34,9 +35,11 @@ export class ViewingNavigation {
 
   get selectedIndex(): number { return this.#selectedIndex; }
   get selectedWatch(): Readonly<WatchMarker> | null { return this.#selectedWatch; }
-  get selectedLogTime(): number | null { return this.#selectedLogTime; }
+  get selectedLog(): Readonly<LogEntry> | null { return this.#selectedLog; }
+  get selectedLogTime(): number | null { return this.#selectedLog?.t ?? null; }
   get selectedWaypointId(): number | string | null { return this.#selectedWaypointId; }
   get selectedWaypointEventTime(): number | null { return this.#selectedWaypointEventTime; }
+  get selectedWaypointEvent(): Readonly<WaypointEventView> | null { return this.#selectedWaypointEvent; }
   get hoverTimelineTime(): number | null { return this.#hoverTimelineTime; }
   get trackHoverPose(): Readonly<Pose> | null { return this.#trackHoverPose; }
   get trackHoverTime(): number | null { return this.#trackHoverTime; }
@@ -76,25 +79,28 @@ export class ViewingNavigation {
 
   selectWatch(marker: Readonly<WatchMarker>): void {
     this.#selectedWatch = marker;
-    this.#selectedLogTime = null;
+    this.#selectedLog = null;
     this.#selectedWaypointId = null;
     this.#selectedWaypointEventTime = null;
+    this.#selectedWaypointEvent = null;
     this.emit("selection");
   }
 
-  selectLog(time: number | null): void {
-    this.#selectedLogTime = time;
+  selectLog(entry: Readonly<LogEntry> | null): void {
+    this.#selectedLog = entry;
     this.#selectedWatch = null;
     this.#selectedWaypointId = null;
     this.#selectedWaypointEventTime = null;
+    this.#selectedWaypointEvent = null;
     this.emit("selection");
   }
 
   selectWaypoint(waypoint: WaypointView, event: WaypointEventView | null = null): void {
     this.#selectedWaypointId = waypoint.id;
     this.#selectedWaypointEventTime = event?.t ?? waypoint.latestActiveEvent?.t ?? waypoint.createdTime ?? null;
+    this.#selectedWaypointEvent = event;
     this.#selectedWatch = null;
-    this.#selectedLogTime = null;
+    this.#selectedLog = null;
     this.emit("selection");
   }
 
@@ -129,9 +135,10 @@ export class ViewingNavigation {
 
   clearDetails(emit = true): void {
     this.#selectedWatch = null;
-    this.#selectedLogTime = null;
+    this.#selectedLog = null;
     this.#selectedWaypointId = null;
     this.#selectedWaypointEventTime = null;
+    this.#selectedWaypointEvent = null;
     if (emit) this.emit("selection");
   }
 
@@ -139,9 +146,10 @@ export class ViewingNavigation {
     this.#selectedIndex = 0;
     this.#lastManualIndex = 0;
     this.#selectedWatch = null;
-    this.#selectedLogTime = null;
+    this.#selectedLog = null;
     this.#selectedWaypointId = null;
     this.#selectedWaypointEventTime = null;
+    this.#selectedWaypointEvent = null;
     this.#hoverTimelineTime = null;
     this.#trackHoverPose = null;
     this.#trackHoverTime = null;

@@ -1,7 +1,7 @@
-import invisibleWatchIconUrl from "../../assets/svg/viewing/invisibleWatch.svg?url";
-import pinWatchIconUrl from "../../assets/svg/viewing/pinWatch.svg?url";
-import visibleWatchIconUrl from "../../assets/svg/viewing/visibleWatch.svg?url";
-import watchGraphIconUrl from "../../assets/svg/viewing/watchGraph.svg?url";
+import invisibleWatchIconSvg from "../../assets/svg/viewing/invisibleWatch.svg?raw";
+import pinWatchIconSvg from "../../assets/svg/viewing/pinWatch.svg?raw";
+import visibleWatchIconSvg from "../../assets/svg/viewing/visibleWatch.svg?raw";
+import watchGraphIconSvg from "../../assets/svg/viewing/watchGraph.svg?raw";
 import { setStatus } from "../../app/status";
 import type { WatchEntry } from "../../state/models";
 import type { ViewingListsDom } from "../ViewingDom";
@@ -16,6 +16,8 @@ export class WatchListView {
   readonly #list: VirtualList<Readonly<WatchMarker>>;
   readonly #keys = new WeakMap<object, string>();
   #nextKey = 1;
+  #searchTerm = "";
+  #itemCount = 0;
   #openActionsMenu: Readonly<{ button: HTMLButtonElement; menu: HTMLElement }> | null = null;
   #openActionsKey: string | null = null;
 
@@ -26,7 +28,7 @@ export class WatchListView {
     private readonly watchGraph: WatchGraphView,
   ) {
     const list = createVirtualList<Readonly<WatchMarker>>(dom.watchList, {
-      estimateRowHeight: 62,
+      estimateRowHeight: 76,
       overscanPx: 320,
       getKey: (marker) => this.keyFor(marker),
       renderItem: (marker) => this.createItem(marker),
@@ -51,6 +53,12 @@ export class WatchListView {
     });
   }
 
+  get itemCount(): number { return this.#itemCount; }
+
+  setSearch(value: string): void {
+    this.#searchTerm = value.trim().toLocaleLowerCase();
+  }
+
   filterMatches(watch: Readonly<WatchEntry>): boolean {
     const filter = this.dom.watchFilter.value || "all";
     return filter === "all" || watchGraphKey(watch) === filter;
@@ -65,7 +73,7 @@ export class WatchListView {
     this.dom.watchFilter.replaceChildren();
     const all = document.createElement("option");
     all.value = "all";
-    all.textContent = "All";
+    all.textContent = "Filter by label";
     this.dom.watchFilter.appendChild(all);
     const options = new Map<string, string>();
     for (const watch of this.viewing.data.watches) {
@@ -83,7 +91,7 @@ export class WatchListView {
   }
 
   render(): void {
-    const items = this.viewing.projection.watchMarkers.filter((marker) => this.filterMatches(marker.watch));
+    const items = this.viewing.projection.watchMarkers.filter((marker) => this.filterMatches(marker.watch) && this.searchMatches(marker.watch));
     const mode = this.dom.watchSort.value;
     items.sort((left, right) => {
       if (mode === "level") return levelSortRank(right.watch.level) - levelSortRank(left.watch.level) || right.t - left.t;
@@ -95,23 +103,29 @@ export class WatchListView {
     if (this.#openActionsKey && !items.some((marker) => this.keyFor(marker) === this.#openActionsKey)) {
       this.closeActionsMenu();
     }
-    this.dom.watchCount.textContent = String(items.length);
+    this.#itemCount = items.length;
     this.#list.setItems(items);
   }
 
+  private searchMatches(watch: Readonly<WatchEntry>): boolean {
+    if (!this.#searchTerm) return true;
+    return `${watch.label ?? ""} ${watch.value ?? ""}`.toLocaleLowerCase().includes(this.#searchTerm);
+  }
+
   highlight(scroll = false): void {
-    const time = this.viewing.navigation.selectedWatch?.t;
-    if (scroll && time != null) {
+    const selected = this.viewing.navigation.selectedWatch;
+    if (scroll && selected) {
       const items = this.#list.getItems();
       for (let index = 0; index < items.length; index += 1) {
-        if (items[index]?.t === time) {
+        if (items[index] === selected) {
           this.#list.scrollToIndex(index, 12);
           break;
         }
       }
     }
+    const selectedKey = selected ? this.keyFor(selected) : null;
     for (const row of this.dom.watchList.querySelectorAll<HTMLElement>(".watchItem")) {
-      row.classList.toggle("selected", time != null && Number(row.dataset.t) === time);
+      row.classList.toggle("selected", row.dataset.watchKey === selectedKey);
     }
   }
 
@@ -126,31 +140,43 @@ export class WatchListView {
       : booleanValue === "false" ? " isBooleanFalse" : "";
     const element = document.createElement("div");
     element.className = "watchItem";
-    if (this.viewing.navigation.selectedWatch?.t === marker.t) element.classList.add("selected");
+    if (this.viewing.navigation.selectedWatch === marker) element.classList.add("selected");
     element.dataset.t = String(marker.t);
-    const icon = (url: string, id: string) => `${url}#icon-${id}`;
+    element.dataset.watchKey = itemKey;
+    const icon = (svg: string) => `<span class="watchActionIcon">${svg}</span>`;
     const graphButton = isGraphableWatchValue(watch.value)
-      ? `<button class="iconBtn watchGraphBtn" type="button" title="Open watch graph"><svg width="20" height="20"><use href="${icon(watchGraphIconUrl, "watchGraph")}"></use></svg></button>` : "";
-    const pinButton = `<button class="iconBtn watchPinBtn" type="button" title="Pin watch" aria-label="Pin watch"><svg width="20" height="20"><use href="${icon(pinWatchIconUrl, "pinWatch")}"></use></svg></button>`;
-    const visibilityButton = `<button class="iconBtn watchVisibilityBtn" type="button" title="${visible ? "Hide" : "Show"} watch" aria-label="${visible ? "Hide" : "Show"} watch"><svg width="20" height="20"><use href="${icon(visible ? visibleWatchIconUrl : invisibleWatchIconUrl, visible ? "visibleWatch" : "invisibleWatch")}"></use></svg></button>`;
+      ? `<button class="iconBtn watchGraphBtn${this.watchGraph.isOpenFor(marker) ? " isOn" : ""}" type="button" title="Open watch graph">${icon(watchGraphIconSvg)}</button>` : "";
+    const pinButton = `<button class="iconBtn watchPinBtn${this.floatingInfo.isWatchPinned(watch.id ?? null) ? " isOn" : ""}" type="button" title="Pin watch" aria-label="Pin watch">${icon(pinWatchIconSvg)}</button>`;
+    const visibilityButton = `<button class="iconBtn watchVisibilityBtn${visible ? "" : " isOff"}" type="button" title="${visible ? "Hide" : "Show"} watch" aria-label="${visible ? "Hide" : "Show"} watch">${icon(visible ? visibleWatchIconSvg : invisibleWatchIconSvg)}</button>`;
     element.innerHTML = `<div class="watchItemContent"><div class="watchItemHeader">
-      <div class="watchTitleGroup"><span class="pill level watchLevelPill" style="background:${style.fill};color:${style.text}">${style.name}</span><span class="watchLabel">${escapeHtml(watch.label)}</span></div>
-      <div class="watchMeta"><div class="watchTimestamp muted">${formatNumber(marker.t / 1000, 2)}s</div><div class="watchActions watchActionsPill watchActionsFull pill">
+      <div class="watchTitleGroup"><span class="pill level watchLevelPill" style="background:${style.fill};color:${style.text}">${style.name}</span><span class="watchLabel eventSelectableText">${escapeHtml(watch.label)}</span></div>
+      <div class="watchMeta"><div class="watchTimestamp muted"><span class="eventSelectableText">${formatNumber(marker.t / 1000, 2)}s</span></div><div class="watchActions watchActionsPill watchActionsFull pill">
         ${pinButton}${visibilityButton}${graphButton}</div>
         <div class="watchActionsCompact">
           <button class="iconBtn watchActionsMoreBtn" type="button" title="More watch actions" aria-label="More watch actions" aria-expanded="false">⋮</button>
           <div class="watchActionsCompactMenu" hidden>${pinButton}${visibilityButton}${graphButton}</div>
-        </div></div></div><div class="bigValue${booleanClass}">${escapeHtml(watch.value ?? "")}</div></div>`;
-    element.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || (event.target instanceof Element && event.target.closest("button"))) return;
-      event.preventDefault();
+        </div></div></div><div class="bigValue${booleanClass}"><span class="eventSelectableText">${escapeHtml(watch.value ?? "")}</span></div></div>`;
+    const selectWatch = () => {
+      if (this.viewing.navigation.selectedWatch === marker) {
+        this.viewing.navigation.clearDetails();
+        return;
+      }
       this.viewing.playback.pause();
       const index = marker.idx ?? this.viewing.projection.findFloorIndex(marker.t);
       const pose = this.viewing.projection.interpolatePose(marker.t) ?? marker.pose;
       if (index >= 0 && pose) this.viewing.navigation.lockTrack(pose, index);
       this.viewing.navigation.selectWatch(marker);
       setStatus(`Watch @${formatNumber(marker.t / 1000, 2)}s selected.`);
+    };
+    element.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || (event.target instanceof Element && event.target.closest("button, .eventSelectableText"))) return;
+      event.preventDefault();
+      selectWatch();
     }, { passive: false });
+    element.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element) || !event.target.closest(".eventSelectableText") || window.getSelection()?.toString()) return;
+      selectWatch();
+    });
     const moreButton = element.querySelector<HTMLButtonElement>(".watchActionsMoreBtn");
     const compactMenu = element.querySelector<HTMLElement>(".watchActionsCompactMenu");
     moreButton?.addEventListener("click", (event) => {
@@ -176,6 +202,7 @@ export class WatchListView {
         event.stopPropagation();
         this.floatingInfo.toggleWatch(watch.id ?? null);
         this.closeActionsMenu();
+        this.render();
       });
     }
     for (const button of element.querySelectorAll<HTMLButtonElement>(".watchGraphBtn")) {
@@ -183,6 +210,7 @@ export class WatchListView {
         event.stopPropagation();
         this.watchGraph.open(marker);
         this.closeActionsMenu();
+        this.render();
       });
     }
     if (this.#openActionsKey === itemKey && moreButton && compactMenu) {

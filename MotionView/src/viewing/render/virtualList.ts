@@ -238,7 +238,12 @@ export function createVirtualList<T>(
       const { key, row } = renderedRows[i];
       syncRowLayout(row);
       const measureEl = row.querySelector<HTMLElement>(".watchItemContent") || row;
-      const rowHeight = Math.ceil(measureEl.offsetHeight || row.offsetHeight || estimateRowHeight);
+      const margins = getComputedStyle(measureEl);
+      const rowHeight = Math.ceil(
+        (measureEl.offsetHeight || row.offsetHeight || estimateRowHeight)
+        + Number.parseFloat(margins.marginTop || "0")
+        + Number.parseFloat(margins.marginBottom || "0"),
+      );
       if (rowHeight > 0 && measuredHeights.get(key) !== rowHeight) {
         measuredHeights.set(key, rowHeight);
         layoutDirty = true;

@@ -570,86 +570,63 @@
           </div>
         </div>
 
-        <div class="section viewingOnly">
-          <details open id="secLogs">
-            <summary>
-              <span>Logs</span>
-              <span class="pill" id="logCount">—</span>
-            </summary>
-            <div class="detailsBody">
-              <div class="rowline" style="margin-bottom:8px">
-                <span class="muted">Sort</span>
-                <select id="logSort" class="settingsSelect toolbarSelect" style="margin-left:auto">
-                  <option value="level">Level</option>
-                  <option value="time" selected>Old</option>
-                  <option value="-time">New</option>
-                </select>
-              </div>
+        <div class="viewingSidebar viewingOnly">
+          <div class="viewingSidebarTabs" role="tablist" aria-label="Viewing sidebar sections">
+            <button class="viewingSidebarTab isActive" type="button" role="tab" aria-selected="true" aria-controls="watchPanel" data-viewing-section="watches">
+              <svg aria-hidden="true"><use href="./assets/svg/viewing/sidebarWatches.svg#icon-sidebarWatches"></use></svg>
+              <span>Watches</span><span class="viewingSidebarTabCount" id="watchTabCount">—</span>
+            </button>
+            <button class="viewingSidebarTab" type="button" role="tab" aria-selected="false" aria-controls="logPanel" data-viewing-section="logs">
+              <svg aria-hidden="true"><use href="./assets/svg/viewing/sidebarLogs.svg#icon-sidebarLogs"></use></svg>
+              <span>Logs</span><span class="viewingSidebarTabCount" id="logTabCount">—</span>
+            </button>
+            <button class="viewingSidebarTab" type="button" role="tab" aria-selected="false" aria-controls="waypointPanel" data-viewing-section="waypoints">
+              <svg aria-hidden="true"><use href="./assets/svg/viewing/sidebarWaypoints.svg#icon-sidebarWaypoints"></use></svg>
+              <span>Waypoints</span><span class="viewingSidebarTabCount" id="waypointTabCount">—</span>
+            </button>
+            <button class="viewingSidebarTab" type="button" role="tab" aria-selected="false" aria-controls="posePanel" data-viewing-section="poses">
+              <svg aria-hidden="true"><use href="./assets/svg/viewing/sidebarPoses.svg#icon-sidebarPoses"></use></svg>
+              <span>Poses</span><span class="viewingSidebarTabCount" id="poseTabCount">—</span>
+            </button>
+          </div>
 
-              <div id="logList"></div>
+          <div class="viewingSidebarToolbar">
+            <label class="viewingSidebarSearch" id="viewingSearchWrap" for="viewingSearch">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
+              <input id="viewingSearch" type="search" autocomplete="off" placeholder="Search watches…" aria-label="Search watches by label or value">
+              <span id="viewingSearchCount" aria-live="polite">—</span>
+            </label>
+            <div class="viewingSidebarControls">
+              <select id="watchFilter" class="settingsSelect viewingToolbarSelect" aria-label="Filter watches by label">
+                <option value="all" selected>Filter by label</option>
+              </select>
+              <select id="watchSort" class="settingsSelect viewingToolbarSelect" aria-label="Sort watches">
+                <option value="level">Level</option>
+                <option value="time">Oldest</option>
+                <option value="-time" selected>Newest</option>
+                <option value="value">Value</option>
+              </select>
+              <select id="logSort" class="settingsSelect viewingToolbarSelect" aria-label="Sort logs" hidden>
+                <option value="level">Level</option>
+                <option value="time" selected>Oldest</option>
+                <option value="-time">Newest</option>
+              </select>
+              <select id="waypointSort" class="settingsSelect viewingToolbarSelect" aria-label="Sort waypoint events" hidden>
+                <option value="time" selected>Oldest</option>
+                <option value="-time">Newest</option>
+                <option value="name">Name</option>
+              </select>
+              <select id="poseSort" class="settingsSelect viewingToolbarSelect" aria-label="Sort poses" hidden>
+                <option value="time" selected>Oldest</option>
+                <option value="-time">Newest</option>
+              </select>
             </div>
-          </details>
-        </div>
+          </div>
 
-        <div class="section viewingOnly">
-          <details open id="secWatches">
-            <summary>
-              <span>Watches</span>
-              <span class="pill" id="watchCount">—</span>
-            </summary>
-            <div class="detailsBody">
-              <div class="rowline" style="margin-bottom:8px">
-                <span class="muted">Filter</span>
-                <select id="watchFilter" class="settingsSelect toolbarSelect" style="margin-left:auto">
-                  <option value="all" selected>All</option>
-                </select>
-              </div>
-
-              <div class="rowline" style="margin-bottom:8px">
-                <span class="muted">Sort</span>
-                <select id="watchSort" class="settingsSelect toolbarSelect" style="margin-left:auto">
-                  <option value="level">Level</option>
-                  <option value="time">Old</option>
-                  <option value="-time" selected>New</option>
-                  <option value="value">Value</option>
-                </select>
-              </div>
-
-              <div id="watchList"></div>
-            </div>
-          </details>
-
-        </div>
-        <div class="section viewingOnly">
-          <details open id="secWaypoints">
-            <summary>
-              <span>Waypoints</span>
-              <span class="pill" id="waypointCount">—</span>
-            </summary>
-            <div class="detailsBody">
-              <div class="rowline" style="margin-bottom:8px">
-                <span class="muted">Filter</span>
-                <select id="waypointFilter" class="settingsSelect toolbarSelect" style="margin-left:auto">
-                  <option value="all" selected>All</option>
-                </select>
-              </div>
-
-              <div id="waypointList"></div>
-            </div>
-          </details>
-        </div>
-
-        <div class="section viewingOnly">
-          <details id="secPoses">
-            <summary>
-              <span>Poses</span>
-              <span class="pill" id="poseCount">—</span>
-            </summary>
-            <div class="detailsBody">
-              <div id="poseList"
-                style="max-height: 40vh; overflow:auto; border:1px solid var(--line); border-radius:10px;"></div>
-            </div>
-          </details>
+          <div id="watchPanel" class="viewingSidebarPanel" role="tabpanel" data-viewing-panel="watches"><div id="watchList"></div></div>
+          <div id="logPanel" class="viewingSidebarPanel" role="tabpanel" data-viewing-panel="logs" hidden><div id="logList"></div></div>
+          <div id="waypointPanel" class="viewingSidebarPanel" role="tabpanel" data-viewing-panel="waypoints" hidden><div id="waypointList"></div></div>
+          <div id="posePanel" class="viewingSidebarPanel" role="tabpanel" data-viewing-panel="poses" hidden><div id="poseList"></div></div>
         </div>
 
       </div>

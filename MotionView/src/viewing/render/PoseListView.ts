@@ -5,31 +5,52 @@ import { createVirtualList, type VirtualList } from "./virtualList";
 import { escapeHtml, formatNumber } from "../viewingPresentation";
 import { getCurrentUnits } from "../../shared/units";
 
+interface PoseListItem {
+  readonly pose: Readonly<Pose>;
+  readonly index: number;
+}
+
 export class PoseListView {
-  readonly #list: VirtualList<Readonly<Pose>>;
+  readonly #list: VirtualList<PoseListItem>;
+  #itemCount = 0;
 
   constructor(
     private readonly viewing: ViewingFeature,
     private readonly dom: ViewingListsDom,
   ) {
-    const list = createVirtualList<Readonly<Pose>>(dom.poseList, {
+    const list = createVirtualList<PoseListItem>(dom.poseList, {
       estimateRowHeight: 64,
       overscanPx: 320,
-      getKey: (_pose, index) => String(index),
-      renderItem: (_pose, index) => this.createItem(index),
+      getKey: (item) => String(item.index),
+      renderItem: (item) => this.createItem(item.index),
     });
     if (!list) throw new Error("MotionView could not initialize the pose virtual list.");
     this.#list = list;
   }
 
+  get itemCount(): number { return this.#itemCount; }
+
+  bind(): void {
+    this.dom.poseSort.addEventListener("change", () => this.render());
+  }
+
   render(): void {
-    const count = this.viewing.data.poses.length;
-    this.dom.poseCount.textContent = count ? String(count) : "—";
-    this.#list.setItems(this.viewing.data.poses as ArrayLike<Readonly<Pose>>);
+    const items: PoseListItem[] = [];
+    for (let index = 0; index < this.viewing.data.poses.length; index += 1) {
+      const pose = this.viewing.data.poses[index];
+      if (pose) items.push({ pose, index });
+    }
+    if (this.dom.poseSort.value === "-time") items.reverse();
+    this.#itemCount = items.length;
+    this.#list.setItems(items);
   }
 
   highlight(scroll = false): void {
-    if (scroll) this.#list.scrollToIndex(this.viewing.navigation.selectedIndex, 12);
+    if (scroll) {
+      const selected = this.viewing.navigation.selectedIndex;
+      const index = Array.from(this.#list.getItems()).findIndex((item) => item.index === selected);
+      if (index >= 0) this.#list.scrollToIndex(index, 12);
+    }
     this.#list.refresh();
   }
 

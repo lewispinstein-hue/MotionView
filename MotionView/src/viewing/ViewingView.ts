@@ -120,7 +120,6 @@ export class ViewingView {
       }
       if (change.result.logsAdded) this.#sidebar.logs.render();
       if (change.result.waypointsAdded) {
-        this.#sidebar.waypoints.renderFilter();
         this.#sidebar.waypoints.render();
       }
       if (change.result.posesAdded) this.#sidebar.poses.render();
@@ -131,6 +130,7 @@ export class ViewingView {
       this.#sidebar.poses.render();
       this.#readout.render();
     }
+    this.#sidebar.refreshCounts();
     requestDrawAll();
   }
 }

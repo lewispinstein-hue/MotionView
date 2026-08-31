@@ -9,6 +9,7 @@ export class FloatingInfoView {
   #resizeStart: Readonly<{ x: number; y: number; width: number; height: number }> | null = null;
   #pinnedDrag: Readonly<{ panel: HTMLElement; x: number; y: number }> | null = null;
   #panelCount = 0;
+  readonly #pinnedWatchListeners = new Set<() => void>();
 
   constructor(
     private readonly viewing: ViewingFeature,
@@ -83,8 +84,20 @@ export class FloatingInfoView {
 
   toggleWatch(watchId: number | string | null): void {
     const existing = watchId == null ? null : this.dom.pinnedHost.querySelector<HTMLElement>(`.pinnedWatchPanel[data-watch-id="${CSS.escape(String(watchId))}"]`);
-    if (existing) existing.remove();
+    if (existing) {
+      existing.remove();
+      this.notifyPinnedWatchChanged();
+    }
     else this.openWatch(watchId);
+  }
+
+  onPinnedWatchChanged(listener: () => void): () => void {
+    this.#pinnedWatchListeners.add(listener);
+    return () => this.#pinnedWatchListeners.delete(listener);
+  }
+
+  isWatchPinned(watchId: number | string | null): boolean {
+    return watchId != null && !!this.dom.pinnedHost.querySelector(`.pinnedWatchPanel[data-watch-id="${CSS.escape(String(watchId))}"]`);
   }
 
   openWatch(watchId: number | string | null): void {
@@ -94,7 +107,10 @@ export class FloatingInfoView {
     panel.style.top = `${128 + this.#panelCount * 26}px`;
     panel.style.right = `${16 + this.#panelCount * 18}px`;
     this.#panelCount += 1;
-    panel.querySelector(".pinnedWatchClose")?.addEventListener("click", () => panel.remove());
+    panel.querySelector(".pinnedWatchClose")?.addEventListener("click", () => {
+      panel.remove();
+      this.notifyPinnedWatchChanged();
+    });
     panel.querySelector(".pinnedWatchHeader")?.addEventListener("pointerdown", (event) => {
       if (!(event instanceof PointerEvent) || event.button !== 0) return;
       this.#pinnedDrag = { panel, x: event.clientX - panel.offsetLeft, y: event.clientY - panel.offsetTop };
@@ -104,10 +120,15 @@ export class FloatingInfoView {
     });
     this.dom.pinnedHost.appendChild(panel);
     this.updatePinnedPanel(panel);
+    this.notifyPinnedWatchChanged();
   }
 
   refreshPinnedPanels(): void {
     for (const panel of this.dom.pinnedHost.querySelectorAll<HTMLElement>(".pinnedWatchPanel")) this.updatePinnedPanel(panel);
+  }
+
+  private notifyPinnedWatchChanged(): void {
+    for (const listener of this.#pinnedWatchListeners) listener();
   }
 
   private closestWatch(time: number | null): Readonly<WatchEntry> | null {

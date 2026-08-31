@@ -21,18 +21,24 @@ export interface ViewingTimelineDom {
 }
 
 export interface ViewingListsDom {
+  readonly sectionTabs: readonly HTMLButtonElement[];
+  readonly panels: Readonly<Record<"watches" | "logs" | "waypoints" | "poses", HTMLElement>>;
+  readonly searchWrap: HTMLElement;
+  readonly search: HTMLInputElement;
+  readonly searchCount: HTMLElement;
   readonly watchList: HTMLElement;
   readonly watchFilter: HTMLSelectElement;
   readonly watchSort: HTMLSelectElement;
-  readonly watchCount: HTMLElement;
+  readonly watchTabCount: HTMLElement;
   readonly poseList: HTMLElement;
-  readonly poseCount: HTMLElement;
+  readonly poseSort: HTMLSelectElement;
+  readonly poseTabCount: HTMLElement;
   readonly waypointList: HTMLElement;
-  readonly waypointCount: HTMLElement;
-  readonly waypointFilter: HTMLSelectElement;
+  readonly waypointSort: HTMLSelectElement;
+  readonly waypointTabCount: HTMLElement;
   readonly logList: HTMLElement;
-  readonly logCount: HTMLElement;
   readonly logSort: HTMLSelectElement;
+  readonly logTabCount: HTMLElement;
 }
 
 export interface ViewingReadoutDom {
@@ -112,18 +118,29 @@ export class ViewingDom {
       top: optionalElement(document, "timelineTop"),
     };
     this.lists = {
+      sectionTabs: Array.from(document.querySelectorAll<HTMLButtonElement>("[data-viewing-section]")),
+      panels: {
+        watches: requiredElement(document, "watchPanel"),
+        logs: requiredElement(document, "logPanel"),
+        waypoints: requiredElement(document, "waypointPanel"),
+        poses: requiredElement(document, "posePanel"),
+      },
+      searchWrap: requiredElement(document, "viewingSearchWrap"),
+      search: requiredElement(document, "viewingSearch"),
+      searchCount: requiredElement(document, "viewingSearchCount"),
       watchList: requiredElement(document, "watchList"),
       watchFilter: requiredElement(document, "watchFilter"),
       watchSort: requiredElement(document, "watchSort"),
-      watchCount: requiredElement(document, "watchCount"),
+      watchTabCount: requiredElement(document, "watchTabCount"),
       poseList: requiredElement(document, "poseList"),
-      poseCount: requiredElement(document, "poseCount"),
+      poseSort: requiredElement(document, "poseSort"),
+      poseTabCount: requiredElement(document, "poseTabCount"),
       waypointList: requiredElement(document, "waypointList"),
-      waypointCount: requiredElement(document, "waypointCount"),
-      waypointFilter: requiredElement(document, "waypointFilter"),
+      waypointSort: requiredElement(document, "waypointSort"),
+      waypointTabCount: requiredElement(document, "waypointTabCount"),
       logList: requiredElement(document, "logList"),
-      logCount: requiredElement(document, "logCount"),
       logSort: requiredElement(document, "logSort"),
+      logTabCount: requiredElement(document, "logTabCount"),
     };
     this.tooltip = requiredElement(document, "watchPopup");
     this.readout = {

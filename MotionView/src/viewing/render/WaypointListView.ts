@@ -31,37 +31,29 @@ function eventLines(event: WaypointEventView): string[] {
 }
 
 export class WaypointListView {
+  #searchTerm = "";
+  #itemCount = 0;
+  readonly #eventKeys = new WeakMap<object, string>();
+  #nextEventKey = 1;
   constructor(
     private readonly viewing: ViewingFeature,
     private readonly dom: ViewingListsDom,
   ) {}
 
   bind(): void {
-    this.dom.waypointFilter.addEventListener("change", () => this.render());
+    this.dom.waypointSort.addEventListener("change", () => this.render());
   }
 
-  filterMatches(waypoint: WaypointView): boolean {
-    const filter = this.dom.waypointFilter.value || "all";
-    return filter === "all" || (filter === "active" ? waypoint.active : String(waypoint.id) === filter);
+  get itemCount(): number { return this.#itemCount; }
+
+  setSearch(value: string): void {
+    this.#searchTerm = value.trim().toLocaleLowerCase();
   }
 
-  renderFilter(): void {
-    const current = this.dom.waypointFilter.value || "all";
-    this.dom.waypointFilter.replaceChildren();
-    for (const [value, label] of [["all", "All"], ["active", "Active"]]) {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = label;
-      this.dom.waypointFilter.appendChild(option);
-    }
-    for (const waypoint of this.viewing.data.waypoints) {
-      const option = document.createElement("option");
-      option.value = String(waypoint.id);
-      option.textContent = waypoint.name || `Waypoint ${waypoint.id}`;
-      this.dom.waypointFilter.appendChild(option);
-    }
-    this.dom.waypointFilter.value = Array.from(this.dom.waypointFilter.options).some((option) => option.value === current)
-      ? current : "all";
+  filterMatches(_waypoint: WaypointView): boolean {
+    // The shared sidebar search only narrows its list; it should not hide route
+    // geometry in the field or timeline.
+    return true;
   }
 
   render(): void {
@@ -69,11 +61,17 @@ export class WaypointListView {
     this.dom.waypointList.replaceChildren();
     const visible: Array<{ waypoint: WaypointView; event: WaypointEventView }> = [];
     for (const waypoint of this.viewing.data.waypoints) {
-      if (!this.filterMatches(waypoint)) continue;
-      for (const event of waypoint.events) visible.push({ waypoint, event });
+      for (const event of waypoint.events) {
+        if (!this.#searchTerm || `${waypoint.name ?? ""} ${event.type} ${eventLines(event).join(" ")}`.toLocaleLowerCase().includes(this.#searchTerm)) {
+          visible.push({ waypoint, event });
+        }
+      }
     }
-    visible.sort((left, right) => left.event.t - right.event.t);
-    this.dom.waypointCount.textContent = String(visible.length);
+    const mode = this.dom.waypointSort.value;
+    visible.sort((left, right) => mode === "name"
+      ? (left.waypoint.name || `Waypoint ${left.waypoint.id}`).localeCompare(right.waypoint.name || `Waypoint ${right.waypoint.id}`, undefined, { numeric: true })
+      : mode === "-time" ? right.event.t - left.event.t : left.event.t - right.event.t);
+    this.#itemCount = visible.length;
     for (const item of visible) this.dom.waypointList.appendChild(this.createItem(item.waypoint, item.event));
     this.highlight(false);
     restoreScrollAnchor(this.dom.waypointList, anchor, ".watchItem", (element) => `${element.dataset.waypointId}:${element.dataset.eventTime}`);
@@ -81,12 +79,9 @@ export class WaypointListView {
 
   highlight(scroll: boolean): void {
     for (const element of this.dom.waypointList.querySelectorAll(".watchItem")) element.classList.remove("selected");
-    const id = this.viewing.navigation.selectedWaypointId;
-    if (id == null) return;
-    const eventTime = this.viewing.navigation.selectedWaypointEventTime;
-    const selector = `.watchItem[data-waypoint-id="${CSS.escape(String(id))}"]${eventTime == null ? "" : `[data-event-time="${CSS.escape(String(eventTime))}"]`}`;
-    const selected = this.dom.waypointList.querySelector(selector)
-      ?? this.dom.waypointList.querySelector(`.watchItem[data-waypoint-id="${CSS.escape(String(id))}"]`);
+    const event = this.viewing.navigation.selectedWaypointEvent;
+    if (!event) return;
+    const selected = this.dom.waypointList.querySelector(`.watchItem[data-waypoint-event-key="${CSS.escape(this.eventKeyFor(event))}"]`);
     selected?.classList.add("selected");
     if (scroll && selected) selected.scrollIntoView({ block: "nearest" });
   }
@@ -101,23 +96,46 @@ export class WaypointListView {
     element.className = "watchItem";
     element.dataset.waypointId = String(waypoint.id);
     element.dataset.eventTime = String(event.t);
+    element.dataset.waypointEventKey = this.eventKeyFor(event);
     element.innerHTML = `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span class="pill" style="background:${stateFill};color:#e7f2ff">${stateLabel}</span>
         <span class="pill" style="background:${style.fill};color:${style.text}">${escapeHtml(event.type)}</span>
-        <span style="font-weight:850;word-break:break-word">${escapeHtml(waypoint.name || `Waypoint ${waypoint.id}`)}</span>
-        <div class="subValue" style="margin-top:0!important">(Id: ${waypoint.id})</div>
-      </div><div class="muted">${formatNumber(event.t / 1000, 2)}s</div>
-    </div>${eventLines(event).map((line) => `<div class="waypointValue">${escapeHtml(line)}</div>`).join("")}`;
-    element.addEventListener("pointerdown", (pointerEvent) => {
-      if (pointerEvent.button !== 0) return;
-      pointerEvent.preventDefault();
+        <span class="eventSelectableText" style="font-weight:850;word-break:break-word">${escapeHtml(waypoint.name || `Waypoint ${waypoint.id}`)}</span>
+        <div class="subValue" style="margin-top:0!important"><span class="eventSelectableText">(Id: ${waypoint.id})</span></div>
+      </div><div class="muted"><span class="eventSelectableText">${formatNumber(event.t / 1000, 2)}s</span></div>
+    </div>${eventLines(event).map((line) => `<div class="waypointValue"><span class="eventSelectableText">${escapeHtml(line)}</span></div>`).join("")}`;
+    const selectWaypoint = () => {
+      if (this.viewing.navigation.selectedWaypointEvent === event) {
+        this.viewing.navigation.clearDetails();
+        return;
+      }
       this.viewing.playback.pause();
       this.viewing.navigation.selectWaypoint(waypoint, event);
       const poseIndex = this.viewing.projection.waypointPoseIndex(waypoint, event.t);
       if (poseIndex != null) this.viewing.navigation.selectPose(poseIndex, { preserveDetails: true });
       this.highlight(true);
+    };
+    element.addEventListener("pointerdown", (pointerEvent) => {
+      if (pointerEvent.button !== 0 || (pointerEvent.target instanceof Element && pointerEvent.target.closest(".eventSelectableText"))) return;
+      pointerEvent.preventDefault();
+      selectWaypoint();
     }, { passive: false });
+    element.addEventListener("click", (clickEvent) => {
+      if (!(clickEvent.target instanceof Element) || !clickEvent.target.closest(".eventSelectableText") || window.getSelection()?.toString()) return;
+      selectWaypoint();
+    });
     return element;
+  }
+
+  private eventKeyFor(event: Readonly<WaypointEventView>): string {
+    const object = event as object;
+    let key = this.#eventKeys.get(object);
+    if (!key) {
+      key = `waypoint-event:${this.#nextEventKey}`;
+      this.#nextEventKey += 1;
+      this.#eventKeys.set(object, key);
+    }
+    return key;
   }
 }

@@ -140,7 +140,7 @@ export class ViewingFieldView implements ViewingFieldLayer {
     for (const marker of this.viewing.projection.watchMarkers) {
       if (!marker.pose || !this.watchList.isVisible(marker)) continue;
       const point = this.field.worldToScreen(marker.pose.x, marker.pose.y);
-      const selected = this.viewing.navigation.selectedWatch?.t === marker.t;
+      const selected = this.viewing.navigation.selectedWatch === marker;
       const radius = this.scaledRadius(selected || this.#hoverWatch === marker ? WATCH_ACTIVE_RADIUS : WATCH_RADIUS);
       context.beginPath();
       context.fillStyle = levelFillWithAlpha(marker.watch.level, 0.95);

@@ -32,6 +32,7 @@ export class WatchGraphView {
   #comparisonMarkers: readonly Readonly<WatchMarker>[] = [];
   #dragOffset: Readonly<{ x: number; y: number }> | null = null;
   #resizeStart: Readonly<{ x: number; y: number; width: number; height: number }> | null = null;
+  readonly #stateListeners = new Set<() => void>();
 
   constructor(
     private readonly viewing: ViewingFeature,
@@ -123,6 +124,16 @@ export class WatchGraphView {
     this.#key = key;
     this.dom.panel.classList.remove("hidden");
     this.render();
+    this.notifyStateChanged();
+  }
+
+  onStateChanged(listener: () => void): () => void {
+    this.#stateListeners.add(listener);
+    return () => this.#stateListeners.delete(listener);
+  }
+
+  isOpenFor(marker: Readonly<WatchMarker>): boolean {
+    return this.#key === watchGraphKey(marker.watch) && !this.dom.panel.classList.contains("hidden");
   }
 
   toggle(): void {
@@ -133,14 +144,21 @@ export class WatchGraphView {
     }
     this.dom.panel.classList.toggle("hidden");
     if (!this.dom.panel.classList.contains("hidden")) this.render();
+    this.notifyStateChanged();
   }
 
   hide(): void {
+    if (this.dom.panel.classList.contains("hidden")) return;
     this.dom.panel.classList.add("hidden");
+    this.notifyStateChanged();
   }
 
   resize(): void {
     this.#chart?.resize();
+  }
+
+  private notifyStateChanged(): void {
+    for (const listener of this.#stateListeners) listener();
   }
 
   updatePlayhead(): void {

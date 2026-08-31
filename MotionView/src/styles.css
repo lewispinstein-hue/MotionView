@@ -213,6 +213,184 @@ canvas#c {
   border-bottom: 1px solid var(--line);
 }
 
+/* Viewing sidebar: one section at a time, with shared contextual controls. */
+#rightViewing {
+  background: rgba(11, 16, 25, 0.88);
+}
+
+#rightViewing > .section {
+  flex: 0 0 auto;
+  border-bottom-color: rgba(255, 255, 255, 0.07);
+}
+
+.viewingSidebar {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  container-type: inline-size;
+}
+
+.viewingSidebarTabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 3px;
+  padding: 8px 8px 6px;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  scrollbar-width: none;
+}
+
+.viewingSidebarTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.viewingSidebarTab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 6px 8px;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.viewingSidebarTab:hover,
+.viewingSidebarTab.isActive {
+  color: #b9d9ff;
+  background: rgba(76, 149, 255, 0.15);
+}
+
+.viewingSidebarTab.isActive {
+  border-color: rgba(110, 168, 255, 0.22);
+}
+
+.viewingSidebarTab svg,
+.viewingSidebarSearch svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.viewingSidebarTabCount {
+  min-width: 14px;
+  color: inherit;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.viewingSidebarToolbar {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 7px;
+  padding: 9px 10px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.viewingSidebarSearch {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  background: rgba(3, 7, 13, 0.42);
+  color: var(--muted);
+}
+
+.viewingSidebarSearch:focus-within {
+  border-color: rgba(110, 168, 255, 0.62);
+  box-shadow: 0 0 0 1px rgba(110, 168, 255, 0.13);
+}
+
+.viewingSidebarSearch input {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+
+.viewingSidebarSearch input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.viewingSidebarSearch span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewingSidebarControls {
+  display: flex;
+  gap: 6px;
+}
+
+.viewingToolbarSelect {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 29px;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  font-size: 11px;
+}
+
+.viewingSidebarControls .viewingToolbarSelect {
+  background: rgba(3, 7, 13, 0.72) url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%2393a4b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center !important;
+}
+
+.viewingSidebarControls .viewingToolbarSelect:hover:not(:disabled) {
+  background: rgba(3, 7, 13, 0.9) url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23e7eef7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center !important;
+}
+
+.viewingToolbarSelect:disabled {
+  color: rgba(147, 164, 184, 0.45);
+  border-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(255, 255, 255, 0.025) !important;
+}
+
+.viewingSidebarPanel {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.viewingSidebarPanel[hidden] {
+  display: none;
+}
+
+.viewingSidebarPanel > #watchList,
+.viewingSidebarPanel > #logList,
+.viewingSidebarPanel > #waypointList,
+.viewingSidebarPanel > #poseList {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .drop {
   border: 1px dashed var(--line);
   border-radius: 12px;
@@ -390,10 +568,10 @@ label {
   grid-row: 1 / 3;
   align-self: start;
   display: flex;
-  flex-direction: row;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-end;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 2px;
   flex-wrap: nowrap;
   flex: 0 0 auto;
 }
@@ -605,6 +783,132 @@ label {
   line-height: 1.35;
   margin-top: 6px;
   word-break: break-word;
+}
+
+/* Borderless list entries: shape and surface, rather than divider lines, define hierarchy. */
+.viewingSidebarPanel .watchItem:not(.virtualListRow) {
+  margin: 5px 8px;
+  padding: 10px 11px;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.viewingSidebarPanel .watchItemContent {
+  margin: 5px 12px;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.viewingSidebarPanel .watchItem:hover .watchItemContent,
+.viewingSidebarPanel .watchItem:not(.virtualListRow):hover,
+.viewingSidebarPanel .watchItem.selected .watchItemContent,
+.viewingSidebarPanel .watchItem:not(.virtualListRow).selected {
+  outline: 0;
+  background: rgba(76, 149, 255, 0.18);
+}
+
+.viewingSidebarPanel .watchItem:last-child .watchItemContent,
+.viewingSidebarPanel .watchItem:not(.virtualListRow):last-child {
+  border-bottom: 0;
+}
+
+.viewingSidebarPanel .pill.level {
+  min-width: 38px;
+  padding: 3px 6px;
+  border-radius: 7px;
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+
+.viewingSidebarPanel .watchActionsPill {
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.viewingSidebarPanel .watchActionsFull .iconBtn {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  opacity: 0.78;
+  background: transparent;
+  border-color: transparent;
+  transform: none;
+}
+
+.viewingSidebarPanel .watchActionIcon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+
+.viewingSidebarPanel .watchActionIcon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.viewingSidebarPanel .watchActionsFull .iconBtn:hover:not(:disabled),
+.viewingSidebarPanel .watchActionsFull .iconBtn:focus-visible {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: transparent;
+  transform: none;
+}
+
+.viewingSidebarPanel .watchMeta {
+  transform: translateY(-2px);
+}
+
+@container (max-width: 280px) {
+  .viewingSidebarControls {
+    flex-wrap: wrap;
+  }
+
+  .viewingToolbarSelect {
+    flex-basis: 100%;
+  }
+}
+
+#rightViewing .watchActionsFull .iconBtn.isOn {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.viewingSidebarPanel .watchPinBtn.isOn {
+  color: #f2c94c;
+}
+
+.viewingSidebarPanel .watchGraphBtn.isOn {
+  color: #78dca0;
+}
+
+.viewingSidebarPanel .watchVisibilityBtn.isOff {
+  color: #ff9b9b;
+}
+
+.viewingSidebarPanel .watchPinBtn:hover:not(:disabled) {
+  color: #f2c94c;
+}
+
+.viewingSidebarPanel .watchGraphBtn:hover:not(:disabled) {
+  color: #78dca0;
+}
+
+.viewingSidebarPanel .watchVisibilityBtn:hover:not(:disabled) {
+  color: #ff9b9b;
+}
+
+.eventSelectableText,
+.eventSelectableText * {
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .kvs {
@@ -1394,6 +1698,11 @@ body:not(.mode-planning) #rightPlanning {
 #rightPlanning {
   min-width: 240px;
   overflow: auto;
+}
+
+#rightViewing {
+  min-height: 0;
+  overflow: hidden;
 }
 
 #left {
