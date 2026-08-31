@@ -1610,6 +1610,137 @@ body:not(.mode-planning) #rightPlanning {
   font-size: 12px;
 }
 
+/* === Feedback modal === */
+.feedbackCard {
+  width: min(620px, calc(100vw - 28px));
+}
+
+.feedbackBody {
+  gap: 10px;
+}
+
+.feedbackLabel,
+.feedbackGroup legend {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.feedbackDescription {
+  min-height: 150px;
+  resize: vertical;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  color: var(--text);
+  background: rgba(16, 23, 32, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  line-height: 1.4;
+}
+
+.feedbackDescription:focus {
+  outline: 2px solid rgba(110, 168, 255, 0.6);
+  outline-offset: 1px;
+}
+
+.feedbackCounter,
+.feedbackRouteHint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.feedbackCounter {
+  text-align: right;
+  margin-top: -6px;
+}
+
+.feedbackGroup {
+  border: 0;
+  padding: 0;
+  margin: 3px 0 0;
+}
+
+.feedbackGroup legend {
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+.feedbackTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.feedbackTag {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.feedbackTag:hover,
+.feedbackTag.selected {
+  border-color: rgba(110, 168, 255, 0.65);
+  background: rgba(110, 168, 255, 0.16);
+  color: var(--text);
+}
+
+.feedbackRouteOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.feedbackRouteOption input {
+  accent-color: #6ea8ff;
+}
+
+.feedbackRouteHint {
+  margin-top: -7px;
+  padding-left: 25px;
+  line-height: 1.35;
+}
+
+.feedbackValidation {
+  min-height: 18px;
+  color: #ff9b9b;
+  font-size: 12px;
+}
+
+.feedbackDeliveryStatus {
+  color: #9ee6b3;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.feedbackActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.feedbackSend {
+  background: rgba(110, 168, 255, 0.22);
+  border-color: rgba(110, 168, 255, 0.5);
+}
+
+.feedbackSend:disabled,
+.feedbackTag:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
 /* === Watch click popup (tiny) === */
 #watchPopup {
   position: fixed;

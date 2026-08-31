@@ -132,7 +132,6 @@ export class TelemetryClient {
       queued_ms: queuedMs,
     };
     const request = this.buildRequest({ event: event.event }, properties);
-    console.log("PostHog capture:", request);
     return this.safeInvoke("plugin:posthog|capture", { request });
   }
 

@@ -108,10 +108,62 @@
           </p>
         </div>
         <div style="margin-top:14px;display:flex;gap:8px;align-self:center;position:absolute;bottom:10px;right:10px">
+          <button id="btnHelpFeedback" class="iconBtn secondaryBtn" style="font-size:15px">Send Feedback</button>
           <button id="btnHelpKeybinds" class="iconBtn secondaryBtn" style="font-size:15px">Keybinds</button>
         </div>
         <div style="color:darkgray;font-size:12px;margin-top:5px;"><span class="muted">Version:</span> <span
             class="muted" id="versionDisplay">?</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="feedbackModal" class="modal" hidden>
+    <div class="modalBackdrop"></div>
+    <div class="modalCard feedbackCard" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+      <div class="modalHeader">
+        <div id="feedbackTitle" style="font-weight:900;font-size:20px">Send feedback</div>
+        <button id="btnFeedbackClose" class="iconBtn" title="Close">✕</button>
+      </div>
+      <div class="modalBody feedbackBody">
+        <label class="feedbackLabel" for="feedbackDescription">What would you like to share?</label>
+        <textarea id="feedbackDescription" class="feedbackDescription" maxlength="2000" placeholder="Describe the issue, idea, or experience…"></textarea>
+        <div id="feedbackDescriptionCount" class="feedbackCounter">0 / 2,000</div>
+
+        <fieldset class="feedbackGroup">
+          <legend>Product <span aria-hidden="true">*</span></legend>
+          <div class="feedbackTags" role="group" aria-label="Product">
+            <button type="button" class="feedbackTag" data-feedback-product="motionview" aria-pressed="false">MotionView</button>
+            <button type="button" class="feedbackTag" data-feedback-product="mvlib" aria-pressed="false">MVLib</button>
+          </div>
+        </fieldset>
+        <fieldset class="feedbackGroup">
+          <legend>Feedback type <span aria-hidden="true">*</span></legend>
+          <div class="feedbackTags" role="group" aria-label="Feedback type">
+            <button type="button" class="feedbackTag" data-feedback-type="bug_report" aria-pressed="false">Bug report</button>
+            <button type="button" class="feedbackTag" data-feedback-type="feature_request" aria-pressed="false">Feature request</button>
+            <button type="button" class="feedbackTag" data-feedback-type="general_feedback" aria-pressed="false">General feedback</button>
+          </div>
+        </fieldset>
+        <fieldset class="feedbackGroup">
+          <legend>Area <span class="muted">(optional)</span></legend>
+          <div class="feedbackTags" role="group" aria-label="Area">
+            <button type="button" class="feedbackTag" data-feedback-area="viewing" aria-pressed="false">Viewing</button>
+            <button type="button" class="feedbackTag" data-feedback-area="planning" aria-pressed="false">Planning</button>
+            <button type="button" class="feedbackTag" data-feedback-area="other" aria-pressed="false">Other</button>
+          </div>
+        </fieldset>
+
+        <label class="feedbackRouteOption">
+          <input id="feedbackRoute" type="checkbox">
+          <span>Include the current route snapshot</span>
+        </label>
+        <div class="feedbackRouteHint">This can include route data, logs, and planning code.</div>
+        <div id="feedbackValidation" class="feedbackValidation" role="alert"></div>
+        <div id="feedbackDeliveryStatus" class="feedbackDeliveryStatus" role="status" hidden></div>
+        <div class="feedbackActions">
+          <button id="btnFeedbackCancel" type="button" class="iconBtn secondaryBtn">Cancel</button>
+          <button id="btnFeedbackSend" type="button" class="iconBtn secondaryBtn feedbackSend" disabled>Send feedback</button>
+        </div>
       </div>
     </div>
   </div>

@@ -47,7 +47,6 @@ const fieldRenderer = new FieldRenderer(requiredElement("c", HTMLCanvasElement, 
 fieldRenderer.bindInput();
 
 const topBar = new TopBarView(app, fieldRenderer, TopBarDom.from(document));
-const helpView = new HelpView(app, HelpDom.from(document));
 
 const planningDom = PlanningDom.from(document);
 const planningDialogs = new PlanningDialogs(planningDom);
@@ -72,6 +71,7 @@ const liveSettings = new LiveSettingsBinding(app.settings, app.live);
 const layoutSettings = new LayoutSettingsBinding(app.settings, planningLayout, viewingLayout);
 
 const serializer = new MotionViewDocumentSerializer(app);
+const helpView = new HelpView(app, HelpDom.from(document), serializer);
 const persistence = new SessionPersistence(app, serializer);
 const importer = new RouteImportService(app, planningDialogs, topBar, demoRouteUrl);
 const exportDialog = new ExportDialog(app, ExportDom.from(document), new ExportService(app, serializer));
