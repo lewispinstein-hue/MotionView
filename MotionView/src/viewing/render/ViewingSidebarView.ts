@@ -62,7 +62,13 @@ export class ViewingSidebarView {
     for (const control of sortControls) {
       control.addEventListener("change", () => this.syncSharedTimeSort(control, sortControls));
     }
-    for (const control of [this.dom.watchFilter, ...sortControls]) {
+    this.dom.levelFilter.addEventListener("change", () => {
+      this.watches.render();
+      this.logs.render();
+      this.waypoints.render();
+      this.updateCounts();
+    });
+    for (const control of sortControls) {
       control.addEventListener("change", () => this.refreshCounts());
     }
     for (const tab of this.dom.sectionTabs) {
@@ -102,7 +108,6 @@ export class ViewingSidebarView {
   }
 
   render(): void {
-    this.watches.renderFilter();
     this.watches.render();
     this.logs.render();
     this.waypoints.render();
@@ -192,8 +197,8 @@ export class ViewingSidebarView {
     this.dom.search.disabled = searchDisabled;
     this.dom.search.placeholder = searchDisabled ? "Searching poses is unavailable" : "Search events…";
     this.dom.search.setAttribute("aria-label", searchDisabled ? "Searching poses is unavailable" : "Search events");
-    this.dom.watchFilter.disabled = section !== "watches";
-    this.dom.watchFilter.hidden = false;
+    this.dom.levelFilter.disabled = section === "poses";
+    this.dom.levelFilter.hidden = false;
     this.dom.watchSort.hidden = section !== "watches";
     this.dom.logSort.hidden = section !== "logs";
     this.dom.waypointSort.hidden = section !== "waypoints";

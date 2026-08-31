@@ -29,7 +29,7 @@ export interface ViewingListsDom {
   readonly search: HTMLInputElement;
   readonly searchCount: HTMLElement;
   readonly watchList: HTMLElement;
-  readonly watchFilter: HTMLSelectElement;
+  readonly levelFilter: HTMLSelectElement;
   readonly watchSort: HTMLSelectElement;
   readonly watchTabCount: HTMLElement;
   readonly poseList: HTMLElement;
@@ -133,7 +133,7 @@ export class ViewingDom {
       search: requiredElement(document, "viewingSearch"),
       searchCount: requiredElement(document, "viewingSearchCount"),
       watchList: requiredElement(document, "watchList"),
-      watchFilter: requiredElement(document, "watchFilter"),
+      levelFilter: requiredElement(document, "levelFilter"),
       watchSort: requiredElement(document, "watchSort"),
       watchTabCount: requiredElement(document, "watchTabCount"),
       poseList: requiredElement(document, "poseList"),

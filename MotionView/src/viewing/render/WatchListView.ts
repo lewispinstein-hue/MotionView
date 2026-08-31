@@ -8,7 +8,7 @@ import type { ViewingListsDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
 import type { WatchMarker } from "../viewingTypes";
 import { createVirtualList, type VirtualList } from "./virtualList";
-import { escapeHtml, formatNumber, isGraphableWatchValue, levelSortRank, levelStyle, watchGraphKey } from "../viewingPresentation";
+import { escapeHtml, formatNumber, isGraphableWatchValue, levelSortRank, levelStyle, normalizeLogLevel } from "../viewingPresentation";
 import type { FloatingInfoView } from "./FloatingInfoView";
 import type { WatchGraphView } from "./WatchGraphView";
 
@@ -41,9 +41,6 @@ export class WatchListView {
     this.dom.watchSort.addEventListener("change", () => {
       this.render();
     });
-    this.dom.watchFilter.addEventListener("change", () => {
-      this.render();
-    });
   }
 
   get itemCount(): number { return this.#itemCount; }
@@ -53,34 +50,12 @@ export class WatchListView {
   }
 
   filterMatches(watch: Readonly<WatchEntry>): boolean {
-    const filter = this.dom.watchFilter.value || "all";
-    return filter === "all" || watchGraphKey(watch) === filter;
+    const filter = this.dom.levelFilter.value || "all";
+    return filter === "all" || normalizeLogLevel(watch.level) === filter;
   }
 
   isVisible(marker: Readonly<WatchMarker>): boolean {
     return marker.watch.visible !== false && this.filterMatches(marker.watch);
-  }
-
-  renderFilter(): void {
-    const current = this.dom.watchFilter.value || "all";
-    this.dom.watchFilter.replaceChildren();
-    const all = document.createElement("option");
-    all.value = "all";
-    all.textContent = "Filter by label";
-    this.dom.watchFilter.appendChild(all);
-    const options = new Map<string, string>();
-    for (const watch of this.viewing.data.watches) {
-      const key = watchGraphKey(watch);
-      const id = Number(watch.id);
-      options.set(key, watch.label || (Number.isInteger(id) ? `Watch ${id}` : "Unnamed Watch"));
-    }
-    for (const [key, label] of [...options].sort((left, right) => left[1].localeCompare(right[1], undefined, { numeric: true }))) {
-      const option = document.createElement("option");
-      option.value = key;
-      option.textContent = label;
-      this.dom.watchFilter.appendChild(option);
-    }
-    this.dom.watchFilter.value = Array.from(this.dom.watchFilter.options).some((option) => option.value === current) ? current : "all";
   }
 
   render(): void {

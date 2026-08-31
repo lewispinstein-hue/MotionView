@@ -10,6 +10,12 @@ function eventStyle(type: string): Readonly<{ fill: string; text: string }> {
   return { fill: "rgba(255,255,255,0.12)", text: "#f7fbff" };
 }
 
+function eventLevel(event: WaypointEventView): "DEBUG" | "INFO" | "ERROR" {
+  if (event.type === "TIMEDOUT") return "ERROR";
+  if (event.type === "REACHED") return "INFO";
+  return "DEBUG";
+}
+
 function eventLines(event: WaypointEventView): string[] {
   if (event.type === "CREATED") {
     const params = event.params;
@@ -52,8 +58,7 @@ export class WaypointListView {
   }
 
   filterMatches(_waypoint: WaypointView): boolean {
-    // The shared sidebar search only narrows its list; it should not hide route
-    // geometry in the field or timeline.
+    // Sidebar list filters should not hide route geometry in the field or timeline.
     return true;
   }
 
@@ -68,7 +73,7 @@ export class WaypointListView {
     const visible: Array<{ waypoint: WaypointView; event: WaypointEventView }> = [];
     for (const waypoint of this.viewing.data.waypoints) {
       for (const event of waypoint.events) {
-        if (!this.#searchTerm || `${waypoint.name ?? ""} ${event.type} ${eventLines(event).join(" ")}`.toLocaleLowerCase().includes(this.#searchTerm)) {
+        if (this.matchesLevel(event) && (!this.#searchTerm || `${waypoint.name ?? ""} ${event.type} ${eventLines(event).join(" ")}`.toLocaleLowerCase().includes(this.#searchTerm))) {
           visible.push({ waypoint, event });
         }
       }
@@ -86,6 +91,11 @@ export class WaypointListView {
       itemSelector,
       (element) => `${element.dataset.waypointId}:${element.dataset.eventTime}`,
     );
+  }
+
+  private matchesLevel(event: WaypointEventView): boolean {
+    const filter = this.dom.levelFilter.value || "all";
+    return filter === "all" || eventLevel(event) === filter;
   }
 
   highlight(scroll: boolean): void {

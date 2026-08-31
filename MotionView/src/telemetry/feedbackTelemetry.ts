@@ -1,7 +1,14 @@
 import type { TelemetryClient } from "./telemetryClient";
 
-const FEEDBACK_RATE_LIMIT_MS = 15 * 60 * 1000;
+const FEEDBACK_RATE_LIMIT_MS = 5 * 60 * 1000;
 const LAST_SUBMISSION_STORAGE_KEY = "motionview.feedback.last-submitted-at";
+
+function formatDuration(milliseconds: number): string {
+  const seconds = Math.max(0, Math.ceil(milliseconds / 1_000));
+  if (seconds < 60) return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  const minutes = Math.ceil(seconds / 60);
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
 
 export type FeedbackProduct = "motionview" | "mvlib";
 export type FeedbackType = "bug_report" | "feature_request" | "general_feedback";
@@ -26,10 +33,9 @@ export class FeedbackTelemetry {
 
   async submit(submission: FeedbackSubmission): Promise<FeedbackDelivery> {
     if (this.remainingRateLimitMs() > 0) return "rate_limited";
-    const sent = await this.telemetry.capture("feedback_submitted", this.propertiesFor(submission), {
-      debounceMs: FEEDBACK_RATE_LIMIT_MS,
-      debounceKey: "feedback_submitted",
-    });
+    // Feedback owns its persisted cooldown. A second telemetry-client debounce
+    // can retain an old value when this setting changes during development.
+    const sent = await this.telemetry.capture("feedback_submitted", this.propertiesFor(submission));
     this.recordSubmission();
     return sent ? "sent" : "queued";
   }
@@ -45,8 +51,8 @@ export class FeedbackTelemetry {
   }
 
   rateLimitMessage(): string {
-    const minutes = Math.max(1, Math.ceil(this.remainingRateLimitMs() / 60_000));
-    return `Feedback is limited to one submission every 15 minutes. Try again in about ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+    if (FEEDBACK_RATE_LIMIT_MS <= 0) return "Feedback can be sent again now.";
+    return `Feedback is limited to one submission every ${formatDuration(FEEDBACK_RATE_LIMIT_MS)}. Try again in about ${formatDuration(this.remainingRateLimitMs())}.`;
   }
 
   private recordSubmission(): void {

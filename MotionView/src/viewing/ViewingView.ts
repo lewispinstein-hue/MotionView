@@ -115,7 +115,6 @@ export class ViewingView {
       this.render();
     } else if (change.kind === "appended") {
       if (change.result.watchesAdded) {
-        this.#sidebar.watches.renderFilter();
         this.#sidebar.watches.render();
         this.#floatingInfo.refreshPinnedPanels();
         this.#watchGraph.render();

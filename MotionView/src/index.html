@@ -592,8 +592,13 @@
                 <span id="viewingSearchCount" aria-live="polite">—</span>
               </label>
               <div class="viewingSidebarControls">
-                <select id="watchFilter" class="settingsSelect viewingToolbarSelect" aria-label="Filter watches by label">
-                  <option value="all" selected>Filter by label</option>
+                <select id="levelFilter" class="settingsSelect viewingToolbarSelect" aria-label="Filter events by level">
+                  <option value="all" selected>Filter level</option>
+                  <option value="DEBUG">Debug</option>
+                  <option value="INFO">Info</option>
+                  <option value="WARN">Warn</option>
+                  <option value="ERROR">Error</option>
+                  <option value="FATAL">Fatal</option>
                 </select>
                 <select id="watchSort" class="settingsSelect viewingToolbarSelect" aria-label="Sort watches">
                   <option value="level">Level</option>

@@ -355,6 +355,8 @@ canvas#c {
 }
 
 .viewingSidebarSearch input {
+  flex: 1 1 auto;
+  width: 0;
   min-width: 0;
   overflow: hidden;
   padding: 0;
@@ -372,6 +374,7 @@ canvas#c {
 }
 
 .viewingSidebarSearch span {
+  flex: 0 0 auto;
   margin-left: auto;
   color: var(--muted);
   font-size: 11px;

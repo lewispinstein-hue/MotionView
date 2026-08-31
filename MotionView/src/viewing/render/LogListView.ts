@@ -3,7 +3,7 @@ import type { LogEntry } from "../../state/models";
 import type { ViewingListsDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
 import { createVirtualList, type VirtualList } from "./virtualList";
-import { escapeHtml, formatNumber, levelSortRank, levelStyle } from "../viewingPresentation";
+import { escapeHtml, formatNumber, levelSortRank, levelStyle, normalizeLogLevel } from "../viewingPresentation";
 
 export class LogListView {
   readonly #list: VirtualList<Readonly<LogEntry>>;
@@ -40,7 +40,7 @@ export class LogListView {
   }
 
   render(): void {
-    const items = Array.from(this.viewing.data.logs).filter((entry) => this.searchMatches(entry));
+    const items = Array.from(this.viewing.data.logs).filter((entry) => this.filterMatches(entry) && this.searchMatches(entry));
     const mode = this.dom.logSort.value;
     items.sort((left, right) => {
       if (mode === "level") return levelSortRank(right.level) - levelSortRank(left.level) || right.t - left.t;
@@ -54,6 +54,11 @@ export class LogListView {
   private searchMatches(entry: Readonly<LogEntry>): boolean {
     if (!this.#searchTerm) return true;
     return `${entry.label ?? ""} ${entry.message ?? entry.value ?? ""}`.toLocaleLowerCase().includes(this.#searchTerm);
+  }
+
+  private filterMatches(entry: Readonly<LogEntry>): boolean {
+    const filter = this.dom.levelFilter.value || "all";
+    return filter === "all" || normalizeLogLevel(entry.level) === filter;
   }
 
   highlight(scroll = false): void {

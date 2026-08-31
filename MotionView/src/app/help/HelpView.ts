@@ -14,7 +14,6 @@ export class HelpView {
   #feedbackType: FeedbackType | null = null;
   #area: FeedbackArea | null = null;
   #submitting = false;
-  #completed = false;
 
   constructor(
     private readonly app: MotionViewApp,
@@ -70,12 +69,8 @@ export class HelpView {
   closeKeybinds(): void { this.hide(this.dom.keybindsModal); }
   openFeedback(): void {
     this.close();
-    if (this.#completed && feedbackTelemetry.remainingRateLimitMs() === 0) {
-      this.#completed = false;
-      this.dom.feedbackSend.textContent = "Send feedback";
-      this.updateFeedbackForm();
-    }
     this.show(this.dom.feedbackModal);
+    this.updateFeedbackForm();
     this.dom.feedbackDescription.focus();
   }
 
@@ -143,8 +138,10 @@ export class HelpView {
     const length = this.dom.feedbackDescription.value.length;
     this.dom.feedbackDescriptionCount.textContent = `${length.toLocaleString()} / 2,000`;
     const valid = !!this.dom.feedbackDescription.value.trim() && !!this.#product && !!this.#feedbackType;
-    this.dom.feedbackSend.disabled = !valid || this.#submitting || this.#completed;
-    if (valid) this.dom.feedbackValidation.textContent = "";
+    this.dom.feedbackSend.disabled = this.#submitting;
+    if (feedbackTelemetry.remainingRateLimitMs() > 0) {
+      this.dom.feedbackValidation.textContent = feedbackTelemetry.rateLimitMessage();
+    } else if (valid) this.dom.feedbackValidation.textContent = "";
   }
 
   private async submitFeedback(): Promise<void> {
@@ -184,15 +181,13 @@ export class HelpView {
         ? "Thanks! Your feedback was sent."
         : "Feedback saved. It will send automatically when MotionView reconnects.";
       this.dom.feedbackDeliveryStatus.hidden = false;
-      this.#completed = true;
-      this.dom.feedbackSend.textContent = result === "sent" ? "Sent" : "Saved";
     } catch (error) {
       console.error("Unable to submit feedback:", error);
       this.dom.feedbackValidation.textContent = "Unable to prepare your feedback. Please try again.";
     } finally {
       this.#submitting = false;
       this.dom.feedbackCancel.disabled = false;
-      if (!this.#completed) this.dom.feedbackSend.textContent = "Send feedback";
+      this.dom.feedbackSend.textContent = "Send feedback";
       this.updateFeedbackForm();
     }
   }
