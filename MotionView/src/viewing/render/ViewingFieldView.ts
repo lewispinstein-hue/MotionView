@@ -53,6 +53,7 @@ export class ViewingFieldView implements ViewingFieldLayer {
     this.dom.canvas.addEventListener("mouseleave", () => {
       if (getMode() !== "viewing") return;
       this.#hoverWatch = null;
+      this.viewing.navigation.setHoveredWaypoint(null);
       this.viewing.navigation.setTrackHover(null);
       this.setCursorReadout(null);
       this.dom.canvas.style.cursor = "";
@@ -179,16 +180,19 @@ export class ViewingFieldView implements ViewingFieldLayer {
     const trackHit = this.hitTrack(event.clientX, event.clientY);
     this.#hoverWatch = this.hitWatch(event.clientX, event.clientY);
     if (this.#hoverWatch) {
+      this.viewing.navigation.setHoveredWaypoint(null);
       this.viewing.navigation.setTrackHover(trackHit?.pose ?? null, trackHit?.time ?? null);
       this.dom.canvas.style.cursor = "pointer";
       return;
     }
     const waypoint = this.hitWaypoint(event.clientX, event.clientY);
     if (waypoint) {
+      this.viewing.navigation.setHoveredWaypoint(waypoint);
       this.viewing.navigation.setTrackHover(null);
       this.dom.canvas.style.cursor = "pointer";
       return;
     }
+    this.viewing.navigation.setHoveredWaypoint(null);
     this.viewing.navigation.setTrackHover(trackHit?.pose ?? null, trackHit?.time ?? null);
     this.dom.canvas.style.cursor = trackHit ? "crosshair" : "";
   }
@@ -221,6 +225,10 @@ export class ViewingFieldView implements ViewingFieldLayer {
     this.watchTooltip.hide();
     const waypoint = this.hitWaypoint(event.clientX, event.clientY);
     if (waypoint) {
+      if (String(this.viewing.navigation.selectedWaypointId) === String(waypoint.id)) {
+        this.viewing.navigation.clearWaypointSelection();
+        return;
+      }
       this.viewing.playback.pause();
       this.viewing.navigation.clearTrackLock();
       this.viewing.navigation.setTrackHover(null);
@@ -322,7 +330,7 @@ export class ViewingFieldView implements ViewingFieldLayer {
   }
 
   private selectedWaypoint(): WaypointView | null {
-    const id = this.viewing.navigation.selectedWaypointId;
+    const id = this.viewing.navigation.overlayWaypointId;
     if (id == null) return null;
     return this.viewing.data.waypointById.get(Number(id))
       ?? this.viewing.data.waypoints.find((waypoint) => String(waypoint.id) === String(id))

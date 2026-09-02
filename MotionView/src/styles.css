@@ -432,6 +432,21 @@ canvas#c {
   background: transparent;
 }
 
+/* Waypoint cards are not virtualized, so use an explicit gap instead of
+   vertical margins (which collapse between regular block elements). */
+.viewingSidebarPanel > #waypointList {
+  display: grid;
+  align-content: start;
+  grid-auto-rows: max-content;
+  gap: 10px;
+  padding: 5px 8px;
+  box-sizing: border-box;
+}
+
+.viewingSidebarPanel > #waypointList .watchItem:not(.virtualListRow) {
+  margin: 0;
+}
+
 .drop {
   border: 1px dashed var(--line);
   border-radius: 12px;
@@ -742,6 +757,12 @@ label {
   line-height: 1.35;
   margin-top: 6px;
   word-break: break-word;
+}
+
+.waypointPill {
+  font-family: "Avenir Next", Avenir, ui-sans-serif, system-ui, sans-serif;
+  font-weight: 650;
+  letter-spacing: 0.015em;
 }
 
 /* Borderless list entries: shape and surface, rather than divider lines, define hierarchy. */
@@ -1779,26 +1800,14 @@ body:not(.mode-planning) #rightPlanning {
   pointer-events: none;
 }
 
-/* Pose list items */
+/* Pose entries reuse the shared virtual card treatment used by Watches and Logs. */
 .poseItem {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--line);
   cursor: pointer;
 }
 
-.poseItem:hover {
-  background: rgba(255, 255, 255, .04);
-}
-
-.poseItem:last-child {
-  border-bottom: none;
-}
-
-.poseItem.selected,
-.poseItem.previewSelected {
-  outline: 2px solid rgba(255, 255, 255, 0.35);
-  outline-offset: -2px;
-  background: rgba(255, 255, 255, .03);
+.viewingSidebarPanel .poseValue {
+  font-size: 10px;
+  font-weight: 400;
 }
 
 /* === Help modal === */
@@ -2460,13 +2469,6 @@ body:not(.mode-planning) #rightPlanning {
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
-}
-
-/* tighten pose list */
-.poseItem .sub {
-  margin-top: 3px;
-  font-size: 12px;
-  color: var(--muted);
 }
 
 /* Floating Info Window */

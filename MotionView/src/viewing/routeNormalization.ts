@@ -255,16 +255,33 @@ export function buildWaypointState(value: unknown): { waypoints: Waypoint[]; way
 
   for (const rawEntry of source) {
     if (!rawEntry || typeof rawEntry !== "object") continue;
-    const entry = rawEntry as Record<string, any>;
+    const entry = rawEntry as Record<string, unknown>;
     const id = Number(entry.id);
     if (!Number.isInteger(id)) continue;
-    const fallbackName = String(entry.name ?? entry.createdEvent?.name ?? "");
+    const rawCreatedEvent = entry.createdEvent;
+    const createdEventRecord = rawCreatedEvent && typeof rawCreatedEvent === "object"
+      ? rawCreatedEvent as Record<string, unknown>
+      : null;
+    const fallbackName = String(entry.name ?? createdEventRecord?.name ?? "");
     const rawEvents = Array.isArray(entry.events) ? [...entry.events] : [];
-    if (entry.createdEvent && !rawEvents.includes(entry.createdEvent)) rawEvents.push(entry.createdEvent);
     const events = rawEvents
       .map((event) => normalizeWaypointEvent(event, id, fallbackName))
       .filter((event): event is WaypointEvent => event != null)
       .sort((left, right) => left.t - right.t);
+    const storedCreatedEvent = normalizeWaypointEvent(rawCreatedEvent, id, fallbackName);
+    if (storedCreatedEvent?.type === "CREATED" && !events.some((event) => event.type === "CREATED")) {
+      events.push(storedCreatedEvent);
+      events.sort((left, right) => left.t - right.t);
+    }
+
+    // `createdEvent` is retained for backwards compatibility alongside `events`.
+    // JSON parsing breaks object identity, so keep the canonical creation only once.
+    const creationIndex = events.findIndex((event) => event.type === "CREATED");
+    if (creationIndex !== -1) {
+      for (let index = events.length - 1; index > creationIndex; index -= 1) {
+        if (events[index].type === "CREATED") events.splice(index, 1);
+      }
+    }
     const createdEvent = events.find((event): event is WaypointCreatedEvent => event.type === "CREATED");
     if (!createdEvent) continue;
 

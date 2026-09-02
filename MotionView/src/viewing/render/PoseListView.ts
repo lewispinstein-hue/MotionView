@@ -3,7 +3,6 @@ import type { ViewingFeature } from "../ViewingFeature";
 import type { ViewingListsDom } from "../ViewingDom";
 import { createVirtualList, type VirtualList } from "./virtualList";
 import { escapeHtml, formatNumber } from "../viewingPresentation";
-import { getCurrentUnits } from "../../shared/units";
 
 interface PoseListItem {
   readonly pose: Readonly<Pose>;
@@ -20,7 +19,7 @@ export class PoseListView {
     private readonly dom: ViewingListsDom,
   ) {
     const list = createVirtualList<PoseListItem>(dom.poseList, {
-      estimateRowHeight: 64,
+      estimateRowHeight: 80,
       overscanPx: 320,
       scrollContainer: dom.scrollContainer,
       getKey: (item) => String(item.index),
@@ -85,18 +84,22 @@ export class PoseListView {
     const rawPose = this.viewing.data.poses[index];
     const pose = this.viewing.projection.displayPose(this.viewing.projection.poseAt(index));
     const time = typeof rawPose?.t === "number" ? Math.round(rawPose.t) : null;
+    const coordinate = (value: unknown) => {
+      const number = Number(value);
+      return Number.isFinite(number) ? number.toFixed(2) : "—";
+    };
     const summary = pose
-      ? `X: ${formatNumber(pose.x, 1, "0")}${getCurrentUnits()}, Y: ${formatNumber(pose.y, 1, "0")}${getCurrentUnits()}, θ: ${formatNumber(pose.theta, 1, "0")}°`
+      ? `X: ${coordinate(pose.x)}, Y: ${coordinate(pose.y)}, θ: ${coordinate(pose.theta)}°`
       : "—";
     const element = document.createElement("div");
-    element.className = "poseItem";
+    element.className = "watchItem poseItem";
     if (index === this.viewing.navigation.selectedIndex) element.classList.add("selected");
     if (index === this.#previewIndex) element.classList.add("previewSelected");
     element.dataset.idx = String(index);
-    element.innerHTML = `<div style="display:flex;justify-content:space-between;gap:10px">
-      <div style="font-weight:800">#${index + 1}</div>
-      <div class="muted">${time != null ? formatNumber(time / 1000) : "—"}s</div>
-    </div><div class="sub">${escapeHtml(summary)}</div>`;
+    element.innerHTML = `<div class="watchItemContent poseItemContent"><div class="watchItemHeader">
+      <div class="watchTitleGroup"><span class="pill level watchLevelPill poseIndexPill" style="background:rgba(174, 190, 211, 0.85);color:#081018">${index + 1}</span></div>
+      <div class="watchMeta"><div class="watchTimestamp muted"><span class="eventSelectableText">${time != null ? formatNumber(time / 1000, 2) : "—"}s</span></div></div>
+    </div><div class="bigValue poseValue"><span class="eventSelectableText">${escapeHtml(summary)}</span></div></div>`;
     if (time != null) {
       element.addEventListener("pointerenter", () => {
         if (!this.viewing.playback.isPlaying) this.viewing.navigation.setTimelineHover(time);

@@ -105,7 +105,7 @@ export class ViewingView {
   }
 
   clearWaypointSelection(): void {
-    this.viewing.navigation.clearDetails();
+    this.viewing.navigation.clearWaypointSelection();
   }
 
   private handleDataChanged(change: Readonly<ViewingDataChangedEvent>): void {

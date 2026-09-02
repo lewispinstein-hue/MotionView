@@ -10,6 +10,7 @@ export class ViewingNavigation {
   #selectedWaypointId: number | string | null = null;
   #selectedWaypointEventTime: number | null = null;
   #selectedWaypointEvent: Readonly<WaypointEventView> | null = null;
+  #hoveredWaypointId: number | string | null = null;
   #hoverTimelineTime: number | null = null;
   #timelineHoverSource: "timeline" | "sidebar" | null = null;
   #sidebarSyncCommitId = 0;
@@ -40,6 +41,8 @@ export class ViewingNavigation {
   get selectedLog(): Readonly<LogEntry> | null { return this.#selectedLog; }
   get selectedLogTime(): number | null { return this.#selectedLog?.t ?? null; }
   get selectedWaypointId(): number | string | null { return this.#selectedWaypointId; }
+  get hoveredWaypointId(): number | string | null { return this.#hoveredWaypointId; }
+  get overlayWaypointId(): number | string | null { return this.#hoveredWaypointId ?? this.#selectedWaypointId; }
   get selectedWaypointEventTime(): number | null { return this.#selectedWaypointEventTime; }
   get selectedWaypointEvent(): Readonly<WaypointEventView> | null { return this.#selectedWaypointEvent; }
   get hoverTimelineTime(): number | null { return this.#hoverTimelineTime; }
@@ -84,18 +87,12 @@ export class ViewingNavigation {
   selectWatch(marker: Readonly<WatchMarker>): void {
     this.#selectedWatch = marker;
     this.#selectedLog = null;
-    this.#selectedWaypointId = null;
-    this.#selectedWaypointEventTime = null;
-    this.#selectedWaypointEvent = null;
     this.emit("selection");
   }
 
   selectLog(entry: Readonly<LogEntry> | null): void {
     this.#selectedLog = entry;
     this.#selectedWatch = null;
-    this.#selectedWaypointId = null;
-    this.#selectedWaypointEventTime = null;
-    this.#selectedWaypointEvent = null;
     this.emit("selection");
   }
 
@@ -106,6 +103,13 @@ export class ViewingNavigation {
     this.#selectedWatch = null;
     this.#selectedLog = null;
     this.emit("selection");
+  }
+
+  setHoveredWaypoint(waypoint: WaypointView | null): void {
+    const id = waypoint?.id ?? null;
+    if (id === this.#hoveredWaypointId) return;
+    this.#hoveredWaypointId = id;
+    this.emit("hover");
   }
 
   setTimelineHover(time: number | null, source: "timeline" | "sidebar" = "sidebar"): void {
@@ -147,9 +151,14 @@ export class ViewingNavigation {
   clearDetails(emit = true): void {
     this.#selectedWatch = null;
     this.#selectedLog = null;
+    if (emit) this.emit("selection");
+  }
+
+  clearWaypointSelection(emit = true): void {
     this.#selectedWaypointId = null;
     this.#selectedWaypointEventTime = null;
     this.#selectedWaypointEvent = null;
+    this.#hoveredWaypointId = null;
     if (emit) this.emit("selection");
   }
 
@@ -161,6 +170,7 @@ export class ViewingNavigation {
     this.#selectedWaypointId = null;
     this.#selectedWaypointEventTime = null;
     this.#selectedWaypointEvent = null;
+    this.#hoveredWaypointId = null;
     this.#hoverTimelineTime = null;
     this.#timelineHoverSource = null;
     this.#trackHoverPose = null;

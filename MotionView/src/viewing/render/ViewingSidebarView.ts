@@ -29,7 +29,7 @@ export class ViewingSidebarView {
   readonly waypoints: WaypointListView;
   #activeSection: SidebarSection = "watches";
   #searchTerm = "";
-  #sharedTimeSort: "time" | "-time" = "-time";
+  #sharedSort = "-time";
   #shiftHeld = false;
   #shiftSync: ShiftSyncSession | null = null;
   #handledSidebarSyncCommitId = 0;
@@ -58,9 +58,11 @@ export class ViewingSidebarView {
     this.floatingInfo.onPinnedWatchChanged(() => this.watches.render());
     this.watchGraph.onStateChanged(() => this.watches.render());
     const sortControls = [this.dom.watchSort, this.dom.logSort, this.dom.waypointSort, this.dom.poseSort];
-    for (const control of sortControls) control.value = this.#sharedTimeSort;
     for (const control of sortControls) {
-      control.addEventListener("change", () => this.syncSharedTimeSort(control, sortControls));
+      if (Array.from(control.options).some((option) => option.value === this.#sharedSort)) control.value = this.#sharedSort;
+    }
+    for (const control of sortControls) {
+      control.addEventListener("change", () => this.syncSharedSort(control, sortControls));
     }
     this.dom.levelFilter.addEventListener("change", () => {
       this.watches.render();
@@ -166,9 +168,8 @@ export class ViewingSidebarView {
     }, true);
   }
 
-  private syncSharedTimeSort(source: HTMLSelectElement, controls: readonly HTMLSelectElement[]): void {
-    if (source.value !== "time" && source.value !== "-time") return;
-    this.#sharedTimeSort = source.value;
+  private syncSharedSort(source: HTMLSelectElement, controls: readonly HTMLSelectElement[]): void {
+    this.#sharedSort = source.value;
     for (const control of controls) {
       if (control === source || !Array.from(control.options).some((option) => option.value === source.value)) continue;
       control.value = source.value;
@@ -204,8 +205,8 @@ export class ViewingSidebarView {
     this.dom.waypointSort.hidden = section !== "waypoints";
     this.dom.poseSort.hidden = section !== "poses";
     const activeSort = this.sortFor(section);
-    if (Array.from(activeSort.options).some((option) => option.value === this.#sharedTimeSort)) {
-      activeSort.value = this.#sharedTimeSort;
+    if (Array.from(activeSort.options).some((option) => option.value === this.#sharedSort)) {
+      activeSort.value = this.#sharedSort;
     }
     this.renderSection(section);
     this.restoreScrollPosition(section);

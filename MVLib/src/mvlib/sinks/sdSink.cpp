@@ -207,7 +207,8 @@ void Logger::getTimestampedFilename(char *buffer, size_t len) {
   }
 
   if (!isRtcWithinBuildWindow(tspec.tv_sec, buildDate)) {
-    _MVLIB_FORWARD_INFO("initSdCard() VEX RTC Inaccurate (%s). Falling back to program duration.", formattedTime.c_str());
+    _MVLIB_FORWARD_INFO("initSdCard() VEX RTC Inaccurate (%s). Falling back to "
+                        "program duration and provided date.", formattedTime.c_str());
 
     snprintf(buffer, len, "%s%sMVLIB_%s_%03u.log",
              folderBuf.c_str(), folderBuf == "/" ? "" : "/",
