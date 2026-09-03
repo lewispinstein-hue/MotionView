@@ -72,19 +72,16 @@ export class LogListView {
 
   setPreviewTime(time: number): void {
     const items = this.#list.getItems();
-    let nearestIndex = -1;
-    let nearestDelta = Number.POSITIVE_INFINITY;
+    let passedIndex = -1;
+    let latestTime = Number.NEGATIVE_INFINITY;
     for (let index = 0; index < items.length; index += 1) {
       const entry = items[index];
-      if (!entry) continue;
-      const delta = Math.abs(entry.t - time);
-      if (delta < nearestDelta) {
-        nearestIndex = index;
-        nearestDelta = delta;
-      }
+      if (!entry || entry.t > time || entry.t <= latestTime) continue;
+      passedIndex = index;
+      latestTime = entry.t;
     }
-    this.#previewKey = nearestIndex >= 0 ? this.keyFor(items[nearestIndex]!) : null;
-    if (nearestIndex >= 0) this.#list.scrollToIndex(nearestIndex, 12, "center");
+    this.#previewKey = passedIndex >= 0 ? this.keyFor(items[passedIndex]!) : null;
+    if (passedIndex >= 0) this.#list.scrollToIndex(passedIndex, 12, "center");
     this.#list.refresh();
   }
 

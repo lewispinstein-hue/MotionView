@@ -96,19 +96,16 @@ export class WatchListView {
 
   setPreviewTime(time: number): void {
     const items = this.#list.getItems();
-    let nearestIndex = -1;
-    let nearestDelta = Number.POSITIVE_INFINITY;
+    let passedIndex = -1;
+    let latestTime = Number.NEGATIVE_INFINITY;
     for (let index = 0; index < items.length; index += 1) {
       const marker = items[index];
-      if (!marker) continue;
-      const delta = Math.abs(marker.t - time);
-      if (delta < nearestDelta) {
-        nearestIndex = index;
-        nearestDelta = delta;
-      }
+      if (!marker || marker.t > time || marker.t <= latestTime) continue;
+      passedIndex = index;
+      latestTime = marker.t;
     }
-    this.#previewKey = nearestIndex >= 0 ? this.keyFor(items[nearestIndex]!) : null;
-    if (nearestIndex >= 0) this.#list.scrollToIndex(nearestIndex, 12, "center");
+    this.#previewKey = passedIndex >= 0 ? this.keyFor(items[passedIndex]!) : null;
+    if (passedIndex >= 0) this.#list.scrollToIndex(passedIndex, 12, "center");
     this.#list.refresh();
   }
 

@@ -70,9 +70,8 @@ export class WaypointListView {
     this.#searchTerm = value.trim().toLocaleLowerCase();
   }
 
-  filterMatches(_waypoint: WaypointView): boolean {
-    // Sidebar list filters should not hide route geometry in the field or timeline.
-    return true;
+  filterMatches(waypoint: WaypointView): boolean {
+    return !this.#searchTerm || waypoint.events.some((event) => this.searchMatches(waypoint, event));
   }
 
   render(): void {
@@ -86,7 +85,7 @@ export class WaypointListView {
     const visible: Array<{ waypoint: WaypointView; event: WaypointEventView }> = [];
     for (const waypoint of this.viewing.data.waypoints) {
       for (const event of waypoint.events) {
-        if (this.matchesLevel(event) && (!this.#searchTerm || `${waypoint.name ?? ""} ${event.type} ${eventLines(this.viewing, waypoint, event).join(" ")}`.toLocaleLowerCase().includes(this.#searchTerm))) {
+        if (this.matchesLevel(event) && this.searchMatches(waypoint, event)) {
           visible.push({ waypoint, event });
         }
       }
@@ -112,6 +111,12 @@ export class WaypointListView {
     return filter === "all" || eventLevel(event) === filter;
   }
 
+  private searchMatches(waypoint: WaypointView, event: WaypointEventView): boolean {
+    return !this.#searchTerm || `${waypoint.name ?? ""} ${event.type} ${eventLines(this.viewing, waypoint, event).join(" ")}`
+      .toLocaleLowerCase()
+      .includes(this.#searchTerm);
+  }
+
   highlight(scroll: boolean): void {
     for (const element of this.dom.waypointList.querySelectorAll(".watchItem")) element.classList.remove("selected");
     const event = this.viewing.navigation.selectedWaypointEvent;
@@ -122,20 +127,19 @@ export class WaypointListView {
   }
 
   setPreviewTime(time: number): void {
-    let nearest: HTMLElement | null = null;
-    let nearestDelta = Number.POSITIVE_INFINITY;
+    let latest: HTMLElement | null = null;
+    let latestTime = Number.NEGATIVE_INFINITY;
     for (const element of this.dom.waypointList.querySelectorAll<HTMLElement>(".watchItem")) {
       const timestamp = Number(element.dataset.eventTime);
-      const delta = Math.abs(timestamp - time);
-      if (!Number.isFinite(timestamp) || delta >= nearestDelta) continue;
-      nearest = element;
-      nearestDelta = delta;
+      if (!Number.isFinite(timestamp) || timestamp > time || timestamp <= latestTime) continue;
+      latest = element;
+      latestTime = timestamp;
     }
-    this.#previewEventKey = nearest?.dataset.waypointEventKey ?? null;
+    this.#previewEventKey = latest?.dataset.waypointEventKey ?? null;
     for (const element of this.dom.waypointList.querySelectorAll<HTMLElement>(".watchItem")) {
       element.classList.toggle("previewSelected", element.dataset.waypointEventKey === this.#previewEventKey);
     }
-    nearest?.scrollIntoView({ block: "center" });
+    latest?.scrollIntoView({ block: "center" });
   }
 
   clearPreview(): void {

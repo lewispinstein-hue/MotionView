@@ -57,20 +57,17 @@ export class PoseListView {
 
   setPreviewTime(time: number): void {
     const items = this.#list.getItems();
-    let nearestIndex = -1;
-    let nearestDelta = Number.POSITIVE_INFINITY;
+    let passedIndex = -1;
+    let latestTime = Number.NEGATIVE_INFINITY;
     for (let index = 0; index < items.length; index += 1) {
       const item = items[index];
       const timestamp = item?.pose.t;
-      if (typeof timestamp !== "number") continue;
-      const delta = Math.abs(timestamp - time);
-      if (delta < nearestDelta) {
-        nearestIndex = index;
-        nearestDelta = delta;
-      }
+      if (typeof timestamp !== "number" || timestamp > time || timestamp <= latestTime) continue;
+      passedIndex = index;
+      latestTime = timestamp;
     }
-    this.#previewIndex = nearestIndex >= 0 ? items[nearestIndex]!.index : null;
-    if (nearestIndex >= 0) this.#list.scrollToIndex(nearestIndex, 12, "center");
+    this.#previewIndex = passedIndex >= 0 ? items[passedIndex]!.index : null;
+    if (passedIndex >= 0) this.#list.scrollToIndex(passedIndex, 12, "center");
     this.#list.refresh();
   }
 
