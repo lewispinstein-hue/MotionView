@@ -52,7 +52,7 @@ struct LoggerTimings {
   /**
    * @brief Terminal output flush interval. At 400ms (default),
    *        terminal output flushes out of its buffer
-   *        every 400ms second.
+   *        every 400ms.
    *
    * @note This interval is used to flush the stdout buffer.
    *       It uses the standard fflush(stdout) function for flushing.
@@ -65,10 +65,12 @@ struct LoggerTimings {
   uint32_t stdoutBufferFlushInterval = 400;
 
   /**
-   * @brief Controls how often mvlib polls for new data and logs it. Default: 100ms
+   * @brief Controls periodic pose telemetry while terminal output is enabled.
+   *        Default: 100ms.
    *
-   * @note This interval overrides the sd card interval. If logging to
-   *       terminal and to sd card, the terminal polling rate is used.
+   * @note If terminal and SD logging are both enabled, this interval also
+   *       controls the pose records written to SD. Watches and waypoints run
+   *       on MVLib's fixed internal update cadence.
    *
    * @warning If the polling rate is too fast, it may overwhelm the
    *          brain -> controller connection, which may cause the
@@ -78,11 +80,12 @@ struct LoggerTimings {
   uint32_t terminalPollingRate = 100;
 
   /**
-   * @brief Controls how often mvlib polls for new data and logs it. Default: 80ms
+   * @brief Controls periodic pose telemetry while terminal output is disabled.
+   *        Default: 80ms.
    *
-   * @note Sd card output is buffered by SD_FLUSH_INTERVAL_MS. This only
-   *       controls how often that buffer is written too. Faster polling
-   *       rates may lead to resource starvation of other tasks.
+   * @note This does not control SD flushes, watches, waypoint events, or
+   *       direct log calls. SD flushing is controlled by
+   *       sdBufferFlushInterval.
    */
   uint32_t sdPollingRate = 80;
 
@@ -95,7 +98,7 @@ struct LoggerTimings {
 };
 
 /**
- * @struct loggerConfig
+ * @struct LoggerConfig
  * @brief Runtime configuration for Logger output and periodic reporters.
  *
  * @note Most fields are atomic so they can be toggled while running.
@@ -104,7 +107,7 @@ struct LoggerConfig {
   /// @brief Print logs to the terminal.
   std::atomic<bool> logToTerminal{true};
 
-  /// @brief Write logs to SD (locked after logger start).
+  /// @brief Write logs to SD (disabled after an SD setup or I/O failure).
   std::atomic<bool> logToSD{true};
 
   /// @brief Print registered watches.
@@ -118,5 +121,37 @@ struct LoggerConfig {
 
   /// @brief Print system messages (e.g., warnings, errors)
   std::atomic<bool> logSystemInfo{true};
+};
+
+// SD card
+
+/**
+  * @enum MissingFolderPolicy
+  * @brief Policy used when the requested SD logging folder does not exist.
+  */
+enum class MissingFolderPolicy : uint8_t {
+  /// @brief Disable SD logging immediately and return failure.
+  disable = 0,
+
+  /// @brief Fall back to the SD root directory (`/usd/`) and continue file resolution there.
+  useRoot
+};
+
+/**
+  * @enum ExistingFilePolicy
+  * @brief Policy used when an explicit SD logging file already exists.
+  *
+  * @note This policy is only consulted after folder resolution has completed.
+  */
+enum class ExistingFilePolicy : uint8_t {
+  /// @brief Disable SD logging immediately and return failure.
+  disable = 0,
+
+  /// @brief Reuse the explicit path and overwrite the existing file.
+  overwrite,
+
+  /// @brief Preserve the existing file and instead generate a new timestamped
+  ///        filename in the resolved folder.
+  automatic
 };
 } // namespace mvlib

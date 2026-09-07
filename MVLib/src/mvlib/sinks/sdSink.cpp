@@ -1,39 +1,25 @@
-#include "mvlib/private/telemetry.hpp"
+#include "mvlib/private/sdSink.hpp"
 #include "mvlib/private/raii.hpp"
-#define _MVLIB_PREVENT_MACRO_CLEANUP
-#include "mvlib/private/forwardLogMacros.h"
 #include "pros/misc.hpp"
 #include "pros/rtos.hpp"
-#include "mvlib/core.hpp"
-#include <cstdarg>
-#include <cstdint>
-#include <cstring>
-#include <random>
+
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
+#include <cstring>
 #include <format>
-#include <time.h>
-#include <algorithm>
 #include <optional>
+#include <random>
+#include <string>
 #include <string_view>
+#include <time.h>
 
 namespace mvlib {
-namespace {
-enum class FolderCheckResult : uint8_t {
-  success,
-  notFound,
-  unknownError
-};
+namespace detail {
 
-uint32_t getrandInt(const uint32_t min, const uint32_t max) {
-  /**
-   * @note This method of generation is needed because the v5 brain is
-   *       completely deterministic. Using std::rand or std::random_device
-   *       results in the same number every time.
-   */
-
+uint32_t SdSink::getRandomInt(uint32_t min, uint32_t max) {
   uint64_t seed = pros::micros();
-  seed ^= (uint64_t)pros::battery::get_voltage() << 32;
+  seed ^= static_cast<uint64_t>(pros::battery::get_voltage()) << 32;
   seed ^= [&]() mutable -> uint64_t {
     seed += 0x9e3779b97f4a7c15ULL;
     uint64_t z = seed;
@@ -48,7 +34,7 @@ uint32_t getrandInt(const uint32_t min, const uint32_t max) {
   return dis(gen);
 }
 
-bool isLocationFolder(const std::string_view absolutePath, char separator = '/') {
+bool SdSink::isLocationFolder(const std::string_view absolutePath, char separator) {
   if (absolutePath.empty()) return false;
   const bool containsNoFilenames = absolutePath.find('.') == std::string_view::npos;
   const size_t slashCount = static_cast<size_t>(std::count(absolutePath.begin(),
@@ -57,38 +43,36 @@ bool isLocationFolder(const std::string_view absolutePath, char separator = '/')
   return containsNoFilenames && slashCount > 0;
 }
 
-void trimTrailingSeparator(std::string& path, char separator = '/') {
+void SdSink::trimTrailingSeparator(std::string& path, char separator) {
   while (path.size() > 1 && path.back() == separator) {
     path.pop_back();
   }
 }
 
-std::string toPosixPath(const std::string_view path) {
+std::string SdSink::toPosixPath(const std::string_view path) {
   std::string normalized(path);
   std::replace(normalized.begin(), normalized.end(), '\\', '/');
   return normalized;
 }
 
-std::string getFilenameFromPath(const std::string_view path, char separator = '/') {
+std::string SdSink::getFilenameFromPath(const std::string_view path, char separator) {
   if (path.empty()) return {};
   const size_t lastSlash = path.find_last_of(separator);
   if (lastSlash == std::string_view::npos) return std::string(path);
   return std::string(path.substr(lastSlash + 1));
 }
 
-std::string getDirectoryFromPath(const std::string_view path, char separator = '/') {
+std::string SdSink::getDirectoryFromPath(const std::string_view path, char separator) {
   if (path.empty()) return {};
   if (path.back() == separator) return std::string(path);
 
   const size_t lastSlash = path.find_last_of(separator);
   if (lastSlash == std::string_view::npos) return {};
-  // Only root-level folder like "/folder"
   if (lastSlash == 0) return std::string(1, separator);
-
   return std::string(path.substr(0, lastSlash));
 }
 
-std::string joinPath(const std::string_view folder, const std::string_view basename) {
+std::string SdSink::joinPath(const std::string_view folder, const std::string_view basename) {
   if (basename.empty()) return std::string(folder);
   if (folder.empty() || folder == "/") return std::string("/") + std::string(basename);
   std::string path(folder);
@@ -97,35 +81,33 @@ std::string joinPath(const std::string_view folder, const std::string_view basen
   return path;
 }
 
-bool doesFileExist(const std::string_view relativePath) {
+bool SdSink::doesFileExist(const std::string_view relativePath) {
   if (relativePath.empty()) return false;
-  const std::string fullPath = "/usd" + std::string(relativePath);
-  if (FILE* file = fopen(fullPath.c_str(), "r")) {
+  if (FILE* file = fopen( ("/usd" + std::string(relativePath)).c_str(), "r")) {
     fclose(file);
     return true;
   }
   return false;
 }
 
-FolderCheckResult checkFolderExists(const std::string_view relativeFolderPath) {
+SdSink::FolderCheckResult SdSink::checkFolderExists(
+    const std::string_view relativeFolderPath) {
   if (relativeFolderPath.empty()) return FolderCheckResult::unknownError;
 
   std::string fatFsPath(relativeFolderPath);
   std::replace(fatFsPath.begin(), fatFsPath.end(), '/', '\\');
 
-  std::string filenames{};
-  filenames.resize(8192); // Dozens of log files should not cause memory overflow
-
+  std::string filenames(8192, '\0');
   errno = 0;
-  int err = pros::usd::list_files(fatFsPath.c_str(),
-                                  filenames.data(), filenames.size() - 1);
+  const int err = pros::usd::list_files(fatFsPath.c_str(), filenames.data(),
+                                        filenames.size() - 1);
   if (err == 1) return FolderCheckResult::success;
   if (errno == ENOENT) return FolderCheckResult::notFound;
   return FolderCheckResult::unknownError;
 }
 
-std::optional<std::chrono::sys_days> parseBuildDate(const std::string_view buildDate) {
-  // __DATE__ is formatted as "Mmm dd yyyy", with a leading space for single-digit days.
+std::optional<std::chrono::sys_days> SdSink::parseBuildDate(
+    const std::string_view buildDate) {
   if (buildDate.size() != 11) return std::nullopt;
 
   constexpr std::string_view months[] = {
@@ -143,7 +125,7 @@ std::optional<std::chrono::sys_days> parseBuildDate(const std::string_view build
   }
   if (month == 0) return std::nullopt;
 
-  auto parseDigit = [](char ch) -> int {
+  const auto parseDigit = [](char ch) -> int {
     return (ch >= '0' && ch <= '9') ? ch - '0' : -1;
   };
 
@@ -160,16 +142,13 @@ std::optional<std::chrono::sys_days> parseBuildDate(const std::string_view build
   const unsigned day = static_cast<unsigned>(dayTens * 10 + dayOnes);
   const int year = y0 * 1000 + y1 * 100 + y2 * 10 + y3;
   const std::chrono::year_month_day ymd{
-    std::chrono::year{year},
-    std::chrono::month{month},
-    std::chrono::day{day}
-  };
-
+    std::chrono::year{year}, std::chrono::month{month}, std::chrono::day{day}};
   if (!ymd.ok()) return std::nullopt;
   return std::chrono::sys_days{ymd};
 }
 
-bool isRtcWithinBuildWindow(const time_t rtcSeconds, const std::string_view buildDate) {
+bool SdSink::isRtcWithinBuildWindow(time_t rtcSeconds,
+                                    const std::string_view buildDate) {
   if (rtcSeconds <= 0) return false;
 
   const auto buildDay = parseBuildDate(buildDate);
@@ -178,122 +157,36 @@ bool isRtcWithinBuildWindow(const time_t rtcSeconds, const std::string_view buil
   const std::chrono::sys_seconds rtcTime{std::chrono::seconds{rtcSeconds}};
   const std::chrono::sys_days rtcDay = std::chrono::floor<std::chrono::days>(rtcTime);
   const std::chrono::year_month_day maxDate{
-    std::chrono::year_month_day{*buildDay} + std::chrono::years{5}
-  };
-
+    std::chrono::year_month_day{*buildDay} + std::chrono::years{5}};
   if (!maxDate.ok()) return false;
 
-  const std::chrono::sys_days maxDay{maxDate};
-  return rtcDay >= *buildDay && rtcDay <= maxDay;
-}
-} // namespace
-
-void Logger::getTimestampedFilename(char *buffer, size_t len) {
-  if (!buffer || len == 0) return;
-
-  struct timespec tspec;
-  clock_gettime(CLOCK_REALTIME, &tspec);
-
-  std::chrono::sys_seconds currentTime{std::chrono::seconds(tspec.tv_sec)};
-  const std::string formattedTime = std::format("{:%Y-%m-%d_%H-%M-%S}", currentTime);
-
-  std::string folderBuf(m_loggingFolder);
-  trimTrailingSeparator(folderBuf, '/');
-  const uint32_t randInt = getrandInt(0, 99999);
-
-  const char* buildDate = getBuildDate();
-  if (m_userBuildDate[0] == '\0') {
-    _MVLIB_FORWARD_WARN("initSdCard() Build date not provided, using fallback date");
-  }
-
-  if (!isRtcWithinBuildWindow(tspec.tv_sec, buildDate)) {
-    _MVLIB_FORWARD_INFO("initSdCard() VEX RTC Inaccurate (%s). Falling back to "
-                        "program duration and provided date.", formattedTime.c_str());
-
-    snprintf(buffer, len, "%s%sMVLIB_%s_%03u.log",
-             folderBuf.c_str(), folderBuf == "/" ? "" : "/",
-             buildDate, randInt);
-  } else {
-    _MVLIB_FORWARD_INFO("initSdCard() VEX RTC Plausible. Creating file name with date.");
-
-    char timeBuf[128];
-    // Format the date/time string
-    snprintf(timeBuf, sizeof(timeBuf), "MVLIB_%s", formattedTime.c_str());
-
-    // Combine pathPrefix, formatted time, and random ID
-    snprintf(buffer, len, "%s%s%s_%05d.log",
-             folderBuf.c_str(), folderBuf == "/" ? "" : "/", timeBuf, randInt);
-  }
-
-  buffer[len - 1] = '\0';
+  return rtcDay >= *buildDay && rtcDay <= std::chrono::sys_days{maxDate};
 }
 
-bool Logger::initSDLogger() {
-  if (m_sdLocked) return false;
+SdSink::~SdSink() {
+  uniqueLock lock(m_mutex, TIMEOUT_MAX);
+  if (!lock.isLocked()) return;
 
-  if (pros::usd::is_installed()) {
-    _MVLIB_FORWARD_DEBUG("initSdCard() SD Card installed (On first attempt)");
-  } else {
-    _MVLIB_FORWARD_DEBUG("initSdCard() SD Card not installed, rechecking...");
-    for (int i = 0; i < 10; i++) {
-      if (pros::usd::is_installed()) {
-        _MVLIB_FORWARD_DEBUG("initSdCard() SD Card installed! Attempt: %d/10", i);
-        break;
-      }
-      _MVLIB_FORWARD_DEBUG("initSdCard() Rechecking SD card installment... Attempts: %d/10", i);
-      pros::delay(50);
-    }
+  if (m_file) {
+    fflush(m_file);
+    fclose(m_file);
+    m_file = nullptr;
   }
-
-  if (!pros::usd::is_installed()) {
-    _MVLIB_FORWARD_FATAL("initSdCard() SD Card not installed after 10 attemps. Aborting SD card.");
-    return false;
-  }
-
-  if (m_currentFilename[0] == '\0') {
-    // Filename not set, generate one as a full relative SD path.
-    getTimestampedFilename(m_currentFilename, sizeof(m_currentFilename));
-    m_currentFilename[sizeof(m_currentFilename) - 1] = '\0';
-  }
-
-  char relativePathBuf[sizeof(m_currentFilename)];
-  strncpy(relativePathBuf, m_currentFilename, sizeof(relativePathBuf) - 1);
-  relativePathBuf[sizeof(relativePathBuf) - 1] = '\0';
-
-  char absolutePathBuf[133];
-  if (relativePathBuf[0] == '\0') {
-    _MVLIB_FORWARD_FATAL("initSdCard() Filename generation failed. Aborting.");
-    return false;
-  }
-
-  snprintf(absolutePathBuf, sizeof(absolutePathBuf), "/usd%s", relativePathBuf);
-  absolutePathBuf[sizeof(absolutePathBuf) - 1] = '\0';
-  strncpy(m_absoluteFilename, absolutePathBuf, sizeof(m_absoluteFilename) - 1);
-  m_absoluteFilename[sizeof(m_absoluteFilename) - 1] = '\0';
-
-  m_sdFile = fopen(absolutePathBuf, "w");
-
-  if (!m_sdFile) {
-    _MVLIB_FORWARD_FATAL("initSdCard() File: %s could not be opened. Aborting.", absolutePathBuf);
-    return false;
-  }
-
-  _MVLIB_FORWARD_DEBUG("initSdCard() File successfully opened.");
-  fprintf(m_sdFile, "|———| Logger initialized at %.2fs |———|\n", pros::millis() / 1000.0);
-  fflush(m_sdFile);
-  return true;
 }
 
-bool Logger::setLoggingLocation(const char *location,
-                                Logger::MissingFolderPolicy folderPolicy,
-                                Logger::ExistingFilePolicy filePolicy) {
-  detail::uniqueLock lock(m_mutex);
-  if (!lock.isLocked()) return false;
-  if (m_started || m_sdLocked) return false;
+SdLocationResult SdSink::setLocation(const char* location,
+                                     MissingFolderPolicy folderPolicy,
+                                     ExistingFilePolicy filePolicy) {
+  SdLocationResult result;
+  uniqueLock lock(m_mutex);
+  if (!lock.isLocked() || m_locked) {
+    result.locked = m_locked;
+    return result;
+  }
 
   if (!location || location[0] == '\0' || location[0] != '/') {
-    _MVLIB_FORWARD_INFO("setLoggingLocation() called with invalid location");
-    return false;
+    result.error = SdLocationError::invalidLocation;
+    return result;
   }
 
   const std::string normalizedLocation = toPosixPath(location);
@@ -308,101 +201,266 @@ bool Logger::setLoggingLocation(const char *location,
     : std::string{};
 
   if (!isFilename && !isFolder) {
-    _MVLIB_FORWARD_INFO("setLoggingLocation() called with invalid location: %s", location);
-    return false;
+    result.error = SdLocationError::invalidLocationSyntax;
+    return result;
   }
 
-  if (basename.find('.') == std::string::npos && isFilename) {
-    _MVLIB_FORWARD_INFO("setLoggingLocation() called with filename lacking extension: %s", location);
-    return false;
+  const size_t extensionSeparator = basename.find_last_of('.');
+  if (isFilename && (extensionSeparator == std::string::npos ||
+                     extensionSeparator == 0 ||
+                     extensionSeparator + 1 == basename.size())) {
+    result.error = SdLocationError::missingFilenameExtension;
+    return result;
   }
 
   if (requestedDirectory.empty()) requestedDirectory = "/";
+  snprintf(result.requestedDirectory, sizeof(result.requestedDirectory), "%s",
+           requestedDirectory.c_str());
   if (requestedDirectory.find('.') != std::string::npos) {
-    _MVLIB_FORWARD_INFO("setLoggingLocation() called with invalid folder segments: %s", location);
-    return false;
+    result.error = SdLocationError::invalidFolderSegments;
+    return result;
   }
 
   std::string resolvedDirectory = requestedDirectory;
-  FolderCheckResult folderCheck = checkFolderExists(requestedDirectory);
+  const FolderCheckResult folderCheck = checkFolderExists(requestedDirectory);
   if (folderCheck != FolderCheckResult::success) {
     if (folderCheck == FolderCheckResult::notFound) {
-      if (folderPolicy == Logger::MissingFolderPolicy::disable) {
-        _MVLIB_FORWARD_ERROR("setLoggingLocation() could not find the path specified. "
-          "Path: %s", requestedDirectory.c_str());
-        m_sdLocked = true;
-        return false;
+      if (folderPolicy == MissingFolderPolicy::disable) {
+        m_locked = true;
+        result.locked = true;
+        result.error = SdLocationError::missingFolder;
+        return result;
       }
-      _MVLIB_FORWARD_WARN("setLoggingLocation() could not find the path specified. "
-        "Falling back to SD root. Path: %s", requestedDirectory.c_str());
+      result.usedRootFallback = true;
       resolvedDirectory = "/";
     } else {
-      _MVLIB_FORWARD_ERROR("setLoggingLocation() failed setting errno: %d", errno);
-      return false;
+      result.error = SdLocationError::folderLookup;
+      result.errorNumber = errno;
+      return result;
     }
+  }
+
+  trimTrailingSeparator(resolvedDirectory, '/');
+  if (resolvedDirectory.size() >= sizeof(m_folder)) {
+    result.error = SdLocationError::pathTooLong;
+    return result;
   }
 
   if (isFilename) {
     const std::string resolvedFilePath = joinPath(resolvedDirectory, basename);
-    const bool fileExists = doesFileExist(resolvedFilePath);
-
-    if (fileExists) {
+    if (resolvedFilePath.size() >= sizeof(m_filename)) {
+      result.error = SdLocationError::pathTooLong;
+      return result;
+    }
+    snprintf(result.resolvedFilePath, sizeof(result.resolvedFilePath), "%s",
+             resolvedFilePath.c_str());
+    if (doesFileExist(resolvedFilePath)) {
       switch (filePolicy) {
-      case Logger::ExistingFilePolicy::disable:
-        _MVLIB_FORWARD_INFO("setLoggingLocation() called with existing filename: %s", resolvedFilePath.c_str());
-        m_sdLocked = true;
-        return false;
-      case Logger::ExistingFilePolicy::overwrite:
-        _MVLIB_FORWARD_INFO("setLoggingLocation() file already exists; overwriting: %s", resolvedFilePath.c_str());
-        strncpy(m_currentFilename, resolvedFilePath.c_str(), sizeof(m_currentFilename) - 1);
-        m_currentFilename[sizeof(m_currentFilename) - 1] = '\0';
+      case ExistingFilePolicy::disable:
+        m_locked = true;
+        result.locked = true;
+        result.error = SdLocationError::existingFile;
+        return result;
+      case ExistingFilePolicy::overwrite:
+        result.overwroteExistingFile = true;
+        snprintf(m_filename, sizeof(m_filename), "%s", resolvedFilePath.c_str());
         break;
-      case Logger::ExistingFilePolicy::automatic:
-        _MVLIB_FORWARD_INFO("setLoggingLocation() file already exists; falling back to auto-generated filename in: %s",
-                             resolvedDirectory.c_str());
-        m_currentFilename[0] = '\0';
+      case ExistingFilePolicy::automatic:
+        result.generatedNameForExistingFile = true;
+        m_filename[0] = '\0';
         break;
       }
     } else {
-      strncpy(m_currentFilename, resolvedFilePath.c_str(), sizeof(m_currentFilename) - 1);
-      m_currentFilename[sizeof(m_currentFilename) - 1] = '\0';
+      snprintf(m_filename, sizeof(m_filename), "%s", resolvedFilePath.c_str());
     }
   } else {
-    m_currentFilename[0] = '\0';
+    m_filename[0] = '\0';
   }
 
-  // Trim the std::string before copying to the raw buffer
-  trimTrailingSeparator(resolvedDirectory, '/');
-  snprintf(m_loggingFolder, sizeof(m_loggingFolder), "%s", resolvedDirectory.c_str());
+  snprintf(m_folder, sizeof(m_folder), "%s", resolvedDirectory.c_str());
+  result.accepted = true;
+  return result;
+}
 
-  _MVLIB_FORWARD_INFO("setLoggingLocation() successfully set logging folder to: %s", m_loggingFolder);
-  if (m_currentFilename[0] != '\0') {
-    _MVLIB_FORWARD_INFO("setLoggingLocation() successfully set logging file to: %s", m_currentFilename);
+void SdSink::getTimestampedFilename(char* buffer, size_t len,
+                                    const char* buildDate, SdInitResult& result) {
+  if (!buffer || len == 0 || !buildDate) return;
+
+  struct timespec tspec;
+  clock_gettime(CLOCK_REALTIME, &tspec);
+
+  const std::chrono::sys_seconds currentTime{std::chrono::seconds(tspec.tv_sec)};
+  const std::string formattedTime = std::format("{:%Y-%m-%d_%H-%M-%S}", currentTime);
+  snprintf(result.formattedTime, sizeof(result.formattedTime), "%s", formattedTime.c_str());
+  result.rtcPlausible = isRtcWithinBuildWindow(tspec.tv_sec, buildDate);
+
+  std::string folder(m_folder);
+  trimTrailingSeparator(folder, '/');
+  const uint32_t randomId = getRandomInt(0, 99999);
+
+  if (!result.rtcPlausible) {
+    snprintf(buffer, len, "%s%sMVLIB_%s_%03u.log", folder.c_str(),
+             folder == "/" ? "" : "/", buildDate, randomId);
+  } else {
+    snprintf(buffer, len, "%s%sMVLIB_%s_%05u.log", folder.c_str(),
+             folder == "/" ? "" : "/", formattedTime.c_str(), randomId);
   }
+  buffer[len - 1] = '\0';
+}
+
+SdInitResult SdSink::init(const char* buildDate, bool userBuildDateProvided) {
+  SdInitResult result;
+  uniqueLock lock(m_mutex, TIMEOUT_MAX);
+  if (!lock.isLocked()) {
+    result.error = SdInitError::locked;
+    return result;
+  }
+
+  if (m_locked) {
+    result.error = SdInitError::locked;
+    return result;
+  }
+
+  result.cardInstalledInitially = pros::usd::is_installed();
+  if (!result.cardInstalledInitially) {
+    for (int attempt = 0; attempt < 10; ++attempt) {
+      if (pros::usd::is_installed()) {
+        result.cardDetectedAttempt = attempt;
+        break;
+      }
+      pros::delay(50);
+    }
+  }
+
+  if (!pros::usd::is_installed()) {
+    result.error = SdInitError::cardMissing;
+    return result;
+  }
+
+  if (m_filename[0] == '\0') {
+    result.usedFallbackBuildDate = !userBuildDateProvided;
+    constexpr uint32_t maxFilenameAttempts = 16;
+    for (uint32_t attempt = 0; attempt < maxFilenameAttempts; ++attempt) {
+      char candidate[sizeof(m_filename)] = "";
+      getTimestampedFilename(candidate, sizeof(candidate), buildDate, result);
+      if (candidate[0] == '\0') {
+        result.error = SdInitError::filenameGeneration;
+        return result;
+      }
+      if (!doesFileExist(candidate)) {
+        snprintf(m_filename, sizeof(m_filename), "%s", candidate);
+        break;
+      }
+    }
+
+    if (m_filename[0] == '\0') {
+      result.error = SdInitError::filenameCollision;
+      return result;
+    }
+  }
+
+  if (m_filename[0] == '\0') {
+    result.error = SdInitError::filenameGeneration;
+    return result;
+  }
+
+  snprintf(m_absoluteFilename, sizeof(m_absoluteFilename), "/usd%s", m_filename);
+  m_file = fopen(m_absoluteFilename, "w");
+  if (!m_file) {
+    result.error = SdInitError::fileOpen;
+    result.errorNumber = errno;
+    return result;
+  }
+
+  const int headerResult = fprintf(
+    m_file, "|———| Logger initialized at %.2fs |———|\n", pros::millis() / 1000.0);
+  if (headerResult < 0 || fflush(m_file) != 0) {
+    result.error = SdInitError::initialWrite;
+    result.errorNumber = errno;
+    fclose(m_file);
+    m_file = nullptr;
+  }
+  return result;
+}
+
+SdWriteResult SdSink::writeV(LogLevel level, const char* format, va_list args) {
+  SdWriteResult result;
+  uniqueLock lock(m_mutex);
+  if (!lock.isLocked()) {
+    result.error = SdWriteError::busy;
+    return result;
+  }
+  if (!m_file || m_locked) {
+    result.error = SdWriteError::unavailable;
+    return result;
+  }
+
+  const int writeResult = vfprintf(m_file, format, args);
+  if (writeResult < 0) {
+    result.error = SdWriteError::write;
+    result.errorNumber = errno;
+    return result;
+  }
+
+  if (fprintf(m_file, "\n") < 0) {
+    result.error = SdWriteError::write;
+    result.errorNumber = errno;
+    return result;
+  }
+
+  const uint32_t now = pros::millis();
+  const bool forceFlush = level == LogLevel::ERROR || level == LogLevel::FATAL;
+  if (forceFlush || now - m_lastFlushMs >= m_flushIntervalMs.load()) {
+    if (fflush(m_file) != 0) {
+      result.error = SdWriteError::flush;
+      result.errorNumber = errno;
+      return result;
+    }
+    m_lastFlushMs = now;
+  }
+  return result;
+}
+
+SdWriteResult SdSink::write(LogLevel level, const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  const SdWriteResult result = writeV(level, format, args);
+  va_end(args);
+  return result;
+}
+
+void SdSink::setFlushInterval(uint32_t flushIntervalMs) {
+  m_flushIntervalMs.store(flushIntervalMs);
+}
+
+bool SdSink::ready() const {
+  uniqueLock lock(m_mutex);
+  return lock.isLocked() && m_file && !m_locked;
+}
+
+bool SdSink::locked() const {
+  uniqueLock lock(m_mutex);
+  return lock.isLocked() && m_locked;
+}
+
+bool SdSink::lock() {
+  uniqueLock lock(m_mutex, TIMEOUT_MAX);
+  if (!lock.isLocked() || m_locked) return false;
+  m_locked = true;
   return true;
 }
 
-void Logger::logToSD(const LogLevel level, const char *fmt, ...) {
-  if (!m_sdFile || m_sdLocked) return;
-
-  detail::uniqueLock m(m_sdMutex);
-  if (!m.isLocked()) return;
-  if (!detail::Telemetry::getInstance().shouldLog(level)) return;
-  if (!m_sdFile || m_sdLocked) return;
-
-  va_list args;
-  va_start(args, fmt);
-  vfprintf(m_sdFile, fmt, args);
-  va_end(args);
-
-  fprintf(m_sdFile, "\n");
-
-  bool isError = (level == LogLevel::ERROR || level == LogLevel::FATAL);
-
-  uint32_t now = pros::millis();
-  if (isError || (now - m_lastFileFlush >= m_timings.sdBufferFlushInterval)) {
-    fflush(m_sdFile);
-    m_lastFileFlush = now;
-  }
+const char* SdSink::filename() const {
+  return m_filename;
 }
+
+const char* SdSink::absoluteFilename() const {
+  return m_absoluteFilename;
+}
+
+const char* SdSink::folder() const {
+  return m_folder;
+}
+
+} // namespace detail
 } // namespace mvlib

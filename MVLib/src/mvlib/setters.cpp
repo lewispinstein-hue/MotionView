@@ -4,6 +4,7 @@
 #define _MVLIB_PREVENT_MACRO_CLEANUP
 #include "mvlib/private/forwardLogMacros.h"
 #include "mvlib/private/raii.hpp"
+#include "mvlib/private/sdSink.hpp"
 
 #include <cstdio>
 
@@ -15,7 +16,10 @@ void Logger::setLogToTerminal(bool v) {
 }
 
 void Logger::setLogToSD(bool v) {
-  if (m_started || m_sdLocked) {
+  detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
+  if (!lock.isLocked()) return;
+
+  if (m_started.load() || m_sdSink->locked()) {
     _MVLIB_FORWARD_WARN("setLogToSD() called after logger start — ignored. Set value: %d", v);
     return;
   }
@@ -45,7 +49,12 @@ void Logger::setLogSystemInfo(bool v) {
 
 void Logger::setTimings(LoggerTimings timings) {
   _MVLIB_FORWARD_DEBUG("SetTimings changed");
-  m_timings = timings;
+  m_sdBufferFlushInterval.store(timings.sdBufferFlushInterval);
+  m_stdoutBufferFlushInterval.store(timings.stdoutBufferFlushInterval);
+  m_sdPollingRate.store(timings.sdPollingRate);
+  m_terminalPollingRate.store(timings.terminalPollingRate);
+  m_rosterSyncAllInterval.store(timings.rosterSyncAllInterval);
+  m_sdSink->setFlushInterval(timings.sdBufferFlushInterval);
 }
 
 void Logger::setMinLogLevel(LogLevel level) {
@@ -57,7 +66,10 @@ void Logger::setMinLogLevel(LogLevel level) {
 }
 
 void Logger::setBuildDate(const char *buildDate) {
-  if (m_started || m_sdLocked) {
+  detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
+  if (!lock.isLocked()) return;
+
+  if (m_started.load() || m_sdSink->locked()) {
     _MVLIB_FORWARD_WARN("setBuildDate() called after logger start — ignored.");
     return;
   }

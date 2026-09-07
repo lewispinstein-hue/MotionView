@@ -106,7 +106,7 @@ std::string Logger::evaluateWatch(WatchId id, bool emit) {
     }
   }
 
-  if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
+  if (m_config.logToSD.load()) {
     if (valueStr == "f") valueStr = "false";
     if (valueStr == "t") valueStr = "true";
 

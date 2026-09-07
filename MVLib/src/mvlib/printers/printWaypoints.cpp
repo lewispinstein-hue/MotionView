@@ -94,8 +94,8 @@ void Logger::printWaypoints() {
       detail::Telemetry::getInstance().sendWaypointStatus(wp.id, subType);
     }
 
-    // Log standard ANSII to the sd card
-    if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
+    // Log standard ANSI text to the SD card.
+    if (m_config.logToSD.load()) {
       logToSD(LogLevel::OVERRIDE, "[WPOINT],%u,%s,%u,%s",
               nowMs, statusStr ? statusStr : "", wp.id, wp.name.c_str());
     }

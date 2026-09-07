@@ -25,6 +25,6 @@
 using namespace mvlib::literals;
 using LogLevel = mvlib::LogLevel;
 using WatchMode = mvlib::WatchMode;
-using MissingFolderPolicy = mvlib::Logger::MissingFolderPolicy;
-using ExistingFilePolicy = mvlib::Logger::ExistingFilePolicy;
+using MissingFolderPolicy = mvlib::MissingFolderPolicy;
+using ExistingFilePolicy = mvlib::ExistingFilePolicy;
 #endif

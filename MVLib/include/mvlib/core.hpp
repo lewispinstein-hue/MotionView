@@ -50,6 +50,10 @@
 #define MVLIB_VERSION 300000 // 3.0.0
 
 namespace mvlib {
+namespace detail {
+class SdSink;
+}
+
 /**
  * @class Logger
  * @brief Singleton logging + telemetry manager.
@@ -87,6 +91,14 @@ public:
    * \return Reference to the global Logger instance.
    */
   [[nodiscard]] static Logger& getInstance();
+
+  ~Logger();
+
+  /// @brief Backward-compatible spelling for the SD missing-folder policy.
+  using MissingFolderPolicy = mvlib::MissingFolderPolicy;
+
+  /// @brief Backward-compatible spelling for the SD existing-file policy.
+  using ExistingFilePolicy = mvlib::ExistingFilePolicy;
 
   // ------------------------------------------------------------------------
   // Lifecycle
@@ -159,7 +171,10 @@ public:
   void setLogSystemInfo(bool v);
 
   /**
-   * @brief Set the runtime configuration for Logger output and update loops.
+   * @brief Update Logger output and update-loop timings.
+   *
+   * @note Timing fields are applied independently and are safe to update while
+   *       the logger task is running.
    */
   void setTimings(LoggerTimings timings);
 
@@ -173,8 +188,8 @@ public:
    * @brief Provide the consumer project build date for RTC validation.
    *
    * @param buildDate Date string in the compiler __DATE__ format
-   *                  ("Mmm dd yyyy"). If omitted, this defaults to the
-   *                  consumer translation unit's build date.
+   *                  ("Mmm dd yyyy"). If omitted, MVLib uses the date baked
+   *                  into its own archive.
    *
    * @note Call before start() if SD filename generation should validate
    *       the VEX RTC against the consumer project build date instead of
@@ -233,36 +248,6 @@ public:
   bool setRobot(Drivetrain drivetrain, bool useSpeedEstimation = false);
 
   /**
-   * @enum MissingFolderPolicy
-   * @brief Policy used when the requested SD logging folder does not exist.
-   */
-  enum class MissingFolderPolicy : uint8_t {
-    /// @brief Disable SD logging immediately and return failure.
-    disable = 0,
-
-    /// @brief Fall back to the SD root directory (`/usd/`) and continue file resolution there.
-    useRoot
-  };
-
-  /**
-   * @enum ExistingFilePolicy
-   * @brief Policy used when an explicit SD logging file already exists.
-   *
-   * @note This policy is only consulted after folder resolution has completed.
-   */
-  enum class ExistingFilePolicy : uint8_t {
-    /// @brief Disable SD logging immediately and return failure.
-    disable = 0,
-
-    /// @brief Reuse the explicit path and overwrite the existing file.
-    overwrite,
-
-    /// @brief Preserve the existing file and instead generate a new timestamped
-    ///        filename in the resolved folder.
-    automatic
-  };
-
-  /**
    * @brief Sets the SD logging destination as either a folder or a specific file path.
    *
    * @param location      Absolute SD-relative folder or file path
@@ -284,7 +269,8 @@ public:
    * @note If filePolicy is automatic, MVLib clears the explicit filename and later
    *       generates a timestamped filename in the resolved folder during initialization.
    *
-   * \return true if the folder exists and the destination was accepted, false otherwise.
+   * \return true if the destination was accepted, including a root fallback,
+   *         false otherwise.
    *
    * \b Examples
    * @code
@@ -526,11 +512,8 @@ private:
   /// @brief Validate that the logger configuration is valid.
   bool configValid() const;
 
-  /// @brief Initialize SD logger file handle and state.
+  /// @brief Initialize the owned SD sink.
   bool initSDLogger();
-
-  /// @brief Return the current sessions filename.
-  void getTimestampedFilename(char* buffer, size_t len);
 
   /**
    * @brief Convert a LogLevel to a printable string.
@@ -738,22 +721,22 @@ private:
   // ------------------------------------------------------------------------
 
   LoggerConfig m_config{};
-  LoggerTimings m_timings{};
 
-  pros::Mutex m_sdMutex;
   pros::Mutex m_mutex;
 
-  uint32_t m_lastFileFlush{0};
-  FILE* m_sdFile = nullptr;
-  char m_currentFilename[128] = "";
-  char m_absoluteFilename[133] = "";
   char m_userBuildDate[12] = "";
-  char m_loggingFolder[24] = "";
 
-  volatile bool m_sdLocked = false; // Has sd card failed?
-  bool m_started = false; // Has start() been called?
+  std::unique_ptr<detail::SdSink> m_sdSink;
+  std::atomic<bool> m_started{false}; // Has start() been called?
   std::atomic<bool> m_configSet{false}; // Has setRobot() been called?
   bool m_forceSpeedEstimation = false;
+
+  // Timings may be updated while the logger task is running.
+  std::atomic<uint32_t> m_sdBufferFlushInterval{1000};
+  std::atomic<uint32_t> m_stdoutBufferFlushInterval{400};
+  std::atomic<uint32_t> m_sdPollingRate{80};
+  std::atomic<uint32_t> m_terminalPollingRate{100};
+  std::atomic<uint32_t> m_rosterSyncAllInterval{8000};
 
   std::atomic<bool> m_pauseRequested{false};
 

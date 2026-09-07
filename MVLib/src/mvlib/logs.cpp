@@ -14,7 +14,7 @@ void Logger::logMessage(const LogLevel level, const char *fmt, va_list args) {
     detail::Telemetry::getInstance().sendLog(level, "%s", buffer);
   }
 
-  if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
+  if (m_config.logToSD.load()) {
     logToSD(level, "[LOG],%d,%s,%s", pros::millis(), levelToString(level), buffer);
   }
 }

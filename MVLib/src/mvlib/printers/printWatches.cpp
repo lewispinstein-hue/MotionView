@@ -85,8 +85,8 @@ void Logger::printWatches() {
       }
     }
 
-    // Log standard ANSII to the sd card
-    if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
+    // Log standard ANSI text to the SD card.
+    if (m_config.logToSD.load()) {
       // Uncompress t/f to true/false
       if (valueStr == "f") valueStr = "false";
       if (valueStr == "t") valueStr = "true";

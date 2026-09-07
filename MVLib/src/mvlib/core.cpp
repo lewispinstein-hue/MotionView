@@ -1,5 +1,6 @@
 #define _MVLIB_PREVENT_MACRO_CLEANUP
 #include "mvlib/private/forwardLogMacros.h"
+#include "mvlib/private/sdSink.hpp"
 #include "mvlib/private/telemetry.hpp"
 #include "mvlib/core.hpp"
 #include "pros/apix.h"
@@ -13,12 +14,15 @@ Logger& Logger::getInstance() {
 }
 
 bool Logger::setRobot(Drivetrain drivetrain, bool useSpeedEstimation) {
+  detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
+  if (!lock.isLocked()) return false;
+
   if (m_configSet.load()) {
     _MVLIB_FORWARD_WARN("setRobot(Drivetrain) called after successfully being set!");
     return false;
   }
 
-  if (m_started) {
+  if (m_started.load()) {
     _MVLIB_FORWARD_WARN("setRobot(Drivetrain) called after logger start!");
     return false;
   }
@@ -35,7 +39,6 @@ bool Logger::setRobot(Drivetrain drivetrain, bool useSpeedEstimation) {
 
   _MVLIB_FORWARD_DEBUG("setRobot(Drivetrain) successfully set variables!");
 
-  checkRobotConfig();
   m_configSet.store(true);
   return true;
 }
@@ -61,6 +64,8 @@ bool Logger::checkRobotConfig() {
 Logger::Logger() {
   m_watches.reserve(24);
   m_waypoints.reserve(16);
+  m_sdSink = std::make_unique<detail::SdSink>();
+  m_sdSink->setFlushInterval(m_sdBufferFlushInterval.load());
 
   // Begin IO Handle for user logs by constructing singleton
   (void) detail::Telemetry::getInstance();
@@ -71,22 +76,29 @@ Logger::Logger() {
   pros::c::serctl(SERCTL_DEACTIVATE, (void*)0x74756f73);
 }
 
+Logger::~Logger() = default;
+
 void Logger::start() {
-  if (m_started) {
+  bool expected = false;
+  if (!m_started.compare_exchange_strong(expected, true)) {
     _MVLIB_FORWARD_WARN("start() called more than once. Aborted!");
     return;
   }
-  m_started = true;
 
-  // SD init
-  if (m_config.logToSD.load() && !m_sdFile) {
-    bool success = initSDLogger();
-    if (!success) {
-      m_config.logToSD.store(false);
-      m_sdLocked = true;
-      _MVLIB_FORWARD_FATAL("start() initSDCard failed! Unable to initialize SD card.");
-    } else {
-      _MVLIB_FORWARD_INFO("start() Successfully initialized SD card with filename: %s", m_absoluteFilename);
+  {
+    detail::uniqueLock setupLock(m_mutex, TIMEOUT_MAX);
+    if (!setupLock.isLocked()) {
+      _MVLIB_FORWARD_ERROR("start() could not acquire the configuration lock. Aborting startup.");
+      return;
+    }
+
+    // SD init
+    if (m_config.logToSD.load() && !m_sdSink->ready()) {
+      bool success = initSDLogger();
+      if (!success) {
+        m_config.logToSD.store(false);
+        m_sdSink->lock();
+      }
     }
   }
 
@@ -111,8 +123,8 @@ void Logger::start() {
       }
 
       if (m_config.logToTerminal.load()) {
-        if (m_timings.stdoutBufferFlushInterval != 0 &&
-            now - m_lastTerminalFlush >= m_timings.stdoutBufferFlushInterval) {
+        const uint32_t flushInterval = m_stdoutBufferFlushInterval.load();
+        if (flushInterval != 0 && now - m_lastTerminalFlush >= flushInterval) {
           fflush(stdout);
           m_lastTerminalFlush = now;
         }
@@ -129,8 +141,8 @@ void Logger::update() {
   if (m_config.printWatches.load()) printWatches();
   if (m_config.printWaypoints.load()) printWaypoints();
 
-  uint32_t telemetryRate = m_config.logToTerminal.load() ?
-      m_timings.terminalPollingRate : m_timings.sdPollingRate;
+  const uint32_t telemetryRate = m_config.logToTerminal.load() ?
+      m_terminalPollingRate.load() : m_sdPollingRate.load();
 
   if (telemetryRate != 0 && now - m_lastTelemetryPrint >= telemetryRate) {
     if (m_config.printTelemetry.load()) printTelemetry();
@@ -138,8 +150,8 @@ void Logger::update() {
   }
 
   // Periodically sync IDs to labels so the frontend can resolve them
-  if (m_timings.rosterSyncAllInterval != 0 &&
-      now - m_lastRosterFlush >= m_timings.rosterSyncAllInterval) {
+  const uint32_t rosterSyncInterval = m_rosterSyncAllInterval.load();
+  if (rosterSyncInterval != 0 && now - m_lastRosterFlush >= rosterSyncInterval) {
     this->resyncAllWatchesRoster();
     this->resyncAllWaypointsRoster();
     m_lastRosterFlush = now;

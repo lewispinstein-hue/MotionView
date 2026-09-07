@@ -34,6 +34,10 @@ static std::string renderValue(bool v) {
   return v ? "t" : "f";
 }
 
+/**
+ * @brief Render a T pointer as a hex string.
+ * \return The rendered hex string.
+ */
 template <class T>
 static std::string renderValue(const T* v) {
   return v ? std::to_string((uintptr_t)v) : std::string("(null)");
