@@ -38,7 +38,7 @@ For most projects:
 
 ### Optional shorthand
 
-If you want the time literals and `LogLevel` alias without the full namespace:
+If you want the common time literals and type aliases without the full namespace:
 
 ```cpp
 #define MVLIB_USE_SIMPLES
@@ -50,6 +50,9 @@ That enables:
 - `1_mvS`
 - `100_mvMs`
 - `LogLevel::INFO`
+- `WatchMode::onChange`
+- `MissingFolderPolicy::useRoot`
+- `ExistingFilePolicy::automatic`
 
 Without it, use the fully qualified names and import the literal namespace when you want `_mvS` or `_mvMs`:
 
@@ -295,7 +298,6 @@ Examples:
 
 ```cpp
 logger.setLogToTerminal(true);
-logger.setLogToSD(true);
 logger.setPrintTelemetry(true);
 logger.setPrintWatches(true);
 logger.setPrintWaypoints(true);
@@ -313,3 +315,5 @@ logger.setTimings({
 ```
 
 The full runtime controls documentation is [here](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Configuration).
+
+`setLogToSD(...)` is setup-only and must be called before `logger.start()`.

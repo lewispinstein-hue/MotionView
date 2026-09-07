@@ -6,7 +6,7 @@ This guide covers MVLib's SD logging path API, fallback policies, and path rules
 
 ```cpp
 bool setLoggingLocation(const char *location,
-                        MissingFolderPolicy folderPolicy = MissingFolderPolicy::disable,
+                        MissingFolderPolicy folderPolicy = MissingFolderPolicy::useRoot,
                         ExistingFilePolicy filePolicy = ExistingFilePolicy::automatic);
 ```
 
@@ -32,8 +32,10 @@ date baked into the MVLib archive.
 
 - pass a POSIX-style path relative to `/usd`
 - start the path with `/`
-- the target folder must already exist on the SD card
-- if you pass a file path, the file portion must include an extension such as `.log`
+- the target folder must already exist on the SD card unless `MissingFolderPolicy::useRoot` is selected
+- folder paths are limited to 23 characters, including the leading `/`
+- explicit file paths are limited to 127 characters, including the leading `/`
+- if you pass a file path, the filename must have a non-empty name and extension such as `match.log`
 - folder segments must not contain `.`
 
 Examples:
@@ -56,11 +58,15 @@ MVLib resolves the destination in this order:
 ## `MissingFolderPolicy`
 
 ```cpp
-enum class Logger::MissingFolderPolicy : uint8_t {
+enum class mvlib::MissingFolderPolicy : uint8_t {
   disable = 0,
   useRoot
 };
 ```
+
+The policies live in the `mvlib` namespace. `Logger::MissingFolderPolicy` and
+`Logger::ExistingFilePolicy` remain supported as compatibility aliases. With
+`MVLIB_USE_SIMPLES`, both policy names can be used without the namespace.
 
 ### `disable`
 
@@ -89,7 +95,7 @@ If `/telem` does not exist, the resolved folder becomes `/`, and file resolution
 ## `ExistingFilePolicy`
 
 ```cpp
-enum class Logger::ExistingFilePolicy : uint8_t {
+enum class mvlib::ExistingFilePolicy : uint8_t {
   disable = 0,
   overwrite,
   automatic
@@ -118,9 +124,14 @@ If the explicit target file already exists:
 
 - MVLib preserves the resolved folder
 - the explicit file path is cleared
-- `initSDLogger()` later generates a timestamped filename in that folder
+- `initSDLogger()` later generates a timestamped filename in that folder and
+  retries generated names that already exist
 
 If the explicit target file does not exist, no fallback is needed and MVLib uses the requested filename directly.
+
+MVLib will not intentionally overwrite an automatically generated name. If it
+cannot select a unique generated name after 16 attempts, SD initialization
+fails and SD logging is disabled.
 
 ## Examples
 
@@ -175,7 +186,8 @@ When relying on that automatic timestamped fallback, call `logger.setBuildDate(_
 
 - Passing `/usd/...` instead of a path relative to `/usd`
 - Forgetting the leading `/`
-- Passing a file path without an extension
+- Passing a file path without a non-empty extension
 - Using `.` in a folder segment
+- Exceeding the folder or explicit-file path length limits
 - Calling `setLoggingLocation(...)` after `logger.start()`
-- Relying on automatic timestamped filenames without calling `logger.setBuildDate(__DATE__)`
+- Relying on MVLib's archive build date when the consumer project's build date is desired

@@ -9,7 +9,7 @@ There are 2 main groups:
 
 All configuration is done through `mvlib::Logger`.
 
-Configure timings, SD behavior, logging location, build date, odometry, drivetrain references, watches, and waypoints before `logger.start()` whenever possible. The output toggles are intended for runtime use, but timing changes are not synchronized with the background logger task in the current implementation.
+Configure SD behavior, logging location, build date, odometry, drivetrain references, watches, and waypoints before `logger.start()`. Terminal and printing toggles may be changed at runtime. Timing changes are safe at runtime, although each timing field may take effect independently during an update cycle.
 
 ## `LoggerConfig`
 
@@ -32,7 +32,6 @@ You normally change these through setters:
 auto& logger = mvlib::Logger::getInstance();
 
 logger.setLogToTerminal(true);
-logger.setLogToSD(true);
 logger.setPrintWatches(true);
 logger.setPrintTelemetry(true);
 logger.setPrintWaypoints(true);
@@ -76,8 +75,9 @@ Turn it off when:
 
 Notes:
 
-- SD logging can become locked after startup if MVLib encounters an SD error.
-- Decide on SD behavior before `logger.start()` whenever possible.
+- This setting is only changeable before `logger.start()`; calls after startup are ignored.
+- SD logging is disabled if initialization, a write, or a flush fails.
+- When terminal and system messages are enabled, MVLib emits one terminal error when a runtime SD write or flush failure disables logging.
 
 ### `setPrintWatches(bool)`
 
@@ -146,7 +146,8 @@ logger.setTimings({
 });
 ```
 
-Set timings before `logger.start()` for deterministic behavior.
+Timings can be changed at runtime. They are stored independently, so set all
+fields before `logger.start()` when they must begin together.
 
 ## Timing Fields
 
@@ -182,7 +183,10 @@ Use this cautiously. Lower values increase flush frequency and terminal pressure
 
 Default: `80`
 
-How often MVLib polls and writes SD-side data.
+How often MVLib emits periodic pose telemetry when terminal output is disabled.
+
+This also controls periodic pose records written to SD in SD-only mode. It does
+not control SD flushes, watches, waypoint events, or direct log calls.
 
 Lower values:
 
@@ -198,7 +202,11 @@ Higher values:
 
 Default: `100`
 
-How often MVLib polls and emits terminal/live telemetry data.
+How often MVLib emits periodic pose telemetry when terminal output is enabled.
+
+When terminal and SD logging are both enabled, this cadence also controls the
+periodic pose records written to SD. Watches and waypoint checks run on the
+fixed 40 ms MVLib update loop.
 
 Lower values:
 
