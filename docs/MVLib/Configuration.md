@@ -242,7 +242,7 @@ Higher values:
 
 Allows you to set a custom logging folder and/or file to route all SD card data to.
 
-See [SDLogging.md](./SDLogging.md#setlogginglocation) for the full API contract, path rules, and fallback policy behavior.
+See [SD Logging](./SDLogging.md#setlogginglocation) for the full API contract, path rules, and fallback policy behavior.
 
 ## Minimum Log Level
 

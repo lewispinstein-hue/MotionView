@@ -8,7 +8,7 @@ MVLib provides 5 standard log functions:
 - `logger.error(...)`
 - `logger.fatal(...)`
 
-Use these for discrete events you want MotionView to show on the run timeline.
+Use these just as you would `printf` or `std::cout`
 
 ## Declarations
 

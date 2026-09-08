@@ -24,9 +24,7 @@ project build date before `logger.start()`:
 logger.setBuildDate(__DATE__);
 ```
 
-MVLib uses this date to sanity-check the VEX Brain RTC before trusting it for
-timestamped SD filenames. If you do not provide it, MVLib falls back to the
-date baked into the MVLib archive.
+MVLib uses this date to sanity-check the VEX Brain RTC before trusting it for timestamped SD filenames. If you do not provide it, MVLib falls back to the date baked into the MVLib archive.
 
 ## Path Rules
 

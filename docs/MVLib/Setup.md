@@ -45,23 +45,6 @@ If you want the common time literals and type aliases without the full namespace
 #include "mvlib/api.hpp"
 ```
 
-That enables:
-
-- `1_mvS`
-- `100_mvMs`
-- `LogLevel::INFO`
-- `WatchMode::onChange`
-- `MissingFolderPolicy::useRoot`
-- `ExistingFilePolicy::automatic`
-
-Without it, use the fully qualified names and import the literal namespace when you want `_mvS` or `_mvMs`:
-
-```cpp
-mvlib::LogLevel::INFO
-mvlib::WatchMode::onChange
-using namespace mvlib::literals;
-```
-
 ## 3. Important Terminal Note
 
 As soon as you create the logger instance:
@@ -85,7 +68,7 @@ Odometry is optional, but strongly recommended.
 
 Without odometry, you still get:
 
-- standard logs
+- logs
 - watches
 - waypoint registration
 

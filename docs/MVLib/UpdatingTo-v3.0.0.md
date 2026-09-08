@@ -81,7 +81,7 @@ logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval,
 - The C++ literal overload rejects labels longer than 24 characters, but the live roster packet stores a 23-character null-terminated display name. Use 23 characters or fewer if the label must appear untruncated in MotionView.
 
 Full watch reference:
-[Watches.md](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Watches)
+[Watches](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Watches)
 
 ## Waypoints
 
@@ -107,7 +107,7 @@ logger.info("Auton %s created Goal Pickup waypoint", selectedAutonName.c_str());
 ```
 
 Full waypoint reference:
-[Waypoints.md](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Waypoints)
+[Waypoints](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Waypoints)
 
 ## Logger API Renames
 
@@ -124,7 +124,7 @@ logger.setMinLogLevel(LogLevel::INFO);
 ```
 
 Full configuration reference:
-[Configuration.md](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Configuration)
+[Configuration](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Configuration)
 
 ## Before / After
 
