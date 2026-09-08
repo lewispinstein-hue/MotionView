@@ -1,5 +1,7 @@
-let sidebarVersion = '2026-05-26-filetree-v2';
+let sidebarVersion = '2026-09-07-sidebar-tree-v4';
 let sidebarTreeState = {};
+let sidebarSearchContent = {};
+let sidebarSearchRequest = 0;
 
 function getSiteBasePath() {
   return window.location.hostname.endsWith('github.io') ? '/MotionView/' : '/';
@@ -155,7 +157,7 @@ function rewriteProjectPageLinks() {
     return;
   }
 
-  document.querySelectorAll('.sidebar-nav a, .search a').forEach(function (link) {
+  document.querySelectorAll('.sidebar-nav a').forEach(function (link) {
     let href = link.getAttribute('href');
 
     if (!href || href.startsWith('http') || href.startsWith(basePath)) {
@@ -166,6 +168,250 @@ function rewriteProjectPageLinks() {
       link.setAttribute('href', basePath.replace(/\/$/, '') + href);
     }
   });
+}
+
+function getDocsRoute(path) {
+  let basePath = getSiteBasePath();
+
+  return basePath === '/'
+    ? path
+    : basePath.replace(/\/$/, '') + path;
+}
+
+function getMarkdownPath(link) {
+  let href = link.getAttribute('href') || '';
+  let basePath = getSiteBasePath();
+
+  if (!href || /^(https?:)?\/\//.test(href)) {
+    return null;
+  }
+
+  href = href.replace(/^#\/?/, '').replace(/[?#].*$/, '');
+
+  if (basePath !== '/' && href.indexOf(basePath) === 0) {
+    href = href.slice(basePath.length);
+  }
+
+  href = href.replace(/^\/+/, '').replace(/\.md$/, '');
+
+  return getDocsRoute('/' + href + '.md');
+}
+
+function countReferences(content, query) {
+  let normalizedContent = (content || '').toLowerCase();
+  let normalizedQuery = query.toLowerCase();
+  let startIndex = 0;
+  let count = 0;
+  let matchIndex;
+
+  while ((matchIndex = normalizedContent.indexOf(normalizedQuery, startIndex)) !== -1) {
+    count += 1;
+    startIndex = matchIndex + normalizedQuery.length;
+  }
+
+  return count;
+}
+
+function clearDocumentSearchHighlights() {
+  document.querySelectorAll('.sidebar-document-match').forEach(function (match) {
+    let parent = match.parentNode;
+    parent.replaceChild(document.createTextNode(match.textContent), match);
+    parent.normalize();
+  });
+}
+
+function highlightDocumentSearchResults(query) {
+  clearDocumentSearchHighlights();
+
+  if (!query) {
+    return;
+  }
+
+  let article = document.querySelector('.markdown-section');
+
+  if (!article) {
+    return;
+  }
+
+  let matchingNodes = [];
+  let walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT, {
+    acceptNode: function (node) {
+      let parent = node.parentElement;
+
+      if (!node.nodeValue.trim() || !parent || parent.closest('script, style, mark.sidebar-document-match')) {
+        return NodeFilter.FILTER_REJECT;
+      }
+
+      return node.nodeValue.toLowerCase().indexOf(query.toLowerCase()) !== -1
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_REJECT;
+    }
+  });
+
+  while (walker.nextNode()) {
+    matchingNodes.push(walker.currentNode);
+  }
+
+  matchingNodes.forEach(function (node) {
+    let text = node.nodeValue;
+    let lowerText = text.toLowerCase();
+    let lowerQuery = query.toLowerCase();
+    let fragment = document.createDocumentFragment();
+    let startIndex = 0;
+    let matchIndex;
+
+    while ((matchIndex = lowerText.indexOf(lowerQuery, startIndex)) !== -1) {
+      fragment.appendChild(document.createTextNode(text.slice(startIndex, matchIndex)));
+
+      let mark = document.createElement('mark');
+      mark.className = 'sidebar-document-match';
+      mark.textContent = text.slice(matchIndex, matchIndex + query.length);
+      fragment.appendChild(mark);
+      startIndex = matchIndex + query.length;
+    }
+
+    fragment.appendChild(document.createTextNode(text.slice(startIndex)));
+    node.parentNode.replaceChild(fragment, node);
+  });
+}
+
+function clearSidebarSearchResults() {
+  document.querySelectorAll('.sidebar-nav li').forEach(function (item) {
+    item.classList.remove('sidebar-search-hidden', 'sidebar-search-expanded');
+  });
+
+  document.querySelectorAll('.sidebar-nav a[data-sidebar-search-label]').forEach(function (link) {
+    link.textContent = link.dataset.sidebarSearchLabel;
+    delete link.dataset.sidebarSearchLabel;
+  });
+
+  clearDocumentSearchHighlights();
+}
+
+function applySidebarSearchResults(query, results) {
+  let resultItems = new Map();
+
+  document.querySelectorAll('.sidebar-nav a').forEach(function (link) {
+    let item = link.closest('li');
+    let result = results.get(link);
+
+    if (!item || !result) {
+      return;
+    }
+
+    link.dataset.sidebarSearchLabel = result.label;
+    link.textContent = result.count + ' ' + (result.count === 1 ? 'reference' : 'references') + ' found in ' + result.label;
+    resultItems.set(item, result.count);
+  });
+
+  Array.prototype.slice.call(document.querySelectorAll('.sidebar-nav li')).reverse().forEach(function (item) {
+    let childItems = Array.prototype.slice.call(item.querySelectorAll(':scope > ul > li'));
+    let hasMatchingChild = childItems.some(function (child) {
+      return !child.classList.contains('sidebar-search-hidden');
+    });
+    let hasResults = resultItems.has(item) || hasMatchingChild;
+
+    item.classList.toggle('sidebar-search-hidden', !hasResults);
+    item.classList.toggle('sidebar-search-expanded', hasMatchingChild);
+  });
+
+  highlightDocumentSearchResults(query);
+}
+
+function searchSidebar(query) {
+  let normalizedQuery = query.trim();
+  let requestId = ++sidebarSearchRequest;
+
+  clearSidebarSearchResults();
+
+  if (!normalizedQuery) {
+    return;
+  }
+
+  let links = Array.prototype.slice.call(document.querySelectorAll('.sidebar-nav a'));
+
+  Promise.all(links.map(function (link) {
+    let label = link.textContent.trim();
+    let markdownPath = getMarkdownPath(link);
+
+    if (!markdownPath) {
+      return Promise.resolve({ link: link, label: label, content: '' });
+    }
+
+    if (sidebarSearchContent[markdownPath]) {
+      return Promise.resolve({ link: link, label: label, content: sidebarSearchContent[markdownPath] });
+    }
+
+    return fetch(markdownPath).then(function (response) {
+      return response.ok ? response.text() : '';
+    }).catch(function () {
+      return '';
+    }).then(function (content) {
+      sidebarSearchContent[markdownPath] = content;
+      return { link: link, label: label, content: content };
+    });
+  })).then(function (documents) {
+    if (requestId !== sidebarSearchRequest) {
+      return;
+    }
+
+    let results = new Map();
+    let currentArticle = document.querySelector('.markdown-section');
+
+    documents.forEach(function (documentInfo) {
+      let content = documentInfo.content;
+
+      if (isCurrentSidebarLink(documentInfo.link) && currentArticle) {
+        content = currentArticle.innerText;
+      }
+
+      let count = countReferences(content, normalizedQuery);
+
+      if (count) {
+        results.set(documentInfo.link, {
+          count: count,
+          label: documentInfo.label
+        });
+      }
+    });
+
+    clearSidebarSearchResults();
+    applySidebarSearchResults(normalizedQuery, results);
+  });
+}
+
+function enhanceSidebarHeader() {
+  let existingHeader = document.querySelector('.site-topbar');
+
+  if (existingHeader) {
+    return existingHeader;
+  }
+
+  let header = document.createElement('div');
+  header.className = 'site-topbar';
+  header.innerHTML = [
+    '<div class="site-topbar-main">',
+    '  <label class="sidebar-search-field">',
+    '    <span class="sidebar-search-icon" aria-hidden="true"></span>',
+    '    <input type="search" class="sidebar-search-input" placeholder="Search docs" aria-label="Search documentation">',
+    '  </label>',
+    '</div>',
+    '<nav class="sidebar-quick-links" aria-label="Quick links">',
+    '  <a href="https://github.com/lewispinstein-hue/MotionView/releases">Download <svg class="quick-link-export-icon" viewBox="0 0 90 90" aria-hidden="true"><path d="M85 35.661c-2.762 0-5-2.239-5-5V10H59.339c-2.762 0-5-2.239-5-5s2.238-5 5-5H85c2.762 0 5 2.239 5 5v25.661c0 2.761-2.238 5-5 5z"/><path d="M33.678 61.322c-1.28 0-2.559-.488-3.536-1.465-1.953-1.952-1.953-5.118 0-7.07L81.465 1.464c1.951-1.952 5.119-1.952 7.07 0 1.953 1.953 1.953 5.119 0 7.071L37.214 59.857c-.977.977-2.256 1.465-3.536 1.465z"/><path d="M74.394 90H15.606C7.001 90 0 82.999 0 74.394V15.606C0 7.001 7.001 0 15.606 0h18.072c2.761 0 5 2.239 5 5s-2.239 5-5 5H15.606C12.515 10 10 12.515 10 15.606v58.787C10 77.485 12.515 80 15.606 80h58.787C77.485 80 80 77.485 80 74.394V56.322c0-2.762 2.238-5 5-5s5 2.238 5 5v18.071C90 82.999 82.999 90 74.394 90z"/></svg></a>',
+    '  <a href="https://github.com/lewispinstein-hue/MotionView/issues">Issues <svg class="quick-link-export-icon" viewBox="0 0 90 90" aria-hidden="true"><path d="M85 35.661c-2.762 0-5-2.239-5-5V10H59.339c-2.762 0-5-2.239-5-5s2.238-5 5-5H85c2.762 0 5 2.239 5 5v25.661c0 2.761-2.238 5-5 5z"/><path d="M33.678 61.322c-1.28 0-2.559-.488-3.536-1.465-1.953-1.952-1.953-5.118 0-7.07L81.465 1.464c1.951-1.952 5.119-1.952 7.07 0 1.953 1.953 1.953 5.119 0 7.071L37.214 59.857c-.977.977-2.256 1.465-3.536 1.465z"/><path d="M74.394 90H15.606C7.001 90 0 82.999 0 74.394V15.606C0 7.001 7.001 0 15.606 0h18.072c2.761 0 5 2.239 5 5s-2.239 5-5 5H15.606C12.515 10 10 12.515 10 15.606v58.787C10 77.485 12.515 80 15.606 80h58.787C77.485 80 80 77.485 80 74.394V56.322c0-2.762 2.238-5 5-5s5 2.238 5 5v18.071C90 82.999 82.999 90 74.394 90z"/></svg></a>',
+    '</nav>',
+    '<a class="sidebar-github-link" href="https://github.com/lewispinstein-hue/MotionView" aria-label="Open MotionView on GitHub" title="GitHub">',
+    '  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2C6.48 2 2 6.58 2 12.23c0 4.52 2.87 8.35 6.84 9.7.5.1.68-.22.68-.49 0-.24-.01-1.04-.01-1.89-2.78.62-3.37-1.2-3.37-1.2-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.63.07-.63 1 .07 1.53 1.05 1.53 1.05.9 1.57 2.35 1.12 2.92.85.09-.67.35-1.12.64-1.38-2.22-.26-4.56-1.15-4.56-5.11 0-1.13.39-2.05 1.04-2.77-.1-.26-.45-1.31.1-2.73 0 0 .85-.28 2.75 1.06A9.35 9.35 0 0 1 12 6.8c.85 0 1.7.12 2.5.34 1.9-1.34 2.75-1.06 2.75-1.06.55 1.42.2 2.47.1 2.73.65.72 1.04 1.64 1.04 2.77 0 3.97-2.35 4.84-4.58 5.1.36.32.68.93.68 1.88 0 1.36-.01 2.46-.01 2.8 0 .27.18.6.69.49A10.24 10.24 0 0 0 22 12.23C22 6.58 17.52 2 12 2Z"/></svg>',
+    '</a>'
+  ].join('');
+
+  document.body.insertBefore(header, document.body.firstChild);
+
+  header.querySelector('.sidebar-search-input').addEventListener('input', function (event) {
+    searchSidebar(event.target.value);
+  });
+
+  return header;
 }
 
 function enhanceSidebarTree() {
@@ -221,9 +467,10 @@ function enhanceSidebarTree() {
     }
 
     let itemKey = getSidebarItemKey(item);
+    let isTopLevelItem = !item.parentElement.closest('li');
     let isCollapsed = storedState[itemKey] !== undefined
       ? storedState[itemKey]
-      : true;
+      : !isTopLevelItem;
 
     item.dataset.sidebarTreeKey = itemKey;
 
@@ -251,6 +498,13 @@ function enhanceSidebarTree() {
 
     item.classList.add('sidebar-tree-item');
     ensureSidebarTreeLabel(item);
+
+    if (isTopLevelItem) {
+      item.classList.add('sidebar-product-section');
+      item.classList.add(getSidebarItemLabel(item) === 'MVLib'
+        ? 'sidebar-product-mvlib'
+        : 'sidebar-product-motionview');
+    }
 
     let toggle = document.createElement('button');
     toggle.className = 'sidebar-tree-toggle';
@@ -379,24 +633,18 @@ window.$docsify = {
   name: 'MotionView Docs',
   repo: 'lewispinstein-hue/MotionView',
   routerMode: 'history',
-  loadSidebar: '_sidebar.md?v=2026-05-26-filetree-v2',
+  loadSidebar: '_sidebar.md?v=2026-09-07-sidebar-tree-v4',
   alias: {
     '/': '/Home.md',
     '/README': '/Home.md',
     '/README.md': '/Home.md',
     '/.*/README': '/Home.md',
     '/.*/README.md': '/Home.md',
-    '/.*/_sidebar.md': '/_sidebar.md?v=2026-05-26-filetree-v2'
+    '/.*/_sidebar.md': '/_sidebar.md?v=2026-09-07-sidebar-tree-v4'
   },
   subMaxLevel: 0,
   auto2top: true,
   homepage: '/Home.md',
-  search: {
-    maxAge: 86400000,
-    paths: 'auto',
-    placeholder: 'Search docs',
-    noData: 'No results'
-  },
   plugins: [
     function (hook) {
       hook.beforeEach(function (content, next) {
@@ -409,6 +657,11 @@ window.$docsify = {
           enhanceSidebarTree();
           rewriteProjectPageLinks();
           markCurrentSidebarLink();
+          let sidebarHeader = enhanceSidebarHeader();
+
+          if (sidebarHeader) {
+            searchSidebar(sidebarHeader.querySelector('.sidebar-search-input').value);
+          }
           enhanceCodeBlocks();
         });
       });
