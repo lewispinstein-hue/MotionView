@@ -22,7 +22,9 @@ body {
 .sidebar {
   background: #1c1d21;
   border-right: 1px solid #303238;
+  box-sizing: border-box;
   height: calc(100% - var(--topbar-height));
+  padding: 0;
   top: var(--topbar-height);
 }
 
@@ -32,6 +34,10 @@ body {
 
 .sidebar > h1 {
   display: none;
+}
+
+.sidebar .search {
+  display: none !important;
 }
 
 .sidebar > h1 a,
