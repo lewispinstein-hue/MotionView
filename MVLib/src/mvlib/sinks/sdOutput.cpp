@@ -16,7 +16,7 @@ bool Logger::initSDLogger() {
     getBuildDate(), m_userBuildDate[0] != '\0');
 
   if (result.error == detail::SdInitError::cardMissing) {
-    _MVLIB_FORWARD_FATAL("initSDLogger() SD card was not detected after 10 checks. Aborting SD logging.");
+    _MVLIB_FORWARD_WARN("initSDLogger() SD card was not detected after 10 checks; SD logging disabled.");
     return false;
   }
 

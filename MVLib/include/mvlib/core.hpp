@@ -461,6 +461,9 @@ public:
    * @note String literal labels longer than 24 characters are rejected at
    *       compile time. Live MotionView roster packets preserve 23 visible
    *       characters because the telemetry label field is null-terminated.
+   * @note When terminal watch output is enabled, MVLib sends the watch roster
+   *       label immediately after registration so its first emitted sample can
+   *       be resolved by MotionView.
    * @note Adding a watch is computationally expensive. Don't call logger.watch()
    *       repeatedly. Additionally, if the same .watch() is called
    *       multiple times, each watch will be separate and logged independently.
@@ -599,48 +602,56 @@ private:
                    const uint32_t intervalMs, Getter&& getter,
                    LevelOverride<T> ov,
                    bool onChange = false) {
-    detail::uniqueLock lock(m_mutex);
-    if (!lock.isLocked()) return static_cast<WatchId>(-1);
+    WatchId id{};
+    {
+      detail::uniqueLock lock(m_mutex);
+      if (!lock.isLocked()) return static_cast<WatchId>(-1);
 
-    using EvalType = T;
+      using EvalType = T;
 
-    InternalWatch w;
-    w.id = m_nextId++;
-    w.label = std::move(label);
-    w.elevatedLabel = ov.label;
-    w.baseLevel = baseLevel;
-    w.intervalMs = intervalMs;
-    w.onChange = onChange;
+      InternalWatch w;
+      w.id = m_nextId++;
+      w.label = std::move(label);
+      w.elevatedLabel = ov.label;
+      w.baseLevel = baseLevel;
+      w.intervalMs = intervalMs;
+      w.onChange = onChange;
 
-    std::decay_t<Getter> eval = std::forward<Getter>(getter); // store callable by value
+      std::decay_t<Getter> eval = std::forward<Getter>(getter); // store callable by value
 
-    // Capture label by value (not by reference to w), and move ov in.
-    const std::string labelCopy = w.label;
+      // Capture label by value (not by reference to w), and move ov in.
+      const std::string labelCopy = w.label;
 
-    // When w.eval is called, it returns final log level, getter eval, final label
-    w.eval = std::make_shared<std::function<std::tuple<LogLevel, std::string, std::string, bool>()>>(
-              [baseLevel, labelCopy, eval = std::move(eval),
-              ov = std::move(ov)]() mutable ->
-              std::tuple<LogLevel, std::string, std::string, bool> {
+      // When w.eval is called, it returns final log level, getter eval, final label
+      w.eval = std::make_shared<std::function<std::tuple<LogLevel, std::string, std::string, bool>()>>(
+                [baseLevel, labelCopy, eval = std::move(eval),
+                ov = std::move(ov)]() mutable ->
+                std::tuple<LogLevel, std::string, std::string, bool> {
 
-      EvalType evalValue = static_cast<EvalType>(eval());
+        EvalType evalValue = static_cast<EvalType>(eval());
 
-      const bool tripped = (ov.predicate && ov.predicate(evalValue));
+        const bool tripped = (ov.predicate && ov.predicate(evalValue));
 
-      // Log level based on predicate
-      const LogLevel lvl = tripped ? ov.elevatedLevel : baseLevel;
+        // Log level based on predicate
+        const LogLevel lvl = tripped ? ov.elevatedLevel : baseLevel;
 
-      std::string rawOut = renderValue(evalValue); // Raw eval of getter
+        std::string rawOut = renderValue(evalValue); // Raw eval of getter
 
-      // Get label based on predicate
-      const std::string& displayOut = (tripped && !ov.label.empty()) ? ov.label : labelCopy;
+        // Get label based on predicate
+        const std::string& displayOut = (tripped && !ov.label.empty()) ? ov.label : labelCopy;
 
-      return std::make_tuple(lvl, std::move(rawOut), std::move(displayOut), tripped);
-    });
-    w.evalMutex = std::make_shared<pros::Mutex>();
+        return std::make_tuple(lvl, std::move(rawOut), std::move(displayOut), tripped);
+      });
+      w.evalMutex = std::make_shared<pros::Mutex>();
 
-    m_watches.push_back(std::move(w));
-    return w.id;
+      id = w.id;
+      m_watches.push_back(std::move(w));
+    }
+
+    if (m_config.printWatches.load() && m_config.logToTerminal.load()) {
+      resyncWatchRoster(id);
+    }
+    return id;
   }
 
   /// @brief Print all watches that are due (and/or changed).
