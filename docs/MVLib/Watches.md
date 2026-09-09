@@ -41,6 +41,8 @@ The mode parameters work like this:
 - `WatchMode::onChange`: `intervalMs` is the debounce interval between emitted changes
 - the single `watch(...)` API returns a `WatchHandle`
 - floating-point watch values are rendered with two decimal places
+- when terminal watch output is enabled, MVLib registers the watch label with
+  MotionView immediately so the first emitted sample has a name
 
 ## `WatchMode`
 
@@ -247,7 +249,7 @@ Important:
 - when the rendered string changes, MVLib waits for the debounce interval before emitting
 - `0` disables the debounce delay and emits on the next changed sample
 
-**Important Note**: Always have a debounce interval for watches to prevent other tasks from being starved of resources. Too many watches printing too fast can overwhelm the serial buffer and CPU.
+**Important Note**: Always have a debounce interval for watches to prevent other tasks from being starved of resources. Too many watches printing too fast can overwhelm the serial buffer and CPU. If the terminal telemetry queue fills, MVLib drops individual telemetry records instead of blocking the robot's control loop; MotionView can then show gaps in the affected watch data.
 
 ## `LevelOverride`
 
