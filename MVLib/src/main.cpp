@@ -16,21 +16,10 @@ pros::MotorGroup right_mg({-4, 5, -6},
                 pros::MotorGearset::blue,
                 pros::v5::MotorUnits::degrees); // Creates a motor group with forwards port 5 and reversed ports 4 & 6
 
-/**
- * A callback function for LLEMU's center button.
- *
- * When this callback is fired, it will toggle line 2 of the LCD text between
- * "I was pressed!" and nothing.
- */
-void on_center_button() {
-  static bool pressed = false;
-  pressed = !pressed;
-  if (pressed) {
-    pros::lcd::set_text(2, "I was pressed!");
-  } else {
-    pros::lcd::clear_line(2);
-  }
-}
+pros::MotorGroup intakeMotors({12, -14});
+pros::adi::Pneumatics stopperPiston(1, 'A');
+
+void moveToPoint(float, float, float) {} // Function outline: mock PID
 
 /**
  * Runs initialization code. This occurs as soon as the program is started.
@@ -117,9 +106,25 @@ void autonomous() {
   logger.info("Starting autonomous!");
   uint32_t startTime = pros::millis();
 
-  //
-  // Your autonomous code...
-  //
+  // MotionView generated autonomous code
+  stopperPiston.set_value(false);
+  moveToPoint(61, 4, 270);
+  moveToPoint(21, 14, 0);
+  intakeMotors.move(127);
+  moveToPoint(24, 28, 40);
+  intakeMotors.move(0);
+  moveToPoint(44, 46, 90);
+  moveToPoint(66, 46, 90);
+  intakeMotors.move(127);
+  pros::delay(5000);
+  intakeMotors.move(0);
+  moveToPoint(24, 47, 90);
+  stopperPiston.set_value(true);
+  intakeMotors.move(127);
+  pros::delay(3000);
+  intakeMotors.move(0);
+  moveToPoint(56.5, 40.9, 170);
+  moveToPoint(62, -1, 180);
 
   logger.info("Finished autonomous! Time: %d ms", pros::millis() - startTime);
 }
@@ -148,10 +153,6 @@ void opcontrol() {
   joystickWatch.resyncRoster(); // Make sure roster is synced to MotionView
 
   while (true) {
-    pros::lcd::print(0, "%d %d %d", (pros::lcd::read_buttons() & LCD_BTN_LEFT) >> 2,
-                     (pros::lcd::read_buttons() & LCD_BTN_CENTER) >> 1,
-                     (pros::lcd::read_buttons() & LCD_BTN_RIGHT) >> 0);  // Prints status of the emulated screen LCDs
-
     // Arcade control scheme
     int dir = master.get_analog(ANALOG_LEFT_Y);    // Gets amount forward/backward from left joystick
     int turn = master.get_analog(ANALOG_RIGHT_X);  // Gets the turn left/right from right joystick

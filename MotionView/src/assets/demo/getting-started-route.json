@@ -1,28 +1,28 @@
 {
   "meta": {
     "SchemaVersion": 3,
-    "CreationDate": "13/01/2026, 16:43:02",
+    "CreationDate": "08/09/2026, 22:23:12",
     "AppVersion": "1.3.0",
     "Creator": "MotionView",
-    "PathName": "Example Route",
+    "PathName": "Untitled Path",
     "Stats": {
       "PoseCount": 314,
-      "WatchCount": 6,
-      "LogCount": 0,
-      "WaypointCount": 0,
-      "WaypointEvents": 0,
+      "WatchCount": 11,
+      "LogCount": 8,
+      "WaypointCount": 4,
+      "WaypointEvents": 6,
       "PlannedWaypointCount": 8,
       "PlannedObjectCount": 3,
-      "PlannedNodeCount": 12
+      "PlannedNodeCount": 10
     },
     "Times": {
       "StartTime": "12.72s",
-      "EndTime": "52.57s",
+      "EndTime": "52.56s",
       "DurationTimeMs": 39842
     },
     "ViewingSettings": {
       "Units": "in",
-      "SelectedField": "./assets/fields/v5_skills_field_2025-2026_pushback.png",
+      "SelectedField": "./assets/fields/v5/skills_field_2025-2026_pushback.png",
       "PathOffsets": {
         "X": 0,
         "Y": 0,
@@ -128,6 +128,11 @@
           "id": "plan-method-1778817981719-zzq0ti",
           "name": "1s",
           "code": "pros::delay(1000);"
+        },
+        {
+          "id": "plan-method-1788920391693-2r13xy",
+          "name": "Custom Delay",
+          "code": "pros::delay();"
         }
       ]
     },
@@ -152,32 +157,11 @@
   ],
   "planned-nodes": [
     {
-      "id": "plan-node-1778819124205-fgg29u",
-      "objectId": "plan-object-1778817940969-uwga0o",
-      "methodId": "plan-method-1778817951422-ytpcb5",
-      "beforeWaypoint": 6,
-      "index": 1
-    },
-    {
-      "id": "plan-node-1778819127055-b5q12l",
-      "objectId": "plan-object-1778817975552-5joe92",
-      "methodId": "plan-method-1778817981719-zzq0ti",
-      "beforeWaypoint": 6,
-      "index": 2
-    },
-    {
-      "id": "plan-node-1778819128688-dnh6yk",
-      "objectId": "plan-object-1778817975552-5joe92",
-      "methodId": "plan-method-1778817981719-zzq0ti",
-      "beforeWaypoint": 6,
-      "index": 4
-    },
-    {
-      "id": "plan-node-1778819273305-jg6mxo",
-      "objectId": "plan-object-1778817975552-5joe92",
-      "methodId": "plan-method-1778817981719-zzq0ti",
-      "beforeWaypoint": 6,
-      "index": 3
+      "id": "plan-node-1779203941345-c6zp1c",
+      "objectId": "plan-object-1779203842410-94e6ku",
+      "methodId": "plan-method-1779203872077-ese9ge",
+      "beforeWaypoint": 0,
+      "index": 0
     },
     {
       "id": "plan-node-1778819296773-rocs2c",
@@ -194,32 +178,11 @@
       "index": 0
     },
     {
-      "id": "plan-node-1778819130788-i3qunf",
+      "id": "plan-node-1778819241591-awfptt",
       "objectId": "plan-object-1778817940969-uwga0o",
-      "methodId": "plan-method-1778817954402-6macgt",
-      "beforeWaypoint": 6,
-      "index": 5
-    },
-    {
-      "id": "plan-node-1779203941345-c6zp1c",
-      "objectId": "plan-object-1779203842410-94e6ku",
-      "methodId": "plan-method-1779203872077-ese9ge",
-      "beforeWaypoint": 0,
-      "index": 0
-    },
-    {
-      "id": "plan-node-1779203952444-55far1",
-      "objectId": "plan-object-1779203842410-94e6ku",
-      "methodId": "plan-method-1779203867178-vmvala",
-      "beforeWaypoint": 6,
-      "index": 0
-    },
-    {
-      "id": "plan-node-1778819243923-64xk8n",
-      "objectId": "plan-object-1778817940969-uwga0o",
-      "methodId": "plan-method-1778817954402-6macgt",
+      "methodId": "plan-method-1778817951422-ytpcb5",
       "beforeWaypoint": 5,
-      "index": 2
+      "index": 0
     },
     {
       "id": "plan-node-1778819081754-3qxj13",
@@ -229,11 +192,40 @@
       "index": 1
     },
     {
-      "id": "plan-node-1778819241591-awfptt",
+      "id": "plan-node-1778819243923-64xk8n",
+      "objectId": "plan-object-1778817940969-uwga0o",
+      "methodId": "plan-method-1778817954402-6macgt",
+      "beforeWaypoint": 5,
+      "index": 2
+    },
+    {
+      "id": "plan-node-1779203952444-55far1",
+      "objectId": "plan-object-1779203842410-94e6ku",
+      "methodId": "plan-method-1779203867178-vmvala",
+      "beforeWaypoint": 6,
+      "index": 0
+    },
+    {
+      "id": "plan-node-1778819124205-fgg29u",
       "objectId": "plan-object-1778817940969-uwga0o",
       "methodId": "plan-method-1778817951422-ytpcb5",
-      "beforeWaypoint": 5,
-      "index": 0
+      "beforeWaypoint": 6,
+      "index": 1
+    },
+    {
+      "id": "plan-node-1788920395425-g04pos",
+      "objectId": "plan-object-1778817975552-5joe92",
+      "methodId": "plan-method-1788920391693-2r13xy",
+      "beforeWaypoint": 6,
+      "index": 2,
+      "code": "pros::delay(3000);"
+    },
+    {
+      "id": "plan-node-1778819130788-i3qunf",
+      "objectId": "plan-object-1778817940969-uwga0o",
+      "methodId": "plan-method-1778817954402-6macgt",
+      "beforeWaypoint": 6,
+      "index": 3
     }
   ],
   "poses": [
@@ -3066,12 +3058,20 @@
   ],
   "watches": [
     {
+      "t": 14270,
+      "id": 8,
+      "visible": true,
+      "level": "INFO",
+      "label": "Intake State",
+      "value": "Intaking"
+    },
+    {
       "t": 16083,
       "id": 3,
       "visible": true,
       "level": "INFO",
-      "label": "Tongue mech state",
-      "value": "true"
+      "label": "Tongue mech",
+      "value": "Enabled"
     },
     {
       "t": 23163,
@@ -3079,7 +3079,15 @@
       "visible": true,
       "level": "INFO",
       "label": "Stopper state",
-      "value": "true"
+      "value": "Open"
+    },
+    {
+      "t": 23163,
+      "id": 8,
+      "visible": true,
+      "level": "INFO",
+      "label": "Intake State",
+      "value": "Scoring High Goal"
     },
     {
       "t": 31685,
@@ -3087,15 +3095,15 @@
       "visible": true,
       "level": "INFO",
       "label": "Stopper state",
-      "value": "false"
+      "value": "Closed"
     },
     {
-      "t": 37685,
-      "id": 3,
+      "t": 31685,
+      "id": 8,
       "visible": true,
       "level": "INFO",
-      "label": "Tongue mech state",
-      "value": "false"
+      "label": "Intake State",
+      "value": "Intaking"
     },
     {
       "t": 40805,
@@ -3103,7 +3111,15 @@
       "visible": true,
       "level": "INFO",
       "label": "Stopper state",
-      "value": "true"
+      "value": "Open"
+    },
+    {
+      "t": 40805,
+      "id": 8,
+      "visible": true,
+      "level": "INFO",
+      "label": "Intake State",
+      "value": "Scoring High Goal"
     },
     {
       "t": 48365,
@@ -3111,9 +3127,173 @@
       "visible": true,
       "level": "INFO",
       "label": "Stopper state",
-      "value": "false"
+      "value": "Closed"
+    },
+    {
+      "t": 51830,
+      "id": 3,
+      "visible": true,
+      "level": "INFO",
+      "label": "Tongue mech",
+      "value": "Disabled"
+    },
+    {
+      "t": 52560,
+      "id": 8,
+      "visible": true,
+      "level": "INFO",
+      "label": "Intake State",
+      "value": "Stopped"
     }
   ],
-  "logs": [],
-  "waypoints": []
+  "logs": [
+    {
+      "t": 3,
+      "level": "DEBUG",
+      "label": "",
+      "value": "[MVLIB] setRobot(Drivetrain) successfully set variables!"
+    },
+    {
+      "t": 2038,
+      "level": "DEBUG",
+      "label": "",
+      "value": "[MVLIB] SD Card installed (On first attempt)"
+    },
+    {
+      "t": 2538,
+      "level": "INFO",
+      "label": "",
+      "value": "[MVLIB] initSdCard() VEX RTC Inaccurate (1901). Falling back to program duration and provided date."
+    },
+    {
+      "t": 2597,
+      "level": "DEBUG",
+      "label": "",
+      "value": "[MVLIB] File successfully opened."
+    },
+    {
+      "t": 2609,
+      "level": "INFO",
+      "label": "",
+      "value": "[MVLIB] start() Successfully initialized SD card with filename: /usd/MVLIB_Apr 12 2026_2-25_58129.log"
+    },
+    {
+      "t": 2609,
+      "level": "INFO",
+      "label": "",
+      "value": "[MVLIB] start() Background logger task started."
+    },
+    {
+      "t": 12720,
+      "level": "INFO",
+      "label": "",
+      "value": "Autonomous started!"
+    },
+    {
+      "t": 52560,
+      "level": "INFO",
+      "label": "",
+      "value": "Autonomous finished with time of 39.8s"
+    }
+  ],
+  "waypoints": [
+    {
+      "id": 5,
+      "name": "Blue Left High Goal",
+      "events": [
+        {
+          "t": 9348,
+          "type": "CREATED",
+          "id": 5,
+          "name": "Blue Left High Goal",
+          "params": {
+            "tarX": 24,
+            "tarY": -47,
+            "tarT": 90,
+            "timeoutMs": null,
+            "linearTol": 2.5,
+            "thetaTol": 10,
+            "retriggerable": true
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Blue Right High Goal",
+      "events": [
+        {
+          "t": 9348,
+          "type": "CREATED",
+          "id": 6,
+          "name": "Blue Right High Goal",
+          "params": {
+            "tarX": 24,
+            "tarY": 47,
+            "tarT": 90,
+            "timeoutMs": null,
+            "linearTol": 2.6,
+            "thetaTol": 10,
+            "retriggerable": true
+          }
+        },
+        {
+          "t": 21000,
+          "type": "REACHED",
+          "id": 6,
+          "name": "Blue Right High Goal",
+          "params": {}
+        },
+        {
+          "t": 39010,
+          "type": "REACHED",
+          "id": 6,
+          "name": "Blue Right High Goal",
+          "params": {}
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Red Right High Goal",
+      "events": [
+        {
+          "t": 9348,
+          "type": "CREATED",
+          "id": 7,
+          "name": "Red Right High Goal",
+          "params": {
+            "tarX": -24,
+            "tarY": 47,
+            "tarT": 270,
+            "timeoutMs": null,
+            "linearTol": 2.5,
+            "thetaTol": 10,
+            "retriggerable": true
+          }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Red Left High Goal",
+      "events": [
+        {
+          "t": 9348,
+          "type": "CREATED",
+          "id": 8,
+          "name": "Red Left High Goal",
+          "params": {
+            "tarX": -24,
+            "tarY": -47,
+            "tarT": 270,
+            "timeoutMs": null,
+            "linearTol": 2.5,
+            "thetaTol": 10,
+            "retriggerable": true
+          }
+        }
+      ]
+    }
+  ]
 }
