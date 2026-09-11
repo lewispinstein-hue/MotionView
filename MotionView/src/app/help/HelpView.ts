@@ -69,6 +69,8 @@ export class HelpView {
   closeKeybinds(): void { this.hide(this.dom.keybindsModal); }
   openFeedback(): void {
     this.close();
+    this.dom.feedbackDeliveryStatus.hidden = true;
+    this.dom.feedbackDeliveryStatus.textContent = "";
     this.show(this.dom.feedbackModal);
     this.updateFeedbackForm();
     this.dom.feedbackDescription.focus();
@@ -134,14 +136,20 @@ export class HelpView {
     }
   }
 
-  private updateFeedbackForm(): void {
+  private updateFeedbackForm({ preserveValidation = false }: { readonly preserveValidation?: boolean } = {}): void {
     const length = this.dom.feedbackDescription.value.length;
     this.dom.feedbackDescriptionCount.textContent = `${length.toLocaleString()} / 2,000`;
     const valid = !!this.dom.feedbackDescription.value.trim() && !!this.#product && !!this.#feedbackType;
-    this.dom.feedbackSend.disabled = this.#submitting;
-    if (feedbackTelemetry.remainingRateLimitMs() > 0) {
+    const rateLimited = feedbackTelemetry.remainingRateLimitMs() > 0;
+    this.dom.feedbackSend.disabled = this.#submitting || !valid || rateLimited;
+    if (preserveValidation) return;
+    if (!this.dom.feedbackDeliveryStatus.hidden) {
+      this.dom.feedbackValidation.textContent = "";
+    } else if (rateLimited) {
       this.dom.feedbackValidation.textContent = feedbackTelemetry.rateLimitMessage();
-    } else if (valid) this.dom.feedbackValidation.textContent = "";
+    } else {
+      this.dom.feedbackValidation.textContent = "";
+    }
   }
 
   private async submitFeedback(): Promise<void> {
@@ -188,7 +196,7 @@ export class HelpView {
       this.#submitting = false;
       this.dom.feedbackCancel.disabled = false;
       this.dom.feedbackSend.textContent = "Send feedback";
-      this.updateFeedbackForm();
+      this.updateFeedbackForm({ preserveValidation: true });
     }
   }
 

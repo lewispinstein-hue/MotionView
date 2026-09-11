@@ -221,7 +221,7 @@ void Telemetry::sendLog(LogLevel level, const char *fmt, ...) {
 }
 
 // The background consumer task
-void telemetryIoTask(void *ignore) {
+[[noreturn]] void telemetryIoTask(void *ignore) {
   (void)ignore;
   // A local buffer to batch multiple frames into one VEXos payload
   std::array<uint8_t, 512> batchBuffer{};
