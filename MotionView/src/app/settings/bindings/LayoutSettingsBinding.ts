@@ -8,13 +8,34 @@ function cssNumber(property: string, fallback: number): number {
 }
 
 export class LayoutSettingsBinding {
-  constructor(private readonly settings: SettingsFeature, private readonly planning: PlanningLayoutView, private readonly viewing: ViewingLayoutView) {}
+  constructor(
+    private readonly settings: SettingsFeature,
+    private readonly planning: PlanningLayoutView,
+    private readonly viewing: ViewingLayoutView
+  ) {}
+
   apply(): void {
     const value = this.settings.current;
-    this.viewing.applyPersistedLayout({ leftSidebarWidth: value.layoutLeftSidebarWidth, sidebarWidth: value.layoutRightSidebarWidthViewing, timelineHeight: value.layoutTimelineHeight });
-    this.planning.applyPersistedLayout({ sidebarWidth: value.layoutRightSidebarWidthPlanning, waypointListHeight: value.layoutPlanningWaypointHeight, timelineHeight: value.layoutPlanningTimelineHeight });
+    this.viewing.applyPersistedLayout({
+      leftSidebarWidth: value.layoutLeftSidebarWidth,
+      sidebarWidth: value.layoutRightSidebarWidthViewing,
+      timelineHeight: value.layoutTimelineHeight
+    });
+    this.planning.applyPersistedLayout({
+      sidebarWidth: value.layoutRightSidebarWidthPlanning,
+      waypointListHeight: value.layoutPlanningWaypointHeight,
+      timelineHeight: value.layoutPlanningTimelineHeight
+    });
   }
   capture(): void {
-    this.settings.update({ layoutLeftSidebarWidth: cssNumber("--leftSidebarW", 360), layoutRightSidebarWidthViewing: cssNumber("--rightSidebarWViewing", 370), layoutRightSidebarWidthPlanning: cssNumber("--rightSidebarWPlanning", 370), layoutTimelineHeight: cssNumber("--timelineH", 180), layoutPlanningWaypointHeight: cssNumber("--planListH", 240), layoutPlanningTimelineHeight: cssNumber("--planningTimelineH", 144) }, "system");
+    this.settings.update({
+      layoutLeftSidebarWidth: cssNumber("--leftSidebarW", 360),
+      layoutRightSidebarWidthViewing: cssNumber("--rightSidebarWViewing", 370),
+      layoutRightSidebarWidthPlanning: cssNumber("--rightSidebarWPlanning", 370),
+      layoutTimelineHeight: cssNumber("--timelineH", 180),
+      layoutPlanningWaypointHeight: cssNumber("--planListH", 240),
+      layoutPlanningTimelineHeight: cssNumber("--planningTimelineH", 144) },
+      "system"
+    );
   }
 }

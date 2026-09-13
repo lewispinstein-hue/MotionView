@@ -1,5 +1,5 @@
-import removeIconUrl from "../../assets/svg/planning/removePlanningObject.svg?url";
-import colorIconUrl from "../../assets/svg/planning/changeObjectColor.svg?url";
+import removeIconSvg from "../../assets/svg/planning/removePlanningObject.svg?raw";
+import colorIconSvg from "../../assets/svg/planning/changeObjectColor.svg?raw";
 import { requestDrawAll } from "../../render/renderScheduler";
 import { setStatus } from "../../app/status";
 import { currentUnitsToInches, formatDistanceFromInches } from "../../shared/units";
@@ -13,7 +13,9 @@ import { generatePlanningCode } from "../planningCode";
 import { getContrastTextColor, getDefaultPlanObjectColor, getDefaultPlanObjectName } from "../planningState";
 import type { PlanningDragCoordinator } from "./PlanningDragCoordinator";
 
-function icon(url: string, id: string): string { return `${url}#${id}`; }
+function icon(svg: string): string {
+  return svg.replace("<svg ", '<svg width="30" height="30" aria-hidden="true" focusable="false" ');
+}
 function format(value: unknown, decimals = 2): string {
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
@@ -137,7 +139,7 @@ export class PlanningSidebarView {
         methodCard.className = `planMethodCard${selectedNode?.objectId === object.id && selectedNode.methodId === method.id ? " isHighlighted" : ""}`;
         methodCard.dataset.objectId = object.id;
         methodCard.dataset.methodId = method.id;
-        methodCard.innerHTML = `<div class="planMethodGrip" aria-hidden="true">⋮⋮</div><div class="planMethodIndex">${methodIndex + 1}</div><div class="planMethodContent"><div class="planMethodName"></div><div class="planMethodCode"></div></div><button class="iconBtn planMethodRemoveBtn" type="button" title="Remove Method"><svg width="30" height="30"><use href="${icon(removeIconUrl, "icon-removePlanningObject")}"></use></svg></button>`;
+        methodCard.innerHTML = `<div class="planMethodGrip" aria-hidden="true">⋮⋮</div><div class="planMethodIndex">${methodIndex + 1}</div><div class="planMethodContent"><div class="planMethodName"></div><div class="planMethodCode"></div></div><button class="iconBtn planMethodRemoveBtn" type="button" title="Remove Method">${icon(removeIconSvg)}</button>`;
         methodCard.querySelector<HTMLElement>(".planMethodName")!.textContent = method.name;
         methodCard.querySelector<HTMLElement>(".planMethodCode")!.textContent = method.code;
         methodCard.addEventListener("pointerdown", (event) => {
@@ -153,7 +155,7 @@ export class PlanningSidebarView {
       card.appendChild(methods);
       const actions = document.createElement("div");
       actions.className = "planObjectActions";
-      actions.innerHTML = `<button class="iconBtn secondaryBtn planMethodAddBtn" type="button">Add Method</button><div class="planObjectActionTools"><div class="planObjectColorWrap"><button class="iconBtn secondaryBtn planObjectColorBtn" type="button" style="color:${object.color}"><svg width="30" height="30"><use href="${icon(colorIconUrl, "icon-planningChangeObjectColor")}"></use></svg></button><div class="planObjectColorPopover${this.#openColorObjectId === object.id ? "" : " hidden"}"><input class="planObjectColorInput" type="color" value="${object.color}" /></div></div></div><button class="iconBtn secondaryBtn planObjectRemoveActionBtn" type="button"><svg width="30" height="30"><use href="${icon(removeIconUrl, "icon-removePlanningObject")}"></use></svg></button>`;
+      actions.innerHTML = `<button class="iconBtn secondaryBtn planMethodAddBtn" type="button">Add Method</button><div class="planObjectActionTools"><div class="planObjectColorWrap"><button class="iconBtn secondaryBtn planObjectColorBtn" type="button" style="color:${object.color}">${icon(colorIconSvg)}</button><div class="planObjectColorPopover${this.#openColorObjectId === object.id ? "" : " hidden"}"><input class="planObjectColorInput" type="color" value="${object.color}" /></div></div></div><button class="iconBtn secondaryBtn planObjectRemoveActionBtn" type="button">${icon(removeIconSvg)}</button>`;
       actions.querySelector(".planMethodAddBtn")?.addEventListener("click", () => void this.addMethod(object.id));
       actions.querySelector(".planObjectRemoveActionBtn")?.addEventListener("click", () => void this.removeObject(object.id));
       actions.querySelector(".planObjectColorBtn")?.addEventListener("click", () => { this.#openColorObjectId = this.#openColorObjectId === object.id ? null : object.id; this.renderObjects(); });

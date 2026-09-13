@@ -18,7 +18,7 @@ export class FieldSettingsBinding {
     private readonly settings: SettingsFeature,
     private readonly field: FieldRenderer,
     private readonly topBar: TopBarView,
-    private readonly dom: SettingsDom,
+    private readonly dom: SettingsDom
   ) {}
 
   bind(): void {
@@ -37,16 +37,25 @@ export class FieldSettingsBinding {
     this.dom.robotWidth.addEventListener("input", () => this.settings.update({ robotW: this.dom.robotWidth.value }));
     this.dom.robotHeight.addEventListener("input", () => this.settings.update({ robotH: this.dom.robotHeight.value }));
     this.dom.robotImageToggle.addEventListener("change", () => this.settings.update({ robotImageEnabled: this.dom.robotImageToggle.checked }));
+    
     for (const [input, key] of [
-      [this.dom.robotImageScale, "robotImgScale"], [this.dom.robotImageOffsetX, "robotImgOffX"],
-      [this.dom.robotImageOffsetY, "robotImgOffY"], [this.dom.robotImageRotation, "robotImgRot"],
-      [this.dom.robotImageAlpha, "robotImgAlpha"], [this.dom.sidebarRobotImageScale, "robotImgScale"],
-      [this.dom.sidebarRobotImageOffsetX, "robotImgOffX"], [this.dom.sidebarRobotImageOffsetY, "robotImgOffY"],
-      [this.dom.sidebarRobotImageRotation, "robotImgRot"], [this.dom.sidebarRobotImageAlpha, "robotImgAlpha"],
+      [this.dom.robotImageScale, "robotImgScale"],
+      [this.dom.robotImageOffsetX, "robotImgOffX"],
+      [this.dom.robotImageOffsetY, "robotImgOffY"],
+      [this.dom.robotImageRotation, "robotImgRot"],
+      [this.dom.robotImageAlpha, "robotImgAlpha"],
+      [this.dom.sidebarRobotImageScale, "robotImgScale"],
+      [this.dom.sidebarRobotImageOffsetX, "robotImgOffX"],
+      [this.dom.sidebarRobotImageOffsetY, "robotImgOffY"],
+      [this.dom.sidebarRobotImageRotation, "robotImgRot"],
+      [this.dom.sidebarRobotImageAlpha, "robotImgAlpha"],
     ] as const) input?.addEventListener("input", () => this.settings.update({ [key]: input.value }));
   }
 
-  async applyAll(): Promise<void> { await this.apply(this.settings.current, Object.keys(this.settings.current) as (keyof MotionViewSettings)[]); }
+  async applyAll(): Promise<void> {
+    await this.apply(this.settings.current,
+                     Object.keys(this.settings.current) as (keyof MotionViewSettings)[]);
+  }
 
   async handleRobotImageFile(file: File | null, input?: HTMLInputElement | null): Promise<void> {
     if (!file) return;
@@ -116,9 +125,25 @@ export class FieldSettingsBinding {
   }
 
   private syncImageInputs(transform: Readonly<{ scale: number; offXIn: number; offYIn: number; rotDeg: number; alpha: number }>): void {
-    const values = [String(transform.scale), String(transform.offXIn), String(transform.offYIn), String(transform.rotDeg), String(Math.round(transform.alpha * 100))];
-    const groups = [[this.dom.robotImageScale, this.dom.sidebarRobotImageScale], [this.dom.robotImageOffsetX, this.dom.sidebarRobotImageOffsetX], [this.dom.robotImageOffsetY, this.dom.sidebarRobotImageOffsetY], [this.dom.robotImageRotation, this.dom.sidebarRobotImageRotation], [this.dom.robotImageAlpha, this.dom.sidebarRobotImageAlpha]];
-    groups.forEach((inputs, index) => inputs.forEach((input) => { if (input) input.value = values[index]!; }));
+    const values = [
+      String(transform.scale),
+      String(transform.offXIn),
+      String(transform.offYIn),
+      String(transform.rotDeg),
+      String(Math.round(transform.alpha * 100))
+    ];
+    
+      const groups = [
+      [this.dom.robotImageScale, this.dom.sidebarRobotImageScale],
+      [this.dom.robotImageOffsetX, this.dom.sidebarRobotImageOffsetX],
+      [this.dom.robotImageOffsetY, this.dom.sidebarRobotImageOffsetY],
+      [this.dom.robotImageRotation, this.dom.sidebarRobotImageRotation],
+      [this.dom.robotImageAlpha, this.dom.sidebarRobotImageAlpha]
+    ];
+
+    groups.forEach((inputs, index) => inputs.forEach((input) => {
+      if (input) input.value = values[index]!;
+    }));
   }
   private refreshImageControls(): void {
     this.dom.robotImageToggle.checked = this.field.isRobotImageEnabled();
