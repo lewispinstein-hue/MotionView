@@ -6,6 +6,7 @@
  */
 
 #include "mvlib/core.hpp"
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cmath>
@@ -113,7 +114,7 @@ private:
   Telemetry(const Telemetry&) = delete;
   Telemetry& operator=(const Telemetry&) = delete;
 
-  LogLevel m_minLevel;
+  std::atomic<LogLevel> m_minLevel;
   std::unique_ptr<pros::Task> m_transmitHandleTask = nullptr;
   void writeFrameDirect(const uint8_t *data, size_t len);
   void transmit(uint8_t header, const uint8_t *data, size_t len); // Use raw header

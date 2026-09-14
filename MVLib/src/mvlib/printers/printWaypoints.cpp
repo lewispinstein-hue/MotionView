@@ -88,6 +88,7 @@ void Logger::printWaypoints() {
     }
 
     if (!shouldTrigger) continue;
+    if (!m_config.printWaypoints.load()) continue;
 
     // Send binary through terminal
     if (m_config.logToTerminal.load()) {

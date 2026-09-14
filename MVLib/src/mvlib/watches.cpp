@@ -38,7 +38,7 @@ void Logger::resyncAllWatchesRoster() {
       detail::Telemetry::getInstance().sendRoster(watch.id, watch.elevatedLabel, true);
     }
   }
-  m_lastRosterFlush = pros::millis();
+  m_lastRosterFlush.store(pros::millis());
 }
 
 bool Logger::resyncWatchRoster(WatchId id) {
@@ -53,7 +53,7 @@ bool Logger::resyncWatchRoster(WatchId id) {
   if (!watch->elevatedLabel.empty()) {
     detail::Telemetry::getInstance().sendRoster(watch->id, watch->elevatedLabel, true);
   }
-  m_lastRosterFlush = pros::millis();
+  m_lastRosterFlush.store(pros::millis());
   return true;
 }
 
@@ -115,5 +115,16 @@ std::string Logger::evaluateWatch(WatchId id, bool emit) {
   }
 
   return valueStr;
+}
+
+void Logger::configureDefaultWatch(WatchId id, uint32_t trippedRepeatIntervalMs) {
+  detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
+  if (!lock.isLocked()) return;
+
+  InternalWatch* watch = m_findWatchUnlocked(id);
+  if (!watch) return;
+
+  watch->suppressNormalOutput = true;
+  watch->trippedRepeatIntervalMs = trippedRepeatIntervalMs;
 }
 } // namespace mvlib

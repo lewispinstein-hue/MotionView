@@ -149,7 +149,8 @@ public:
   /**
    * @brief Enable/disable Pose/Telemetry printing.
    *
-   * @note If false, MotionView will only update with watches.
+   * @note If false, MotionView stops receiving periodic pose/drivetrain telemetry.
+   *       Watches, logs, and waypoint events continue independently.
    */
   void setPrintTelemetry(bool v);
 
@@ -159,7 +160,9 @@ public:
   void setPrintWatches(bool v);
 
   /**
-   * @brief Enable/disable printing of waypoints.
+   * @brief Enable/disable waypoint event output.
+   *
+   * @note Waypoint reach and timeout evaluation continues while output is disabled.
    */
   void setPrintWaypoints(bool v);
 
@@ -304,8 +307,9 @@ public:
    * @param fmt printf-style format string.
    * @param ... Format arguments.
    *
-   * @note Messages are truncated to 512 bytes.
-   * @note These are affected by minLoggerLevel.
+   * @note Messages are formatted into a 1024-byte buffer. Live terminal output
+   *       is truncated to 511 text bytes; SD output can contain up to 1023 bytes.
+   * @note These are affected by setMinLogLevel().
    *
    * \b Example
    * @code
@@ -403,9 +407,10 @@ public:
 
   /**
    * @struct DefaultWatches
-   * @brief Built-in watchdog watches that stay silent while normal and periodically log when tripped.
+   * @brief Built-in watchdog watches that stay silent while normal and repeat a
+   *        stable tripped state every five seconds.
    *
-   * @note These are affected by minLoggerLevel.
+   * @note These are affected by setMinLogLevel().
    *
    * @note Drivetrain watches will fail if setRobot has not been set, or if the
    *       drivetrain pointers are invalid.
@@ -417,7 +422,7 @@ public:
     /// @brief Watch right drivetrain temperature. Warns above 50 C.
     bool rightDrivetrainWatchdog = true;
 
-    /// @brief Watch battery temperature and voltage. Warns above 45 C or outside 12000-13250 mV.
+    /// @brief Watch battery temperature and voltage. Warns above 45 C or outside 11700-13250 mV.
     bool batteryWatchdog = true;
   };
 
@@ -554,6 +559,12 @@ private:
     /// @brief Last emitted rendered value (for onChange).
     std::optional<std::string> lastValue = std::nullopt;
 
+    /// @brief Suppress normal-state output while still tracking its value.
+    bool suppressNormalOutput = false;
+
+    /// @brief Repeat a stable tripped on-change sample at this interval; zero disables repeats.
+    uint32_t trippedRepeatIntervalMs = 0;
+
     /// @brief Computes (level, rendered eval string, label, predicate) for the current sample.
     std::shared_ptr<std::function<std::tuple<LogLevel, std::string, std::string, bool>()>> eval;
 
@@ -575,6 +586,9 @@ private:
 
   /// @brief Re-send the roster entry for a single watch.
   bool resyncWatchRoster(WatchId id);
+
+  /// @brief Configure the output policy used by built-in watchdog watches.
+  void configureDefaultWatch(WatchId id, uint32_t trippedRepeatIntervalMs);
 
   /// @brief Find a watch without taking m_mutex.
   InternalWatch* m_findWatchUnlocked(WatchId id);
@@ -679,6 +693,9 @@ private:
     /// @brief Is the waypoint active (not yet reached or timed out)?
     bool active = true;
 
+    /// @brief Whether waypoint event output was enabled at registration.
+    bool createdWithOutputEnabled = true;
+
     /// @brief Latched true after this waypoint has ever been reached.
     bool reached = false;
 
@@ -711,6 +728,9 @@ private:
 
   /// @brief Print all waypoints that are due
   void printWaypoints();
+
+  /// @brief Write a waypoint creation record to the active SD log.
+  void logWaypointCreatedToSD(const InternalWaypoint& waypoint);
 
   /// @brief Print pose data
   void printTelemetry();
@@ -761,7 +781,7 @@ private:
   std::shared_ptr<std::function<std::optional<Pose>()>> m_getPose = nullptr;
   std::shared_ptr<pros::Mutex> m_poseGetterMutex = nullptr;
 
-  uint32_t m_lastRosterFlush{0};
+  std::atomic<uint32_t> m_lastRosterFlush{0};
   uint32_t m_lastTerminalFlush{0};
   uint32_t m_lastTelemetryPrint{0};
 

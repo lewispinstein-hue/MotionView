@@ -139,7 +139,7 @@ void Logger::update() {
   uint32_t now = pros::millis();
 
   if (m_config.printWatches.load()) printWatches();
-  if (m_config.printWaypoints.load()) printWaypoints();
+  printWaypoints();
 
   const uint32_t telemetryRate = m_config.logToTerminal.load() ?
       m_terminalPollingRate.load() : m_sdPollingRate.load();
@@ -151,10 +151,12 @@ void Logger::update() {
 
   // Periodically sync IDs to labels so the frontend can resolve them
   const uint32_t rosterSyncInterval = m_rosterSyncAllInterval.load();
-  if (rosterSyncInterval != 0 && now - m_lastRosterFlush >= rosterSyncInterval) {
+  const uint32_t lastRosterFlush = m_lastRosterFlush.load();
+  if (rosterSyncInterval != 0 && now - lastRosterFlush >= rosterSyncInterval) {
     this->resyncAllWatchesRoster();
     this->resyncAllWaypointsRoster();
-    m_lastRosterFlush = now;
+    uint32_t expected = lastRosterFlush;
+    m_lastRosterFlush.compare_exchange_strong(expected, now);
   }
 }
 } // namespace mvlib

@@ -107,6 +107,7 @@ WaypointHandle Logger::internalRegisterWaypoint(std::string name, WaypointParams
   wp.startTimeMs = pros::millis();
   wp.active = true;
   wp.timedOut = false;
+  wp.createdWithOutputEnabled = m_config.printWaypoints.load();
 
   if (details.tarT.has_value() && !details.thetaTol.has_value())
     details.thetaTol = details.linearTol;
@@ -118,7 +119,7 @@ WaypointHandle Logger::internalRegisterWaypoint(std::string name, WaypointParams
 
   m_waypoints.push_back(std::move(wp));
 
-  if (!m_config.printWaypoints.load()) return WaypointHandle(id);
+  if (!m_waypoints.back().createdWithOutputEnabled) return WaypointHandle(id);
 
   if (m_config.logToTerminal.load()) {
     detail::Telemetry::getInstance().sendRoster(id, m_waypoints.back().name);
@@ -136,12 +137,14 @@ WaypointHandle Logger::internalRegisterWaypoint(std::string name, WaypointParams
     detail::Telemetry::getInstance().sendWaypointCreated(pkt);
   }
 
-  if (m_config.logToSD.load()) {
-    logToSD(LogLevel::OVERRIDE, "[WPOINT],%d,CREATED,%d,%s,%s",
-            pros::millis(), id, m_waypoints.back().name.c_str(),
-            formatParams(details).c_str());
-  }
+  if (m_config.logToSD.load()) logWaypointCreatedToSD(m_waypoints.back());
   return WaypointHandle(id);
+}
+
+void Logger::logWaypointCreatedToSD(const InternalWaypoint& waypoint) {
+  logToSD(LogLevel::OVERRIDE, "[WPOINT],%u,CREATED,%u,%s,%s",
+          waypoint.startTimeMs, waypoint.id, waypoint.name.c_str(),
+          formatParams(waypoint.params).c_str());
 }
 
 std::optional<std::string> Logger::m_getRosterNameUnlocked(uint16_t id, bool isElevated) const {
@@ -158,7 +161,7 @@ bool Logger::resyncWaypointRoster(WPId id) {
   if (!waypoint || !waypoint->active) return false;
 
   detail::Telemetry::getInstance().sendRoster(waypoint->id, waypoint->name);
-  m_lastRosterFlush = pros::millis();
+  m_lastRosterFlush.store(pros::millis());
   return true;
 }
 
@@ -171,6 +174,6 @@ void Logger::resyncAllWaypointsRoster() {
     if (!wp.active) continue;
     detail::Telemetry::getInstance().sendRoster(wp.id, wp.name);
   }
-  m_lastRosterFlush = pros::millis();
+  m_lastRosterFlush.store(pros::millis());
 }
 } // namespace mvlib

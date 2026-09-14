@@ -41,6 +41,11 @@ bool Logger::initSDLogger() {
 
   switch (result.error) {
   case detail::SdInitError::none:
+    if (m_config.printWaypoints.load()) {
+      for (const auto& waypoint : m_waypoints) {
+        if (waypoint.createdWithOutputEnabled) logWaypointCreatedToSD(waypoint);
+      }
+    }
     _MVLIB_FORWARD_INFO("initSDLogger() Successfully initialized SD card with filename: %s",
                         m_sdSink->absoluteFilename());
     return true;

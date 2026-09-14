@@ -97,15 +97,16 @@ Telemetry& Telemetry::getInstance() {
 }
 
 void Telemetry::setMinLevel(LogLevel level) {
-  m_minLevel = level;
+  m_minLevel.store(level);
 }
 
 bool Telemetry::shouldLog(LogLevel level) const {
   if (level == LogLevel::OVERRIDE) return true;
-  if (m_minLevel == LogLevel::OFF || m_minLevel == LogLevel::NONE) return false;
+  const LogLevel minLevel = m_minLevel.load();
+  if (minLevel == LogLevel::OFF || minLevel == LogLevel::NONE) return false;
 
   // Casting to uint8_t ensures numeric comparison works for LogLevel enum
-  return static_cast<uint8_t>(level) >= static_cast<uint8_t>(m_minLevel);
+  return static_cast<uint8_t>(level) >= static_cast<uint8_t>(minLevel);
 }
 
 uint16_t packTelemetryTheta(double degrees) {
@@ -224,7 +225,8 @@ void Telemetry::sendLog(LogLevel level, const char *fmt, ...) {
 [[noreturn]] void telemetryIoTask(void *ignore) {
   (void)ignore;
   // A local buffer to batch multiple frames into one VEXos payload
-  std::array<uint8_t, 512> batchBuffer{};
+  // A single valid COBS frame can be larger than a VEXos payload batch.
+  std::array<uint8_t, kTelemetryMaxEncodedFrameBytes> batchBuffer{};
   size_t batchLen = 0;
 
   auto flushBatch = [&]() {

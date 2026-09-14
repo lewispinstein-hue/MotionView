@@ -47,9 +47,19 @@ void Logger::printWatches() {
       if (!watch || !watch->active) continue;
 
       if (watch->onChange) {
-        if (watch->lastValue.has_value() && watch->lastValue.value() == valueStr) {
+        const bool valueChanged = !watch->lastValue.has_value() ||
+                                  watch->lastValue.value() != valueStr;
+        const bool repeatTripped = !valueChanged && tripped &&
+            watch->trippedRepeatIntervalMs != 0 &&
+            nowMs - watch->lastPrintMs >= watch->trippedRepeatIntervalMs;
+
+        if (!valueChanged && !repeatTripped) {
           continue;
-        } else if (watch->lastPrintMs != 0 && (nowMs - watch->lastPrintMs) < watch->intervalMs) {
+        } else if (valueChanged && !tripped && watch->suppressNormalOutput) {
+          watch->lastValue = valueStr;
+          continue;
+        } else if (valueChanged && watch->lastPrintMs != 0 &&
+                   (nowMs - watch->lastPrintMs) < watch->intervalMs) {
           continue;
         } else {
           watch->lastValue = valueStr;

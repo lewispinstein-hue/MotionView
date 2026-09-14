@@ -35,8 +35,8 @@ static std::string renderValue(bool v) {
 }
 
 /**
- * @brief Render a T pointer as a hex string.
- * \return The rendered hex string.
+ * @brief Render a T pointer address as a decimal string.
+ * \return The rendered decimal string.
  */
 template <class T>
 static std::string renderValue(const T* v) {
