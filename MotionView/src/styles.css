@@ -411,7 +411,7 @@ canvas#c {
 
 .viewingSidebarPanel {
   display: block;
-  min-height: 100%;
+  min-height: 0;
   overflow: visible;
 }
 
@@ -424,7 +424,7 @@ canvas#c {
 .viewingSidebarPanel > #waypointList,
 .viewingSidebarPanel > #poseList {
   flex: 1 1 0;
-  min-height: 100%;
+  min-height: 0;
   max-height: none;
   overflow: visible;
   border: 0;
@@ -550,7 +550,7 @@ label {
 
 .virtualListContent {
   position: relative;
-  min-height: 100%;
+  min-height: 0;
 }
 
 .virtualListRow {
