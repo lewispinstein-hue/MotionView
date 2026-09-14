@@ -5,7 +5,7 @@
   - [Viewing Mode](docs/MotionView/ViewingMode.md)
   - Planning Mode
     - [Planning Mode](docs/MotionView/PlanningMode/PlanningMode)
-    - [Planning Mode Template](docs/MotionView/PlanningMode/PlanningModeExportTemplate.md)
+    - [Planning Mode Template](docs/MotionView/PlanningMode/PlanningExportTemplate.md)
   - [Keybinds](docs/MotionView/Keybinds.md)
   - Setup
     - [Installing on macOS](docs/MotionView/InstallingMacOS.md)

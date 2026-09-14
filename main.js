@@ -1,4 +1,4 @@
-let sidebarVersion = '2026-09-07-sidebar-tree-v4';
+let sidebarVersion = '2026-09-14-planning-mode-v5';
 let sidebarTreeState = {};
 let sidebarSearchContent = {};
 let sidebarSearchRequest = 0;
@@ -633,14 +633,14 @@ window.$docsify = {
   name: 'MotionView Docs',
   repo: 'lewispinstein-hue/MotionView',
   routerMode: 'history',
-  loadSidebar: '_sidebar.md?v=2026-09-07-sidebar-tree-v4',
+  loadSidebar: '_sidebar.md?v=2026-09-14-planning-mode-v5',
   alias: {
     '/': '/Home.md',
     '/README': '/Home.md',
     '/README.md': '/Home.md',
     '/.*/README': '/Home.md',
     '/.*/README.md': '/Home.md',
-    '/.*/_sidebar.md': '/_sidebar.md?v=2026-09-07-sidebar-tree-v4'
+    '/.*/_sidebar.md': '/_sidebar.md?v=2026-09-14-planning-mode-v5'
   },
   subMaxLevel: 0,
   auto2top: true,
