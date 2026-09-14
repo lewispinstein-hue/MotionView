@@ -1,4 +1,4 @@
-x<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -8,6 +8,16 @@ x<!doctype html>
       content="MotionView and MVLib documentation"
     />
     <title>MotionView Docs</title>
+    <script>
+      (function () {
+        if (
+          window.location.hostname.endsWith('github.io') &&
+          /^\/MotionView\/?$/.test(window.location.pathname)
+        ) {
+          window.location.replace('/MotionView/Home');
+        }
+      })();
+    </script>
     <script>
       (function () {
         var basePath = window.location.hostname.endsWith('github.io') ? '/MotionView/' : '/';
