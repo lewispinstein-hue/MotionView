@@ -13,8 +13,8 @@ Within these docs, there are referrals to human-readable files that are likely u
 
 ## MotionView (Desktop Client)
 - [Viewing Mode](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/ViewingMode.md): Live streaming, timeline, logs, watches, and waypoint UI basics.
-- [Planning Mode](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/PlanningMode.md): How to open and use MotionView's autonomous planning mode.
-- [Planning Mode Template](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/PlanningExportTemplate.md): Planning export templates, variables, generated code, and timeline node insertion.
+- [Planning Mode](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/PlanningMode/PlanningMode.md): How to open and use MotionView's autonomous planning mode.
+- [Planning Mode Template](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/PlanningMode/PlanningExportTemplate.md): Planning export templates, variables, generated code, and timeline node insertion.
 - [Keybinds](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/Keybinds.md): Keyboard shortcuts for viewing, playback, planning, and navigation.
 
 ### Setup & Installation
