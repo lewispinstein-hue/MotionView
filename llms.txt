@@ -13,9 +13,11 @@ Within these docs, there are referrals to human-readable files that are likely u
 
 ## MotionView (Desktop Client)
 - [Viewing Mode](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/ViewingMode.md): Live streaming, timeline, logs, watches, and waypoint UI basics.
-- [Planning Mode](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/PlanningMode/PlanningMode.md): How to open and use MotionView's autonomous planning mode.
-- [Planning Mode Template](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/PlanningMode/PlanningExportTemplate.md): Planning export templates, variables, generated code, and timeline node insertion.
 - [Keybinds](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/Keybinds.md): Keyboard shortcuts for viewing, playback, planning, and navigation.
+
+### Planning Mode
+- [Planning Mode](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/PlanningMode/PlanningMode.md): Creating autonomous paths with waypoints; using theta handles; creating custom-event objects and methods; placing events on the timeline; copying or exporting generated code; planning without odometry; and troubleshooting.
+- [Planning Export Template](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/PlanningMode/PlanningExportTemplate.md): Defining per-waypoint export templates, supported variables (`x`, `y`, `theta`, `distance`, `iteration`, and `speed`), timeline event insertion order, and generated-code examples.
 
 ### Setup & Installation
 - [Installing on macOS](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/InstallingMacOS.md): macOS installation and Gatekeeper quarantine fixes.
