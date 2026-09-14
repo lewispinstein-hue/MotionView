@@ -22,6 +22,18 @@ struct BridgeState(Mutex<Option<Child>>);
 struct BridgeOrigin(Mutex<Option<String>>);
 struct QuitState(Mutex<bool>);
 
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BridgePidRecord {
+    pid: u32,
+    command_marker: String,
+}
+
+struct SpawnedBridge {
+    child: Child,
+    command_marker: String,
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SystemInfo {
@@ -240,8 +252,6 @@ fn stop_bridge(state: &tauri::State<BridgeState>, app: &tauri::AppHandle) {
     if let Ok(path) = pid_path(app) {
         let _ = fs::remove_file(path);
     }
-    #[cfg(windows)]
-    cleanup_bridge_processes_by_name();
 }
 
 #[cfg(unix)]
@@ -312,33 +322,53 @@ fn kill_pid(pid: u32) {
         .status();
 }
 
-#[cfg(windows)]
-fn cleanup_bridge_processes_by_name() {
-    let script = r#"
-$targets = Get-Process | Where-Object {
-  $_.ProcessName -like 'motionview-py*'
+#[cfg(unix)]
+fn process_command(pid: u32) -> Option<String> {
+    let output = Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "command="])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let command = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!command.is_empty()).then_some(command)
 }
-foreach ($proc in $targets) {
-  try {
-    Stop-Process -Id $proc.Id -Force -ErrorAction Stop
-  } catch {
-  }
-}
-"#;
 
-    let _ = Command::new("powershell")
+#[cfg(windows)]
+fn process_command(pid: u32) -> Option<String> {
+    let script = format!(
+        "$process = Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}'; if ($null -ne $process) {{ $process.CommandLine }}"
+    );
+    let output = Command::new("powershell")
         .args([
             "-NoProfile",
             "-NonInteractive",
             "-ExecutionPolicy",
             "Bypass",
             "-Command",
-            script,
+            &script,
         ])
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .status();
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let command = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!command.is_empty()).then_some(command)
+}
+
+#[cfg(all(not(unix), not(windows)))]
+fn process_command(_: u32) -> Option<String> {
+    None
+}
+
+fn is_matching_bridge_process(record: &BridgePidRecord) -> bool {
+    process_command(record.pid).is_some_and(|command| command.contains(&record.command_marker))
 }
 
 fn cleanup_previous_bridge(app: &tauri::AppHandle) {
@@ -346,24 +376,50 @@ fn cleanup_previous_bridge(app: &tauri::AppHandle) {
         Ok(p) => p,
         Err(_) => return,
     };
-    let pid_str = match fs::read_to_string(&path) {
+    let contents = match fs::read_to_string(&path) {
         Ok(s) => s,
         Err(_) => return,
     };
-    if let Ok(pid) = pid_str.trim().parse::<u32>() {
-        kill_pid(pid);
+
+    // Older releases stored only a PID. Retain their cleanup behavior only when
+    // the currently running command is still recognizably a MotionView bridge.
+    let record = serde_json::from_str::<BridgePidRecord>(&contents)
+        .ok()
+        .or_else(|| {
+            contents
+                .trim()
+                .parse::<u32>()
+                .ok()
+                .map(|pid| BridgePidRecord {
+                    pid,
+                    command_marker: "motionview-py".to_string(),
+                })
+        });
+    if let Some(record) = record {
+        if is_matching_bridge_process(&record) {
+            kill_pid(record.pid);
+        } else {
+            eprintln!(
+                "Not terminating stale bridge PID {} because its command no longer matches MotionView.",
+                record.pid
+            );
+        }
     }
     let _ = fs::remove_file(path);
-    #[cfg(windows)]
-    cleanup_bridge_processes_by_name();
 }
 
-fn write_bridge_pid(app: &tauri::AppHandle, pid: u32) {
+fn write_bridge_pid(app: &tauri::AppHandle, pid: u32, command_marker: &str) {
     if let Ok(path) = pid_path(app) {
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        let _ = fs::write(path, pid.to_string());
+        let record = BridgePidRecord {
+            pid,
+            command_marker: command_marker.to_string(),
+        };
+        if let Ok(serialized) = serde_json::to_string(&record) {
+            let _ = fs::write(path, serialized);
+        }
     }
 }
 
@@ -463,7 +519,7 @@ fn stage_bridge_bin_for_runtime(
     Ok(staged)
 }
 
-fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child, tauri::Error> {
+fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<SpawnedBridge, tauri::Error> {
     // Setup Logging Directory and File
     // Prefer app_data_dir/Logs, falling back to project root/Logs if that fails
     let log_dir = app
@@ -555,7 +611,8 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child
         ))
     })?;
 
-    cmd.args(["--host", "127.0.0.1", "--port", &port.to_string()])
+    let child = cmd
+        .args(["--host", "127.0.0.1", "--port", &port.to_string()])
         .env("MOTIONVIEW_LOG_PATH", &log_path)
         .env("MOTIONVIEW_BUNDLE_ROOTS", bundle_root_env)
         .stdout(std::process::Stdio::from(log))
@@ -564,7 +621,12 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child
         .map_err(|e| {
             eprintln!("BRIDGE ERROR: Failed to spawn process: {}", e);
             tauri::Error::Io(e)
-        })
+        })?;
+
+    Ok(SpawnedBridge {
+        child,
+        command_marker: spawn_label,
+    })
 }
 
 #[tauri::command]
@@ -660,9 +722,9 @@ fn main() {
         .setup(|app| {
             cleanup_previous_bridge(app.handle());
             let port = pick_free_port();
-            let child = spawn_bridge(app.handle(), port)?;
-            write_bridge_pid(app.handle(), child.id());
-            *app.state::<BridgeState>().0.lock().unwrap() = Some(child);
+            let bridge = spawn_bridge(app.handle(), port)?;
+            write_bridge_pid(app.handle(), bridge.child.id(), &bridge.command_marker);
+            *app.state::<BridgeState>().0.lock().unwrap() = Some(bridge.child);
             *app.state::<BridgeOrigin>().0.lock().unwrap() =
                 Some(format!("http://127.0.0.1:{port}"));
 
