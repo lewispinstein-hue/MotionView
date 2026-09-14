@@ -11,7 +11,7 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2.11.1", features = [] }
 tauri-plugin-shell = "2"
 tauri-plugin-posthog = "0.2.4"
 serde = { version = "1", features = ["derive"] }

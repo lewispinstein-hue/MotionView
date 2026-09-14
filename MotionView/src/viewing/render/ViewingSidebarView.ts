@@ -1,5 +1,6 @@
 import type { ViewingListsDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
+import { requestDrawAll } from "../../render/renderScheduler";
 import { LogListView } from "./LogListView";
 import { PoseListView } from "./PoseListView";
 import { WatchListView } from "./WatchListView";
@@ -69,6 +70,7 @@ export class ViewingSidebarView {
       this.logs.render();
       this.waypoints.render();
       this.updateCounts();
+      requestDrawAll();
     });
     for (const control of sortControls) {
       control.addEventListener("change", () => this.refreshCounts());
@@ -105,6 +107,7 @@ export class ViewingSidebarView {
       this.waypoints.render();
       this.poses.render();
       this.updateCounts();
+      requestDrawAll();
     });
     this.setActiveSection("watches");
   }
