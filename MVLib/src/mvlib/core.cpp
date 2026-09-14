@@ -103,7 +103,7 @@ void Logger::start() {
   }
 
   if (!checkRobotConfig()) {
-    _MVLIB_FORWARD_ERROR("start() failed! At least one pointer set by setRobot(Drivetrain) is nullptr. Using speed estimation.");
+    _MVLIB_FORWARD_ERROR("start() At least one pointer set by setRobot(Drivetrain) is nullptr. Using speed estimation.");
   }
 
   m_task = std::make_unique<pros::Task>([this]() mutable {
