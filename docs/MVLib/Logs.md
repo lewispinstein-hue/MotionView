@@ -95,6 +95,12 @@ These functions follow normal MVLib routing:
 - if terminal logging is enabled, MotionView receives them live
 - if SD logging is enabled, they are also written to the SD log
 
+## Message Length
+
+MVLib formats log messages into a 1024-byte buffer. Live terminal telemetry carries
+up to 511 text bytes per log message, while SD log lines can contain up to 1023
+formatted message bytes.
+
 ## Important `v2.0.0` Note
 
 After `Logger::getInstance()` is created, do not use raw `printf`, `std::cout`, or other plain terminal prints for MVLib live logging.

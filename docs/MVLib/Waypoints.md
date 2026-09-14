@@ -112,8 +112,7 @@ Behavior:
 
 Note:
 
-- SD `[WPOINT]` creation lines include the retriggerable flag.
-- The current binary live waypoint-created packet does not carry the retriggerable flag, so live MotionView may initially treat a retriggerable waypoint as non-retriggerable. Use SD log import when exact retriggerable state needs to be preserved in exported run data.
+- Both live binary waypoint-created packets and SD `[WPOINT]` creation lines include the retriggerable flag.
 
 ## `WaypointHandle`
 
@@ -241,7 +240,7 @@ struct WaypointOffset {
 
 With waypoint printing enabled, MVLib emits:
 
-- `CREATED` when you call `addWaypoint(...)`
+- `CREATED` when you call `addWaypoint(...)` while waypoint printing is enabled. If the waypoint was registered before `logger.start()`, MVLib writes its SD creation record after the SD log opens while preserving the waypoint's original creation timestamp.
 - `REACHED` when the waypoint enters tolerance
 - `TIMEDOUT` when timeout expires first
 

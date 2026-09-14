@@ -94,8 +94,8 @@ Controls whether MVLib emits periodic pose/drivetrain telemetry.
 
 If disabled:
 
-- MotionView can still receive logs and watches
-- path/pose-driven features will stop updating
+- MotionView can still receive logs, watches, and waypoint events
+- waypoint evaluation and `WaypointHandle` lifecycle state continue independently
 
 ### `setPrintWaypoints(bool)`
 
@@ -108,6 +108,22 @@ In current MVLib, that means:
 - `TIMEDOUT`
 
 It does not mean periodic waypoint offset streaming anymore. That old terminal-side offset event flow was removed.
+
+Disabling this output does not pause waypoint tracking. MVLib continues updating
+`reached()`, `timedOut()`, `active()`, and `getOffset()` lifecycle fields, but it
+does not emit `CREATED`, `REACHED`, or `TIMEDOUT` records until output is enabled
+again. Events that occur while output is disabled are not replayed.
+
+## Built-in Watchdogs
+
+`setDefaultWatches(...)` registers drivetrain-temperature and battery watchdogs.
+They stay silent while their values are normal. On a tripped condition, MVLib emits
+a warning immediately, honors the 750 ms on-change debounce for changed values,
+and repeats an unchanged tripped state every five seconds.
+
+- drivetrain temperature warns at `50 C` or above
+- battery temperature warns at `45 C` or above
+- battery voltage warns outside `11.7 V` to `13.25 V`
 
 ### `setLogSystemInfo(bool)`
 
