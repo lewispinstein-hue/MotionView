@@ -1,5 +1,8 @@
 # Planning Template
 
+<p align="left">
+    <img src="assets/MotionView/PlanningDocs/PlanningExportTemplate.png" alt="Theta Handle" width="700" />
+</p>
 
 This document defines the Planning mode export template system used by MotionView.
 Used for visually generating autonomous routines for the robot to follow. Completely platform and language-agnostic — can be used for any robot, any language, and any IDE.
