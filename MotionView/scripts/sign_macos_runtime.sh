@@ -45,15 +45,13 @@ while IFS= read -r -d '' candidate; do
   if is_framework_member "$candidate"; then
     continue
   fi
+  if [[ "$candidate" == "$pros_runtime_dir/motionview-pros" ]]; then
+    continue
+  fi
   if is_macho_file "$candidate"; then
     sign_file "$candidate"
   fi
 done < <(find "$pros_runtime_dir" -type f -print0)
-
-# Sign framework bundles after their inner executable and libraries.
-while IFS= read -r -d '' framework; do
-  sign_file "$framework"
-done < <(find "$pros_runtime_dir" -type d -name '*.framework' -depth -print0)
 
 # Sign the PyInstaller launcher after its runtime dependencies.
 sign_file "$pros_runtime_dir/motionview-pros"
