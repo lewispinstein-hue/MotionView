@@ -104,27 +104,6 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
         }
     }
 
-    // Tauri packages externalBin helpers beside the macOS app executable and
-    // signs them as nested code. Prefer that location over resource fallbacks
-    // so the bridge stays within MotionView's notarized bundle.
-    #[cfg(target_os = "macos")]
-    if let Ok(exe_dir) = std::env::current_exe().and_then(|p| {
-        p.parent()
-            .map(|p| p.to_path_buf())
-            .ok_or(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "no exe parent",
-            ))
-    }) {
-        for name in &names {
-            let candidate = exe_dir.join(name);
-            println!("CHECKING MACOS SIDECAR PATH: {:?}", candidate);
-            if candidate.exists() {
-                return Ok(candidate);
-            }
-        }
-    }
-
     // Collect search roots in priority order:
     // 1) Dev resource bin folders (when running from source; skipped in release builds)
     // 2) Bundled updater/resource bridge folders
@@ -548,9 +527,9 @@ fn bridge_bin_for_launch(
     source: &std::path::Path,
 ) -> Result<PathBuf, tauri::Error> {
     // A copied macOS executable is no longer contained by the notarized app
-    // bundle. Launch the signed resource in place so Gatekeeper evaluates it
-    // as part of MotionView. Windows and Linux keep the staged executable path
-    // needed by their installer/runtime layouts.
+    // bundle. Launch the signed onedir runtime in place so its Python
+    // framework retains the same Team ID. Windows and Linux keep the staged
+    // executable path needed by their installer/runtime layouts.
     #[cfg(target_os = "macos")]
     {
         let _ = app;

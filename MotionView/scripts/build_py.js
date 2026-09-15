@@ -157,16 +157,15 @@ function copySidecar(baseName) {
   console.log(`Copied updater bridge to ${bridgeFallbackPath}`);
 }
 
-function copyRuntimeDir(baseName) {
+function copyRuntimeDir(baseName, destination = path.join(binDir, baseName)) {
   const distRuntimeDir = path.join(distDir, baseName);
   if (!fs.existsSync(distRuntimeDir) || !fs.statSync(distRuntimeDir).isDirectory()) {
     throw new Error(`PyInstaller runtime directory not found: ${distRuntimeDir}`);
   }
 
-  const runtimeDir = path.join(binDir, baseName);
-  fs.rmSync(runtimeDir, { recursive: true, force: true });
-  copyResolvedTree(distRuntimeDir, runtimeDir);
-  console.log(`Copied runtime directory to ${runtimeDir}`);
+  fs.rmSync(destination, { recursive: true, force: true });
+  copyResolvedTree(distRuntimeDir, destination);
+  console.log(`Copied runtime directory to ${destination}`);
 }
 
 function copyRuntimeArchive(baseName) {
@@ -197,10 +196,12 @@ installRequirements(bridgeRequirements);
 installProsRequirements();
 removeObsoletePyInstallerPackages();
 
+const bridgeUsesOneDir = process.platform === "darwin";
 buildPyInstaller(
   "motionview-py",
   bridgeEntry,
   [
+    ...(bridgeUsesOneDir ? ["--onedir"] : []),
     // ensure all lazy-loaded modules get bundled
     "--collect-all", "fastapi",
     "--collect-all", "starlette",
@@ -213,7 +214,11 @@ buildPyInstaller(
   ],
   { noConsole: true },
 );
-copySidecar("motionview-py");
+if (bridgeUsesOneDir) {
+  copyRuntimeDir("motionview-py", bridgeBinDir);
+} else {
+  copySidecar("motionview-py");
+}
 
 buildPyInstaller(
   "motionview-pros",
