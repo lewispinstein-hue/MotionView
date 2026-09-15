@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Manual Version Override (MUST be a 3-point version, e.g., 0.9.1 or 0.9.1-beta)'
+        description: 'Manual Version Override (MUST be SemVer, e.g., 0.9.1, 0.9.1-pre, or 0.9.1-beta.1)'
         required: true
 
 concurrency:
@@ -38,11 +38,10 @@ jobs:
             RAW_VERSION="${GITHUB_REF#refs/tags/}"
           fi
 
-          # Strict Regex Validation
-          # Matches: vX.Y.Z, vX.Y.Z-alpha, vX.Y.Z-beta, vX.Y.Z-stable
-          # Rejects anything else completely.
-          if [[ ! "$RAW_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|stable))?$ ]]; then
-            echo "::error::Invalid version format: $RAW_VERSION. Must be vX.Y.Z or vX.Y.Z-(alpha|beta|stable)"
+          # Strict SemVer validation with an optional prerelease identifier.
+          # Matches: vX.Y.Z, vX.Y.Z-pre, vX.Y.Z-beta.1, and vX.Y.Z-rc.2.
+          if [[ ! "$RAW_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "::error::Invalid version format: $RAW_VERSION. Must be vX.Y.Z or vX.Y.Z-prerelease"
             exit 1
           fi
 
