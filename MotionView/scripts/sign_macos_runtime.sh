@@ -45,9 +45,11 @@ while IFS= read -r -d '' candidate; do
   if [[ "$candidate" == "$pros_runtime_dir/motionview-pros" ]]; then
     continue
   fi
-  # PyInstaller's copied framework wrapper is ambiguous to codesign. The
-  # versioned binaries below Versions/ are real Mach-O files and are signed.
-  if is_framework_root_executable "$candidate"; then
+  # copyResolvedTree flattens PyInstaller's framework symlinks into duplicate
+  # wrapper binaries. Those wrappers are ambiguous to codesign and unused; the
+  # versioned binaries and the _internal launcher remain in the runtime.
+  if is_framework_root_executable "$candidate" && is_macho_file "$candidate"; then
+    rm -f "$candidate"
     continue
   fi
   if is_macho_file "$candidate"; then
