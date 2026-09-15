@@ -21,6 +21,10 @@ is_macho_file() {
   [[ "$(file -b "$1")" == Mach-O* ]]
 }
 
+is_framework_root_executable() {
+  [[ "${1%/*}" == *.framework ]]
+}
+
 for sidecar in \
   "$bin_dir"/motionview-py \
   "$bin_dir"/motionview-py-* \
@@ -39,6 +43,11 @@ fi
 
 while IFS= read -r -d '' candidate; do
   if [[ "$candidate" == "$pros_runtime_dir/motionview-pros" ]]; then
+    continue
+  fi
+  # PyInstaller's copied framework wrapper is ambiguous to codesign. The
+  # versioned binaries below Versions/ are real Mach-O files and are signed.
+  if is_framework_root_executable "$candidate"; then
     continue
   fi
   if is_macho_file "$candidate"; then
