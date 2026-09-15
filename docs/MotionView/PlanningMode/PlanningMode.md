@@ -51,7 +51,7 @@ Now, just click the **Export** button to instantly update your auton code!
 ## What if I don't have odometry?
 If you are using an environment such as VEXCode that does not easily provide odometry, you can use Planning Mode to the same effect! Instead of using a waypoint template that exports with `x, y, theta` values, use the built-in `${distance}` and `${theta}` variables. Example:
 
-```c++
+```cpp
 // Template code:
 Drivetrain.driveFor(forward, ${distance}, inches);
 Drivetrain.turnToHeading(${theta}, degrees);
