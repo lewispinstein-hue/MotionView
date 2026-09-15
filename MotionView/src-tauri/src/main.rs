@@ -4,6 +4,8 @@ use sha2::{Digest, Sha256};
 use std::io::Read;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
+#[cfg(unix)]
+use std::time::Duration;
 #[cfg(not(unix))]
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
@@ -12,7 +14,6 @@ use std::{
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
-    time::Duration,
 };
 
 use tauri::{Emitter, Manager, RunEvent, State, Window};
@@ -716,10 +717,39 @@ fn persist_window_state(app_handle: &tauri::AppHandle) {
 #[cfg(mobile)]
 fn persist_window_state(_: &tauri::AppHandle) {}
 
+// Windows gives the process entry thread a 1 MiB stack. Tauri's Windows
+// startup path can exceed that during release builds, which otherwise aborts
+// before a window or log can be created with STATUS_STACK_OVERFLOW.
+#[cfg(windows)]
 fn main() {
+    let app_thread = std::thread::Builder::new()
+        .name("motionview-main".into())
+        .stack_size(8 * 1024 * 1024)
+        .spawn(run_app)
+        .expect("failed to create MotionView application thread");
+
+    if app_thread.join().is_err() {
+        eprintln!("MotionView application thread terminated unexpectedly.");
+        std::process::exit(1);
+    }
+}
+
+#[cfg(not(windows))]
+fn main() {
+    run_app();
+}
+
+fn run_app() {
     println!("DO NOT CLOSE THIS WINDOW. MotionView runs off of it and cannot function without this window open.");
 
-    maybe_add_posthog_plugin(tauri::Builder::default())
+    let builder = tauri::Builder::default();
+    // This is paired with the larger Windows application thread above. Tauri
+    // normally requires the native entry thread, so explicitly opt into its
+    // supported Windows event-loop mode for a dedicated application thread.
+    #[cfg(windows)]
+    let builder = builder.any_thread();
+
+    maybe_add_posthog_plugin(builder)
         .plugin(tauri_plugin_shell::init())
         .manage(BridgeState(Mutex::new(None)))
         .manage(BridgeOrigin(Mutex::new(None)))
