@@ -38,6 +38,9 @@ gh secret set --env macos-release APPLE_TEAM_ID
 
 The workflow creates a random temporary keychain for each macOS runner and
 deletes it after artifact upload. It signs the bundled bridge and PROS runtime
-before Tauri packages the app, then verifies the resulting app signature and
-the stapled DMG ticket. Rotate the app-specific password and replace the
-certificate secret whenever either credential is revoked or renewed.
+before Tauri packages the app. It then submits the DMG to Apple explicitly,
+prints the notarization submission ID, polls Apple for up to one hour, and
+staples the accepted ticket. This keeps an Apple queue delay from exhausting a
+six-hour GitHub runner without any diagnosable submission ID. Rotate the
+app-specific password and replace the certificate secret whenever either
+credential is revoked or renewed.

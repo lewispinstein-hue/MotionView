@@ -75,6 +75,7 @@ jobs:
           #   tauri_bundle: appimage
 
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
 
     # Only the macOS job receives the Developer ID and notarization secrets.
     # Configure the macos-release environment with required reviewers and
@@ -224,10 +225,7 @@ jobs:
 
       - name: Build app
         env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           if [[ "${{ matrix.os_name }}" == "macos" ]]; then
             pnpm py:clean
@@ -248,21 +246,93 @@ jobs:
           fi
         shell: bash
 
-      - name: Verify signed and notarized macOS artifacts
+      - name: Verify signed macOS app
         if: matrix.os_name == 'macos'
         run: |
           set -euo pipefail
           app_bundle="$(find src-tauri/target -type d -path '*/bundle/macos/*.app' -print -quit)"
-          dmg_path="$(find src-tauri/target -type f -path '*/bundle/dmg/*.dmg' -print -quit)"
 
-          if [[ -z "$app_bundle" || -z "$dmg_path" ]]; then
-            echo "::error::Expected signed macOS app and DMG artifacts were not produced."
+          if [[ -z "$app_bundle" ]]; then
+            echo "::error::Expected a signed macOS app bundle."
             exit 1
           fi
 
           codesign --verify --deep --strict --verbose=2 "$app_bundle"
-          spctl --assess --type execute --verbose=4 "$app_bundle"
-          xcrun stapler validate "$dmg_path"
+        shell: bash
+
+      - name: Submit and poll macOS notarization
+        if: matrix.os_name == 'macos'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          dmg_path="$(find src-tauri/target -type f -path '*/bundle/dmg/*.dmg' -print -quit)"
+          submission_path="$RUNNER_TEMP/motionview-notarization-submission.json"
+          status_path="$RUNNER_TEMP/motionview-notarization-status.json"
+
+          if [[ -z "$dmg_path" ]]; then
+            echo "::error::Expected a macOS DMG to submit for notarization."
+            exit 1
+          fi
+
+          xcrun notarytool submit "$dmg_path" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --output-format json > "$submission_path"
+
+          submission_id="$(node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).id' < "$submission_path")"
+          if [[ -z "$submission_id" ]]; then
+            echo "::error::Apple did not return a notarization submission ID."
+            exit 1
+          fi
+
+          echo "Notarization submission ID: $submission_id"
+          echo "Apple notarization submission: \`$submission_id\`" >> "$GITHUB_STEP_SUMMARY"
+
+          for attempt in {1..60}; do
+            if ! xcrun notarytool info "$submission_id" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --output-format json > "$status_path"; then
+              echo "Notarization status check $attempt failed; retrying in one minute."
+              sleep 60
+              continue
+            fi
+
+            notarization_status="$(node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).status' < "$status_path")"
+            echo "Notarization status: $notarization_status"
+
+            if [[ "$notarization_status" == "Accepted" ]]; then
+              xcrun stapler staple "$dmg_path"
+              xcrun stapler validate "$dmg_path"
+              exit 0
+            fi
+
+            if [[ "$notarization_status" == "Invalid" ]]; then
+              xcrun notarytool log "$submission_id" \
+                --apple-id "$APPLE_ID" \
+                --password "$APPLE_PASSWORD" \
+                --team-id "$APPLE_TEAM_ID"
+              exit 1
+            fi
+
+            sleep 60
+          done
+
+          echo "::error::Notarization remains in progress after one hour. Submission ID: $submission_id"
+          exit 1
+        shell: bash
+
+      - name: Verify notarized macOS DMG
+        if: matrix.os_name == 'macos'
+        run: |
+          set -euo pipefail
+          dmg_path="$(find src-tauri/target -type f -path '*/bundle/dmg/*.dmg' -print -quit)"
+          spctl --assess --type open --verbose=4 "$dmg_path"
         shell: bash
 
       - name: Rename and Collect Output Binaries
