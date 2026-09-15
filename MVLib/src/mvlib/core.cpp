@@ -1,23 +1,32 @@
-#include "pros/rtos.hpp"
-#include "mvlib/core.hpp"
+#define _MVLIB_PREVENT_MACRO_CLEANUP
 #include "mvlib/private/forwardLogMacros.h"
-#include "mvlib/telemetry.hpp"
+#include "mvlib/private/sdSink.hpp"
+#include "mvlib/private/telemetry.hpp"
+#include "mvlib/core.hpp"
 #include "pros/apix.h"
+#include "pros/rtos.hpp"
 #include <cmath>
-#include <algorithm>
 
 namespace mvlib {
-
-Logger &Logger::getInstance() {
+Logger& Logger::getInstance() {
   static Logger instance;
   return instance;
 }
 
 bool Logger::setRobot(Drivetrain drivetrain, bool useSpeedEstimation) {
-  if (m_configSet) {
+  detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
+  if (!lock.isLocked()) return false;
+
+  if (m_configSet.load()) {
     _MVLIB_FORWARD_WARN("setRobot(Drivetrain) called after successfully being set!");
     return false;
   }
+
+  if (m_started.load()) {
+    _MVLIB_FORWARD_WARN("setRobot(Drivetrain) called after logger start!");
+    return false;
+  }
+
   m_forceSpeedEstimation = useSpeedEstimation;
 
   if (!drivetrain.leftDrivetrain || !drivetrain.rightDrivetrain) {
@@ -28,24 +37,24 @@ bool Logger::setRobot(Drivetrain drivetrain, bool useSpeedEstimation) {
   m_pLeftDrivetrain = drivetrain.leftDrivetrain;
   m_pRightDrivetrain = drivetrain.rightDrivetrain;
 
-  _MVLIB_FORWARD_DEBUG("setRobot() successfully set variables!");
+  _MVLIB_FORWARD_DEBUG("setRobot(Drivetrain) successfully set variables!");
 
-  m_configValid = m_checkRobotConfig();
-  m_configSet = true;
+  m_configSet.store(true);
   return true;
 }
 
-bool Logger::m_checkRobotConfig() {
-  unique_lock m(m_mutex, TIMEOUT_MAX);
+bool Logger::checkRobotConfig() {
+  detail::uniqueLock m(m_mutex, TIMEOUT_MAX);
 
   bool allValid = true;
 
   if (!m_pLeftDrivetrain) {
-    _MVLIB_FORWARD_ERROR("Left Drivetrain pointer is NULL!");
+    _MVLIB_FORWARD_ERROR("checkRobotConfig() Left Drivetrain pointer is null!");
     allValid = false;
   }
+
   if (!m_pRightDrivetrain) {
-    _MVLIB_FORWARD_ERROR("Right Drivetrain pointer is NULL!");
+    _MVLIB_FORWARD_ERROR("checkRobotConfig() Right Drivetrain pointer is null!");
     allValid = false;
   }
 
@@ -55,80 +64,46 @@ bool Logger::m_checkRobotConfig() {
 Logger::Logger() {
   m_watches.reserve(24);
   m_waypoints.reserve(16);
+  m_sdSink = std::make_unique<detail::SdSink>();
+  m_sdSink->setFlushInterval(m_sdBufferFlushInterval.load());
 
   // Begin IO Handle for user logs by constructing singleton
-  (void) Telemetry::getInstance(); 
+  (void) detail::Telemetry::getInstance();
 
-  // Disable PROS CBOS; we do it ourselves
+  // Disable PROS COBS; we do it ourselves
   pros::c::serctl(SERCTL_DISABLE_COBS, nullptr);
   // Disable PROS prepending messages with "sout"
   pros::c::serctl(SERCTL_DEACTIVATE, (void*)0x74756f73);
 }
 
-uint32_t Logger::status() const {
-  if (!m_task) return pros::E_TASK_STATE_INVALID;
-  return m_task->get_state();
-}
-
-void Logger::pause(bool byForce) {
-  uint32_t st = status();
-  bool isPauseable = st != pros::E_TASK_STATE_DELETED && 
-                     st != pros::E_TASK_STATE_INVALID &&
-                     st != pros::E_TASK_STATE_SUSPENDED;
-
-  if (isPauseable && byForce) {
-    m_task->suspend();
-    _MVLIB_FORWARD_DEBUG("Logger force suspended.");
-  } else if (isPauseable) {
-    m_pauseRequested.store(true);
-    _MVLIB_FORWARD_DEBUG("Logger paused.");
-  } else {
-    _MVLIB_FORWARD_DEBUG("Logger cannot be paused as it is not in a running state.");
-  }
-}
-
-void Logger::resume() {
-  uint32_t st = status();
-  bool wasPaused = false;
-
-  if (m_pauseRequested.exchange(false)) wasPaused = true;
-
-  if (st != pros::E_TASK_STATE_DELETED && 
-      st != pros::E_TASK_STATE_INVALID && 
-      st == pros::E_TASK_STATE_SUSPENDED) {
-    m_task->resume();
-    wasPaused = true;
-  }
-
-  if (wasPaused) {
-    _MVLIB_FORWARD_DEBUG("Logger resumed.");
-  } else {
-    _MVLIB_FORWARD_DEBUG("Logger cannot be resumed as it is not paused.");
-  }
-}
+Logger::~Logger() = default;
 
 void Logger::start() {
-  if (m_started) {
+  bool expected = false;
+  if (!m_started.compare_exchange_strong(expected, true)) {
     _MVLIB_FORWARD_WARN("start() called more than once. Aborted!");
     return;
   }
-  m_started = true;
 
-  // SD init
-  if (m_config.logToSD.load() && !m_sdFile) {
-    bool success = m_initSDLogger();
-    if (!success) {
-      m_config.logToSD.store(false);
-      m_sdLocked = true;
-      _MVLIB_FORWARD_FATAL("initSDCard failed! Unable to initialize SD card.");
-    } else {
-      _MVLIB_FORWARD_INFO("Successfully initialized SD card with filename: %s", m_currentFilename);
+  {
+    detail::uniqueLock setupLock(m_mutex, TIMEOUT_MAX);
+    if (!setupLock.isLocked()) {
+      _MVLIB_FORWARD_ERROR("start() could not acquire the configuration lock. Aborting startup.");
+      return;
+    }
+
+    // SD init
+    if (m_config.logToSD.load() && !m_sdSink->ready()) {
+      bool success = initSDLogger();
+      if (!success) {
+        m_config.logToSD.store(false);
+        m_sdSink->lock();
+      }
     }
   }
-    
-  m_configValid = m_checkRobotConfig();
-  if (!m_configValid) {
-    _MVLIB_FORWARD_ERROR("At least one pointer set by setRobot(Drivetrain) is nullptr. Using speed estimation.");
+
+  if (!checkRobotConfig()) {
+    _MVLIB_FORWARD_ERROR("start() At least one pointer set by setRobot(Drivetrain) is nullptr. Using speed estimation.");
   }
 
   m_task = std::make_unique<pros::Task>([this]() mutable {
@@ -136,99 +111,52 @@ void Logger::start() {
     uint32_t now = pros::millis();
     while (true) {
       if (m_pauseRequested.load()) {
-        pros::delay(200);
+        pros::delay(100);
+        now = pros::millis();
         continue;
       }
 
-      try { this->Update(); }
-      catch (std::exception& e) {
+      try {
+        this->update();
+      } catch (std::exception& e) {
         _MVLIB_FORWARD_ERROR("MVLib Update loop exception: %s", e.what());
       }
 
       if (m_config.logToTerminal.load()) {
-        if (m_timings.stdoutBufferFlushInterval != 0 &&
-            now - m_lastTerminalFlush >= m_timings.stdoutBufferFlushInterval) {
+        const uint32_t flushInterval = m_stdoutBufferFlushInterval.load();
+        if (flushInterval != 0 && now - m_lastTerminalFlush >= flushInterval) {
           fflush(stdout);
           m_lastTerminalFlush = now;
         }
-        pros::Task::delay_until(&now, m_timings.terminalPollingRate);
-      } else {
-        pros::Task::delay_until(&now, m_timings.sdPollingRate);
       }
+      pros::Task::delay_until(&now, 40);
     }
   }, TASK_PRIORITY_DEFAULT, TASK_STACK_DEPTH_DEFAULT, "MVLib Logger");
+  _MVLIB_FORWARD_INFO("start() Background logger task started.");
 }
 
-void Logger::Update() {
+void Logger::update() {
+  uint32_t now = pros::millis();
+
   if (m_config.printWatches.load()) printWatches();
-  if (m_config.printWaypoints.load()) printWaypoints();
+  printWaypoints();
+
+  const uint32_t telemetryRate = m_config.logToTerminal.load() ?
+      m_terminalPollingRate.load() : m_sdPollingRate.load();
+
+  if (telemetryRate != 0 && now - m_lastTelemetryPrint >= telemetryRate) {
+    if (m_config.printTelemetry.load()) printTelemetry();
+    m_lastTelemetryPrint = now;
+  }
 
   // Periodically sync IDs to labels so the frontend can resolve them
-  if (m_timings.rosterSyncAllInterval != 0 &&
-      pros::millis() - m_lastRosterFlush >= m_timings.rosterSyncAllInterval) {
+  const uint32_t rosterSyncInterval = m_rosterSyncAllInterval.load();
+  const uint32_t lastRosterFlush = m_lastRosterFlush.load();
+  if (rosterSyncInterval != 0 && now - lastRosterFlush >= rosterSyncInterval) {
     this->resyncAllWatchesRoster();
     this->resyncAllWaypointsRoster();
-    m_lastRosterFlush = pros::millis();
-  }
-
-  static double leftVelocity, rightVelocity;
-  std::optional<Pose> pose = std::nullopt;
-
-  if (m_getPose) {
-    unique_lock lock(m_mutex);
-    pose = m_getPose();
-  }
-  
-  if (m_configValid && m_pLeftDrivetrain && m_pRightDrivetrain && !m_forceSpeedEstimation) {
-    auto norm = [&](const double& rpm, const pros::MotorGears& gearset) {
-      double maxRpm = 100.0;
-      if (gearset == pros::MotorGears::rpm_200) maxRpm = 200.0;
-      else if (gearset == pros::MotorGears::rpm_600) maxRpm = 600.0;
-      return std::clamp((rpm / maxRpm) * 127.0, -127.0, 127.0);
-    };
-
-    leftVelocity = norm(m_pLeftDrivetrain->get_actual_velocity(), m_pLeftDrivetrain->get_gearing());
-    rightVelocity = norm(m_pRightDrivetrain->get_actual_velocity(), m_pRightDrivetrain->get_gearing());
-  } else {
-    static Pose prevPose;
-    static uint32_t prevMs = pros::millis();
-    static double fallbackSpeed = 0.0;
-    if (pose.has_value()) {
-      uint32_t nowMs = pros::millis();
-      double dt = (nowMs - prevMs) / 1000.0;
-      double vx = (dt > 0) ? (pose->x - prevPose.x) / dt : 0.0;
-      double vy = (dt > 0) ? (pose->y - prevPose.y) / dt : 0.0;
-      double avgSpeed = std::sqrt(vx * vx + vy * vy);
-      leftVelocity = rightVelocity = fallbackSpeed = avgSpeed;
-      prevPose = pose.value();
-      prevMs = nowMs;
-    } else {
-      leftVelocity = rightVelocity = fallbackSpeed;
-    }
-  }
-
-  if (m_config.printTelemetry.load() && pose.has_value()) {
-    const double normTheta = normalizeDegrees360(pose->theta);
-    
-    if (std::isfinite(pose->x) && std::isfinite(pose->y) && std::isfinite(pose->theta)) {
-      // Send binary through terminal
-      if (m_config.logToTerminal.load()) {
-        PosePacket pkt;
-        pkt.timestamp = static_cast<uint16_t>(pros::millis());
-        pkt.x = (float)pose->x;
-        pkt.y = (float)pose->y;
-        pkt.theta = packTelemetryTheta(pose->theta);
-        pkt.leftVel = packTelemetryVelocity(leftVelocity);
-        pkt.rightVel = packTelemetryVelocity(rightVelocity);
-        Telemetry::getInstance().sendPose(pkt);
-      }
-
-      // Log standard ANSII to the sd card
-      if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
-        logToSD(LogLevel::OVERRIDE, "[POSE],%u,%.2f,%.2f,%.2f,%.0f,%.0f", 
-                pros::millis(), pose->x, pose->y, normTheta, leftVelocity, rightVelocity);
-      }
-    }
+    uint32_t expected = lastRosterFlush;
+    m_lastRosterFlush.compare_exchange_strong(expected, now);
   }
 }
 } // namespace mvlib

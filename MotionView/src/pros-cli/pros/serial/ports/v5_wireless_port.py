@@ -1,5 +1,6 @@
 from typing import *
 
+from pros.common.utils import logger
 from pros.serial.devices.vex.v5_device import V5Device
 from pros.serial.ports import BasePort, DirectPort
 
@@ -14,8 +15,15 @@ class V5WirelessPort(BasePort):
         self.download_channel.__enter__()
 
     def destroy(self):
-        self.port_instance.destroy()
-        self.download_channel.__exit__()
+        try:
+            self.download_channel.__exit__()
+        except Exception as e:
+            logger(__name__).warning(f"Failed to restore V5 pit channel during disconnect cleanup: {e}")
+        finally:
+            try:
+                self.port_instance.destroy()
+            except Exception as e:
+                logger(__name__).warning(f"Failed to close V5 wireless port cleanly: {e}")
 
     def config(self, command: str, argument: Any):
         return self.port_instance.config(command, argument)

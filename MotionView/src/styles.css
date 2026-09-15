@@ -1,21 +1,4 @@
-:root {
-  --rightSidebarWViewing: 370px;
-  --rightSidebarWPlanning: 370px;
-  --leftSidebarW: 391px;
-  --timelineH: 180px;
-  --planListH: 240px;
-  --toolbarH: 54px;
-  --topbarH: 50px;
-  --planningTimelineH: 90px;
-  --bg: #0b0f14;
-  --panel: #101720;
-  --text: #e7eef7;
-  --muted: #93a4b8;
-  --line: #233244;
-  overscroll-behavior: none;
-  -webkit-user-select: none;
-  user-select: none;
-}
+@import "./styles/base.css";
 
 input, textarea {
   -webkit-user-select: auto;
@@ -211,7 +194,6 @@ canvas#c {
 
 /* Sidebar: flexible width, wraps content, no horizontal scroll */
 .rightSidebar {
-  flex: 0 0 clamp(260px, 26vw, 420px);
   border-left: 1px solid var(--line);
   background: rgba(16, 23, 32, .7);
   backdrop-filter: blur(6px);
@@ -229,6 +211,240 @@ canvas#c {
 .rightSidebar .section {
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
+}
+
+/* Viewing sidebar: one section at a time, with shared contextual controls. */
+#rightViewing {
+  background: rgba(11, 16, 25, 0.88);
+}
+
+.viewingSidebar {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  container-type: inline-size;
+}
+
+.viewingSidebarHeader {
+  flex: 0 0 auto;
+  display: flex;
+  padding: 8px 8px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 6px;
+  min-width: 0;
+}
+
+.viewingSidebarTabs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.viewingSidebarTabs.isDragging,
+.viewingSidebarTabs.isDragging * {
+  cursor: grabbing !important;
+}
+
+.viewingSidebarTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.viewingSidebarSectionTabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.viewingSidebarTab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 6px 8px;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.viewingSidebarTab:hover,
+.viewingSidebarTab.isActive {
+  color: #b9d9ff;
+  background: rgba(76, 149, 255, 0.15);
+}
+
+.viewingSidebarTab.isActive {
+  border-color: rgba(110, 168, 255, 0.22);
+}
+
+.viewingSidebarControl {
+  justify-content: center;
+  min-width: 30px;
+  padding: 6px;
+}
+
+.viewingSidebarControl:hover,
+.viewingSidebarControl:focus-visible,
+.viewingSidebarControl.active,
+.viewingSidebarControl.isOn {
+  color: #b9d9ff;
+  background: rgba(76, 149, 255, 0.15);
+  border-color: rgba(110, 168, 255, 0.22);
+  box-shadow: none;
+}
+
+.viewingSidebarTab svg,
+.viewingSidebarSearch svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.viewingSidebarTabCount {
+  min-width: 14px;
+  color: inherit;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.viewingSidebarToolbar {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 7px;
+  padding: 9px 10px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.viewingSidebarScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.viewingSidebarSearch {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  background: rgba(3, 7, 13, 0.42);
+  color: var(--muted);
+}
+
+.viewingSidebarSearch:focus-within {
+  border-color: rgba(110, 168, 255, 0.62);
+  box-shadow: 0 0 0 1px rgba(110, 168, 255, 0.13);
+}
+
+.viewingSidebarSearch input {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+
+.viewingSidebarSearch input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.viewingSidebarSearch span {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewingSidebarControls {
+  display: flex;
+  gap: 6px;
+}
+
+.viewingToolbarSelect {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 29px;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  font-size: 11px;
+}
+
+.viewingSidebarControls .viewingToolbarSelect {
+  background: rgba(3, 7, 13, 0.72) url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%2393a4b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center !important;
+}
+
+.viewingSidebarControls .viewingToolbarSelect:hover:not(:disabled) {
+  background: rgba(3, 7, 13, 0.9) url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23e7eef7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center !important;
+}
+
+.viewingToolbarSelect:disabled {
+  color: rgba(147, 164, 184, 0.45);
+  border-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(255, 255, 255, 0.025) !important;
+}
+
+.viewingSidebarPanel {
+  display: block;
+  min-height: 0;
+  overflow: visible;
+}
+
+.viewingSidebarPanel[hidden] {
+  display: none;
+}
+
+.viewingSidebarPanel > #watchList,
+.viewingSidebarPanel > #logList,
+.viewingSidebarPanel > #waypointList,
+.viewingSidebarPanel > #poseList {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* Waypoint cards are not virtualized, so use an explicit gap instead of
+   vertical margins (which collapse between regular block elements). */
+.viewingSidebarPanel > #waypointList {
+  display: grid;
+  align-content: start;
+  grid-auto-rows: max-content;
+  gap: 10px;
+  padding: 5px 8px;
+  box-sizing: border-box;
+}
+
+.viewingSidebarPanel > #waypointList .watchItem:not(.virtualListRow) {
+  margin: 0;
 }
 
 .drop {
@@ -301,6 +517,12 @@ details>summary::-webkit-details-marker {
   gap: 10px;
 }
 
+.grid4 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 10px;
+}
+
 label {
   font-size: 12px;
   color: var(--muted);
@@ -317,6 +539,10 @@ label {
   border-radius: 10px;
 }
 
+#watchList {
+  container-type: inline-size;
+}
+
 .virtualList {
   position: relative;
   overflow: auto;
@@ -324,7 +550,7 @@ label {
 
 .virtualListContent {
   position: relative;
-  min-height: 100%;
+  min-height: 0;
 }
 
 .virtualListRow {
@@ -334,33 +560,119 @@ label {
 }
 
 .watchItem {
+  cursor: pointer;
+  position: relative;
+  overflow: visible;
+  min-height: 0;
+}
+
+.watchItem:not(.virtualListRow) {
   padding: 10px 10px;
   border-bottom: 1px solid var(--line);
-  cursor: pointer;
   overflow: hidden;
 }
 
-.watchItem:hover {
+.watchItem.virtualListRow {
+  position: absolute;
+}
+
+.watchItemContent {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 12px;
+  row-gap: 7px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  overflow: visible;
+  min-height: 0;
+}
+
+.logItemContent {
+  display: block;
+}
+
+.logItemContent .bigValue {
+  margin-top: 7px;
+}
+
+.watchItem:hover .watchItemContent {
   background: rgba(255, 255, 255, .04);
 }
 
-.watchItem:last-child {
+.watchItem:not(.virtualListRow):hover {
+  background: rgba(255, 255, 255, .04);
+}
+
+.watchItem:last-child .watchItemContent {
   border-bottom: none;
 }
 
-.watchItem.selected {
+.watchItem:not(.virtualListRow):last-child {
+  border-bottom: none;
+}
+
+.watchItem.selected .watchItemContent {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: -2px;
+  background: rgba(255, 255, 255, .03);
+}
+
+.watchItem:not(.virtualListRow).selected {
   outline: 2px solid rgba(255, 255, 255, 0.35);
   outline-offset: -2px;
   background: rgba(255, 255, 255, .03);
 }
 
 .watchMeta {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  align-self: start;
   display: flex;
-  flex-direction: row;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-end;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 2px;
   flex-wrap: nowrap;
+  flex: 0 0 auto;
+}
+
+.watchItemHeader {
+  display: contents;
+}
+
+.watchTitleGroup {
+  display: contents;
+}
+
+.watchLevelPill {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.watchLabel {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  flex: 0 1 auto;
+  font-weight: 850;
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.watchTimestamp {
+  align-self: flex-start;
+  flex: 0 0 auto;
+  margin-left: auto;
+  line-height: 22px;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .watchActions {
@@ -387,6 +699,18 @@ label {
   padding: 0;
 }
 
+.watchActionsFull .iconBtn {
+  min-width: 26px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.watchActionsFull .iconBtn svg {
+  width: 15px;
+  height: 15px;
+}
+
 .watchActionsPill .iconBtn {
   border: 0;
   border-radius: 8px;
@@ -394,9 +718,14 @@ label {
 }
 
 .bigValue {
+  grid-column: 1 / 4;
+  grid-row: 2;
   font-size: 15px;
   font-weight: 800;
-  margin-top: 6px;
+  margin-top: 0;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
@@ -428,6 +757,140 @@ label {
   line-height: 1.35;
   margin-top: 6px;
   word-break: break-word;
+}
+
+.waypointPill {
+  font-family: "Avenir Next", Avenir, ui-sans-serif, system-ui, sans-serif;
+  font-weight: 650;
+  letter-spacing: 0.015em;
+}
+
+/* Borderless list entries: shape and surface, rather than divider lines, define hierarchy. */
+.viewingSidebarPanel .watchItem:not(.virtualListRow) {
+  margin: 5px 8px;
+  padding: 10px 11px;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.viewingSidebarPanel .watchItemContent {
+  margin: 5px 12px;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.viewingSidebarPanel .watchItem:hover .watchItemContent,
+.viewingSidebarPanel .watchItem:not(.virtualListRow):hover,
+.viewingSidebarPanel .watchItem.selected .watchItemContent,
+.viewingSidebarPanel .watchItem:not(.virtualListRow).selected,
+.viewingSidebarPanel .watchItem.previewSelected .watchItemContent,
+.viewingSidebarPanel .watchItem:not(.virtualListRow).previewSelected {
+  outline: 0;
+  background: rgba(76, 149, 255, 0.18);
+}
+
+.viewingSidebarPanel .watchItem:last-child .watchItemContent,
+.viewingSidebarPanel .watchItem:not(.virtualListRow):last-child {
+  border-bottom: 0;
+}
+
+.viewingSidebarPanel .pill.level {
+  min-width: 38px;
+  padding: 3px 6px;
+  border-radius: 7px;
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+
+.viewingSidebarPanel .watchActionsPill {
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.viewingSidebarPanel .watchActionsFull .iconBtn {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  opacity: 0.78;
+  background: transparent;
+  border-color: transparent;
+  transform: none;
+}
+
+.viewingSidebarPanel .watchActionIcon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+
+.viewingSidebarPanel .watchActionIcon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.viewingSidebarPanel .watchActionsFull .iconBtn:hover:not(:disabled),
+.viewingSidebarPanel .watchActionsFull .iconBtn:focus-visible {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: transparent;
+  transform: none;
+}
+
+.viewingSidebarPanel .watchMeta {
+  transform: translateY(-2px);
+}
+
+@container (max-width: 280px) {
+  .viewingSidebarControls {
+    flex-wrap: wrap;
+  }
+
+  .viewingToolbarSelect {
+    flex-basis: 100%;
+  }
+}
+
+#rightViewing .watchActionsFull .iconBtn.isOn {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.viewingSidebarPanel .watchPinBtn.isOn {
+  color: #f2c94c;
+}
+
+.viewingSidebarPanel .watchGraphBtn.isOn {
+  color: #78dca0;
+}
+
+.viewingSidebarPanel .watchVisibilityBtn.isOff {
+  color: #ff9b9b;
+}
+
+.viewingSidebarPanel .watchPinBtn:hover:not(:disabled) {
+  color: #f2c94c;
+}
+
+.viewingSidebarPanel .watchGraphBtn:hover:not(:disabled) {
+  color: #78dca0;
+}
+
+.viewingSidebarPanel .watchVisibilityBtn:hover:not(:disabled) {
+  color: #ff9b9b;
+}
+
+.eventSelectableText,
+.eventSelectableText * {
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .kvs {
@@ -482,13 +945,12 @@ label {
 }
 
 #planningTimelineBar {
-  flex: 0 0 var(--planningTimelineH);
-  border-top: 1px solid var(--line);
-  background: rgba(8, 12, 18, 0.95);
-  display: flex;
+  display: none;
   flex-direction: column;
-  padding: 10px 12px;
   gap: 8px;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
 }
 
 #planningTimelineTop {
@@ -508,18 +970,254 @@ label {
   margin-left: auto;
 }
 
-#planningTimelineCanvas {
+#planningTimelineViewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
   width: 100%;
-  height: 48px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+#planningTimelineBar *,
+#planningTimelineViewport *,
+#planningEventTimeline *,
+#planningTimelineCanvas,
+.planningTimelineNode,
+.planMethodDragGhost,
+.planMethodDragGhost * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#planningTimelineViewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+#planningTimelineContent {
+  flex: 0 0 auto;
+  min-width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: rgba(16, 23, 32, 0.55);
+  overflow: hidden;
+}
+
+#planningEventTimeline {
+  position: relative;
+  flex: 0 0 28px;
+  height: 28px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  z-index: 2;
+}
+
+#planningEventTimeline.isDropActive {
+  box-shadow: inset 0 0 0 1px rgba(111, 217, 143, 0.16);
+  background: rgba(20, 30, 24, 0.42);
+}
+
+#planningEventTimelineInner {
+  position: relative;
+  height: 100%;
+}
+
+#planningEventTimelineHint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+#planningEventTimelineHint[hidden],
+#planningTimelineDropLine[hidden] {
+  display: none;
+}
+
+#planningTimelineWaypointLayer,
+#planningTimelineNodeLayer {
+  position: absolute;
+  inset: 0;
+}
+
+#planningTimelineDropLine {
+  position: absolute;
+  top: 10px;
+  bottom: -10px;
+  width: 2px;
+  border-radius: 999px;
+  background: #6fd98f;
+  box-shadow: 0 0 0 1px rgba(12, 18, 24, 0.6);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.planningTimelineWaypointConnector {
+  position: absolute;
+  top: 100%;
+  width: 2px;
+  height: 26px;
+  margin-left: -1px;
+  margin-top: 0;
+  border-radius: 999px;
+  background: rgba(180, 220, 255, 0.45);
+  box-shadow: 0 0 0 1px rgba(12, 18, 24, 0.28);
+  pointer-events: none;
+}
+
+.planningTimelineWaypointConnector::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  border-radius: 999px;
+  border: 1.5px solid rgba(150, 198, 235, 0.82);
+  background: rgba(16, 23, 32, 0.92);
+  box-shadow: 0 0 0 1px rgba(12, 18, 24, 0.22);
+}
+
+.planningTimelineWaypointConnector.isSelected {
+  background: rgba(150, 200, 255, 0.95);
+}
+
+.planningTimelineWaypointConnector.isSelected::before {
+  border-color: rgba(180, 220, 255, 1);
+  background: rgba(150, 200, 255, 0.95);
+}
+
+.planningTimelineNode {
+  position: absolute;
+  top: 100%;
+  width: 18px;
+  height: 24px;
+  margin-top: -12px;
+  margin-left: -9px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(245, 249, 255, 0.95);
+  cursor: grab;
+  user-select: none;
+  outline: none;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.18);
+  transition: box-shadow 140ms ease, transform 140ms ease, border-color 140ms ease;
+  z-index: 2;
+}
+
+.planningTimelineNode:hover {
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
+}
+
+.planningTimelineNode:active {
+  cursor: grabbing;
+}
+
+.planningTimelineNode.isSelected {
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18), 0 8px 18px rgba(0, 0, 0, 0.28);
+}
+
+.planningTimelineNode.hasOverride::after {
+  --planning-node-override-blue: rgb(0, 120, 212);
+  content: "";
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--planning-node-override-blue);
+  opacity: 0.8;
+}
+
+.planningTimelineNode.isDragging {
+  opacity: 0.68;
+}
+
+.planningTimelineNode.isExiting {
+  pointer-events: none;
+  z-index: 1;
+}
+
+#planningTimelineCanvas {
+  flex: 0 0 48px;
+  width: 100%;
+  height: 48px;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0;
+  background: transparent;
   display: block;
+  position: relative;
+  z-index: 1;
 }
 
 #planningTimelineHint {
   color: var(--muted);
   font-size: 12px;
+}
+
+.planNodeTooltip {
+  --planning-node-override-blue: rgb(0, 120, 212);
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 140;
+  max-width: 220px;
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(8, 14, 22, 0.96);
+  color: #e6eef8;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 90ms ease, transform 90ms ease;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34);
+}
+
+.planNodeTooltip.hasOverride {
+  border-color: var(--planning-node-override-blue);
+}
+
+.planNodeTooltip.isVisible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.planNodeTooltip[hidden] {
+  display: block;
+  opacity: 0;
 }
 
 header.toolbar {
@@ -603,6 +1301,30 @@ header.topBar.isOverflowing .topBarContent {
   overflow: hidden;
   align-self: stretch;
   grid-column: 1;
+}
+
+.topBarControlGroup {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.topBarControlGroup .iconBtn {
+  width: 34px;
+  min-width: 34px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.topBarControlGroup .iconBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .topStatus {
@@ -705,11 +1427,10 @@ header.topBar.isOverflowing .topBarRight {
 body.mode-planning .app {
   height: calc(100vh - var(--topbarH));
   display: grid;
-  grid-template-rows: 1fr var(--planningTimelineH);
+  grid-template-rows: 1fr 8px var(--planningTimelineH);
 }
 
 body.mode-planning #left,
-body.mode-planning #timelineBar,
 body.mode-planning #hSplit,
 body.mode-planning #vSplit,
 body.mode-planning #vSplitL,
@@ -723,7 +1444,6 @@ body.mode-planning #watchGraphPanel {
 }
 
 body.mode-planning #left,
-body.mode-planning #timelineBar,
 body.mode-planning #hSplit,
 body.mode-planning #vSplit,
 body.mode-planning #vSplitL {
@@ -738,18 +1458,47 @@ body.mode-planning #left {
   border: none !important;
 }
 
-body.mode-planning #timelineBar {
-  height: 0 !important;
-  padding: 0 !important;
-  border: none !important;
+#planningTimelineSplit {
+  display: none;
 }
 
-#planningTimelineBar {
+body.mode-planning #timelineBar {
+  display: flex;
+  flex: 0 0 var(--planningTimelineH);
+  height: var(--planningTimelineH);
+  min-height: 0;
+  max-height: none;
+  padding: 8px 12px 2px;
+  gap: 8px;
+}
+
+body.mode-planning #timelineBar.isCollapsed {
+  display: flex !important;
+  flex-basis: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+}
+
+body.mode-planning #timelineTop,
+body.mode-planning #timelineCanvas {
   display: none;
 }
 
 body.mode-planning #planningTimelineBar {
   display: flex;
+}
+
+body.mode-planning #planningTimelineSplit {
+  display: block;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+body:not(.mode-planning) #planningTimelineBar {
+  display: none !important;
 }
 
 body.mode-planning .settingsViewing {
@@ -957,6 +1706,11 @@ body:not(.mode-planning) #rightPlanning {
   overflow: auto;
 }
 
+#rightViewing {
+  min-height: 0;
+  overflow: hidden;
+}
+
 #left {
   min-width: 220px;
   overflow: auto;
@@ -1046,25 +1800,14 @@ body:not(.mode-planning) #rightPlanning {
   pointer-events: none;
 }
 
-/* Pose list items */
+/* Pose entries reuse the shared virtual card treatment used by Watches and Logs. */
 .poseItem {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--line);
   cursor: pointer;
 }
 
-.poseItem:hover {
-  background: rgba(255, 255, 255, .04);
-}
-
-.poseItem:last-child {
-  border-bottom: none;
-}
-
-.poseItem.selected {
-  outline: 2px solid rgba(255, 255, 255, 0.35);
-  outline-offset: -2px;
-  background: rgba(255, 255, 255, .03);
+.viewingSidebarPanel .poseValue {
+  font-size: 10px;
+  font-weight: 400;
 }
 
 /* === Help modal === */
@@ -1169,6 +1912,137 @@ body:not(.mode-planning) #rightPlanning {
 .keybindAction {
   color: var(--muted);
   font-size: 12px;
+}
+
+/* === Feedback modal === */
+.feedbackCard {
+  width: min(620px, calc(100vw - 28px));
+}
+
+.feedbackBody {
+  gap: 10px;
+}
+
+.feedbackLabel,
+.feedbackGroup legend {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.feedbackDescription {
+  min-height: 150px;
+  resize: vertical;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  color: var(--text);
+  background: rgba(16, 23, 32, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  line-height: 1.4;
+}
+
+.feedbackDescription:focus {
+  outline: 2px solid rgba(110, 168, 255, 0.6);
+  outline-offset: 1px;
+}
+
+.feedbackCounter,
+.feedbackRouteHint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.feedbackCounter {
+  text-align: right;
+  margin-top: -6px;
+}
+
+.feedbackGroup {
+  border: 0;
+  padding: 0;
+  margin: 3px 0 0;
+}
+
+.feedbackGroup legend {
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+.feedbackTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.feedbackTag {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.feedbackTag:hover,
+.feedbackTag.selected {
+  border-color: rgba(110, 168, 255, 0.65);
+  background: rgba(110, 168, 255, 0.16);
+  color: var(--text);
+}
+
+.feedbackRouteOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.feedbackRouteOption input {
+  accent-color: #6ea8ff;
+}
+
+.feedbackRouteHint {
+  margin-top: -7px;
+  padding-left: 25px;
+  line-height: 1.35;
+}
+
+.feedbackValidation {
+  min-height: 18px;
+  color: #ff9b9b;
+  font-size: 12px;
+}
+
+.feedbackDeliveryStatus {
+  color: #9ee6b3;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.feedbackActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.feedbackSend {
+  background: rgba(110, 168, 255, 0.22);
+  border-color: rgba(110, 168, 255, 0.5);
+}
+
+.feedbackSend:disabled,
+.feedbackTag:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
 }
 
 /* === Watch click popup (tiny) === */
@@ -1597,13 +2471,6 @@ body:not(.mode-planning) #rightPlanning {
   word-break: break-word;
 }
 
-/* tighten pose list */
-.poseItem .sub {
-  margin-top: 3px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
 /* Floating Info Window */
 #floatingInfo {
   position: fixed;
@@ -1971,7 +2838,7 @@ body:not(.mode-planning) #rightPlanning {
   gap: 8px;
 }
 
-/* smaller pills for Stop/Connect */
+/* compact live controls */
 #left .pillAction {
   height: 28px;
   min-width: 64px;
@@ -2070,12 +2937,364 @@ body:not(.mode-planning) #rightPlanning {
   box-shadow: 0 0 0 1px rgba(120, 220, 160, 0.15) inset;
 }
 
-.planSelSection {
+.planWaypointSection {
   margin-top: auto;
 }
 
+.planWaypointPanel {
+  gap: 10px;
+}
+
+.planSelectedPanel {
+  margin-top: 10px;
+  padding: 10px 12px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.planningExportPanel {
+  gap: 10px;
+}
+
+.planEventsPanel {
+  gap: 12px;
+}
+
+.planEventAddBtn {
+  height: 34px;
+  min-width: 34px;
+  width: 34px;
+  padding: 0;
+  margin-left: auto;
+  border-radius: 10px;
+  color: var(--text);
+}
+
+.planObjectList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.planObjectCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.planObjectHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.planObjectMeta {
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: calc(100% - 10px);
+}
+
+.planObjectName {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  min-height: 20px;
+  cursor: text;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planObjectSubtle {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.planObjectNameEditor {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 6px 9px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.planObjectLatest {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(110, 168, 255, 0.1);
+  border: 1px solid rgba(110, 168, 255, 0.14);
+  margin-left: auto;
+  text-align: left;
+}
+
+.planObjectRemoveActionBtn svg,
+.planObjectColorBtn svg,
+.planMethodRemoveBtn svg,
+.planEventAddBtn svg {
+  display: block;
+  color: currentColor;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  overflow: visible;
+}
+
+.planObjectLatestLabel {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.planObjectLatestValue {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.planMethodList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.planMethodEmpty {
+  padding: 10px 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.planMethodCard {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(7, 11, 17, 0.5);
+  cursor: grab;
+  transform-origin: center;
+  transition: transform 150ms ease, opacity 150ms ease, box-shadow 150ms ease;
+}
+
+.planMethodCard:active {
+  cursor: grabbing;
+}
+
+.planMethodCard.isDragging {
+  transform: scale(0.72);
+  opacity: 0.78;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+}
+
+.planMethodDragGhost {
+  position: fixed;
+  top: -10000px;
+  left: -10000px;
+  z-index: -1;
+  pointer-events: none;
+  transform: scale(0.72);
+  transform-origin: top left;
+  opacity: 0.78;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+}
+
+.planMethodGrip {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: -1px;
+}
+
+.planMethodContent {
+  min-width: 0;
+}
+
+.planMethodIndex {
+  align-self: flex-start;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding-top: 2px;
+}
+
+.planMethodName {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.planMethodCode {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planMethodRemoveBtn {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 10px;
+  color: #fff;
+}
+
+.planMethodCard.isHighlighted {
+  border-color: rgba(255, 255, 255, 0.42);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18), 0 10px 20px rgba(0, 0, 0, 0.18);
+  background: rgba(24, 32, 44, 0.78);
+}
+
+.planMethodAddBtn {
+  align-self: flex-start;
+  height: 30px;
+  min-width: 92px;
+  font-size: 12px;
+}
+
+.planMethodAddBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.planObjectActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.planObjectActionTools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.planObjectColorWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.planObjectColorBtn {
+  width: 38px;
+  min-width: 38px;
+  height: 30px;
+  padding: 0;
+}
+
+.planObjectColorPopover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(16, 23, 32, 0.98);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  z-index: 6;
+}
+
+.planObjectColorInput {
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.planObjectColorInput::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.planObjectColorInput::-webkit-color-swatch {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+
+.planObjectColorInput::-moz-color-swatch {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+
+.planObjectRemoveActionBtn {
+  align-self: flex-end;
+  width: 38px;
+  min-width: 38px;
+  height: 30px;
+  padding: 0;
+  color: #fff;
+}
+
+.planObjectCard.isHighlighted {
+  border-color: rgba(255, 255, 255, 0.34);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.14), 0 14px 26px rgba(0, 0, 0, 0.16);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.planningExportActions {
+  display: flex;
+  gap: 8px;
+}
+
+.planningExportActions .iconBtn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 32px;
+  font-size: 13px;
+}
+
+.planEditTemplateBtn {
+  height: 28px;
+  padding-inline: 9px;
+  font-size: 12px;
+}
+
+.planCodeExportCard {
+  width: min(680px, calc(100vw - 32px));
+}
+
+.planCodeExportAffix {
+  min-height: 86px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+
 #rightPlanning.planListCollapsed .planList {
   display: none;
+}
+
+#rightPlanning.planListCollapsed .planSelectedPanel {
+  display: none;
+}
+
+#rightPlanning.planListCollapsed .planWaypointPanel {
+  gap: 0;
+  padding-bottom: 10px;
 }
 
 /* ===== NEW SETTINGS MODAL STYLING ===== */
@@ -2200,6 +3419,35 @@ body:not(.mode-planning) #rightPlanning {
   background: rgba(0, 0, 0, 0.5);
 }
 
+.planTemplateInput {
+  min-height: 50px;
+  max-height: 150px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.templateModalValidation {
+  min-height: 16px;
+  color: #f2cb6b;
+  font-size: 12px;
+}
+
+.templateModalCard {
+  max-width: 760px !important;
+}
+
+.planConfirmModalCard {
+  max-width: 360px !important;
+}
+
+.planConfirmMessage {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 /* Remove ugly native select styling */
 .settingsSelect {
   appearance: none;
@@ -2307,6 +3555,12 @@ body:not(.mode-planning) #rightPlanning {
   color: #9ef0b5;
   font-size: 13px;
   font-weight: 600;
+}
+
+.exportSuccessMessage.isError {
+  border-color: rgba(255, 105, 105, 0.45);
+  background: rgba(170, 45, 55, 0.22);
+  color: #ffb0b7;
 }
 
 .exportFooter {

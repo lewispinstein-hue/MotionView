@@ -5,12 +5,12 @@
     <!-- Repository Stats -->
     <td style="padding: 10px 16px; vertical-align: middle; border-right: 1px solid #d0d7de;">
       <img src="https://img.shields.io/github/stars/lewispinstein-hue/MotionView?style=flat-square" alt="Stars" style="vertical-align: middle; margin-right: 4px;">
-      <img src="https://img.shields.io/github/downloads/lewispinstein-hue/MotionView/total?style=flat-square" alt="Downloads" style="vertical-align: middle;">
+      <img src="https://img.shields.io/github/downloads/lewispinstein-hue/MotionView/total?style=flat-square&cacheSeconds=60" alt="Downloads" style="vertical-align: middle;">
     </td>
     <!-- Versions -->
     <td style="padding: 10px 16px; vertical-align: middle;">
-      <img src="https://img.shields.io/badge/MotionView-v1.2.0-green?style=flat-square" alt="Version" style="vertical-align: middle; margin-right: 4px;">
-      <img src="https://img.shields.io/badge/MVLib-v2.0.1-green?style=flat-square" alt="Version" style="vertical-align: middle;">
+      <img src="https://img.shields.io/badge/MotionView-v1.2.0-green?style=flat-square&cacheSeconds=60" alt="Version" style="vertical-align: middle; margin-right: 4px;">
+      <img src="https://img.shields.io/badge/MVLib-v2.0.1-green?style=flat-square&cacheSeconds=60" alt="Version" style="vertical-align: middle;">
     </td>
   </tr>
 </table>
@@ -26,7 +26,7 @@ MotionView's creation was inspired by other visualizers such as [Grafana](https:
 **MotionView is a high-speed telemetry dashboard and live visualizer for VEX PROS teams.** It turns a raw stream of terminal numbers into a highly visual, actionable representation of your robot's behavior. Stop guessing why your robot is failing, and start seeing it.
 
 <p align="center">
-    <img src="assets/MotionView/viewing_with_overlay.png" alt="MotionView Dashboard" width="800" />
+    <img src="assets/ViewingHypermode.png" alt="MotionView Dashboard" width="800" />
 </p>
 
 ## Core Features
@@ -39,8 +39,21 @@ MotionView's creation was inspired by other visualizers such as [Grafana](https:
 
 ## Quick Start
 1. **Download:** Grab the latest release for your OS from the [Releases Page](https://github.com/lewispinstein-hue/MotionView/releases).
-2. **Demo:** Download the [`Example Route`](MotionView_Example.json), press `Cmd + O` in MotionView to open it, and press `Space` to watch a recorded run.
+2. **Demo:** In older versions (v1.2.0 and earlier, newer versions have a built-in demo), download the [`Example Route`](MotionView_Example.json), press `Cmd + O` in MotionView to open it, and press `Space` to watch a recorded run (Note this is a VEX Pushback run, as the current season is still to early for an actual Override demo).
 3. **Connect your Robot:** Install [MVLib](MVLib/README.md) into your PROS project to start streaming your own live data.
+
+## Launching From Source
+Install Node.js 20 or newer, pnpm 10, Python 3, and Rust/Tauri prerequisites for your platform. An active Node.js LTS release is recommended. Then run the repository initializer:
+
+```sh
+./MotionView-initialize.sh
+cd MotionView
+pnpm dev
+```
+
+Use `./MotionView-initialize.sh --build-sidecars` if you also want to prebuild the Python sidecars that `pnpm dev` normally builds before launch.
+
+On Linux, if `node` fails with a `GLIBC_... not found` error, the installed Node.js binary was built for a newer glibc than your distribution provides. Update the Linux system packages together, or install a distro-compatible Node.js 20+ binary from a source such as your package manager, `nvm`, `fnm`, or Volta, then rerun the initializer. On Arch-based systems, avoid partial upgrades; use a full system upgrade instead of pulling only `nodejs`.
 
 ## Docs
 - [MotionView Docs](Docs/MotionView)
@@ -93,6 +106,7 @@ Because MotionView and MVLib communicate using a highly optimized binary protoco
 
 | MotionView App | Requires MVLib | Notes |
 | :--- | :--- | :--- |
-| **v1.2.x** | **v2.0.x** | **Current Release:** Introduced high-speed binary telemetry. |
+| **v1.3.x** | **v3.0.x** <br> **v2.0.x** | Latest release |
+| **v1.2.x** | **v2.0.x** | Introduced high-speed binary telemetry. |
 | **v1.1.x** | **v1.1.x** | Non-binary data protocol |
 | **v1.0.x** | **v1.0.x** | Legacy data protocol (missing some features) |

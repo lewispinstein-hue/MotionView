@@ -1,7 +1,13 @@
 # MVLib: Telemetry + Logging For MotionView
 
+<p align="center">
+  <img src="./../assets/Logo.png" alt="MotionView Logo" width="180" />
+</p>
+
 # What is this?
 `MVLib` is a simple logging and telemetry library for PROS V5 teams that want **clear, replayable data** in MotionView. It gives you structured logs, live “watches,” and pose data so MotionView can draw your robot path, list watches, and show details when you hover or click the field.
+
+Odometry and a tank-style drivetrain are not required. With a single line of setup, MVLib immediately replaces scattered `printf`s with structured logs and live watches that appear in an organized dashboard.
 
 ## What Can MVLib Do?
 - **See your robot path** in MotionView, on a real field, with real numbers.
@@ -19,32 +25,15 @@
 5. Add the `mvlib` headers to your project, and finally run `pros make all` to finish.
 
 ## Documentation
-Detailed Docs:
-
-- [`Initial setup`](../Docs/MVLib/Setup.md): installation, logger startup, odometry and drivetrain setup.
-- [`Configurables`](../Docs/MVLib/Configuration.md): user-configurable settings in `include/mvlib/config.hpp` and `LoggerConfig`.
-- [`Watches`](../Docs/MVLib/Watches.md): the `logger.watch(...)` overloads, `LevelOverride`, `PREDICATE`, formatting, and examples.
-- [`Waypoints`](../Docs/MVLib/Waypoints.md): `logger.addWaypoint(...)`, waypoint structs, waypoint handles, and waypoint usage patterns.
-- [`Logs`](../Docs/MVLib/Logs.md): the MotionView-formatted `debug`, `info`, `warn`, `error`, and `fatal` log functions.
-
-## What MotionView Gets From MVLib
-
-MotionView recognizes two kinds of lines that mvlib prints:
-
-- **Pose data** so it can draw your path, speed, and show pose readouts.
-- **Watch data** so it can list watches in the sidebar and show the closest watch value when you hover points on the field.
-
-This is exactly what MotionView is built to consume, so MVLib is the easiest way to feed it.
-
-> **Note:** MVLib is not strictly necessary. However, MVLib provides easy setup, cross-library support, seamless integration with MotionView, and tons of features, which is why it's recommended.
+Find the GitHub Pages [here](https://lewispinstein-hue.github.io/MotionView/)
 
 ## Quick Setup (PROS V5)
 
-1. Install MVlib .zip into your PROS project. View the setup guide [here](../Docs/MVLib/Setup.md)
+1. Install MVlib .zip into your PROS project.
 2. Include the api header:
 
 ```cpp
-#define USING_MVLIB_SIMPLES // Optional; for more concise code
+#define MVLIB_USE_SIMPLES // Optional; for more concise code
 #include "mvlib/api.hpp"
 ```
 
@@ -70,6 +59,7 @@ This is exactly what MotionView is built to consume, so MVLib is the easiest way
 extern lemlib::Chassis chassis; // Your chassis
 void initialize() {
   auto& logger = mvlib::Logger::getInstance();
+  logger.setBuildDate(__DATE__);
 
   // Attach your odom 
   mvlib::setOdom(&chassis);
@@ -83,7 +73,7 @@ void initialize() {
 }
 ```
 
-That’s it. Just 10 lines of code. Once the robot runs, MotionView can read your logs and show the path and watches.
+That’s it. Once the robot runs, MotionView can read your logs and show the path and watches.
 
 ## Watches
 
@@ -97,23 +87,31 @@ Teams usually use them for:
 - intake current
 - constant monitoring
 
+Every watch returns a `WatchHandle`.
+`LevelOverride` is optional, and on `WatchMode::onChange` watches `intervalMs` is the debounce interval.
+
 Example:
 
 ```cpp
 auto& logger = mvlib::Logger::getInstance();
 
-logger.watch("Flywheel RPM", LogLevel::INFO, 1_mvS,
-  [&]() { return flywheel.get_actual_velocity(); },
-  mvlib::LevelOverride<double>{}, "%.1f");
+logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval, 1_mvS,
+  [&]() { return flywheel.get_actual_velocity(); });
 
-logger.watch("Auton Stage", LogLevel::INFO, 250_mvMs,
-  [&]() { return (int)autonStage; },
-  mvlib::LevelOverride<int>{});
+logger.watch("Auton Stage", LogLevel::INFO, WatchMode::onChange, 250_mvMs,
+  [&]() { return autonStage; });
 ```
+
+That means:
+
+- `WatchMode::onInterval` watches emit on their normal interval
+- `WatchMode::onChange` watches emit only after the rendered value changes and the debounce interval has elapsed
+- floating-point watch values are rendered with two decimal places
+- you only need `LevelOverride` when you want elevated severity and/or an alternate label
 
 MotionView shows these in the watch list and can associate nearby watch values with points in the run.
 
-For the detailed watch guide, including overloads, `LevelOverride`, `PREDICATE`, formatting, and more examples, see the [`Watches Guide`](../Docs/MVLib/Watches.md).
+For the detailed watch guide, including `WatchMode`, optional `LevelOverride`, on-change debounce, `PREDICATE`, and more examples, see the [`Watches Guide`](https://lewispinstein-hue.github.io/MotionView/MVLib/Watches).
 
 ## Logs
 
@@ -164,15 +162,15 @@ auto goalPickup = logger.addWaypoint("Goal Pickup", {
 });
 
 auto off = goalPickup.getOffset();
-printf("Distance to target: %.2f\n", off.totalOffset);
+logger.info("Distance to target: %.2f\n", off.totalOffset);
 ```
 
 This waypoint:
 
 - targets a specific field position
 - also requires the robot to face the right direction
-- times out after 3 seconds if it is not reached
-- prints periodic offset updates while active
+- times out after 10 seconds if it is not reached
+- can be queried at runtime with `getOffset()`, `reached()`, and `timedOut()`
 
 Practical use cases:
 

@@ -1,22 +1,40 @@
+#[cfg(not(target_os = "macos"))]
+use sha2::{Digest, Sha256};
+#[cfg(not(target_os = "macos"))]
+use std::io::Read;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
+#[cfg(not(unix))]
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     fs,
     net::TcpListener,
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
+    time::Duration,
 };
-#[cfg(not(unix))]
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use tauri::{Manager, RunEvent, State, Window};
+use tauri::{Emitter, Manager, RunEvent, State, Window};
 use tauri_plugin_posthog::{init as posthog_init, PostHogConfig, PostHogOptions};
 mod export;
 mod settings;
 
 struct BridgeState(Mutex<Option<Child>>);
 struct BridgeOrigin(Mutex<Option<String>>);
+struct QuitState(Mutex<bool>);
+
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BridgePidRecord {
+    pid: u32,
+    command_marker: String,
+}
+
+struct SpawnedBridge {
+    child: Child,
+    command_marker: String,
+}
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,8 +50,8 @@ fn load_posthog_config() -> Option<PostHogConfig> {
     Some(PostHogConfig {
         api_key,
         options: Some(PostHogOptions {
-        disable_session_recording: Some(false),
-        ..Default::default()
+            disable_session_recording: Some(false),
+            ..Default::default()
         }),
         ..Default::default()
     })
@@ -61,12 +79,20 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
         names.push(format!(
             "motionview-py-{}{}",
             triple,
-            if cfg!(target_os = "windows") { ".exe" } else { "" }
+            if cfg!(target_os = "windows") {
+                ".exe"
+            } else {
+                ""
+            }
         ));
     }
     names.push(format!(
         "motionview-py{}",
-        if cfg!(target_os = "windows") { ".exe" } else { "" }
+        if cfg!(target_os = "windows") {
+            ".exe"
+        } else {
+            ""
+        }
     ));
 
     // Allow an explicit override for diagnostics or custom deployments.
@@ -96,7 +122,10 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
         .resolve("", tauri::path::BaseDirectory::Resource)
         .map(|p| {
             let mut roots = vec![
-                p.join("_up_").join("src-tauri").join("bin").join("motionview-bridge"),
+                p.join("_up_")
+                    .join("src-tauri")
+                    .join("bin")
+                    .join("motionview-bridge"),
                 p.join("src-tauri").join("bin").join("motionview-bridge"),
                 p.join("src-tauri").join("bin"),
                 p.join("bin"),
@@ -112,14 +141,23 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
     if let Ok(exe_dir) = std::env::current_exe().and_then(|p| {
         p.parent()
             .map(|p| p.to_path_buf())
-            .ok_or(std::io::Error::new(std::io::ErrorKind::Other, "no exe parent"))
+            .ok_or(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "no exe parent",
+            ))
     }) {
         // Where the main exe lives (e.g., Contents/MacOS or AppData/Local/MotionView/__up__)
         roots.push(exe_dir.clone());
 
         // A bin/ next to the exe (some installers flatten to a bin folder)
         roots.push(exe_dir.join("bin"));
-        roots.push(exe_dir.join("_up_").join("src-tauri").join("bin").join("motionview-bridge"));
+        roots.push(
+            exe_dir
+                .join("_up_")
+                .join("src-tauri")
+                .join("bin")
+                .join("motionview-bridge"),
+        );
         roots.push(exe_dir.join("_up_").join("src-tauri").join("bin"));
 
         // Also look one level up, because Windows installers sometimes place
@@ -127,7 +165,13 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
         if let Some(parent) = exe_dir.parent() {
             roots.push(parent.to_path_buf());
             roots.push(parent.join("bin"));
-            roots.push(parent.join("_up_").join("src-tauri").join("bin").join("motionview-bridge"));
+            roots.push(
+                parent
+                    .join("_up_")
+                    .join("src-tauri")
+                    .join("bin")
+                    .join("motionview-bridge"),
+            );
             roots.push(parent.join("_up_"));
             roots.push(parent.join("_up_").join("bin"));
             roots.push(parent.join("_up_").join("src-tauri").join("bin"));
@@ -196,23 +240,7 @@ fn stop_bridge(state: &tauri::State<BridgeState>, app: &tauri::AppHandle) {
     if let Some(mut child) = state.0.lock().unwrap().take() {
         #[cfg(unix)]
         {
-            let pid = child.id() as i32;
-            // Try graceful stop of the process group first
-            let _ = Command::new("kill")
-                .arg("-TERM")
-                .arg(format!("-{}", pid))
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status();
-            // Ensure the process group is gone
-            let _ = Command::new("kill")
-                .arg("-KILL")
-                .arg(format!("-{}", pid))
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status();
+            terminate_child_group(&mut child, Duration::from_secs(3));
         }
         #[cfg(not(unix))]
         {
@@ -226,8 +254,36 @@ fn stop_bridge(state: &tauri::State<BridgeState>, app: &tauri::AppHandle) {
     if let Ok(path) = pid_path(app) {
         let _ = fs::remove_file(path);
     }
-    #[cfg(windows)]
-    cleanup_bridge_processes_by_name();
+}
+
+#[cfg(unix)]
+fn signal_process_group(pid: u32, signal: &str) {
+    let _ = Command::new("kill")
+        .arg(signal)
+        .arg(format!("-{}", pid))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
+#[cfg(unix)]
+fn terminate_child_group(child: &mut Child, graceful_timeout: Duration) {
+    let pid = child.id();
+
+    signal_process_group(pid, "-TERM");
+
+    let start = std::time::Instant::now();
+    while start.elapsed() < graceful_timeout {
+        match child.try_wait() {
+            Ok(Some(_)) => return,
+            Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+            Err(_) => break,
+        }
+    }
+
+    signal_process_group(pid, "-KILL");
+    let _ = child.wait();
 }
 
 fn pid_path(app: &tauri::AppHandle) -> Result<PathBuf, tauri::Error> {
@@ -268,33 +324,53 @@ fn kill_pid(pid: u32) {
         .status();
 }
 
-#[cfg(windows)]
-fn cleanup_bridge_processes_by_name() {
-    let script = r#"
-$targets = Get-Process | Where-Object {
-  $_.ProcessName -like 'motionview-py*'
+#[cfg(unix)]
+fn process_command(pid: u32) -> Option<String> {
+    let output = Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "command="])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let command = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!command.is_empty()).then_some(command)
 }
-foreach ($proc in $targets) {
-  try {
-    Stop-Process -Id $proc.Id -Force -ErrorAction Stop
-  } catch {
-  }
-}
-"#;
 
-    let _ = Command::new("powershell")
+#[cfg(windows)]
+fn process_command(pid: u32) -> Option<String> {
+    let script = format!(
+        "$process = Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}'; if ($null -ne $process) {{ $process.CommandLine }}"
+    );
+    let output = Command::new("powershell")
         .args([
             "-NoProfile",
             "-NonInteractive",
             "-ExecutionPolicy",
             "Bypass",
             "-Command",
-            script,
+            &script,
         ])
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .status();
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let command = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!command.is_empty()).then_some(command)
+}
+
+#[cfg(all(not(unix), not(windows)))]
+fn process_command(_: u32) -> Option<String> {
+    None
+}
+
+fn is_matching_bridge_process(record: &BridgePidRecord) -> bool {
+    process_command(record.pid).is_some_and(|command| command.contains(&record.command_marker))
 }
 
 fn cleanup_previous_bridge(app: &tauri::AppHandle) {
@@ -302,30 +378,58 @@ fn cleanup_previous_bridge(app: &tauri::AppHandle) {
         Ok(p) => p,
         Err(_) => return,
     };
-    let pid_str = match fs::read_to_string(&path) {
+    let contents = match fs::read_to_string(&path) {
         Ok(s) => s,
         Err(_) => return,
     };
-    if let Ok(pid) = pid_str.trim().parse::<u32>() {
-        kill_pid(pid);
+
+    // Older releases stored only a PID. Retain their cleanup behavior only when
+    // the currently running command is still recognizably a MotionView bridge.
+    let record = serde_json::from_str::<BridgePidRecord>(&contents)
+        .ok()
+        .or_else(|| {
+            contents
+                .trim()
+                .parse::<u32>()
+                .ok()
+                .map(|pid| BridgePidRecord {
+                    pid,
+                    command_marker: "motionview-py".to_string(),
+                })
+        });
+    if let Some(record) = record {
+        if is_matching_bridge_process(&record) {
+            kill_pid(record.pid);
+        } else {
+            eprintln!(
+                "Not terminating stale bridge PID {} because its command no longer matches MotionView.",
+                record.pid
+            );
+        }
     }
     let _ = fs::remove_file(path);
-    #[cfg(windows)]
-    cleanup_bridge_processes_by_name();
 }
 
-fn write_bridge_pid(app: &tauri::AppHandle, pid: u32) {
+fn write_bridge_pid(app: &tauri::AppHandle, pid: u32, command_marker: &str) {
     if let Ok(path) = pid_path(app) {
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        let _ = fs::write(path, pid.to_string());
+        let record = BridgePidRecord {
+            pid,
+            command_marker: command_marker.to_string(),
+        };
+        if let Ok(serialized) = serde_json::to_string(&record) {
+            let _ = fs::write(path, serialized);
+        }
     }
 }
 
 #[cfg(debug_assertions)]
 fn dev_bridge_python_and_script() -> Option<(PathBuf, PathBuf)> {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent()?.to_path_buf();
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()?
+        .to_path_buf();
     let python = if cfg!(target_os = "windows") {
         root.join(".venv").join("Scripts").join("python.exe")
     } else {
@@ -368,6 +472,7 @@ fn collect_bundle_roots(app: &tauri::AppHandle) -> Vec<PathBuf> {
     deduped
 }
 
+#[cfg(not(target_os = "macos"))]
 fn stage_bridge_bin_for_runtime(
     app: &tauri::AppHandle,
     source: &std::path::Path,
@@ -379,30 +484,65 @@ fn stage_bridge_bin_for_runtime(
         ))
     })?;
 
-    let runtime_dir = app
-        .path()
-        .app_data_dir()
-        .map(|dir| dir.join("Runtime").join("motionview-bridge"))?;
+    let mut source_file = fs::File::open(source).map_err(tauri::Error::Io)?;
+    let mut source_hash = Sha256::new();
+    let mut buffer = [0_u8; 1024 * 1024];
+    loop {
+        let count = source_file.read(&mut buffer).map_err(tauri::Error::Io)?;
+        if count == 0 {
+            break;
+        }
+        source_hash.update(&buffer[..count]);
+    }
+    let source_id = format!("{:x}", source_hash.finalize());
+
+    let runtime_dir = app.path().app_data_dir().map(|dir| {
+        dir.join("Runtime")
+            .join("motionview-bridge")
+            .join(source_id)
+    })?;
     fs::create_dir_all(&runtime_dir).map_err(tauri::Error::Io)?;
 
     let staged = runtime_dir.join(file_name);
-    let needs_copy = match (fs::metadata(source), fs::metadata(&staged)) {
-        (Ok(src_meta), Ok(dst_meta)) => {
-            src_meta.len() != dst_meta.len()
-                || src_meta.modified().ok() != dst_meta.modified().ok()
+    if !staged.exists() {
+        let temporary = runtime_dir.join(format!(
+            ".{}.{}.tmp",
+            file_name.to_string_lossy(),
+            std::process::id()
+        ));
+        fs::copy(source, &temporary).map_err(tauri::Error::Io)?;
+        if let Err(err) = fs::rename(&temporary, &staged) {
+            let _ = fs::remove_file(&temporary);
+            if !staged.exists() {
+                return Err(tauri::Error::Io(err));
+            }
         }
-        (Ok(_), Err(_)) => true,
-        (Err(err), _) => return Err(tauri::Error::Io(err)),
-    };
-
-    if needs_copy {
-        fs::copy(source, &staged).map_err(tauri::Error::Io)?;
     }
 
     Ok(staged)
 }
 
-fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child, tauri::Error> {
+fn bridge_bin_for_launch(
+    app: &tauri::AppHandle,
+    source: &std::path::Path,
+) -> Result<PathBuf, tauri::Error> {
+    // A copied macOS executable is no longer contained by the notarized app
+    // bundle. Launch the signed onedir runtime in place so its Python
+    // framework retains the same Team ID. Windows and Linux keep the staged
+    // executable path needed by their installer/runtime layouts.
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app;
+        Ok(source.to_path_buf())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        stage_bridge_bin_for_runtime(app, source)
+    }
+}
+
+fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<SpawnedBridge, tauri::Error> {
     // Setup Logging Directory and File
     // Prefer app_data_dir/Logs, falling back to project root/Logs if that fails
     let log_dir = app
@@ -449,9 +589,9 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child
             eprintln!("BRIDGE ERROR: Could not resolve binary: {}", e);
             e
         })?;
-        let staged = stage_bridge_bin_for_runtime(app, &exe)?;
-        let label = staged.display().to_string();
-        (std::process::Command::new(&staged), label)
+        let launch_path = bridge_bin_for_launch(app, &exe)?;
+        let label = launch_path.display().to_string();
+        (std::process::Command::new(&launch_path), label)
     };
 
     #[cfg(not(debug_assertions))]
@@ -460,17 +600,17 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child
             eprintln!("BRIDGE ERROR: Could not resolve binary: {}", e);
             e
         })?;
-        let staged = stage_bridge_bin_for_runtime(app, &exe)?;
-        let label = staged.display().to_string();
-        (std::process::Command::new(&staged), label)
+        let launch_path = bridge_bin_for_launch(app, &exe)?;
+        let label = launch_path.display().to_string();
+        (std::process::Command::new(&launch_path), label)
     };
 
     #[cfg(windows)]
     {
-      const CREATE_NO_WINDOW: u32 = 0x08000000;
-      cmd.creation_flags(CREATE_NO_WINDOW);
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    
+
     // Apply Unix-specific process grouping (ignored on Windows)
     #[cfg(unix)]
     {
@@ -494,7 +634,8 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child
         ))
     })?;
 
-    cmd.args(["--host", "127.0.0.1", "--port", &port.to_string()])
+    let child = cmd
+        .args(["--host", "127.0.0.1", "--port", &port.to_string()])
         .env("MOTIONVIEW_LOG_PATH", &log_path)
         .env("MOTIONVIEW_BUNDLE_ROOTS", bundle_root_env)
         .stdout(std::process::Stdio::from(log))
@@ -503,7 +644,12 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<std::process::Child
         .map_err(|e| {
             eprintln!("BRIDGE ERROR: Failed to spawn process: {}", e);
             tauri::Error::Io(e)
-        })
+        })?;
+
+    Ok(SpawnedBridge {
+        child,
+        command_marker: spawn_label,
+    })
 }
 
 #[tauri::command]
@@ -530,6 +676,13 @@ fn get_system_info() -> SystemInfo {
 #[tauri::command]
 fn get_bridge_origin(state: State<'_, BridgeOrigin>) -> Option<String> {
     state.0.lock().unwrap().clone()
+}
+
+#[tauri::command]
+fn finalize_app_quit(app: tauri::AppHandle, state: State<'_, QuitState>) -> Result<(), String> {
+    *state.0.lock().unwrap() = true;
+    app.exit(0);
+    Ok(())
 }
 
 #[tauri::command]
@@ -565,33 +718,36 @@ fn persist_window_state(_: &tauri::AppHandle) {}
 
 fn main() {
     println!("DO NOT CLOSE THIS WINDOW. MotionView runs off of it and cannot function without this window open.");
-    
+
     maybe_add_posthog_plugin(tauri::Builder::default())
         .plugin(tauri_plugin_shell::init())
         .manage(BridgeState(Mutex::new(None)))
         .manage(BridgeOrigin(Mutex::new(None)))
+        .manage(QuitState(Mutex::new(false)))
         .invoke_handler(tauri::generate_handler![
             settings::read_settings,
             settings::write_settings,
+            settings::was_previous_version_old,
             settings::read_image_data,
             settings::save_robot_image,
             settings::read_saved_paths,
             settings::write_saved_paths,
-            settings::read_aux_window_state,
-            settings::write_aux_window_state,
             export::export_motionview_json,
+            export::resolve_export_directory,
+            export::export_planning_code,
             set_windows_fullscreen,
             get_window_fullscreen_state,
             get_system_info,
             get_bridge_origin,
-            get_posthog_distinct_id
+            get_posthog_distinct_id,
+            finalize_app_quit
         ])
         .setup(|app| {
             cleanup_previous_bridge(app.handle());
             let port = pick_free_port();
-            let child = spawn_bridge(app.handle(), port)?;
-            write_bridge_pid(app.handle(), child.id());
-            *app.state::<BridgeState>().0.lock().unwrap() = Some(child);
+            let bridge = spawn_bridge(app.handle(), port)?;
+            write_bridge_pid(app.handle(), bridge.child.id(), &bridge.command_marker);
+            *app.state::<BridgeState>().0.lock().unwrap() = Some(bridge.child);
             *app.state::<BridgeOrigin>().0.lock().unwrap() =
                 Some(format!("http://127.0.0.1:{port}"));
 
@@ -647,7 +803,16 @@ fn main() {
                 }
 
                 // Fires on quit requests (Cmd+Q / Dock Quit / menu Quit)
-                RunEvent::ExitRequested { .. } => {
+                RunEvent::ExitRequested { api, .. } => {
+                    let quit_ready = *app_handle.state::<QuitState>().0.lock().unwrap();
+                    if !quit_ready {
+                        api.prevent_exit();
+                        if let Some(win) = app_handle.get_webview_window("main") {
+                            let _ = win.emit("motionview://app-quit-requested", ());
+                        }
+                        return;
+                    }
+
                     persist_window_state(&app_handle);
                     stop_bridge(&app_handle.state::<BridgeState>(), app_handle);
                 }

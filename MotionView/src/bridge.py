@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import hashlib
 import os
 import signal
 import sys
@@ -169,12 +170,37 @@ def _expand_bundle_search_roots(base_roots: List[Path]) -> List[Path]:
         ])
     return expanded
 
+def _is_dev_target_build_root(root: Path) -> bool:
+    return (
+        not getattr(sys, "frozen", False)
+        and "target" in root.parts
+        and any(part in {"debug", "release"} for part in root.parts)
+    )
+
+def _ensure_executable(path: Path) -> Optional[str]:
+    if not path.exists() or not path.is_file():
+        return None
+    if platform.system() != "Windows":
+        try:
+            path.chmod(path.stat().st_mode | 0o755)
+        except Exception:
+            pass
+    try:
+        return str(path.resolve())
+    except Exception:
+        return str(path)
+
+def _bridge_log(message: str) -> None:
+    print(f"[MotionView Bridge] {message}", file=sys.stderr, flush=True)
+
+def _pros_launch_env() -> dict:
+    env = os.environ.copy()
+    env["MOTIONVIEW_HEADLESS"] = "1"
+    env["PYTHONWARNINGS"] = "ignore"
+    return env
+
 def resolve_bundled_pros_exe() -> Optional[str]:
     exe_ext = ".exe" if platform.system() == "Windows" else ""
-    exact_names = [f"motionview-pros{exe_ext}"]
-    glob_patterns = [f"motionview-pros-*{exe_ext}"]
-    runtime_dirs = ["motionview-pros"]
-    archive_names = ["motionview-pros.zip"]
 
     roots: List[Path] = []
     roots.extend(_expand_bundle_search_roots(_bundle_search_roots_from_env()))
@@ -224,35 +250,33 @@ def resolve_bundled_pros_exe() -> Optional[str]:
         if not resolved_root.is_dir():
             continue
 
-        candidates: List[Path] = []
-        for name in exact_names:
-            candidates.append(resolved_root / name)
-        for pattern in glob_patterns:
-            candidates.extend(sorted(resolved_root.glob(pattern)))
-        for runtime_dir in runtime_dirs:
-            candidates.append(resolved_root / runtime_dir / f"{runtime_dir}{exe_ext}")
+        candidate_groups: List[List[Path]] = [
+            [resolved_root / "motionview-pros" / f"motionview-pros{exe_ext}"],
+        ]
+        if not _is_dev_target_build_root(resolved_root):
+            candidate_groups.extend([
+                [resolved_root / f"motionview-pros{exe_ext}"],
+                sorted(resolved_root.glob(f"motionview-pros-*{exe_ext}")),
+            ])
 
-        for candidate in candidates:
-            try:
-                resolved_candidate = candidate.expanduser().resolve()
-            except Exception:
-                continue
-            key = str(resolved_candidate)
-            if key in seen:
-                continue
-            seen.add(key)
-            if resolved_candidate.exists() and resolved_candidate.is_file():
-                return key
+        for candidates in candidate_groups:
+            for candidate in candidates:
+                normalized = candidate.expanduser()
+                key = str(normalized)
+                if key in seen:
+                    continue
+                seen.add(key)
+                resolved = _ensure_executable(normalized)
+                if resolved:
+                    return resolved
 
         if getattr(sys, "frozen", False):
-            for archive_name in archive_names:
-                archive_path = resolved_root / archive_name
-                try:
-                    resolved_archive = archive_path.expanduser().resolve()
-                except Exception:
-                    continue
-                if not resolved_archive.exists() or not resolved_archive.is_file():
-                    continue
+            archive_path = resolved_root / "motionview-pros.zip"
+            try:
+                resolved_archive = archive_path.expanduser().resolve()
+            except Exception:
+                resolved_archive = None
+            if resolved_archive and resolved_archive.exists() and resolved_archive.is_file():
                 extracted = extract_bundled_pros_archive(resolved_archive)
                 if extracted:
                     return extracted
@@ -276,68 +300,83 @@ def motionview_support_dir() -> Path:
 def extract_bundled_pros_archive(archive_path: Path) -> Optional[str]:
     exe_ext = ".exe" if platform.system() == "Windows" else ""
     runtime_root = motionview_support_dir() / "Runtime"
-    extract_root = runtime_root / "motionview-pros"
-    stamp_path = extract_root / ".archive-mtime"
+    archive_hash = hashlib.sha256()
+    with archive_path.open("rb") as archive_file:
+        for chunk in iter(lambda: archive_file.read(1024 * 1024), b""):
+            archive_hash.update(chunk)
+    archive_id = archive_hash.hexdigest()
+
+    # The runtime is a cache of the bundled archive. Keep each archive in its
+    # own content-addressed directory so a newly installed bundle can never be
+    # mistaken for a prior extraction because of installer timestamps.
+    runtime_dir = runtime_root / "motionview-pros"
+    extract_root = runtime_dir / archive_id
     expected_exe = extract_root / "motionview-pros" / f"motionview-pros{exe_ext}"
-    archive_mtime = str(int(archive_path.stat().st_mtime))
 
     try:
-        current_stamp = stamp_path.read_text(encoding="utf-8").strip() if stamp_path.exists() else None
-        needs_extract = current_stamp != archive_mtime or not expected_exe.exists()
-        if needs_extract:
-            if extract_root.exists():
-                shutil.rmtree(extract_root, ignore_errors=True)
-            extract_root.mkdir(parents=True, exist_ok=True)
+        if not expected_exe.exists():
+            runtime_dir.mkdir(parents=True, exist_ok=True)
+            temporary_root = runtime_dir / f".{archive_id}.tmp"
+            shutil.rmtree(temporary_root, ignore_errors=True)
+            temporary_root.mkdir(parents=True)
             with zipfile.ZipFile(archive_path) as zf:
-                zf.extractall(extract_root)
-            if platform.system() != "Windows":
-                try:
-                    executable = extract_root / "motionview-pros" / f"motionview-pros{exe_ext}"
-                    if executable.exists():
-                        executable.chmod(executable.stat().st_mode | 0o755)
-                except Exception:
-                    pass
-            stamp_path.write_text(archive_mtime, encoding="utf-8")
-        if expected_exe.exists() and expected_exe.is_file():
-            if platform.system() != "Windows":
-                try:
-                    expected_exe.chmod(expected_exe.stat().st_mode | 0o755)
-                except Exception:
-                    pass
-            return str(expected_exe.resolve())
+                zf.extractall(temporary_root)
+            temporary_exe = temporary_root / "motionview-pros" / f"motionview-pros{exe_ext}"
+            if not temporary_exe.exists():
+                raise RuntimeError("bundled PROS archive is missing its executable")
+            temporary_root.rename(extract_root)
+        return _ensure_executable(expected_exe)
     except Exception:
+        shutil.rmtree(runtime_dir / f".{archive_id}.tmp", ignore_errors=True)
         return None
-    return None
 
 def resolve_extracted_pros_exe() -> Optional[str]:
     exe_ext = ".exe" if platform.system() == "Windows" else ""
-    runtime_root = motionview_support_dir() / "Runtime" / "motionview-pros"
     candidates = [
-        runtime_root / "motionview-pros" / f"motionview-pros{exe_ext}",
-        runtime_root / f"motionview-pros{exe_ext}",
+        motionview_support_dir() / "Runtime" / "motionview-pros" / "motionview-pros" / f"motionview-pros{exe_ext}",
+        motionview_support_dir() / "Runtime" / "motionview-pros" / f"motionview-pros{exe_ext}",
     ]
 
     for candidate in candidates:
-        try:
-            resolved = candidate.expanduser().resolve()
-        except Exception:
-            continue
-        if resolved.exists() and resolved.is_file():
-            if platform.system() != "Windows":
-                try:
-                    resolved.chmod(resolved.stat().st_mode | 0o755)
-                except Exception:
-                    pass
-            return str(resolved)
+        resolved = _ensure_executable(candidate.expanduser())
+        if resolved:
+            return resolved
     return None
 
 def resolve_pros_exe() -> Optional[str]:
-    return resolve_extracted_pros_exe() or resolve_bundled_pros_exe()
+    # The packaged archive is authoritative. Only use an old Runtime extraction
+    # as a fallback when no bundled archive can be located.
+    return resolve_bundled_pros_exe() or resolve_extracted_pros_exe()
 
-# MotionView must use the bundled MVLib-compatible PROS fork.
-PROS_EXE = resolve_pros_exe()
-if not PROS_EXE:
-    print("[WARN] Bundled MotionView PROS CLI not found. Live streaming may not work.", file=sys.stderr)
+def resolve_pros_command() -> Optional[List[str]]:
+    if not getattr(sys, "frozen", False):
+        repo_root = Path(__file__).resolve().parent.parent
+        entry = repo_root / "src" / "pros-cli" / "motionview_terminal_entry.py"
+        if entry.is_file():
+            venv_python = repo_root / ".venv" / ("Scripts/python.exe" if platform.system() == "Windows" else "bin/python")
+            python = venv_python if venv_python.is_file() else Path(sys.executable).resolve()
+            return [str(python), str(entry)]
+    executable = resolve_pros_exe()
+    return [executable] if executable else None
+
+def current_bridge_exe() -> str:
+    if getattr(sys, "frozen", False):
+        try:
+            return str(Path(sys.executable).resolve())
+        except Exception:
+            return str(sys.executable)
+    try:
+        return str(Path(__file__).resolve())
+    except Exception:
+        return str(__file__)
+
+# Development runs the checked-in fork directly so parser edits do not require
+# rebuilding PyInstaller. Packaged applications use the bundled executable.
+PROS_COMMAND = resolve_pros_command()
+_bridge_log(f"bridge executable: {current_bridge_exe()}")
+_bridge_log(f"resolved motionview-pros command: {PROS_COMMAND}")
+if not PROS_COMMAND:
+    _bridge_log("Bundled MotionView PROS CLI not found. Live streaming may not work.")
 # Resource paths (PyInstaller-friendly)
 # ----------------------------
 def resource_base_dir() -> Path:
@@ -423,8 +462,13 @@ async def broadcast(line: str):
     # Take useless lines and remove them
     if "resolve_v5_port - No v5 ports were found" in line:
         line = "No v5 devices were found."
-    elif "PROS-CLI Version: " in line:
-        return
+    elif "You must be in a PROS project directory" in line:
+        line = "The PROS Path selected is not inside of a PROS Project."
+    elif "Couldn't find the response header in the device response after" in line:
+        line = "Connected device disconnected."
+    elif "The PROS Path selected is not inside of a PROS Project" in line:
+        line = "The PROS Path selected is not inside of a PROS Project."
+        
     elif "Usage: pros terminal [OPTIONS] [PORT]" in line:
         return
     elif "Try 'pros terminal --help' for help" in line:
@@ -433,16 +477,26 @@ async def broadcast(line: str):
         or "Sentry is attempting to send" in line
         or "Waiting up to" in line):
         return
-    elif "You must be in a PROS project directory" in line:
-        line = "The PROS Path selected is not inside of a PROS Project."
-    elif "Couldn't find the response header in the device response after" in line:
-        line = "Connected device disconnected."
-    elif "The PROS Path selected is not inside of a PROS Project" in line:
-        line = "The PROS Path selected is not inside of a PROS Project."
+    elif "Connection to" in line and "broken" in line and "Device not configured" in line:
+        return
+    elif "Stopping terminal" in line:
+        return
+    elif "warnings.warn(" in line:
+        return
     elif ("NotOpenSSLWarning" in line
         or "RequestsDependencyWarning" in line
         or "currently the 'ssl' module is compiled with 'LibreSSL" in line
-        or "Unable to find acceptable character detection dependency" in line):
+        or "Unable to find acceptable character detection dependency" in line
+        or "Traceback (most recent call last):" in line
+        or "During handling of the above exception" in line
+        or "Exception in thread serial-rx-term:" in line
+        or "Failed to restore V5 pit channel during disconnect cleanup" in line
+        or "serial.serialutil.SerialException: read failed:" in line
+        or "PortConnectionException: read failed:" in line
+        or line.strip().startswith("[Errno 6] Device not configured")
+        or line.strip().startswith("OSError: [Errno 6] Device not configured")
+        or line.strip().startswith("TypeError: argument must be an int, or have a fileno() method.")
+    ):
         return
 
     async with _clients_lock:
@@ -475,6 +529,26 @@ class ProsTerminalRunner:
         self._pty_buf: bytes = b""
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
+    def _prune_exited_process_state(self):
+        if self.proc is not None and self.proc.returncode is not None:
+            self.proc = None
+            self.reader_task = None
+            self._close_pty_reader()
+
+    def _close_pty_reader(self):
+        if self._loop is not None and self._pty_master_fd is not None:
+            try:
+                self._loop.remove_reader(self._pty_master_fd)
+            except Exception:
+                pass
+        if self._pty_master_fd is not None:
+            try:
+                os.close(self._pty_master_fd)
+            except Exception:
+                pass
+            self._pty_master_fd = None
+        self._pty_buf = b""
+
     @property
     def running(self) -> bool:
         return self.proc is not None and self.proc.returncode is None
@@ -485,41 +559,31 @@ class ProsTerminalRunner:
 
     async def start(self) -> dict:
         async with self._op_lock:
+            self._prune_exited_process_state()
             if self.running:
                 return {"ok": True, "status": "already running", "pid": self.pid}
 
             self._loop = asyncio.get_running_loop()
 
             # If a previous session exited without cleanup, clear stale PTY/reader state.
-            if self._loop is not None and self._pty_master_fd is not None:
-                try:
-                    self._loop.remove_reader(self._pty_master_fd)
-                except Exception:
-                    pass
-                try:
-                    os.close(self._pty_master_fd)
-                except Exception:
-                    pass
-                self._pty_master_fd = None
-                self._pty_buf = b""
-
-            # Prefer PTY on Unix-like systems
-            if os.name != "nt":
-                try:
-                    await asyncio.wait_for(self._start_unix_pty(), timeout=3.0)
-                    return {"ok": True, "status": "started", "pid": self.pid, "mode": "pty"}
-                except Exception as e:
-                    # Fall back to pipes if PTY fails
-                    print(f"WARNING: PTY start failed, falling back to pipes: {e}", file=sys.stderr)
+            if self._pty_master_fd is not None:
+                self._close_pty_reader()
 
             try:
                 await asyncio.wait_for(self._start_pipes(), timeout=3.0)
                 return {"ok": True, "status": "started", "pid": self.pid, "mode": "pipes"}
             except Exception as e:
+                if os.name != "nt":
+                    try:
+                        await asyncio.wait_for(self._start_unix_pty(), timeout=3.0)
+                        return {"ok": True, "status": "started", "pid": self.pid, "mode": "pty"}
+                    except Exception as pty_error:
+                        return {"ok": False, "status": f"start failed: pipes={e}; pty={pty_error}"}
                 return {"ok": False, "status": f"start failed: {e}"}
 
     async def stop(self) -> dict:
         async with self._op_lock:
+            self._prune_exited_process_state()
             if not self.running:
                 # Still clean up stale PTY/reader state if present.
                 if self.proc is None and self.reader_task is None and self._pty_master_fd is None:
@@ -538,6 +602,7 @@ class ProsTerminalRunner:
 
     async def kill(self) -> dict:
         async with self._op_lock:
+            self._prune_exited_process_state()
             if not self.running:
                 return {"ok": True, "status": "not running"}
 
@@ -553,23 +618,12 @@ class ProsTerminalRunner:
             self.reader_task.cancel()
             try:
                 await self.reader_task
-            except Exception:
+            except BaseException:
                 pass
             self.reader_task = None
 
         # Close PTY reader hook + fds on Unix
-        if self._loop is not None and self._pty_master_fd is not None:
-            try:
-                self._loop.remove_reader(self._pty_master_fd)
-            except Exception:
-                pass
-        if self._pty_master_fd is not None:
-            try:
-                os.close(self._pty_master_fd)
-            except Exception:
-                pass
-            self._pty_master_fd = None
-            self._pty_buf = b""
+        self._close_pty_reader()
 
         proc = self.proc
         self.proc = None
@@ -628,10 +682,8 @@ class ProsTerminalRunner:
                 pass
             try:
                 await asyncio.wait_for(proc.wait(), timeout=1.0)
-            except:
+            except BaseException:
                 pass
-        except Exception:
-            pass
 
     async def _start_unix_pty(self):
         import pty  # Unix only
@@ -651,14 +703,19 @@ class ProsTerminalRunner:
         lock = _get_lock()
         async with lock:
             pros_dir = str(PROS_PROJECT_DIR)
+        env = _pros_launch_env()
         # Spawn `pros terminal` with stdio attached to PTY slave
+        if not PROS_COMMAND:
+            raise RuntimeError("MotionView PROS terminal is unavailable")
+        _bridge_log(f"launching motionview-pros (pty): {PROS_COMMAND}")
         self.proc = await asyncio.create_subprocess_exec(
-            PROS_EXE, "terminal", "--no-banner",
+            *PROS_COMMAND, "terminal", "--no-banner",
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,
             preexec_fn=_preexec,
-            cwd=pros_dir
+            cwd=pros_dir,
+            env=env,
         )
 
         # Parent closes slave; we only read from master
@@ -676,19 +733,11 @@ class ProsTerminalRunner:
         try:
             data = os.read(self._pty_master_fd, 4096)
         except OSError:
+            self._close_pty_reader()
             return
         if not data:
             # EOF: remove reader to avoid busy loop, and close master.
-            try:
-                self._loop.remove_reader(self._pty_master_fd)
-            except Exception:
-                pass
-            try:
-                os.close(self._pty_master_fd)
-            except Exception:
-                pass
-            self._pty_master_fd = None
-            self._pty_buf = b""
+            self._close_pty_reader()
             return
 
         self._pty_buf += data
@@ -715,10 +764,12 @@ class ProsTerminalRunner:
         lock = _get_lock()
         async with lock:
             pros_dir = str(PROS_PROJECT_DIR)
-        env = os.environ.copy()
-        env["MOTIONVIEW_HEADLESS"] = "1"
+        env = _pros_launch_env()
+        if not PROS_COMMAND:
+            raise RuntimeError("MotionView PROS terminal is unavailable")
+        _bridge_log(f"launching motionview-pros (pipes): {PROS_COMMAND}")
         self.proc = await asyncio.create_subprocess_exec(
-            PROS_EXE, "terminal", "--no-banner",
+            *PROS_COMMAND, "terminal", "--no-banner",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             stdin=asyncio.subprocess.DEVNULL,

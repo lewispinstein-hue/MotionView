@@ -1,0 +1,43 @@
+export interface RenderSchedulerCallbacks {
+  drawField(): void;
+}
+
+export interface ViewingRenderLayer {
+  drawTimeline(): void;
+}
+
+export interface PlanningRenderLayer {
+  drawTimeline(): void;
+}
+
+let callbacks: RenderSchedulerCallbacks | null = null;
+let viewingLayer: ViewingRenderLayer | null = null;
+let planningLayer: PlanningRenderLayer | null = null;
+let drawQueued = false;
+
+export function configureRenderScheduler(nextCallbacks: RenderSchedulerCallbacks): void {
+  callbacks = nextCallbacks;
+}
+
+export function registerViewingRenderLayer(layer: ViewingRenderLayer): void {
+  viewingLayer = layer;
+}
+
+export function registerPlanningRenderLayer(layer: PlanningRenderLayer): void {
+  planningLayer = layer;
+}
+
+export function drawAllNow(): void {
+  callbacks?.drawField();
+  viewingLayer?.drawTimeline();
+  planningLayer?.drawTimeline();
+}
+
+export function requestDrawAll(): void {
+  if (drawQueued) return;
+  drawQueued = true;
+  requestAnimationFrame(() => {
+    drawQueued = false;
+    drawAllNow();
+  });
+}

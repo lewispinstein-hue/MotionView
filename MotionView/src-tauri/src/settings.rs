@@ -1,7 +1,7 @@
 use std::path::PathBuf;
-use std::{collections::HashMap, fs};
 
 use base64::Engine as _;
+use semver::Version;
 use tauri::{AppHandle, Manager};
 
 const SETTINGS_FILE: &str = "user-preferences.json";
@@ -10,15 +10,15 @@ const SAVED_PATHS_FILE: &str = "saved-paths.json";
 #[cfg(not(mobile))]
 #[allow(dead_code)]
 const WINDOW_STATE_FILE: &str = "window-state.json";
-const AUX_WINDOW_STATE_FILE: &str = "aux-window-state.json";
+const APP_STATE_KEY: &str = "appState";
+const LAST_SEEN_APP_VERSION_KEY: &str = "lastSeenAppVersion";
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AuxWindowState {
-    pub x: f64,
-    pub y: f64,
-    pub width: f64,
-    pub height: f64,
+pub struct PreviousVersionStatus {
+    pub previous_version: Option<String>,
+    pub current_version: String,
+    pub was_previous_version_older: bool,
 }
 
 fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -45,15 +45,6 @@ fn saved_paths_path(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e: tauri::Error| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.join(SAVED_PATHS_FILE))
-}
-
-fn aux_window_state_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e: tauri::Error| e.to_string())?;
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir.join(AUX_WINDOW_STATE_FILE))
 }
 
 #[cfg(not(mobile))]
@@ -100,6 +91,69 @@ pub fn write_settings(app: AppHandle, contents: String) -> Result<(), String> {
     std::fs::write(path, contents).map_err(|e| e.to_string())
 }
 
+fn read_settings_value(app: &AppHandle) -> Result<serde_json::Value, String> {
+    match read_settings(app.clone())? {
+        Some(contents) => serde_json::from_str(&contents).map_err(|e| e.to_string()),
+        None => Ok(serde_json::json!({})),
+    }
+}
+
+fn write_settings_value(app: &AppHandle, value: &serde_json::Value) -> Result<(), String> {
+    let path = settings_path(app)?;
+    let contents = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
+    std::fs::write(path, contents).map_err(|e| e.to_string())
+}
+
+fn parse_version(value: &str) -> Option<Version> {
+    Version::parse(value).ok().or_else(|| {
+        let trimmed = value.trim();
+        trimmed
+            .strip_prefix('v')
+            .and_then(|rest| Version::parse(rest).ok())
+    })
+}
+
+#[tauri::command]
+pub fn was_previous_version_old(app: AppHandle) -> Result<PreviousVersionStatus, String> {
+    let mut settings = read_settings_value(&app)?;
+    let root = settings
+        .as_object_mut()
+        .ok_or_else(|| "settings root must be a JSON object".to_string())?;
+
+    let app_state = root
+        .entry(APP_STATE_KEY.to_string())
+        .or_insert_with(|| serde_json::json!({}));
+    let app_state_obj = app_state
+        .as_object_mut()
+        .ok_or_else(|| "settings.appState must be a JSON object".to_string())?;
+
+    let current_version = app.package_info().version.to_string();
+    let previous_version = app_state_obj
+        .get(LAST_SEEN_APP_VERSION_KEY)
+        .and_then(|value| value.as_str())
+        .map(|value| value.to_string());
+
+    let was_previous_version_older = match previous_version.as_deref() {
+        Some(previous) => match (parse_version(previous), parse_version(&current_version)) {
+            (Some(prev), Some(curr)) => prev < curr,
+            _ => previous != current_version,
+        },
+        None => false,
+    };
+
+    app_state_obj.insert(
+        LAST_SEEN_APP_VERSION_KEY.to_string(),
+        serde_json::Value::String(current_version.clone()),
+    );
+    write_settings_value(&app, &settings)?;
+
+    Ok(PreviousVersionStatus {
+        previous_version,
+        current_version,
+        was_previous_version_older,
+    })
+}
+
 #[tauri::command]
 pub fn read_saved_paths(app: AppHandle) -> Result<Option<String>, String> {
     let path = saved_paths_path(&app)?;
@@ -116,36 +170,6 @@ pub fn write_saved_paths(app: AppHandle, contents: String) -> Result<(), String>
     serde_json::from_str::<serde_json::Value>(&contents).map_err(|e| e.to_string())?;
     let path = saved_paths_path(&app)?;
     std::fs::write(path, contents).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn read_aux_window_state(app: AppHandle, label: String) -> Result<Option<AuxWindowState>, String> {
-    let path = aux_window_state_path(&app)?;
-    if !path.exists() {
-        return Ok(None);
-    }
-    let contents = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let states: HashMap<String, AuxWindowState> =
-        serde_json::from_str(&contents).map_err(|e| e.to_string())?;
-    Ok(states.get(&label).cloned())
-}
-
-#[tauri::command]
-pub fn write_aux_window_state(
-    app: AppHandle,
-    label: String,
-    state: AuxWindowState,
-) -> Result<(), String> {
-    let path = aux_window_state_path(&app)?;
-    let mut states: HashMap<String, AuxWindowState> = if path.exists() {
-        let contents = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&contents).unwrap_or_default()
-    } else {
-        HashMap::new()
-    };
-    states.insert(label, state);
-    let contents = serde_json::to_string_pretty(&states).map_err(|e| e.to_string())?;
-    fs::write(path, contents).map_err(|e| e.to_string())
 }
 
 fn mime_from_ext(path: &std::path::Path) -> &'static str {

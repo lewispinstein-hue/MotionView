@@ -573,9 +573,9 @@ std::int32_t is_installed(void);
  * This function uses the following values of errno when an error state is
  * reached:
  * 
- * EIO - Hard error occurred in the low level disk I/O layer
+ * EIO - Hard error occured in the low level disk I/O layer
  * EINVAL - file or directory is invalid, or length is invalid
- * EBUSY - THe physical drive cannot work
+ * EBUSY - THe physical drinve cannot work
  * ENOENT - cannot find the path or file
  * EINVAL - the path name format is invalid
  * EACCES - Access denied or directory full

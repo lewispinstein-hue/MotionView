@@ -1,0 +1,18 @@
+:root {
+  --rightSidebarWViewing: 370px;
+  --rightSidebarWPlanning: 370px;
+  --leftSidebarW: 391px;
+  --timelineH: 180px;
+  --planListH: 240px;
+  --toolbarH: 54px;
+  --topbarH: 50px;
+  --planningTimelineH: 144px;
+  --bg: #0b0f14;
+  --panel: #101720;
+  --text: #e7eef7;
+  --muted: #93a4b8;
+  --line: #233244;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+}

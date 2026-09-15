@@ -12,6 +12,7 @@
 #ifndef _MVLIB_OPTIONAL_USED
 #define _MVLIB_OPTIONAL_USED "ezTemplate"
 #include "mvlib/core.hpp" // IWYU pragma: keep
+#include "mvlib/types.hpp" // IWYU pragma: keep
 #include "EZ-Template/api.hpp"  // IWYU pragma: keep
 
 #include <optional>
@@ -30,7 +31,7 @@ namespace mvlib {
  * @warning The caller must ensure the chassis pointer remains valid for
  *          as long as the Logger might invoke the callback.
  *
- * @par Example: EZ-Template odometry
+ * \b Example
  * @code{.cpp}
  * #include "mvlib/api.hpp"
  * #include "mvlib/Optional/ezTemplate.hpp"

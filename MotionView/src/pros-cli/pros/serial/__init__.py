@@ -10,6 +10,7 @@ from typing import DefaultDict, Dict, List, Optional, Tuple, Union
 DEFAULT_ROSTER: Dict[int, str] = {}
 ELEVATED_ROSTER: Dict[int, str] = {}
 PENDING_ROSTER_EVENTS: DefaultDict[int, List[Tuple[object, ...]]] = defaultdict(list)
+MAX_PENDING_ROSTER_EVENTS_PER_ID = 100
 LAST_TIMESTAMP_RAW: Optional[int] = None
 TIMESTAMP_WRAP_OFFSET = 0
 STREAM_BUFFER = bytearray()
@@ -167,7 +168,7 @@ def _render_pending_event(event: Tuple[object, ...], label: str) -> str:
         return _csv_line("[WATCH]", ts, level_name, watch_id, label, value)
 
     if kind == "wpoint_created":
-        _, ts, wp_id, tar_x, tar_y, tar_theta_raw, lin_tol, theta_tol, timeout = event
+        _, ts, wp_id, tar_x, tar_y, tar_theta_raw, lin_tol, theta_tol, timeout, retriggerable = event
         has_theta = not math.isnan(theta_tol)
         tar_theta = f"{_decode_theta(tar_theta_raw):.2f}" if has_theta else "NA"
         theta_tol_str = f"{theta_tol:.2f}" if has_theta else "NA"
@@ -184,6 +185,7 @@ def _render_pending_event(event: Tuple[object, ...], label: str) -> str:
             timeout_str,
             f"{lin_tol:.2f}",
             theta_tol_str,
+            1 if retriggerable else 0,
         )
 
     if kind == "wpoint_status":
@@ -193,10 +195,19 @@ def _render_pending_event(event: Tuple[object, ...], label: str) -> str:
     return ""
 
 
+def _queue_pending_event(item_id: int, event: Tuple[object, ...]) -> None:
+    pending = PENDING_ROSTER_EVENTS[item_id]
+    # Keep a bounded backlog per roster id so early events survive until the
+    # matching roster arrives without allowing unbounded memory growth.
+    if len(pending) >= MAX_PENDING_ROSTER_EVENTS_PER_ID:
+        pending.pop(0)
+    pending.append(event)
+
+
 def _emit_rostered_event(item_id: int, prefer_elevated: bool, event: Tuple[object, ...]) -> str:
     label = _resolve_roster_label(item_id, prefer_elevated)
     if label is None:
-        PENDING_ROSTER_EVENTS[item_id].append(event)
+        _queue_pending_event(item_id, event)
         return ""
     return _render_pending_event(event, label)
 
@@ -242,9 +253,16 @@ def _handle_pose(payload: bytes) -> str:
 
 def _handle_waypoint(payload: bytes, subtype: int) -> str:
     if subtype == WPOINT_CREATED:
-        ts, wp_id, tar_x, tar_y, tar_theta_raw, lin_tol, theta_tol, timeout = struct.unpack("<HHffHffI", payload)
+        legacy_size = struct.calcsize("<HHffHffI")
+        ts, wp_id, tar_x, tar_y, tar_theta_raw, lin_tol, theta_tol, timeout = struct.unpack(
+            "<HHffHffI", payload[:legacy_size]
+        )
+        retriggerable = len(payload) > legacy_size and payload[legacy_size] != 0
         ts = _expand_timestamp(ts)
-        event = ("wpoint_created", ts, wp_id, tar_x, tar_y, tar_theta_raw, lin_tol, theta_tol, timeout)
+        event = (
+            "wpoint_created", ts, wp_id, tar_x, tar_y, tar_theta_raw,
+            lin_tol, theta_tol, timeout, retriggerable,
+        )
         return _emit_rostered_event(wp_id, False, event)
 
     if subtype in (WPOINT_REACHED, WPOINT_TIMEDOUT):
@@ -293,7 +311,7 @@ def _handle_roster(payload: bytes, subtype: int) -> str:
 def _handle_log(payload: bytes, level_bits: int) -> str:
     ts = _expand_timestamp(struct.unpack("<H", payload[:2])[0])
     msg = _decode_text(payload[2:])
-    return _csv_line("[LOG]", ts, _decode_level(level_bits), msg)
+    return f"[LOG],{ts},{_decode_level(level_bits)},{msg}\n"
 
 
 def _expected_payload_len(msg_type: int, subtype: int) -> Optional[int]:
@@ -346,6 +364,9 @@ def _parse_binary_frame(frame: bytes) -> Optional[str]:
     if msg_type in (MSG_TYPE_WATCH, MSG_TYPE_LOG):
         if len(payload) < expected_len:
             return None
+    elif msg_type == MSG_TYPE_WPOINT and subtype == WPOINT_CREATED:
+        if len(payload) not in (expected_len, expected_len + 1):
+            return None
     elif len(payload) != expected_len:
         return None
 
@@ -368,6 +389,24 @@ def _parse_binary_frame(frame: bytes) -> Optional[str]:
 
 
 
+def _decode_plain_text_or_hex(frame: bytes, encoding: str = "utf-8") -> str:
+    candidates = [frame]
+    try:
+        decoded_cobs = cobs_decode(frame)
+        if decoded_cobs and decoded_cobs != frame:
+            candidates.append(decoded_cobs)
+    except Exception:
+        pass
+
+    for candidate in candidates:
+        try:
+            return _decode_text_chunk(candidate, encoding=encoding, errors="strict")
+        except Exception:
+            continue
+
+    return bytes_to_str(frame) + "\n"
+
+
 def _decode_binary_frame(frame: bytes) -> str:
     try:
         parsed = _parse_binary_frame(frame)
@@ -375,7 +414,7 @@ def _decode_binary_frame(frame: bytes) -> str:
             return parsed
     except Exception:
         pass
-    return bytes_to_str(frame) + "\n"
+    return _decode_plain_text_or_hex(frame)
 
 
 def _decode_text_chunk(chunk: bytes, encoding: str, errors: str) -> str:

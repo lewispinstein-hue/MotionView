@@ -1,16 +1,25 @@
 #include "mvlib/core.hpp"
+#include "mvlib/private/telemetry.hpp"
+#include "mvlib/types.hpp"
+#define _MVLIB_PREVENT_MACRO_CLEANUP
 #include "mvlib/private/forwardLogMacros.h"
-#include "mvlib/telemetry.hpp"
+#include "mvlib/private/raii.hpp"
+#include "mvlib/private/sdSink.hpp"
+
+#include <cstdio>
 
 namespace mvlib {
 
 void Logger::setLogToTerminal(bool v) {
   m_config.logToTerminal.store(v);
-  _MVLIB_FORWARD_DEBUG("logToTerminal set to: %d", v);
+  _MVLIB_FORWARD_DEBUG("logToTerminal() set to: %d", v);
 }
 
 void Logger::setLogToSD(bool v) {
-  if (m_started || m_sdLocked) {
+  detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
+  if (!lock.isLocked()) return;
+
+  if (m_started.load() || m_sdSink->locked()) {
     _MVLIB_FORWARD_WARN("setLogToSD() called after logger start — ignored. Set value: %d", v);
     return;
   }
@@ -40,19 +49,55 @@ void Logger::setLogSystemInfo(bool v) {
 
 void Logger::setTimings(LoggerTimings timings) {
   _MVLIB_FORWARD_DEBUG("SetTimings changed");
-  m_timings = timings;
+  m_sdBufferFlushInterval.store(timings.sdBufferFlushInterval);
+  m_stdoutBufferFlushInterval.store(timings.stdoutBufferFlushInterval);
+  m_sdPollingRate.store(timings.sdPollingRate);
+  m_terminalPollingRate.store(timings.terminalPollingRate);
+  m_rosterSyncAllInterval.store(timings.rosterSyncAllInterval);
+  m_sdSink->setFlushInterval(timings.sdBufferFlushInterval);
 }
 
-void Logger::setLoggerMinLevel(LogLevel level) {
-  _MVLIB_FORWARD_DEBUG("SetLoggerMinLevel set to: %d", (int)level);
+void Logger::setMinLogLevel(LogLevel level) {
+  if (level == LogLevel::OVERRIDE) return;
+
   // Telemetry engine is now the source of truth for the min log level
-  Telemetry::getInstance().setMinLevel(level);
+  detail::Telemetry::getInstance().setMinLevel(level);
+  _MVLIB_FORWARD_DEBUG("SetMinLogLevel set to: %d", (int)level);
+}
+
+void Logger::setBuildDate(const char *buildDate) {
+  detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
+  if (!lock.isLocked()) return;
+
+  if (m_started.load() || m_sdSink->locked()) {
+    _MVLIB_FORWARD_WARN("setBuildDate() called after logger start — ignored.");
+    return;
+  }
+
+  if (!buildDate || buildDate[0] == '\0') {
+    m_userBuildDate[0] = '\0';
+    _MVLIB_FORWARD_DEBUG("setBuildDate() cleared user build date.");
+    return;
+  }
+
+  snprintf(m_userBuildDate, sizeof(m_userBuildDate), "%s", buildDate);
+  _MVLIB_FORWARD_DEBUG("setBuildDate() set user build date to: %s", m_userBuildDate);
+}
+
+const char* Logger::getBuildDate() const {
+  return m_userBuildDate[0] != '\0' ? m_userBuildDate : __DATE__;
 }
 
 void Logger::setPoseGetter(std::function<std::optional<Pose>()> getter) {
-  unique_lock m(m_mutex, TIMEOUT_MAX);
-  if (!m.isLocked() || !getter) return;
-  _MVLIB_FORWARD_DEBUG("SetPoseGetter callback. Address: %p", (void*)&getter);
-  m_getPose = std::move(getter);
+  detail::uniqueLock m(m_mutex);
+  if (!m.isLocked() || !getter) {
+    _MVLIB_FORWARD_DEBUG("Unable to set pose getter because mutex failed "
+                         "to lock. Try adding delay or calling at a different "
+                         "time.");
+    return;
+  }
+  _MVLIB_FORWARD_DEBUG("SetPoseGetter set callback.");
+  m_getPose = std::make_shared<std::function<std::optional<Pose>()>>(std::move(getter));
+  m_poseGetterMutex = std::make_shared<pros::Mutex>();
 }
 } // namespace mvlib

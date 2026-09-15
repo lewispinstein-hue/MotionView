@@ -10,10 +10,11 @@ const binDir = path.join(repoRoot, "src-tauri", "bin");
 const bridgeBinDir = path.join(binDir, "motionview-bridge");
 const pyInstallerWorkDir = path.join(repoRoot, ".pyinstaller");
 const pyInstallerSpecDir = path.join(repoRoot, ".pyinstaller-spec");
+const pyInstallerConfigDir = path.join(pyInstallerWorkDir, "config");
 const bridgeEntry = path.join(repoRoot, "src", "bridge.py");
 const bridgeRequirements = path.join(repoRoot, "requirements.txt");
 const prosRoot = path.join(repoRoot, "src", "pros-cli");
-const prosEntry = path.join(prosRoot, "pros", "cli", "main.py");
+const prosEntry = path.join(prosRoot, "motionview_terminal_entry.py");
 const prosRequirements = path.join(prosRoot, "requirements.txt");
 
 function run(cmd, args) {
@@ -71,10 +72,25 @@ const python =
   process.env.PYTHON ||
   (fs.existsSync(venvPython) ? venvPython : process.platform === "win32" ? "python" : "python3");
 
-function installRequirements(requirementsPath) {
+function installRequirements(requirementsPath, extraArgs = []) {
   if (fs.existsSync(requirementsPath)) {
-    run(python, ["-m", "pip", "install", "-r", requirementsPath]);
+    run(python, ["-m", "pip", "install", ...extraArgs, "-r", requirementsPath]);
   }
+}
+
+function isPackageInstalled(packageName) {
+  const res = spawnSync(python, ["-m", "pip", "show", packageName], {
+    stdio: "ignore",
+  });
+  if (res.error) throw res.error;
+  return res.status === 0;
+}
+
+function installProsRequirements() {
+  // scan-build depends on the obsolete `typing` backport. After the first
+  // install, keep top-level packages current without reinstalling that backport.
+  const extraArgs = isPackageInstalled("scan-build") ? ["--no-deps"] : [];
+  installRequirements(prosRequirements, extraArgs);
 }
 
 function removeObsoletePyInstallerPackages() {
@@ -105,7 +121,15 @@ function buildPyInstaller(name, entry, extraArgs = [], { noConsole = false } = {
     args.push("--noconsole");
   }
   args.push("-n", name, entry);
-  run(python, args);
+  const res = spawnSync(python, args, {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      PYINSTALLER_CONFIG_DIR: pyInstallerConfigDir,
+    },
+  });
+  if (res.error) throw res.error;
+  if (res.status !== 0) process.exit(res.status ?? 1);
 }
 
 function copySidecar(baseName) {
@@ -133,16 +157,15 @@ function copySidecar(baseName) {
   console.log(`Copied updater bridge to ${bridgeFallbackPath}`);
 }
 
-function copyRuntimeDir(baseName) {
+function copyRuntimeDir(baseName, destination = path.join(binDir, baseName)) {
   const distRuntimeDir = path.join(distDir, baseName);
   if (!fs.existsSync(distRuntimeDir) || !fs.statSync(distRuntimeDir).isDirectory()) {
     throw new Error(`PyInstaller runtime directory not found: ${distRuntimeDir}`);
   }
 
-  const runtimeDir = path.join(binDir, baseName);
-  fs.rmSync(runtimeDir, { recursive: true, force: true });
-  copyResolvedTree(distRuntimeDir, runtimeDir);
-  console.log(`Copied runtime directory to ${runtimeDir}`);
+  fs.rmSync(destination, { recursive: true, force: true });
+  copyResolvedTree(distRuntimeDir, destination);
+  console.log(`Copied runtime directory to ${destination}`);
 }
 
 function copyRuntimeArchive(baseName) {
@@ -169,13 +192,16 @@ resetPath(path.join(distDir, `motionview-pros${exeExt}`));
 resetPath(pyInstallerWorkDir);
 resetPath(pyInstallerSpecDir);
 
-// Build the bridge sidecar first from the bridge dependency set so it does not
-// inherit extra PROS CLI packages that can destabilize startup.
 installRequirements(bridgeRequirements);
+installProsRequirements();
+removeObsoletePyInstallerPackages();
+
+const bridgeUsesOneDir = process.platform === "darwin";
 buildPyInstaller(
   "motionview-py",
   bridgeEntry,
   [
+    ...(bridgeUsesOneDir ? ["--onedir"] : []),
     // ensure all lazy-loaded modules get bundled
     "--collect-all", "fastapi",
     "--collect-all", "starlette",
@@ -188,17 +214,19 @@ buildPyInstaller(
   ],
   { noConsole: true },
 );
-copySidecar("motionview-py");
+if (bridgeUsesOneDir) {
+  copyRuntimeDir("motionview-py", bridgeBinDir);
+} else {
+  copySidecar("motionview-py");
+}
 
-// Then install/build the bundled PROS fork.
-installRequirements(prosRequirements);
-removeObsoletePyInstallerPackages();
 buildPyInstaller(
   "motionview-pros",
   prosEntry,
   [
     "--onedir",
     "--paths", prosRoot,
+    "--add-data", `${path.join(prosRoot, "pros", "autocomplete")}${path.delimiter}pros/autocomplete`,
     "--collect-all", "pros",
     "--collect-all", "requests",
     "--collect-all", "charset_normalizer",

@@ -1,0 +1,554 @@
+import { getMode } from "../../app/modeController";
+import { requestDrawAll } from "../../render/renderScheduler";
+import { planningTelemetry } from "../../telemetry/createTelemetry";
+import type { PlanningDialogs } from "../PlanningDialogs";
+import type { PlanningDom } from "../PlanningDom";
+import type { PlanningFeature } from "../PlanningFeature";
+import type { PlanningNodeView } from "../planningTypes";
+import { getPlanMethodNumber, getPlanNodeEffectiveMethod, hasPlanNodeMethodOverride } from "../planningObjects";
+import { getContrastTextColor, getDefaultPlanObjectColor } from "../planningState";
+import { getUtf8ByteLength } from "../planningTemplate";
+import type { PlanningMethodDrag, PlanningDragCoordinator } from "./PlanningDragCoordinator";
+
+const PAD = 6;
+const NODE_WIDTH = 18;
+const NODE_GAP = 6;
+const NODE_SLOT = NODE_WIDTH + NODE_GAP;
+const NODE_START_OFFSET = 18;
+const NODE_END_OFFSET = 18;
+const EDGE_INSET = 14;
+const INSERT_HALF = (NODE_WIDTH + NODE_GAP) / 2;
+const WAYPOINT_MIN_GAP = 48;
+const PLAN_PIXELS_PER_INCH = 2;
+const MAX_PLAN_LENGTH_WIDTH = 8_000;
+
+// Animation timings
+const NODE_SHIFT_MS = 320;
+const NODE_ENTER_MS = 240;
+const NODE_EXIT_MS = 220;
+const NODE_MOVE_EPSILON = 0.5;
+
+interface TimelineBucketLayout {
+  readonly beforeWaypoint: number;
+  readonly start: number;
+  readonly end: number;
+  readonly nodeStart: number;
+  readonly nodes: readonly PlanningNodeView[];
+}
+
+interface TimelineLayout {
+  readonly contentWidth: number;
+  readonly waypointX: readonly number[];
+  readonly buckets: readonly TimelineBucketLayout[];
+}
+
+interface ActiveDrag extends PlanningMethodDrag {
+  readonly ghost: HTMLElement;
+  started: boolean;
+}
+
+interface TimelineNodeSnapshot {
+  readonly left: number;
+  readonly background: string;
+  readonly className: string;
+  readonly color: string;
+  readonly text: string;
+}
+
+type TimelineNodeAnimation =
+  | Readonly<{ kind: "enter"; start: number; duration: number }>
+  | Readonly<{ kind: "shift"; fromLeft: number; toLeft: number; start: number; duration: number }>;
+
+interface TimelineExitAnimation extends TimelineNodeSnapshot {
+  readonly start: number;
+  readonly duration: number;
+}
+
+export class PlanningTimelineView {
+  readonly #context: CanvasRenderingContext2D;
+  #activeDrag: ActiveDrag | null = null;
+  #drop: Readonly<{ beforeWaypoint: number; index: number; x: number }> | null = null;
+  #scrubbing = false;
+  #tooltipTimer: number | null = null;
+  #layout: TimelineLayout | null = null;
+  #renderedRouteRevision = -1;
+  #bound = false;
+  #hasRenderedNodes = false;
+  #nodeSnapshots = new Map<string, TimelineNodeSnapshot>();
+  #nodeAnimations = new Map<string, TimelineNodeAnimation>();
+  #exitAnimations = new Map<string, TimelineExitAnimation>();
+
+  constructor(
+    private readonly planning: PlanningFeature,
+    private readonly dom: PlanningDom,
+    private readonly dialogs: PlanningDialogs,
+    drag: PlanningDragCoordinator,
+  ) {
+    const context = dom.timelineCanvas.getContext("2d");
+    if (!context) throw new Error("MotionView could not initialize the Planning timeline canvas.");
+    this.#context = context;
+    drag.started.subscribe((event) => this.beginDrag(event));
+  }
+
+  bind(): void {
+    if (this.#bound) return;
+    this.#bound = true;
+    this.dom.timelineCanvas.addEventListener("pointerdown", (event) => {
+      if (getMode() !== "planning") return;
+      this.#scrubbing = true;
+      this.dom.timelineCanvas.setPointerCapture(event.pointerId);
+      this.scrub(event.clientX);
+    });
+    this.dom.timelineCanvas.addEventListener("pointermove", (event) => { if (this.#scrubbing) this.scrub(event.clientX); });
+    this.dom.timelineCanvas.addEventListener("pointerup", (event) => {
+      this.#scrubbing = false;
+      try { this.dom.timelineCanvas.releasePointerCapture(event.pointerId); } catch { /* already released */ }
+    });
+    this.dom.timelineCanvas.addEventListener("pointercancel", () => { this.#scrubbing = false; });
+    this.dom.eventTimeline.addEventListener("click", (event) => {
+      if (event.target === this.dom.eventTimeline || event.target === this.dom.eventTimelineInner) this.planning.selection.selectNode(null);
+    });
+    window.addEventListener("pointermove", (event) => this.moveDrag(event));
+    window.addEventListener("pointerup", () => this.finishDrag());
+    window.addEventListener("pointercancel", () => this.cancelDrag());
+    window.addEventListener("blur", () => this.cancelDrag());
+  }
+
+  render(): void {
+    const nodes = [...this.planning.timeline.nodes].sort((a, b) => a.beforeWaypoint - b.beforeWaypoint || a.index - b.index || a.id.localeCompare(b.id));
+    const layout = this.buildLayout(nodes);
+    const previousSnapshots = this.#nodeSnapshots;
+    const nextSnapshots = new Map<string, TimelineNodeSnapshot>();
+    const animateChanges = this.#hasRenderedNodes && this.shouldAnimateNodes();
+    const now = performance.now();
+    this.pruneNodeAnimations(now);
+    this.#layout = layout;
+    this.#renderedRouteRevision = this.planning.route.revision;
+    this.dom.timelineNodeLayer.replaceChildren();
+    this.dom.timelineWaypointLayer.replaceChildren();
+    this.dom.eventTimelineHint.hidden = this.planning.route.length >= 2;
+    this.dom.timelineContent.style.width = `${layout.contentWidth}px`;
+    this.planning.route.waypoints.forEach((_point, index) => {
+      const marker = document.createElement("div");
+      marker.className = `planningTimelineWaypointConnector${this.planning.selection.isWaypointSelected(index) ? " isSelected" : ""}`;
+      marker.style.left = `${layout.waypointX[index] ?? PAD}px`;
+      this.dom.timelineWaypointLayer.appendChild(marker);
+    });
+    for (const node of nodes) {
+      const object = this.planning.objects.get(node.objectId);
+      const method = getPlanNodeEffectiveMethod(this.planning.objects.items, node);
+      if (!object || !method) continue;
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = `planningTimelineNode${this.planning.selection.selectedNodeId === node.id ? " isSelected" : ""}${hasPlanNodeMethodOverride(node as any) ? " hasOverride" : ""}`;
+      element.dataset.nodeId = node.id;
+      const bucket = layout.buckets[node.beforeWaypoint];
+      if (!bucket) continue;
+      const left = bucket.nodeStart + node.index * NODE_SLOT;
+      element.style.left = `${left}px`;
+      element.style.background = object.color || getDefaultPlanObjectColor(0);
+      element.style.color = getContrastTextColor(object.color);
+      element.textContent = String(getPlanMethodNumber(this.planning.objects.items, node.objectId, node.methodId) ?? "");
+      nextSnapshots.set(node.id, {
+        left,
+        background: element.style.background,
+        className: element.className,
+        color: element.style.color,
+        text: element.textContent || "",
+      });
+      element.addEventListener("click", (event) => { event.stopPropagation(); this.planning.selection.selectNode(node.id); });
+      element.addEventListener("dblclick", (event) => { event.stopPropagation(); void this.editNode(node.id); });
+      element.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        this.beginDrag({ source: "timeline", objectId: node.objectId, methodId: node.methodId, nodeId: node.id, sourceElement: element, startX: event.clientX, startY: event.clientY });
+      });
+      element.addEventListener("pointerenter", (event) => this.showTooltip(`${object.name || "Object"} • ${method.name}`, event.clientX, event.clientY, method.hasOverride));
+      element.addEventListener("pointermove", (event) => this.positionTooltip(event.clientX, event.clientY));
+      element.addEventListener("pointerleave", () => this.hideTooltip());
+      this.dom.timelineNodeLayer.appendChild(element);
+      if (animateChanges) this.prepareNodeAnimation(node.id, previousSnapshots.get(node.id), left, now);
+      this.playNodeAnimation(node.id, element, now);
+    }
+    if (animateChanges) this.prepareRemovedNodeAnimations(previousSnapshots, nextSnapshots, now);
+    this.renderRemovedNodeAnimations(now);
+    this.#nodeSnapshots = nextSnapshots;
+    this.#hasRenderedNodes = true;
+    this.updateDropLine();
+    this.draw();
+  }
+
+  draw(): void {
+    if (getMode() !== "planning") return;
+    if (this.#renderedRouteRevision !== this.planning.route.revision) {
+      this.render();
+      return;
+    }
+    const rect = this.dom.timelineCanvas.getBoundingClientRect();
+    const layout = this.#layout ?? this.buildLayout([...this.planning.timeline.nodes]);
+    const ratio = window.devicePixelRatio || 1;
+    const pixelWidth = Math.max(1, Math.floor(rect.width * ratio));
+    const pixelHeight = Math.max(1, Math.floor(rect.height * ratio));
+    if (this.dom.timelineCanvas.width !== pixelWidth || this.dom.timelineCanvas.height !== pixelHeight) {
+      this.dom.timelineCanvas.width = pixelWidth;
+      this.dom.timelineCanvas.height = pixelHeight;
+      this.#context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+    this.#context.clearRect(0, 0, rect.width, rect.height);
+    if (this.planning.projection.totalLength <= 0) return;
+    const y = rect.height / 2;
+    this.#context.strokeStyle = "rgba(255,255,255,0.12)";
+    this.#context.lineWidth = 2;
+    this.#context.beginPath();
+    const startX = layout.waypointX[0] ?? PAD + EDGE_INSET;
+    const endX = layout.waypointX.at(-1) ?? rect.width - PAD - EDGE_INSET;
+    this.#context.moveTo(startX, y);
+    this.#context.lineTo(endX, y);
+    this.#context.stroke();
+    const progress = this.xForDistance(this.planning.playback.distance, layout);
+    this.#context.strokeStyle = "rgba(120,180,255,0.9)";
+    this.#context.beginPath();
+    this.#context.moveTo(PAD, y);
+    this.#context.lineTo(progress, y);
+    this.#context.stroke();
+    this.#context.beginPath();
+    this.#context.arc(progress, y, 8, 0, Math.PI * 2);
+    this.#context.fillStyle = "rgba(90,162,250,0.9)";
+    this.#context.fill();
+  }
+
+  resize(): void { this.render(); }
+
+  private scrub(clientX: number): void {
+    const rect = this.dom.timelineCanvas.getBoundingClientRect();
+    this.planning.playback.setDistance(this.distanceForX(clientX - rect.left, this.#layout ?? this.buildLayout([...this.planning.timeline.nodes])));
+  }
+
+  private beginDrag(event: Readonly<PlanningMethodDrag>): void {
+    if (getMode() !== "planning" || this.planning.route.length < 2) return;
+    this.cancelDrag();
+    const ghost = this.createMethodGhost(event.objectId, event.methodId);
+    document.body.appendChild(ghost);
+    this.#activeDrag = { ...event, ghost, started: false };
+  }
+
+  private moveDrag(event: PointerEvent): void {
+    const drag = this.#activeDrag;
+    if (!drag) return;
+    if (!drag.started && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
+    drag.started = true;
+    drag.sourceElement.classList.add("isDragging");
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+    drag.ghost.style.left = `${event.clientX + 12}px`;
+    drag.ghost.style.top = `${event.clientY + 12}px`;
+    drag.ghost.style.zIndex = "1000";
+    const rect = this.dom.timelineViewport.getBoundingClientRect();
+    if (event.clientX < rect.left + 40) this.dom.timelineViewport.scrollLeft -= 10;
+    else if (event.clientX > rect.right - 40) this.dom.timelineViewport.scrollLeft += 10;
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+      this.#drop = null;
+    } else {
+      this.#drop = this.dropTarget(event.clientX);
+    }
+    this.updateDropLine();
+  }
+
+  private finishDrag(): void {
+    const drag = this.#activeDrag;
+    const drop = this.#drop;
+    if (drag?.started && drop) {
+      const node = drag.source === "sidebar"
+        ? this.planning.timeline.insert(drag.objectId, drag.methodId, drop.beforeWaypoint, drop.index)
+        : drag.nodeId ? this.planning.timeline.move(drag.nodeId, drop.beforeWaypoint, drop.index) : null;
+      if (node) {
+        this.planning.selection.selectNode(node.id);
+        const telemetry = drag.source === "sidebar" ? planningTelemetry.timelineNodeCreated : planningTelemetry.timelineNodeMoved;
+        void telemetry.call(planningTelemetry, this.planning.telemetryProperties({ before_waypoint: node.beforeWaypoint, node_index: node.index }));
+      }
+    }
+    this.cancelDrag();
+  }
+
+  private cancelDrag(): void {
+    this.#activeDrag?.sourceElement.classList.remove("isDragging");
+    this.#activeDrag?.ghost.remove();
+    this.#activeDrag = null;
+    this.#drop = null;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    this.updateDropLine();
+  }
+
+  private createMethodGhost(objectId: string, methodId: string): HTMLElement {
+    const object = this.planning.objects.get(objectId);
+    const method = this.planning.objects.method(objectId, methodId);
+    const ghost = document.createElement("div");
+    ghost.className = "planMethodCard planMethodDragGhost";
+    const grip = document.createElement("div");
+    grip.className = "planMethodGrip";
+    grip.textContent = "⋮⋮";
+    const index = document.createElement("div");
+    index.className = "planMethodIndex";
+    index.textContent = String(getPlanMethodNumber(this.planning.objects.items, objectId, methodId) ?? "");
+    const content = document.createElement("div");
+    content.className = "planMethodContent";
+    const name = document.createElement("div");
+    name.className = "planMethodName";
+    name.textContent = method?.name ?? "";
+    const code = document.createElement("div");
+    code.className = "planMethodCode";
+    code.textContent = method?.code ?? "";
+    content.append(name, code);
+    ghost.append(grip, index, content);
+    if (object?.color) ghost.style.setProperty("--plan-drag-color", object.color);
+    return ghost;
+  }
+
+  private updateDropLine(): void {
+    this.dom.timelineDropLine.hidden = !this.#drop;
+    if (this.#drop) this.dom.timelineDropLine.style.left = `${this.#drop.x}px`;
+  }
+
+  private shouldAnimateNodes(): boolean {
+    return !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  private prepareNodeAnimation(id: string, previous: TimelineNodeSnapshot | undefined, left: number, now: number): void {
+    if (this.#nodeAnimations.has(id)) return;
+    if (!previous) {
+      this.#nodeAnimations.set(id, { kind: "enter", start: now, duration: NODE_ENTER_MS });
+      return;
+    }
+    const deltaX = previous.left - left;
+    if (Math.abs(deltaX) <= NODE_MOVE_EPSILON) return;
+    this.#nodeAnimations.set(id, { kind: "shift", fromLeft: previous.left, toLeft: left, start: now, duration: NODE_SHIFT_MS });
+  }
+
+  private playNodeAnimation(id: string, element: HTMLElement, now: number): void {
+    const animation = this.#nodeAnimations.get(id);
+    if (!animation) return;
+    const elapsed = Math.max(0, now - animation.start);
+    if (elapsed >= animation.duration) {
+      this.#nodeAnimations.delete(id);
+      return;
+    }
+    if (animation.kind === "enter") {
+      element.animate(
+        [
+          { opacity: 0, transform: "translateY(-7px) scale(0.82)" },
+          { opacity: 1, transform: "translateY(0) scale(1)" },
+        ],
+        { duration: animation.duration, delay: -elapsed, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+      );
+      return;
+    }
+    const deltaX = animation.fromLeft - animation.toLeft;
+    element.animate(
+      [
+        { transform: `translateX(${deltaX}px)` },
+        { transform: "translateX(0)" },
+      ],
+      { duration: animation.duration, delay: -elapsed, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+    );
+  }
+
+  private prepareRemovedNodeAnimations(previous: ReadonlyMap<string, TimelineNodeSnapshot>, next: ReadonlyMap<string, TimelineNodeSnapshot>, now: number): void {
+    previous.forEach((snapshot, id) => {
+      if (next.has(id)) return;
+      if (this.#exitAnimations.has(id)) return;
+      this.#nodeAnimations.delete(id);
+      this.#exitAnimations.set(id, { ...snapshot, start: now, duration: NODE_EXIT_MS });
+    });
+  }
+
+  private renderRemovedNodeAnimations(now: number): void {
+    this.#exitAnimations.forEach((snapshot, id) => {
+      const elapsed = Math.max(0, now - snapshot.start);
+      if (elapsed >= snapshot.duration) {
+        this.#exitAnimations.delete(id);
+        return;
+      }
+      const element = document.createElement("div");
+      element.className = `${snapshot.className} isExiting`;
+      element.style.left = `${snapshot.left}px`;
+      element.style.background = snapshot.background;
+      element.style.color = snapshot.color;
+      element.textContent = snapshot.text;
+      this.dom.timelineNodeLayer.appendChild(element);
+      element.animate(
+        [
+          { opacity: 1, transform: "translateY(0) scale(1)" },
+          { opacity: 0, transform: "translateY(5px) scale(0.82)" },
+        ],
+        { duration: snapshot.duration, delay: -elapsed, easing: "cubic-bezier(0.4, 0, 1, 1)" },
+      ).finished
+        .catch(() => undefined)
+        .finally(() => element.remove());
+    });
+  }
+
+  private pruneNodeAnimations(now: number): void {
+    this.#nodeAnimations.forEach((animation, id) => {
+      if (now - animation.start >= animation.duration) this.#nodeAnimations.delete(id);
+    });
+    this.#exitAnimations.forEach((animation, id) => {
+      if (now - animation.start >= animation.duration) this.#exitAnimations.delete(id);
+    });
+  }
+
+  private buildLayout(nodes: readonly PlanningNodeView[]): TimelineLayout {
+    const waypointCount = this.planning.route.length;
+    const viewportWidth = Math.max(1, this.dom.timelineViewport.clientWidth || this.dom.timelineViewport.getBoundingClientRect().width || 1);
+    const routeWidth = Math.min(
+      MAX_PLAN_LENGTH_WIDTH,
+      this.planning.projection.totalLength * PLAN_PIXELS_PER_INCH,
+    );
+    const baseContentWidth = Math.max(
+      viewportWidth,
+      PAD * 2 + EDGE_INSET * 2 + routeWidth,
+      PAD * 2 + EDGE_INSET * 2 + Math.max(0, waypointCount - 1) * WAYPOINT_MIN_GAP,
+      PAD * 2 + 120,
+    );
+    const buckets = Array.from({ length: waypointCount + 1 }, (_, beforeWaypoint) => ({
+      beforeWaypoint,
+      nodes: nodes.filter((node) => node.beforeWaypoint === beforeWaypoint).sort((a, b) => a.index - b.index || a.id.localeCompare(b.id)),
+    }));
+    const total = this.planning.projection.totalLength;
+    const baseWaypointX = Array.from({ length: waypointCount }, (_, index) => {
+      if (waypointCount === 1) return PAD + EDGE_INSET;
+      const ratio = total > 0
+        ? (this.planning.projection.distances[index] ?? 0) / total
+        : index / Math.max(1, waypointCount - 1);
+      return PAD + EDGE_INSET + (baseContentWidth - PAD * 2 - EDGE_INSET * 2) * ratio;
+    });
+    const baseWidths = waypointCount
+      ? [
+          Math.max(0, (baseWaypointX[0] ?? PAD) - PAD),
+          ...baseWaypointX.slice(1).map((x, index) => Math.max(0, x - (baseWaypointX[index] ?? x))),
+          Math.max(0, baseContentWidth - PAD - (baseWaypointX.at(-1) ?? PAD)),
+        ]
+      : [baseContentWidth - PAD * 2];
+    const widths = baseWidths.map((width, beforeWaypoint) => {
+      const count = buckets[beforeWaypoint]?.nodes.length ?? 0;
+      if (!count || !waypointCount) return width;
+      const needed = NODE_START_OFFSET + NODE_WIDTH + (count - 1) * NODE_SLOT
+        + (beforeWaypoint > 0 && beforeWaypoint < waypointCount ? NODE_END_OFFSET : 0);
+      return Math.max(width, needed);
+    });
+    const waypointX: number[] = [];
+    let cursor = PAD;
+    for (let index = 0; index < waypointCount; index += 1) {
+      cursor += widths[index] ?? 0;
+      waypointX.push(cursor);
+    }
+    cursor += widths[waypointCount] ?? 0;
+    const contentWidth = Math.max(viewportWidth, cursor + PAD);
+    const layouts = buckets.map((bucket, beforeWaypoint): TimelineBucketLayout => {
+      const start = beforeWaypoint === 0 ? PAD : waypointX[beforeWaypoint - 1] ?? PAD;
+      const width = widths[beforeWaypoint] ?? 0;
+      return {
+        beforeWaypoint,
+        start,
+        end: start + width,
+        nodeStart: start + (beforeWaypoint === 0 ? 10 : NODE_START_OFFSET),
+        nodes: bucket.nodes,
+      };
+    });
+    return { contentWidth, waypointX, buckets: layouts };
+  }
+
+  private dropTarget(clientX: number): Readonly<{ beforeWaypoint: number; index: number; x: number }> | null {
+    const layout = this.#layout ?? this.buildLayout([...this.planning.timeline.nodes]);
+    if (this.planning.route.length < 2) return null;
+    const innerRect = this.dom.eventTimelineInner.getBoundingClientRect();
+    const x = Math.max(PAD, Math.min(layout.contentWidth - PAD, clientX - innerRect.left));
+    let bucket: TimelineBucketLayout | null = layout.buckets[0] ?? null;
+    if (layout.waypointX.length && x > (layout.waypointX.at(-1) ?? 0)) bucket = layout.buckets.at(-1) ?? null;
+    else if (layout.waypointX.length && x >= layout.waypointX[0]!) {
+      bucket = layout.buckets.slice(1, -1).find((candidate) => x <= candidate.end) ?? layout.buckets[1] ?? bucket;
+    }
+    if (!bucket) return null;
+    const dragId = this.#activeDrag?.nodeId;
+    const remainingNodes = bucket.nodes.filter((node) => node.id !== dragId);
+    const index = remainingNodes.length
+      ? remainingNodes.filter((node) => x > bucket.nodeStart + node.index * NODE_SLOT).length
+      : 0;
+    const lineX = Math.max(PAD + 2, Math.min(layout.contentWidth - PAD - 2, this.dropLineX(bucket, remainingNodes, index)));
+    return { beforeWaypoint: bucket.beforeWaypoint, index, x: lineX };
+  }
+
+  private dropLineX(bucket: TimelineBucketLayout, nodes: readonly PlanningNodeView[], index: number): number {
+    if (!nodes.length) return bucket.nodeStart - INSERT_HALF;
+    if (index <= 0) return bucket.nodeStart + nodes[0]!.index * NODE_SLOT - INSERT_HALF;
+    const previous = nodes[Math.min(index - 1, nodes.length - 1)]!;
+    if (index >= nodes.length) return bucket.nodeStart + previous.index * NODE_SLOT + INSERT_HALF;
+    const next = nodes[index]!;
+    return bucket.nodeStart + ((previous.index + next.index) * NODE_SLOT) / 2;
+  }
+
+  private xForDistance(distance: number, layout: TimelineLayout): number {
+    const distances = this.planning.projection.distances;
+    if (!layout.waypointX.length) return PAD + EDGE_INSET;
+    const total = this.planning.projection.totalLength;
+    const clamped = Math.max(0, Math.min(total, distance));
+    if (clamped <= 0) return layout.waypointX[0]!;
+    if (clamped >= total) return layout.waypointX.at(-1)!;
+    for (let index = 1; index < distances.length; index += 1) {
+      const end = distances[index] ?? 0;
+      if (clamped > end) continue;
+      const start = distances[index - 1] ?? 0;
+      const ratio = end > start ? (clamped - start) / (end - start) : 1;
+      return (layout.waypointX[index - 1] ?? 0) + ((layout.waypointX[index] ?? 0) - (layout.waypointX[index - 1] ?? 0)) * ratio;
+    }
+    return layout.waypointX.at(-1)!;
+  }
+
+  private distanceForX(x: number, layout: TimelineLayout): number {
+    const waypointX = layout.waypointX;
+    const distances = this.planning.projection.distances;
+    if (!waypointX.length || x <= waypointX[0]!) return 0;
+    if (x >= waypointX.at(-1)!) return this.planning.projection.totalLength;
+    for (let index = 1; index < waypointX.length; index += 1) {
+      const endX = waypointX[index] ?? 0;
+      if (x > endX) continue;
+      const startX = waypointX[index - 1] ?? 0;
+      const ratio = endX > startX ? (x - startX) / (endX - startX) : 1;
+      const start = distances[index - 1] ?? 0;
+      return start + ((distances[index] ?? start) - start) * ratio;
+    }
+    return this.planning.projection.totalLength;
+  }
+
+  private async editNode(nodeId: string): Promise<void> {
+    const node = this.planning.timeline.get(nodeId);
+    const method = node ? getPlanNodeEffectiveMethod(this.planning.objects.items, node) : null;
+    if (!node || !method) return;
+    const result = await this.dialogs.edit({ title: "Edit Placed Node", groupTitle: "Node Code", description: "These code changes only apply to this placed node.", code: method.code });
+    if (!result) return;
+    const changed = this.planning.timeline.setCodeOverride(nodeId, result.code);
+    if (changed.changed) void planningTelemetry.timelineNodeUpdated(this.planning.telemetryProperties({ node_override_created: !changed.hadOverride && changed.hasOverride, node_override_cleared: changed.hadOverride && !changed.hasOverride, node_code_chars: result.code.length, node_code_bytes: getUtf8ByteLength(result.code) }));
+  }
+
+  private showTooltip(text: string, x: number, y: number, edited: boolean): void {
+    this.hideTooltip();
+    this.#tooltipTimer = window.setTimeout(() => {
+      this.dom.nodeTooltip.textContent = text;
+      this.dom.nodeTooltip.classList.toggle("hasOverride", edited);
+      this.dom.nodeTooltip.hidden = false;
+      this.dom.nodeTooltip.classList.add("isVisible");
+      this.positionTooltip(x, y);
+    }, 250);
+  }
+
+  private positionTooltip(x: number, y: number): void {
+    this.dom.nodeTooltip.style.left = `${x + 12}px`;
+    this.dom.nodeTooltip.style.top = `${y + 12}px`;
+  }
+
+  private hideTooltip(): void {
+    if (this.#tooltipTimer != null) window.clearTimeout(this.#tooltipTimer);
+    this.#tooltipTimer = null;
+    this.dom.nodeTooltip.classList.remove("isVisible");
+    this.dom.nodeTooltip.hidden = true;
+  }
+}

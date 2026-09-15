@@ -1,0 +1,117 @@
+import type { Pose } from "../../state/models";
+import type { ViewingFeature } from "../ViewingFeature";
+import type { ViewingListsDom } from "../ViewingDom";
+import { createVirtualList, type VirtualList } from "./virtualList";
+import { escapeHtml, formatNumber } from "../viewingPresentation";
+
+interface PoseListItem {
+  readonly pose: Readonly<Pose>;
+  readonly index: number;
+}
+
+export class PoseListView {
+  readonly #list: VirtualList<PoseListItem>;
+  #itemCount = 0;
+  #previewIndex: number | null = null;
+
+  constructor(
+    private readonly viewing: ViewingFeature,
+    private readonly dom: ViewingListsDom,
+  ) {
+    const list = createVirtualList<PoseListItem>(dom.poseList, {
+      estimateRowHeight: 80,
+      overscanPx: 320,
+      scrollContainer: dom.scrollContainer,
+      getKey: (item) => String(item.index),
+      renderItem: (item) => this.createItem(item.index),
+    });
+    if (!list) throw new Error("MotionView could not initialize the pose virtual list.");
+    this.#list = list;
+  }
+
+  get itemCount(): number { return this.#itemCount; }
+
+  bind(): void {
+    this.dom.poseSort.addEventListener("change", () => this.render());
+  }
+
+  render(): void {
+    const items: PoseListItem[] = [];
+    for (let index = 0; index < this.viewing.data.poses.length; index += 1) {
+      const pose = this.viewing.data.poses[index];
+      if (pose) items.push({ pose, index });
+    }
+    if (this.dom.poseSort.value === "-time") items.reverse();
+    this.#itemCount = items.length;
+    this.#list.setItems(items);
+  }
+
+  highlight(scroll = false): void {
+    if (scroll) {
+      const selected = this.viewing.navigation.selectedIndex;
+      const index = Array.from(this.#list.getItems()).findIndex((item) => item.index === selected);
+      if (index >= 0) this.#list.scrollToIndex(index, 12);
+    }
+    this.#list.refresh();
+  }
+
+  setPreviewTime(time: number): void {
+    const items = this.#list.getItems();
+    let passedIndex = -1;
+    let latestTime = Number.NEGATIVE_INFINITY;
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      const timestamp = item?.pose.t;
+      if (typeof timestamp !== "number" || timestamp > time || timestamp <= latestTime) continue;
+      passedIndex = index;
+      latestTime = timestamp;
+    }
+    this.#previewIndex = passedIndex >= 0 ? items[passedIndex]!.index : null;
+    if (passedIndex >= 0) this.#list.scrollToIndex(passedIndex, 12, "center");
+    this.#list.refresh();
+  }
+
+  clearPreview(): void {
+    if (this.#previewIndex == null) return;
+    this.#previewIndex = null;
+    this.#list.refresh();
+  }
+
+  private createItem(index: number): HTMLElement {
+    const rawPose = this.viewing.data.poses[index];
+    const pose = this.viewing.projection.displayPose(this.viewing.projection.poseAt(index));
+    const time = typeof rawPose?.t === "number" ? Math.round(rawPose.t) : null;
+    const coordinate = (value: unknown) => {
+      const number = Number(value);
+      return Number.isFinite(number) ? number.toFixed(2) : "—";
+    };
+    const summary = pose
+      ? `X: ${coordinate(pose.x)}, Y: ${coordinate(pose.y)}, θ: ${coordinate(pose.theta)}°`
+      : "—";
+    const element = document.createElement("div");
+    element.className = "watchItem poseItem";
+    if (index === this.viewing.navigation.selectedIndex) element.classList.add("selected");
+    if (index === this.#previewIndex) element.classList.add("previewSelected");
+    element.dataset.idx = String(index);
+    element.innerHTML = `<div class="watchItemContent poseItemContent"><div class="watchItemHeader">
+      <div class="watchTitleGroup"><span class="pill level watchLevelPill poseIndexPill" style="background:rgba(174, 190, 211, 0.85);color:#081018">${index + 1}</span></div>
+      <div class="watchMeta"><div class="watchTimestamp muted"><span class="eventSelectableText">${time != null ? formatNumber(time / 1000, 2) : "—"}s</span></div></div>
+    </div><div class="bigValue poseValue"><span class="eventSelectableText">${escapeHtml(summary)}</span></div></div>`;
+    if (time != null) {
+      element.addEventListener("pointerenter", () => {
+        if (!this.viewing.playback.isPlaying) this.viewing.navigation.setTimelineHover(time);
+      });
+      element.addEventListener("pointerleave", () => {
+        if (this.viewing.navigation.hoverTimelineTime === time) this.viewing.navigation.setTimelineHover(null);
+      });
+    }
+    element.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      this.viewing.playback.pause();
+      this.viewing.navigation.setTimelineHover(null);
+      this.viewing.navigation.selectPose(index);
+    }, { passive: false });
+    return element;
+  }
+}

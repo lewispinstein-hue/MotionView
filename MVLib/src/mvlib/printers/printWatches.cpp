@@ -1,39 +1,82 @@
 #include "mvlib/core.hpp"
-#include "mvlib/telemetry.hpp"
+#include "mvlib/private/telemetry.hpp"
+#include "mvlib/private/raii.hpp"
 #include <cerrno>
 #include <cmath>
 #include <cstdlib>
 
 namespace mvlib {
-
 void Logger::printWatches() {
-  unique_lock lock(m_mutex);
-  if (!lock.isLocked()) return;
+  size_t index = 0;
 
-  uint32_t nowMs = pros::millis();
+  while (true) {
+    // Copies of all variables
+    WatchId watchId{};
+    std::shared_ptr<std::function<std::tuple<LogLevel, std::string, std::string, bool>()>> eval;
+    std::shared_ptr<pros::Mutex> evalMutex;
 
-  for (auto& w : m_watches) {
-    // Frequency gating
-    if (!w.onChange && w.lastPrintMs != 0 && (nowMs - w.lastPrintMs) < w.intervalMs) {
-      continue;
+    {
+      // Lock mutex only while copying variables
+      detail::uniqueLock lock(m_mutex);
+      if (!lock.isLocked()) return;
+      if (index >= m_watches.size()) break;
+
+      auto& watch = m_watches[index++];
+      const uint32_t nowMs = pros::millis();
+
+      if (!watch.active || !watch.eval || !watch.evalMutex) continue;
+      if (!watch.onChange && watch.lastPrintMs != 0 &&
+          (nowMs - watch.lastPrintMs) < watch.intervalMs) continue;
+
+      watchId = watch.id;
+      eval = watch.eval;
+      evalMutex = watch.evalMutex;
     }
 
-    if (!w.eval) continue;
+    detail::uniqueLock callbackLock(*evalMutex, TIMEOUT_MAX);
+    if (!callbackLock.isLocked()) continue;
 
-    auto [lvl, valueStr, label, tripped] = w.eval();
+    auto [lvl, valueStr, label, tripped] = (*eval)();
+    const uint32_t nowMs = pros::millis();
 
-    // Change detection
-    if (w.onChange) {
-      if (w.lastValue && *w.lastValue == valueStr) continue;
-      w.lastValue = valueStr;
-    } else {
-      w.lastPrintMs = nowMs;
+    {
+      detail::uniqueLock lock(m_mutex);
+      if (!lock.isLocked()) return;
+
+      InternalWatch* watch = m_findWatchUnlocked(watchId);
+      if (!watch || !watch->active) continue;
+
+      if (watch->onChange) {
+        const bool valueChanged = !watch->lastValue.has_value() ||
+                                  watch->lastValue.value() != valueStr;
+        const bool repeatTripped = !valueChanged && tripped &&
+            watch->trippedRepeatIntervalMs != 0 &&
+            nowMs - watch->lastPrintMs >= watch->trippedRepeatIntervalMs;
+
+        if (!valueChanged && !repeatTripped) {
+          continue;
+        } else if (valueChanged && !tripped && watch->suppressNormalOutput) {
+          watch->lastValue = valueStr;
+          continue;
+        } else if (valueChanged && watch->lastPrintMs != 0 &&
+                   (nowMs - watch->lastPrintMs) < watch->intervalMs) {
+          continue;
+        } else {
+          watch->lastValue = valueStr;
+          watch->lastPrintMs = nowMs;
+        }
+      } else {
+        if (watch->lastPrintMs != 0 && (nowMs - watch->lastPrintMs) < watch->intervalMs) {
+          continue;
+        } else {
+          watch->lastPrintMs = nowMs;
+        }
+      }
     }
 
-    // --- 2. Terminal Dispatch (Binary Hex) ---
     if (m_config.logToTerminal.load()) {
       bool sentAsBinary = false;
-      
+
       // Prefer the compact binary watch packet when the rendered value is a pure float.
       if (!valueStr.empty()) {
         char* end = nullptr;
@@ -41,21 +84,25 @@ void Logger::printWatches() {
         const float numericVal = std::strtof(valueStr.c_str(), &end);
         if (end != valueStr.c_str() && end != nullptr && *end == '\0' &&
             errno != ERANGE && std::isfinite(numericVal)) {
-          Telemetry::getInstance().sendWatch(w.id, lvl, numericVal, tripped);
+          detail::Telemetry::getInstance().sendWatch(watchId, lvl, numericVal, tripped);
           sentAsBinary = true;
         }
       }
 
       // Non-numeric watches still use the structured binary watch channel.
       if (!sentAsBinary) {
-        Telemetry::getInstance().sendWatchText(w.id, lvl, valueStr, tripped);
+        detail::Telemetry::getInstance().sendWatchText(watchId, lvl, valueStr, tripped);
       }
     }
 
-    // Log standard ANSII to the sd card
-    if (m_config.logToSD.load() && !m_sdLocked && m_sdFile) {
-      logToSD(lvl, "[WATCH],%u,%s,%u,%s,%s", 
-              nowMs, m_levelToString(lvl), w.id, label.c_str(), valueStr.c_str());
+    // Log standard ANSI text to the SD card.
+    if (m_config.logToSD.load()) {
+      // Uncompress t/f to true/false
+      if (valueStr == "f") valueStr = "false";
+      if (valueStr == "t") valueStr = "true";
+
+      logToSD(lvl, "[WATCH],%u,%s,%u,%s,%s", nowMs,
+              levelToString(lvl), watchId, label.c_str(), valueStr.c_str());
     }
   }
 }

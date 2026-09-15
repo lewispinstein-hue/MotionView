@@ -8,12 +8,18 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Manual Version Override (MUST be a 3-point version, e.g., 0.9.1 or 0.9.1-beta)'
+        description: 'Manual Version Override (MUST be SemVer, e.g., 0.9.1, 0.9.1-pre, or 0.9.1-beta.1)'
         required: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+# Release artifacts do not need write access to the repository. Keeping this
+# explicit also prevents future workflow changes from inheriting broader token
+# permissions.
+permissions:
+  contents: read
 
 jobs:
   validate-version:
@@ -32,11 +38,10 @@ jobs:
             RAW_VERSION="${GITHUB_REF#refs/tags/}"
           fi
 
-          # Strict Regex Validation
-          # Matches: vX.Y.Z, vX.Y.Z-alpha, vX.Y.Z-beta, vX.Y.Z-stable
-          # Rejects anything else completely.
-          if [[ ! "$RAW_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|stable))?$ ]]; then
-            echo "::error::Invalid version format: $RAW_VERSION. Must be vX.Y.Z or vX.Y.Z-(alpha|beta|stable)"
+          # Strict SemVer validation with an optional prerelease identifier.
+          # Matches: vX.Y.Z, vX.Y.Z-pre, vX.Y.Z-beta.1, and vX.Y.Z-rc.2.
+          if [[ ! "$RAW_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "::error::Invalid version format: $RAW_VERSION. Must be vX.Y.Z or vX.Y.Z-prerelease"
             exit 1
           fi
 
@@ -57,11 +62,24 @@ jobs:
           - os: macos-14
             os_name: macos
             bundle_ext: dmg
+            tauri_bundle: dmg
           - os: windows-latest
             os_name: windows
             bundle_ext: exe
+            tauri_bundle: nsis
+          - os: ubuntu-24.04
+            os_name: linux
+            bundle_ext: AppImage
+            tauri_bundle: appimage
 
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+
+    # Only the macOS job receives the Developer ID and notarization secrets.
+    # Configure the macos-release environment with required reviewers and
+    # permitted release refs in the repository settings.
+    environment:
+      name: ${{ matrix.os_name == 'macos' && 'macos-release' || 'build' }}
 
     defaults:
       run:
@@ -98,6 +116,23 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install Linux system dependencies
+        if: matrix.os_name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libgtk-3-dev \
+            libxdo-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+        shell: bash
+
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
@@ -121,20 +156,171 @@ jobs:
           "
         shell: bash
 
+      - name: Validate macOS release credentials
+        if: matrix.os_name == 'macos'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          for required_secret in \
+            APPLE_CERTIFICATE \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_ID \
+            APPLE_PASSWORD \
+            APPLE_SIGNING_IDENTITY \
+            APPLE_TEAM_ID; do
+            if [[ -z "${!required_secret}" ]]; then
+              echo "::error::The macos-release environment is missing $required_secret."
+              exit 1
+            fi
+          done
+        shell: bash
+
+      - name: Import Apple Developer ID certificate
+        if: matrix.os_name == 'macos'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          certificate_path="$RUNNER_TEMP/motionview-developer-id.p12"
+          keychain_path="$RUNNER_TEMP/motionview-signing.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+
+          printf '%s' "$APPLE_CERTIFICATE" | base64 -D > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" \
+            -k "$keychain_path" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain_path"
+          security list-keychains -d user -s \
+            "$keychain_path" \
+            "$HOME/Library/Keychains/login.keychain-db"
+          security default-keychain -d user -s "$keychain_path"
+
+          if ! security find-identity -v -p codesigning "$keychain_path" | \
+            grep -Fq "\"$APPLE_SIGNING_IDENTITY\""; then
+            echo "::error::The imported certificate does not match APPLE_SIGNING_IDENTITY."
+            exit 1
+          fi
+
+          rm -f "$certificate_path"
+          echo "MOTIONVIEW_SIGNING_KEYCHAIN=$keychain_path" >> "$GITHUB_ENV"
+        shell: bash
+
       - name: Build app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           if [[ "${{ matrix.os_name }}" == "macos" ]]; then
             pnpm py:clean
             pnpm py:build
-            pnpm tauri build --bundles dmg
+            bash scripts/sign_macos_runtime.sh "$APPLE_SIGNING_IDENTITY"
+            pnpm tauri build --bundles "${{ matrix.tauri_bundle }}"
           elif [[ "${{ matrix.os_name }}" == "windows" ]]; then
             pnpm py:clean
             pnpm py:build
-            pnpm tauri build --bundles nsis
+            pnpm tauri build --bundles "${{ matrix.tauri_bundle }}"
+          elif [[ "${{ matrix.os_name }}" == "linux" ]]; then
+            pnpm py:clean
+            pnpm py:build
+            pnpm tauri build --bundles "${{ matrix.tauri_bundle }}"
           else
             echo "::error::Unsupported OS name: ${{ matrix.os_name }}"
             exit 1
           fi
+        shell: bash
+
+      - name: Submit and poll macOS notarization
+        if: matrix.os_name == 'macos'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          dmg_path="$(find src-tauri/target -type f -path '*/bundle/dmg/*.dmg' -print -quit)"
+          submission_path="$RUNNER_TEMP/motionview-notarization-submission.json"
+          status_path="$RUNNER_TEMP/motionview-notarization-status.json"
+
+          if [[ -z "$dmg_path" ]]; then
+            echo "::error::Expected a macOS DMG to submit for notarization."
+            exit 1
+          fi
+
+          xcrun notarytool submit "$dmg_path" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --output-format json > "$submission_path"
+
+          submission_id="$(node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).id' < "$submission_path")"
+          if [[ -z "$submission_id" ]]; then
+            echo "::error::Apple did not return a notarization submission ID."
+            exit 1
+          fi
+
+          echo "Notarization submission ID: $submission_id"
+          echo "Apple notarization submission: \`$submission_id\`" >> "$GITHUB_STEP_SUMMARY"
+
+          for attempt in {1..60}; do
+            if ! xcrun notarytool info "$submission_id" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --output-format json > "$status_path"; then
+              echo "Notarization status check $attempt failed; retrying in one minute."
+              sleep 60
+              continue
+            fi
+
+            notarization_status="$(node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).status' < "$status_path")"
+            echo "Notarization status: $notarization_status"
+
+            if [[ "$notarization_status" == "Accepted" ]]; then
+              xcrun stapler staple "$dmg_path"
+              xcrun stapler validate "$dmg_path"
+              exit 0
+            fi
+
+            if [[ "$notarization_status" == "Invalid" ]]; then
+              xcrun notarytool log "$submission_id" \
+                --apple-id "$APPLE_ID" \
+                --password "$APPLE_PASSWORD" \
+                --team-id "$APPLE_TEAM_ID"
+              exit 1
+            fi
+
+            sleep 60
+          done
+
+          echo "::error::Notarization remains in progress after one hour. Submission ID: $submission_id"
+          exit 1
+        shell: bash
+
+      - name: Verify notarized macOS DMG
+        if: matrix.os_name == 'macos'
+        run: |
+          set -euo pipefail
+          dmg_path="$(find src-tauri/target -type f -path '*/bundle/dmg/*.dmg' -print -quit)"
+          spctl --assess \
+            --type open \
+            --context context:primary-signature \
+            --verbose=4 \
+            "$dmg_path"
         shell: bash
 
       - name: Rename and Collect Output Binaries
@@ -170,3 +356,11 @@ jobs:
           name: motionview-${{ matrix.os_name }}_${{ needs.validate-version.outputs.tag_name }}
           path: MotionView/src-tauri/artifacts
           if-no-files-found: error
+
+      - name: Remove temporary signing keychain
+        if: always() && matrix.os_name == 'macos'
+        run: |
+          if [[ -n "${MOTIONVIEW_SIGNING_KEYCHAIN:-}" ]]; then
+            security delete-keychain "$MOTIONVIEW_SIGNING_KEYCHAIN" || true
+          fi
+        shell: bash

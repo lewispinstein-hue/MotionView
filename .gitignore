@@ -34,3 +34,5 @@ MotionView/bin
 MotionView/src/sim-log.py
 
 .pnpm-store
+
+.env
