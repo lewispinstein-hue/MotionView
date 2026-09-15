@@ -15,6 +15,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Release artifacts do not need write access to the repository. Keeping this
+# explicit also prevents future workflow changes from inheriting broader token
+# permissions.
+permissions:
+  contents: read
+
 jobs:
   validate-version:
     runs-on: ubuntu-latest
@@ -68,6 +74,12 @@ jobs:
             tauri_bundle: appimage
 
     runs-on: ${{ matrix.os }}
+
+    # Only the macOS job receives the Developer ID and notarization secrets.
+    # Configure the macos-release environment with required reviewers and
+    # permitted release refs in the repository settings.
+    environment:
+      name: ${{ matrix.os_name == 'macos' && 'macos-release' || 'build' }}
 
     defaults:
       run:
@@ -144,11 +156,81 @@ jobs:
           "
         shell: bash
 
+      - name: Validate macOS release credentials
+        if: matrix.os_name == 'macos'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          for required_secret in \
+            APPLE_CERTIFICATE \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_ID \
+            APPLE_PASSWORD \
+            APPLE_SIGNING_IDENTITY \
+            APPLE_TEAM_ID; do
+            if [[ -z "${!required_secret}" ]]; then
+              echo "::error::The macos-release environment is missing $required_secret."
+              exit 1
+            fi
+          done
+        shell: bash
+
+      - name: Import Apple Developer ID certificate
+        if: matrix.os_name == 'macos'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          certificate_path="$RUNNER_TEMP/motionview-developer-id.p12"
+          keychain_path="$RUNNER_TEMP/motionview-signing.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+
+          printf '%s' "$APPLE_CERTIFICATE" | base64 -D > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" \
+            -k "$keychain_path" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain_path"
+          security list-keychains -d user -s \
+            "$keychain_path" \
+            "$HOME/Library/Keychains/login.keychain-db"
+          security default-keychain -d user -s "$keychain_path"
+
+          if ! security find-identity -v -p codesigning "$keychain_path" | \
+            grep -Fq "\"$APPLE_SIGNING_IDENTITY\""; then
+            echo "::error::The imported certificate does not match APPLE_SIGNING_IDENTITY."
+            exit 1
+          fi
+
+          rm -f "$certificate_path"
+          echo "MOTIONVIEW_SIGNING_KEYCHAIN=$keychain_path" >> "$GITHUB_ENV"
+        shell: bash
+
       - name: Build app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           if [[ "${{ matrix.os_name }}" == "macos" ]]; then
             pnpm py:clean
             pnpm py:build
+            bash scripts/sign_macos_runtime.sh "$APPLE_SIGNING_IDENTITY"
             pnpm tauri build --bundles "${{ matrix.tauri_bundle }}"
           elif [[ "${{ matrix.os_name }}" == "windows" ]]; then
             pnpm py:clean
@@ -162,6 +244,23 @@ jobs:
             echo "::error::Unsupported OS name: ${{ matrix.os_name }}"
             exit 1
           fi
+        shell: bash
+
+      - name: Verify signed and notarized macOS artifacts
+        if: matrix.os_name == 'macos'
+        run: |
+          set -euo pipefail
+          app_bundle="$(find src-tauri/target -type d -path '*/bundle/macos/*.app' -print -quit)"
+          dmg_path="$(find src-tauri/target -type f -path '*/bundle/dmg/*.dmg' -print -quit)"
+
+          if [[ -z "$app_bundle" || -z "$dmg_path" ]]; then
+            echo "::error::Expected signed macOS app and DMG artifacts were not produced."
+            exit 1
+          fi
+
+          codesign --verify --deep --strict --verbose=2 "$app_bundle"
+          spctl --assess --type execute --verbose=4 "$app_bundle"
+          xcrun stapler validate "$dmg_path"
         shell: bash
 
       - name: Rename and Collect Output Binaries
@@ -197,3 +296,11 @@ jobs:
           name: motionview-${{ matrix.os_name }}_${{ needs.validate-version.outputs.tag_name }}
           path: MotionView/src-tauri/artifacts
           if-no-files-found: error
+
+      - name: Remove temporary signing keychain
+        if: always() && matrix.os_name == 'macos'
+        run: |
+          if [[ -n "${MOTIONVIEW_SIGNING_KEYCHAIN:-}" ]]; then
+            security delete-keychain "$MOTIONVIEW_SIGNING_KEYCHAIN" || true
+          fi
+        shell: bash
