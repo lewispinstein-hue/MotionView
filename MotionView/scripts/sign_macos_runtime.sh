@@ -21,10 +21,6 @@ is_macho_file() {
   [[ "$(file -b "$1")" == Mach-O* ]]
 }
 
-is_framework_member() {
-  [[ "$1" == *.framework/* ]]
-}
-
 for sidecar in \
   "$bin_dir"/motionview-py \
   "$bin_dir"/motionview-py-* \
@@ -42,9 +38,6 @@ if [[ ! -d "$pros_runtime_dir" ]]; then
 fi
 
 while IFS= read -r -d '' candidate; do
-  if is_framework_member "$candidate"; then
-    continue
-  fi
   if [[ "$candidate" == "$pros_runtime_dir/motionview-pros" ]]; then
     continue
   fi
