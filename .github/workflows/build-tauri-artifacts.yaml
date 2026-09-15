@@ -63,14 +63,16 @@ jobs:
             os_name: macos
             bundle_ext: dmg
             tauri_bundle: dmg
-          - os: windows-latest
-            os_name: windows
-            bundle_ext: exe
-            tauri_bundle: nsis
-          - os: ubuntu-24.04
-            os_name: linux
-            bundle_ext: AppImage
-            tauri_bundle: appimage
+          # Windows and Linux builds are temporarily disabled while the macOS
+          # signing and notarization path is validated.
+          # - os: windows-latest
+          #   os_name: windows
+          #   bundle_ext: exe
+          #   tauri_bundle: nsis
+          # - os: ubuntu-24.04
+          #   os_name: linux
+          #   bundle_ext: AppImage
+          #   tauri_bundle: appimage
 
     runs-on: ${{ matrix.os }}
 
