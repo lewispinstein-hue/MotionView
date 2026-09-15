@@ -25,6 +25,9 @@
     }
   },
   "bundle": {
+    "externalBin": [
+      "bin/motionview-py"
+    ],
     "resources": {
       "../src/bridge.py": "../src/bridge.py",
       "../src/assets/": "../src/assets/",

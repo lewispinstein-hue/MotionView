@@ -1,11 +1,13 @@
+#[cfg(not(target_os = "macos"))]
 use sha2::{Digest, Sha256};
+#[cfg(not(target_os = "macos"))]
+use std::io::Read;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 #[cfg(not(unix))]
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     fs,
-    io::Read,
     net::TcpListener,
     path::PathBuf,
     process::{Child, Command, Stdio},
@@ -99,6 +101,27 @@ fn resolve_bridge_bin(app: &tauri::AppHandle) -> tauri::Result<std::path::PathBu
         println!("CHECKING BIN PATH (override): {:?}", p);
         if p.exists() {
             return Ok(p);
+        }
+    }
+
+    // Tauri packages externalBin helpers beside the macOS app executable and
+    // signs them as nested code. Prefer that location over resource fallbacks
+    // so the bridge stays within MotionView's notarized bundle.
+    #[cfg(target_os = "macos")]
+    if let Ok(exe_dir) = std::env::current_exe().and_then(|p| {
+        p.parent()
+            .map(|p| p.to_path_buf())
+            .ok_or(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "no exe parent",
+            ))
+    }) {
+        for name in &names {
+            let candidate = exe_dir.join(name);
+            println!("CHECKING MACOS SIDECAR PATH: {:?}", candidate);
+            if candidate.exists() {
+                return Ok(candidate);
+            }
         }
     }
 
@@ -470,6 +493,7 @@ fn collect_bundle_roots(app: &tauri::AppHandle) -> Vec<PathBuf> {
     deduped
 }
 
+#[cfg(not(target_os = "macos"))]
 fn stage_bridge_bin_for_runtime(
     app: &tauri::AppHandle,
     source: &std::path::Path,
@@ -519,6 +543,26 @@ fn stage_bridge_bin_for_runtime(
     Ok(staged)
 }
 
+fn bridge_bin_for_launch(
+    app: &tauri::AppHandle,
+    source: &std::path::Path,
+) -> Result<PathBuf, tauri::Error> {
+    // A copied macOS executable is no longer contained by the notarized app
+    // bundle. Launch the signed resource in place so Gatekeeper evaluates it
+    // as part of MotionView. Windows and Linux keep the staged executable path
+    // needed by their installer/runtime layouts.
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app;
+        Ok(source.to_path_buf())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        stage_bridge_bin_for_runtime(app, source)
+    }
+}
+
 fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<SpawnedBridge, tauri::Error> {
     // Setup Logging Directory and File
     // Prefer app_data_dir/Logs, falling back to project root/Logs if that fails
@@ -566,9 +610,9 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<SpawnedBridge, taur
             eprintln!("BRIDGE ERROR: Could not resolve binary: {}", e);
             e
         })?;
-        let staged = stage_bridge_bin_for_runtime(app, &exe)?;
-        let label = staged.display().to_string();
-        (std::process::Command::new(&staged), label)
+        let launch_path = bridge_bin_for_launch(app, &exe)?;
+        let label = launch_path.display().to_string();
+        (std::process::Command::new(&launch_path), label)
     };
 
     #[cfg(not(debug_assertions))]
@@ -577,9 +621,9 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<SpawnedBridge, taur
             eprintln!("BRIDGE ERROR: Could not resolve binary: {}", e);
             e
         })?;
-        let staged = stage_bridge_bin_for_runtime(app, &exe)?;
-        let label = staged.display().to_string();
-        (std::process::Command::new(&staged), label)
+        let launch_path = bridge_bin_for_launch(app, &exe)?;
+        let label = launch_path.display().to_string();
+        (std::process::Command::new(&launch_path), label)
     };
 
     #[cfg(windows)]
