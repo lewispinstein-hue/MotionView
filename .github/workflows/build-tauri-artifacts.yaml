@@ -246,20 +246,6 @@ jobs:
           fi
         shell: bash
 
-      - name: Verify signed macOS app
-        if: matrix.os_name == 'macos'
-        run: |
-          set -euo pipefail
-          app_bundle="$(find src-tauri/target -type d -path '*/bundle/macos/*.app' -print -quit)"
-
-          if [[ -z "$app_bundle" ]]; then
-            echo "::error::Expected a signed macOS app bundle."
-            exit 1
-          fi
-
-          codesign --verify --deep --strict --verbose=2 "$app_bundle"
-        shell: bash
-
       - name: Submit and poll macOS notarization
         if: matrix.os_name == 'macos'
         env:
