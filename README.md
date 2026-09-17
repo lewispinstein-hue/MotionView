@@ -42,21 +42,15 @@ MotionView's creation was inspired by other visualizers such as [Grafana](https:
 2. **Demo:** In older versions (v1.2.0 and earlier, newer versions have a built-in demo), download the [`Example Route`](MotionView_Example.json), press `Cmd + O` in MotionView to open it, and press `Space` to watch a recorded run (Note this is a VEX Pushback run, as the current season is still to early for an actual Override demo).
 3. **Connect your Robot:** Install [MVLib](MVLib/README.md) into your PROS project to start streaming your own live data.
 
-## Launching From Source
-Install Node.js 20 or newer, pnpm 10, Python 3, and Rust/Tauri prerequisites for your platform. An active Node.js LTS release is recommended. Then run the repository initializer:
-
-```sh
-./MotionView-initialize.sh
-cd MotionView
-pnpm dev
-```
-
-Use `./MotionView-initialize.sh --build-sidecars` if you also want to prebuild the Python sidecars that `pnpm dev` normally builds before launch.
-
-On Linux, if `node` fails with a `GLIBC_... not found` error, the installed Node.js binary was built for a newer glibc than your distribution provides. Update the Linux system packages together, or install a distro-compatible Node.js 20+ binary from a source such as your package manager, `nvm`, `fnm`, or Volta, then rerun the initializer. On Arch-based systems, avoid partial upgrades; use a full system upgrade instead of pulling only `nodejs`.
+## Send feedback directly through the app
+Open the help menu (the `?` in the top left corner) and select "Send Feedback" in the bottom right corner.
+Anything helps! We're always looking for ways to improve MotionView.
 
 ## Docs
 Documentation can be found [here](https://lewispinstein-hue.github.io/MotionView/).
+
+## Discord
+Join the MotionView Discord! [Click Here](https://discord.gg/za42qK5qHS)
 
 ---
 
