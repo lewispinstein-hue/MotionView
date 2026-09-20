@@ -141,14 +141,19 @@ export class ViewingSidebarView {
         startScrollLeft: scroller.scrollLeft,
         moved: false,
       };
-      scroller.setPointerCapture(event.pointerId);
     });
     scroller.addEventListener("pointermove", (event) => {
       const drag = this.#tabDrag;
       if (!drag || drag.pointerId !== event.pointerId) return;
       const distance = event.clientX - drag.startX;
       if (!drag.moved && Math.abs(distance) < 4) return;
-      drag.moved = true;
+      if (!drag.moved) {
+        // Capturing on pointerdown makes Windows WebView2 retarget the matching
+        // pointerup/click to the scroller, so a simple press on a tab never
+        // reaches that tab's click handler. Capture only after this is a drag.
+        drag.moved = true;
+        scroller.setPointerCapture(event.pointerId);
+      }
       scroller.scrollLeft = drag.startScrollLeft - distance;
       scroller.classList.add("isDragging");
       event.preventDefault();
