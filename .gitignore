@@ -2,3 +2,4 @@
 /MVLib/
 .DS_Store
 .env
+.pnpm-store/
