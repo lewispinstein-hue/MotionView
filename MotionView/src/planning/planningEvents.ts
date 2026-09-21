@@ -9,7 +9,7 @@ export interface PlanningDocumentChangedEvent {
 }
 
 export interface PlanningSelectionChangedEvent {
-  readonly kind: "waypoint" | "node" | "cleared";
+  readonly kind: "waypoint" | "node" | "method" | "cleared";
 }
 
 export interface PlanningPlaybackChangedEvent {

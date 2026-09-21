@@ -9,8 +9,14 @@ interface PlanningHistorySnapshot {
   selected: number[];
   selectedIndex: number;
   selectedNodeId: string | null;
+  selectedMethod: PlanningMethodSelection | null;
   playDist: number;
   exportTemplate: string;
+}
+
+export interface PlanningMethodSelection {
+  readonly objectId: string;
+  readonly methodId: string;
 }
 
 function cloneWaypoint(point: Readonly<PlanningWaypoint>): PlanningWaypoint {
@@ -37,6 +43,7 @@ export class PlanningSession {
   readonly selectedWaypoints = new Set<number>();
   selectedWaypoint = -1;
   selectedNodeId: string | null = null;
+  selectedMethod: PlanningMethodSelection | null = null;
   exportTemplate: string;
   overlayVisible = false;
   playbackDistance = 0;
@@ -167,6 +174,7 @@ export class PlanningSession {
       selected: [...this.selectedWaypoints],
       selectedIndex: this.selectedWaypoint,
       selectedNodeId: this.selectedNodeId,
+      selectedMethod: this.selectedMethod ? { ...this.selectedMethod } : null,
       playDist: this.playbackDistance,
       exportTemplate: this.exportTemplate,
     };
@@ -180,6 +188,7 @@ export class PlanningSession {
     for (const index of snapshot.selected) this.selectedWaypoints.add(index);
     this.selectedWaypoint = snapshot.selectedIndex;
     this.selectedNodeId = snapshot.selectedNodeId;
+    this.selectedMethod = snapshot.selectedMethod ? { ...snapshot.selectedMethod } : null;
     this.playbackDistance = snapshot.playDist;
     this.exportTemplate = snapshot.exportTemplate || this.defaultExportTemplate;
     this.maintainDocumentInvariants();
@@ -196,6 +205,8 @@ export class PlanningSession {
   private matchesCurrent(snapshot: PlanningHistorySnapshot): boolean {
     return snapshot.selectedIndex === this.selectedWaypoint
       && snapshot.selectedNodeId === this.selectedNodeId
+      && snapshot.selectedMethod?.objectId === this.selectedMethod?.objectId
+      && snapshot.selectedMethod?.methodId === this.selectedMethod?.methodId
       && snapshot.playDist === this.playbackDistance
       && snapshot.exportTemplate === this.exportTemplate
       && snapshot.selected.length === this.selectedWaypoints.size
@@ -209,6 +220,7 @@ export class PlanningSession {
     this.selectedWaypoints.clear();
     this.selectedWaypoint = -1;
     this.selectedNodeId = null;
+    this.selectedMethod = null;
     this.playbackDistance = 0;
     this.undoStack.length = 0;
     this.redoStack.length = 0;
@@ -236,6 +248,9 @@ export class PlanningSession {
       bucketCounts.set(node.beforeWaypoint, index + 1);
     }
     if (this.selectedNodeId && !this.nodes.some((node) => node.id === this.selectedNodeId)) this.selectedNodeId = null;
+    if (this.selectedMethod && !objects.get(this.selectedMethod.objectId)?.methods.some((method) => method.id === this.selectedMethod?.methodId)) {
+      this.selectedMethod = null;
+    }
     for (const index of [...this.selectedWaypoints]) {
       if (index < 0 || index >= this.waypoints.length) this.selectedWaypoints.delete(index);
     }

@@ -120,7 +120,7 @@ export class PlanningFieldView {
       const tangentStart = this.field.worldToScreen(marker.x - marker.tx, marker.y - marker.ty);
       const tangentEnd = this.field.worldToScreen(marker.x + marker.tx, marker.y + marker.ty);
       const normalAngle = Math.atan2(tangentEnd.y - tangentStart.y, tangentEnd.x - tangentStart.x) + Math.PI / 2;
-      const selected = this.planning.selection.selectedNodeId === marker.node.id || this.#hoverNodeId === marker.node.id;
+      const selected = this.planning.selection.isNodeHighlighted(marker.node) || this.#hoverNodeId === marker.node.id;
       const size = this.nodeScreenSize(getMode() === "planning");
       context.save();
       context.translate(screen.x, screen.y);
@@ -224,6 +224,12 @@ export class PlanningFieldView {
         return waypoint ? [{ index, x: waypoint.x, y: waypoint.y }] : [];
       });
       this.planning.history.begin("route");
+      return;
+    }
+    if (this.planning.selection.selectedMethod) {
+      this.planning.selection.clear();
+      this.releaseCapture(event.pointerId);
+      this.#pointerId = null;
       return;
     }
     const world = this.field.screenToWorld(point.x, point.y);

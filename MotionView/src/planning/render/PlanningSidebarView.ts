@@ -97,7 +97,8 @@ export class PlanningSidebarView {
     const selectedNode = this.planning.selection.selectedNode;
     this.planning.objects.items.forEach((object, objectIndex) => {
       const card = document.createElement("article");
-      card.className = `planObjectCard${selectedNode?.objectId === object.id ? " isHighlighted" : ""}`;
+      const selectedMethod = this.planning.selection.selectedMethod;
+      card.className = `planObjectCard${selectedNode?.objectId === object.id || selectedMethod?.objectId === object.id ? " isHighlighted" : ""}`;
       card.dataset.objectId = object.id;
       const header = document.createElement("div");
       header.className = "planObjectHeader";
@@ -142,7 +143,7 @@ export class PlanningSidebarView {
       if (!object.methods.length) methods.innerHTML = `<div class="planMethodEmpty">No methods yet.</div>`;
       object.methods.forEach((method, methodIndex) => {
         const methodCard = document.createElement("div");
-        methodCard.className = `planMethodCard${selectedNode?.objectId === object.id && selectedNode.methodId === method.id ? " isHighlighted" : ""}`;
+        methodCard.className = `planMethodCard${selectedNode?.objectId === object.id && selectedNode.methodId === method.id || this.planning.selection.isMethodSelected(object.id, method.id) ? " isHighlighted" : ""}`;
         methodCard.dataset.objectId = object.id;
         methodCard.dataset.methodId = method.id;
         methodCard.innerHTML = `<div class="planMethodGrip" aria-hidden="true">⋮⋮</div><div class="planMethodIndex">${methodIndex + 1}</div><div class="planMethodContent"><div class="planMethodName"></div><div class="planMethodCode"></div></div><button class="iconBtn planMethodRemoveBtn" type="button" title="Remove Method">${icon(removeIconSvg)}</button>`;
@@ -154,6 +155,10 @@ export class PlanningSidebarView {
         });
         methodCard.addEventListener("dblclick", (event) => {
           if (!(event.target instanceof Element) || !event.target.closest(".planMethodRemoveBtn")) void this.editMethod(object.id, method.id);
+        });
+        methodCard.addEventListener("click", (event) => {
+          if (!(event.target instanceof Element) || event.target.closest(".planMethodRemoveBtn")) return;
+          this.planning.selection.selectMethod(object.id, method.id);
         });
         methodCard.querySelector(".planMethodRemoveBtn")?.addEventListener("click", () => void this.removeMethod(object.id, method.id));
         methods.appendChild(methodCard);

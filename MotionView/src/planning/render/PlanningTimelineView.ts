@@ -140,7 +140,7 @@ export class PlanningTimelineView {
       if (!object || !method) continue;
       const element = document.createElement("button");
       element.type = "button";
-      element.className = `planningTimelineNode${this.planning.selection.selectedNodeId === node.id ? " isSelected" : ""}${hasPlanNodeMethodOverride(node as any) ? " hasOverride" : ""}`;
+      element.className = `planningTimelineNode${this.planning.selection.isNodeHighlighted(node) ? " isSelected" : ""}${hasPlanNodeMethodOverride(node as any) ? " hasOverride" : ""}`;
       element.dataset.nodeId = node.id;
       const bucket = layout.buckets[node.beforeWaypoint];
       if (!bucket) continue;
