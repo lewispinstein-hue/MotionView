@@ -2,7 +2,9 @@
 - [Download](Download.md)
 
 - MotionView
-  - [Viewing Mode](docs/MotionView/ViewingMode.md)
+  - Viewing Mode
+    - [Viewing Mode](docs/MotionView/ViewingMode/ViewingMode.md)
+    - [Settings](docs/MotionView/ViewingMode/Settings.md)
   - Planning Mode
     - [Planning Mode](docs/MotionView/PlanningMode/PlanningMode)
     - [Planning Mode Template](docs/MotionView/PlanningMode/PlanningExportTemplate.md)
