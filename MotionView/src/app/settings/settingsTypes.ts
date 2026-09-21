@@ -54,7 +54,7 @@ export interface SettingsChangedEvent {
 
 export const DEFAULT_SETTINGS: Readonly<MotionViewSettings> = {
   prosDir: "",
-  telemetryEnabled: false,
+  telemetryEnabled: true,
   robotImageEnabled: true,
   units: "in",
   robotW: "12",
