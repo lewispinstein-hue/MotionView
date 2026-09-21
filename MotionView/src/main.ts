@@ -1,4 +1,3 @@
-// @ts-nocheck
 import demoRouteUrl from "./assets/demo/getting-started-route.json?url";
 import { initializeMotionViewApp } from "./app/appRuntime";
 import { HelpDom, HelpView } from "./app/help";
@@ -16,6 +15,7 @@ import {
   PlanningSettingsBinding,
   SettingsDom,
   SettingsView,
+  TelemetrySettingsBinding,
   ViewingSettingsBinding,
 } from "./app/settings";
 import { TopBarDom, TopBarView } from "./app/topBar";
@@ -69,6 +69,7 @@ const viewingSettings = new ViewingSettingsBinding(app.settings, app.viewing, se
 const planningSettings = new PlanningSettingsBinding(app.settings, app.planning, fieldRenderer, planningCodeExportDialog, settingsDom);
 const liveSettings = new LiveSettingsBinding(app.settings, app.live);
 const layoutSettings = new LayoutSettingsBinding(app.settings, planningLayout, viewingLayout);
+const telemetrySettings = new TelemetrySettingsBinding(app.settings, app.core.telemetry.telemetryClient, settingsDom);
 
 const serializer = new MotionViewDocumentSerializer(app);
 const helpView = new HelpView(app, HelpDom.from(), serializer);
@@ -91,6 +92,7 @@ const bootstrap = new AppBootstrap(
   planningSettings,
   liveSettings,
   layoutSettings,
+  telemetrySettings,
   persistence,
   importer,
   viewingLayout,

@@ -25,6 +25,11 @@ function cloneNode(node: Readonly<PlanningNode>): PlanningNode {
   return { ...node };
 }
 
+function finiteNumber(value: unknown, fallback = 0): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
 export class PlanningSession {
   readonly waypoints: PlanningWaypoint[] = [];
   readonly objects: PlanningObject[] = [];
@@ -119,9 +124,9 @@ export class PlanningSession {
       ? data["planned-path"].map((raw) => {
         const point = raw as Record<string, unknown>;
         return {
-          x: Number(point?.x) || 0,
-          y: Number(point?.y) || 0,
-          theta: Number(point?.theta) || 0,
+          x: finiteNumber(point?.x),
+          y: finiteNumber(point?.y),
+          theta: finiteNumber(point?.theta),
           speed: Number.isFinite(Number(point?.speed))
             ? Math.max(1, Math.min(127, Number(point?.speed)))
             : 127,

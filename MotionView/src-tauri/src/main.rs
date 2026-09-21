@@ -23,6 +23,7 @@ mod settings;
 
 struct BridgeState(Mutex<Option<Child>>);
 struct BridgeOrigin(Mutex<Option<String>>);
+struct BridgeToken(Mutex<Option<String>>);
 struct QuitState(Mutex<bool>);
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -47,11 +48,10 @@ struct SystemInfo {
 fn load_posthog_config() -> Option<PostHogConfig> {
     // Public facing api key (phc_...), ok to hard code
     let api_key: String = "phc_PsC5l917wW1iP38NmUybaMTn0sRFpawhGSF03jb3g5w".to_string();
-    println!("API KEY SET");
     Some(PostHogConfig {
         api_key,
         options: Some(PostHogOptions {
-            disable_session_recording: Some(false),
+            disable_session_recording: Some(true),
             ..Default::default()
         }),
         ..Default::default()
@@ -543,7 +543,11 @@ fn bridge_bin_for_launch(
     }
 }
 
-fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<SpawnedBridge, tauri::Error> {
+fn spawn_bridge(
+    app: &tauri::AppHandle,
+    port: u16,
+    token: &str,
+) -> Result<SpawnedBridge, tauri::Error> {
     // Setup Logging Directory and File
     // Prefer app_data_dir/Logs, falling back to project root/Logs if that fails
     let log_dir = app
@@ -635,8 +639,22 @@ fn spawn_bridge(app: &tauri::AppHandle, port: u16) -> Result<SpawnedBridge, taur
         ))
     })?;
 
+    cmd.args([
+        "--host",
+        "127.0.0.1",
+        "--port",
+        &port.to_string(),
+        "--token",
+        token,
+        "--allowed-origin",
+        "tauri://localhost",
+        "--allowed-origin",
+        "http://tauri.localhost",
+    ]);
+    #[cfg(debug_assertions)]
+    cmd.args(["--allowed-origin", "http://127.0.0.1:1420"]);
+
     let child = cmd
-        .args(["--host", "127.0.0.1", "--port", &port.to_string()])
         .env("MOTIONVIEW_LOG_PATH", &log_path)
         .env("MOTIONVIEW_BUNDLE_ROOTS", bundle_root_env)
         .stdout(std::process::Stdio::from(log))
@@ -676,6 +694,11 @@ fn get_system_info() -> SystemInfo {
 
 #[tauri::command]
 fn get_bridge_origin(state: State<'_, BridgeOrigin>) -> Option<String> {
+    state.0.lock().unwrap().clone()
+}
+
+#[tauri::command]
+fn get_bridge_token(state: State<'_, BridgeToken>) -> Option<String> {
     state.0.lock().unwrap().clone()
 }
 
@@ -753,6 +776,7 @@ fn run_app() {
         .plugin(tauri_plugin_shell::init())
         .manage(BridgeState(Mutex::new(None)))
         .manage(BridgeOrigin(Mutex::new(None)))
+        .manage(BridgeToken(Mutex::new(None)))
         .manage(QuitState(Mutex::new(false)))
         .invoke_handler(tauri::generate_handler![
             settings::read_settings,
@@ -769,22 +793,27 @@ fn run_app() {
             get_window_fullscreen_state,
             get_system_info,
             get_bridge_origin,
+            get_bridge_token,
             get_posthog_distinct_id,
             finalize_app_quit
         ])
         .setup(|app| {
             cleanup_previous_bridge(app.handle());
             let port = pick_free_port();
-            let bridge = spawn_bridge(app.handle(), port)?;
+            let token = uuid::Uuid::new_v4().to_string();
+            let origin = format!("http://127.0.0.1:{port}");
+            let bridge = spawn_bridge(app.handle(), port, &token)?;
             write_bridge_pid(app.handle(), bridge.child.id(), &bridge.command_marker);
             *app.state::<BridgeState>().0.lock().unwrap() = Some(bridge.child);
-            *app.state::<BridgeOrigin>().0.lock().unwrap() =
-                Some(format!("http://127.0.0.1:{port}"));
+            *app.state::<BridgeOrigin>().0.lock().unwrap() = Some(origin.clone());
+            *app.state::<BridgeToken>().0.lock().unwrap() = Some(token.clone());
 
             // Tell frontend where backend is
             if let Some(win) = app.get_webview_window("main") {
+                let origin_json = serde_json::to_string(&origin).expect("bridge origin is serializable");
+                let token_json = serde_json::to_string(&token).expect("bridge token is serializable");
                 win.eval(&format!(
-                    "window.__BRIDGE_ORIGIN__ = 'http://127.0.0.1:{port}';"
+                    "window.__BRIDGE_ORIGIN__ = {origin_json}; window.__BRIDGE_TOKEN__ = {token_json};"
                 ))?;
 
                 #[cfg(not(mobile))]

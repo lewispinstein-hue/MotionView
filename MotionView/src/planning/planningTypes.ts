@@ -35,19 +35,6 @@ export interface PlanningTelemetrySnapshot {
   [key: string]: unknown;
 }
 
-export interface PlanningTemplateExportTelemetrySnapshot {
-  readonly plan_waypoints: number;
-  readonly template: string;
-  readonly plan_objects: readonly Readonly<{
-    name: string;
-    methods: readonly Readonly<{
-      name: string;
-      code: string;
-    }>[];
-  }>[];
-  readonly [key: string]: unknown;
-}
-
 export interface PlanningExportView {
   readonly waypoints: readonly PlanningWaypointView[];
   readonly objects: readonly PlanningObjectView[];

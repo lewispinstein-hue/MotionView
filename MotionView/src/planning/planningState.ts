@@ -24,6 +24,11 @@ export function getDefaultPlanObjectColor(index = 0) {
   return DEFAULT_PLAN_OBJECT_COLORS[index % DEFAULT_PLAN_OBJECT_COLORS.length];
 }
 
+export function normalizePlanObjectColor(value: unknown, index = 0): string {
+  const color = typeof value === "string" ? value.trim() : "";
+  return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : getDefaultPlanObjectColor(index);
+}
+
 export function getDefaultPlanObjectName(index = 0) {
   return `Object ${index + 1}`;
 }
@@ -45,7 +50,7 @@ export function normalizePlanObjects(value: unknown): PlanningObject[] {
     return {
       id: (typeof obj?.id === "string" && obj.id.trim()) ? obj.id.trim() : createPlanObjectId(),
       name: typeof obj?.name === "string" ? obj.name : "",
-      color: (typeof obj?.color === "string" && obj.color.trim()) ? obj.color.trim() : getDefaultPlanObjectColor(index),
+      color: normalizePlanObjectColor(obj?.color, index),
       latestMethod: typeof obj?.latestMethod === "string" ? obj.latestMethod : "",
       methods: rawMethods.map((method: any, methodIndex: number) => ({
         id: (typeof method?.id === "string" && method.id.trim()) ? method.id.trim() : `plan-method-${index + 1}-${methodIndex + 1}`,

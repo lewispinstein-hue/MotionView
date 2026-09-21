@@ -16,11 +16,31 @@ export class TelemetryClient {
   private systemInfo: SystemInfo = {};
   private distinctId: string | null = null;
   private initialized = false;
+  private analyticsInitialized = false;
+  private analyticsEnabled = false;
+  private analyticsInitialization: Promise<void> | null = null;
   private debounceUntilByKey = new Map<string, number>();
   private readonly queue = new TelemetryQueue();
 
-  enabled() {
-    return isTauriRuntime();
+  enabled(): boolean {
+    return this.analyticsEnabled && isTauriRuntime();
+  }
+
+  setEnabled(enabled: boolean): void {
+    const next = enabled && isTauriRuntime();
+    if (this.analyticsEnabled === next) {
+      if (!next) this.queue.clearAutomatic();
+      return;
+    }
+    this.analyticsEnabled = next;
+    if (!next) {
+      this.analyticsInitialized = false;
+      this.distinctId = null;
+      this.systemInfo = {};
+      this.queue.clearAutomatic();
+      return;
+    }
+    if (this.initialized) void this.initializeAnalytics();
   }
 
   getAppVersion() {
@@ -29,44 +49,27 @@ export class TelemetryClient {
 
   async init() {
     if (this.initialized) return this.appVersion;
-    if (!this.enabled()) {
-      this.initialized = true;
-      return this.appVersion;
-    }
 
-    try {
-      this.appVersion = await getVersion();
-    } catch (err) {
-      console.warn("Failed to load app version for telemetry:", err);
-    }
-
-    try {
-      this.distinctId = await invoke<string>("get_posthog_distinct_id");
-    } catch (err) {
-      console.warn("Failed to load native PostHog distinct ID:", err);
-    }
-
-    try {
-      this.systemInfo = await invoke<SystemInfo>("get_system_info");
-    } catch (err) {
-      console.warn("Failed to load system info from backend:", err);
-    }
-
-    if (this.distinctId) {
+    if (isTauriRuntime()) {
       try {
-        await this.withRetry(() => this.identify(this.distinctId as string));
+        this.appVersion = await getVersion();
       } catch (err) {
-        console.warn("PostHog identify failed:", err);
+        console.warn("Failed to load app version:", err);
       }
     }
 
     this.initialized = true;
+    await this.initializeAnalytics();
     await this.flush();
     return this.appVersion;
   }
 
   async capture(event: TelemetryEventName, properties: TelemetryProperties = {}, opts: TelemetryCaptureOptions = {}) {
-    if (!this.enabled()) return false;
+    const explicitlySubmitted = opts.explicitUserAction === true && isTauriRuntime();
+    if (!this.enabled() && !explicitlySubmitted) return false;
+
+    await this.init();
+    await this.initializeAnalytics();
 
     const debounceMs = Number(opts.debounceMs || 0);
     const debounceKey = opts.debounceKey || event;
@@ -81,6 +84,7 @@ export class TelemetryClient {
       event,
       properties: { ...properties },
       createdAt: new Date().toISOString(),
+      explicitUserAction: explicitlySubmitted,
     };
 
     try {
@@ -92,6 +96,45 @@ export class TelemetryClient {
       this.queue.enqueue(queuedEvent);
       return false;
     }
+  }
+
+  private async initializeAnalytics(): Promise<void> {
+    if (!this.enabled() || this.analyticsInitialized) return;
+    if (this.analyticsInitialization) return this.analyticsInitialization;
+
+    this.analyticsInitialization = this.initializeAnalyticsOnce().finally(() => {
+      this.analyticsInitialization = null;
+    });
+    return this.analyticsInitialization;
+  }
+
+  private async initializeAnalyticsOnce(): Promise<void> {
+    if (!this.enabled()) return;
+
+    try {
+      this.distinctId = await invoke<string>("get_posthog_distinct_id");
+    } catch (err) {
+      console.warn("Failed to load native PostHog distinct ID:", err);
+    }
+    if (!this.enabled()) return;
+
+    try {
+      this.systemInfo = await invoke<SystemInfo>("get_system_info");
+    } catch (err) {
+      console.warn("Failed to load system info from backend:", err);
+    }
+    if (!this.enabled()) return;
+
+    if (this.distinctId) {
+      try {
+        await this.withRetry(() => this.identify(this.distinctId as string));
+      } catch (err) {
+        console.warn("PostHog identify failed:", err);
+      }
+    }
+
+    this.analyticsInitialized = true;
+    await this.flush();
   }
 
   async identify(distinctId: string, properties?: TelemetryProperties) {
@@ -111,6 +154,11 @@ export class TelemetryClient {
 
     const remaining: QueuedTelemetryEvent[] = [];
     for (const event of events) {
+      const canSend = this.enabled() || (event.explicitUserAction === true && isTauriRuntime());
+      if (!canSend) {
+        remaining.push(event);
+        continue;
+      }
       try {
         await this.withRetry(() => this.sendQueuedEvent(event, true));
       } catch {

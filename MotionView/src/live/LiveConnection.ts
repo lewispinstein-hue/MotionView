@@ -28,12 +28,17 @@ export class LiveConnection {
       if (this.connected) return true;
       if (this.project.path && !this.project.valid && !(await this.project.validate())) return false;
       if (!this.project.valid) {
-        this.appendConsole("Something went wrong. Try restarting the application or waiting.");
-        this.events.notice.emit({ kind: "error", message: "Cannot connect: set a valid PROS directory in Settings first." });
+        const missingProjectDirectory = !this.project.path && await this.bridge.isReady();
+        const message = missingProjectDirectory
+          ? "Set your PROS Project directory to start streaming"
+          : "Cannot connect: set a valid PROS directory in Settings first.";
+        this.appendConsole(`[UI] ${message}`);
+        this.events.notice.emit({ kind: "error", message });
         return false;
       }
-      const websocketOrigin = (await this.bridge.resolveOrigin()) && this.bridge.websocketOrigin;
-      if (!websocketOrigin) {
+      await this.bridge.resolveOrigin();
+      const websocketUrl = this.bridge.websocketUrl;
+      if (!websocketUrl) {
         this.appendConsole("[UI] Child process Bridge.py was not given a port. Live streaming cannot start.");
         return false;
       }
@@ -45,7 +50,7 @@ export class LiveConnection {
       this.viewing.playback.pause();
       if (this.session.socket) return false;
       this.setState("connecting");
-      const connected = await this.openSocket(`${websocketOrigin}/ws`);
+      const connected = await this.openSocket(websocketUrl);
       if (!connected) this.setState("disconnected");
       return connected;
     });

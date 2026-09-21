@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import hashlib
 import os
+import secrets
 import signal
 import sys
 import shutil
@@ -14,15 +15,17 @@ import zipfile
 from datetime import datetime
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from fastapi.websockets import WebSocket
-from starlette.middleware.cors import CORSMiddleware
 import uvicorn
 
 # PROS_PROJECT_DIR can be updated via API
 PROS_PROJECT_DIR = None
 # Lock will be created when needed (can't create Lock outside async context)
 PROS_PROJECT_DIR_LOCK = None
+BRIDGE_TOKEN = ""
+ALLOWED_ORIGINS: Set[str] = set()
 
 def _get_lock():
     """Get or create the lock for PROS_PROJECT_DIR updates."""
@@ -411,13 +414,38 @@ BASE_DIR = resource_base_dir()
 
 app = FastAPI()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def _has_valid_token(token: str) -> bool:
+    return bool(BRIDGE_TOKEN) and secrets.compare_digest(token, BRIDGE_TOKEN)
+
+def _cors_headers(origin: Optional[str]) -> dict:
+    if origin not in ALLOWED_ORIGINS:
+        return {}
+    return {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, X-MotionView-Token",
+        "Access-Control-Max-Age": "600",
+        "Vary": "Origin",
+    }
+
+
+@app.middleware("http")
+async def require_bridge_token(request: Request, call_next):
+    origin = request.headers.get("origin")
+    cors_headers = _cors_headers(origin)
+    if request.method == "OPTIONS":
+        if not cors_headers:
+            return Response(status_code=403)
+        return Response(status_code=204, headers=cors_headers)
+
+    token = request.headers.get("x-motionview-token", "")
+    if not _has_valid_token(token):
+        return JSONResponse(status_code=401, content={"ok": False, "status": "unauthorized"}, headers=cors_headers)
+
+    response = await call_next(request)
+    for name, value in cors_headers.items():
+        response.headers[name] = value
+    return response
 
 LOG_PATH = os.environ.get("MOTIONVIEW_LOG_PATH")
 
@@ -444,6 +472,11 @@ _clients_lock = asyncio.Lock()
 
 @app.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket):
+    origin = websocket.headers.get("origin")
+    token = websocket.query_params.get("token", "")
+    if origin not in ALLOWED_ORIGINS or not _has_valid_token(token):
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
     async with _clients_lock:
         clients.add(websocket)
@@ -522,12 +555,50 @@ class ProsTerminalRunner:
     def __init__(self):
         self.proc: Optional[asyncio.subprocess.Process] = None
         self.reader_task: Optional[asyncio.Task] = None
+        self._broadcast_task: Optional[asyncio.Task] = None
+        self._broadcast_queue: Optional[asyncio.Queue[str]] = None
         self._op_lock = asyncio.Lock()
 
         # Unix PTY support
         self._pty_master_fd: Optional[int] = None
         self._pty_buf: bytes = b""
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+
+    def _ensure_broadcast_worker(self):
+        if self._broadcast_task is not None and not self._broadcast_task.done():
+            return
+        self._broadcast_queue = asyncio.Queue(maxsize=1_024)
+        self._broadcast_task = asyncio.create_task(self._broadcast_lines())
+
+    def _enqueue_broadcast(self, line: str):
+        if self._broadcast_queue is None:
+            return
+        try:
+            self._broadcast_queue.put_nowait(line)
+        except asyncio.QueueFull:
+            # Serial output is untrusted and can be arbitrarily fast. Preserve
+            # bridge responsiveness rather than creating an unbounded task list.
+            pass
+
+    async def _broadcast_lines(self):
+        assert self._broadcast_queue is not None
+        while True:
+            line = await self._broadcast_queue.get()
+            try:
+                await broadcast(line)
+            finally:
+                self._broadcast_queue.task_done()
+
+    async def _stop_broadcast_worker(self):
+        if self._broadcast_task is None:
+            return
+        self._broadcast_task.cancel()
+        try:
+            await self._broadcast_task
+        except BaseException:
+            pass
+        self._broadcast_task = None
+        self._broadcast_queue = None
 
     def _prune_exited_process_state(self):
         if self.proc is not None and self.proc.returncode is not None:
@@ -564,6 +635,7 @@ class ProsTerminalRunner:
                 return {"ok": True, "status": "already running", "pid": self.pid}
 
             self._loop = asyncio.get_running_loop()
+            self._ensure_broadcast_worker()
 
             # If a previous session exited without cleanup, clear stale PTY/reader state.
             if self._pty_master_fd is not None:
@@ -586,7 +658,7 @@ class ProsTerminalRunner:
             self._prune_exited_process_state()
             if not self.running:
                 # Still clean up stale PTY/reader state if present.
-                if self.proc is None and self.reader_task is None and self._pty_master_fd is None:
+                if self.proc is None and self.reader_task is None and self._pty_master_fd is None and self._broadcast_task is None:
                     return {"ok": True, "status": "not running"}
                 try:
                     await asyncio.wait_for(self._terminate(graceful=True), timeout=3.0)
@@ -621,6 +693,8 @@ class ProsTerminalRunner:
             except BaseException:
                 pass
             self.reader_task = None
+
+        await self._stop_broadcast_worker()
 
         # Close PTY reader hook + fds on Unix
         self._close_pty_reader()
@@ -741,11 +815,13 @@ class ProsTerminalRunner:
             return
 
         self._pty_buf += data
+        if len(self._pty_buf) > 256 * 1024:
+            self._pty_buf = self._pty_buf[-256 * 1024:]
         while b"\n" in self._pty_buf:
             raw, self._pty_buf = self._pty_buf.split(b"\n", 1)
             line = raw.decode("utf-8", errors="replace").rstrip("\r").strip()
             if line:
-                self._loop.create_task(broadcast(line))
+                self._enqueue_broadcast(line)
 
     async def _start_pipes(self):
         creationflags = 0
@@ -792,7 +868,7 @@ class ProsTerminalRunner:
                 break
             text = line.decode("utf-8", errors="replace").rstrip("\r\n")
             if text.strip():
-                await broadcast(text)
+                self._enqueue_broadcast(text)
 
 
 runner = ProsTerminalRunner()
@@ -939,7 +1015,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--token", required=True)
+    parser.add_argument("--allowed-origin", action="append", default=[])
     args = parser.parse_args()
+    global BRIDGE_TOKEN, ALLOWED_ORIGINS
+    BRIDGE_TOKEN = args.token
+    ALLOWED_ORIGINS = {origin for origin in args.allowed_origin if origin}
+    if not ALLOWED_ORIGINS:
+        parser.error("at least one --allowed-origin is required")
     uvicorn.run(app, host=args.host, port=args.port, ws="websockets")
 
 if __name__ == "__main__":

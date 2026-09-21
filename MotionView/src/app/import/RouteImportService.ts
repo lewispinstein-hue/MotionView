@@ -10,6 +10,31 @@ import type { RouteImportResult } from "./importTypes";
 function numberOrNull(value: unknown): number | null { const number = Number(value); return Number.isFinite(number) ? number : null; }
 function logLevel(value: unknown): "DEBUG" | "INFO" | "WARN" | "ERROR" | "FATAL" { const level = String(value ?? "INFO").toUpperCase(); return level === "DEBUG" || level === "WARN" || level === "ERROR" || level === "FATAL" ? level : "INFO"; }
 
+const MAX_IMPORT_BYTES = 32 * 1024 * 1024;
+const MAX_IMPORT_ITEMS = 100_000;
+
+function assertArrayLimit(value: unknown, name: string): void {
+  if (Array.isArray(value) && value.length > MAX_IMPORT_ITEMS) {
+    throw new Error(`${name} contains more than ${MAX_IMPORT_ITEMS.toLocaleString()} items`);
+  }
+}
+
+function assertDocumentLimits(record: Record<string, unknown>): void {
+  for (const name of ["planned-path", "planned-objects", "planned-nodes", "poses", "robot-path", "watches", "watch", "logs", "log", "waypoints"]) {
+    assertArrayLimit(record[name], name);
+  }
+
+  let methodCount = 0;
+  for (const object of Array.isArray(record["planned-objects"]) ? record["planned-objects"] : []) {
+    const methods = object && typeof object === "object" ? (object as Record<string, unknown>).methods : undefined;
+    if (!Array.isArray(methods)) continue;
+    methodCount += methods.length;
+    if (methodCount > MAX_IMPORT_ITEMS) {
+      throw new Error(`planned objects contain more than ${MAX_IMPORT_ITEMS.toLocaleString()} methods`);
+    }
+  }
+}
+
 export class RouteImportService {
   constructor(private readonly app: MotionViewApp, private readonly dialogs: PlanningDialogs, private readonly topBar: TopBarView, private readonly demoRouteUrl: string) {}
 
@@ -19,25 +44,30 @@ export class RouteImportService {
     if (![".json", ".txt", ".log"].some((extension) => name.endsWith(extension))) {
       window.alert("Invalid file type. Please select a .txt, .log, or .json file"); this.app.core.status.setStatus("Invalid file type."); input && (input.value = ""); return null;
     }
+    if (file.size > MAX_IMPORT_BYTES) {
+      window.alert("File is too large. MotionView imports files up to 32 MB."); this.app.core.status.setStatus("File is too large to import."); input && (input.value = ""); return null;
+    }
     try {
       const result = name.endsWith(".json") ? await this.loadJson(await file.text()) : this.loadCapture(await file.text());
       input && (input.value = "");
       if (result.loaded) this.app.core.status.setStatus(`Loaded ${file.name}`);
-      await viewingTelemetry.fileLoaded({ file_name: name, file_type: result.type, file_size: file.size });
+      await viewingTelemetry.fileLoaded({ file_type: result.type, file_size: file.size });
       return result;
     } catch (error) {
       input && (input.value = ""); console.error(error); this.app.core.status.setStatus(`Failed to load: ${error instanceof Error ? error.message : String(error)}`);
-      await viewingTelemetry.failedFileLoad({ reason: error instanceof Error ? error.message : String(error) }); return null;
+      await viewingTelemetry.failedFileLoad({ file_type: name.endsWith(".json") ? "json" : "text" }); return null;
     }
   }
 
   async loadJson(text: string): Promise<RouteImportResult> {
+    if (text.length > MAX_IMPORT_BYTES) throw new Error("JSON is too large to import");
     const document: unknown = JSON.parse(text); return this.loadDocument(document);
   }
 
   async loadDocument(document: unknown): Promise<RouteImportResult> {
     if (!document || typeof document !== "object") throw new Error("Invalid JSON: missing data object");
     const record = document as Record<string, unknown>;
+    assertDocumentLimits(record);
     const planning = Array.isArray(record["planned-path"]) && record["planned-path"].length > 0;
     const viewing = this.hasViewing(record);
     if (planning && this.app.planning.hasData && !await this.dialogs.confirm({ title: "Replace Planning Route", message: "This import contains planning points and will replace the current planning route. Continue?", confirmLabel: "Replace" })) {
@@ -50,6 +80,7 @@ export class RouteImportService {
   }
 
   loadCapture(text: string): RouteImportResult {
+    if (text.length > MAX_IMPORT_BYTES) throw new Error("Capture is too large to import");
     this.app.planning.clear(); this.app.live.loadCapture(text);
     if (!this.app.viewing.data.hasData) throw new Error("No poses, watches, logs, waypoints, or planning data found in file.");
     this.finalize(); return { type: "text", loaded: true };

@@ -97,12 +97,24 @@ export class TopBarView {
     this.dom.root.addEventListener("scroll", () => {
       this.#savedScrollLeft = this.dom.root.scrollLeft || 0;
     }, { passive: true });
+    this.dom.root.addEventListener("wheel", (event) => this.scrollWithWheel(event), { passive: false });
   }
 
   render(): void {
     this.renderMode(this.app.core.mode.getMode());
     this.renderPlayback();
     this.scheduleLayout();
+  }
+
+  private scrollWithWheel(event: WheelEvent): void {
+    if (event.ctrlKey || this.dom.root.scrollWidth <= this.dom.root.clientWidth) return;
+    const distance = event.deltaX || event.deltaY;
+    if (!distance) return;
+    const multiplier = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16
+      : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? this.dom.root.clientWidth
+        : 1;
+    this.dom.root.scrollLeft += distance * multiplier;
+    event.preventDefault();
   }
 
   scheduleLayout(): void {

@@ -35,7 +35,7 @@ export class FeedbackTelemetry {
     if (this.remainingRateLimitMs() > 0) return "rate_limited";
     // Feedback owns its persisted cooldown. A second telemetry-client debounce
     // can retain an old value when this setting changes during development.
-    const sent = await this.telemetry.capture("feedback_submitted", this.propertiesFor(submission));
+    const sent = await this.telemetry.capture("feedback_submitted", this.propertiesFor(submission), { explicitUserAction: true });
     this.recordSubmission();
     return sent ? "sent" : "queued";
   }

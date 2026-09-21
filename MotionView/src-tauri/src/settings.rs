@@ -12,6 +12,7 @@ const SAVED_PATHS_FILE: &str = "saved-paths.json";
 const WINDOW_STATE_FILE: &str = "window-state.json";
 const APP_STATE_KEY: &str = "appState";
 const LAST_SEEN_APP_VERSION_KEY: &str = "lastSeenAppVersion";
+const MAX_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -202,6 +203,13 @@ fn ext_from_mime(mime: &str) -> &'static str {
     }
 }
 
+fn is_supported_image_mime(mime: &str) -> bool {
+    matches!(
+        mime,
+        "image/png" | "image/jpeg" | "image/gif" | "image/webp" | "image/bmp"
+    )
+}
+
 fn parse_data_url(data_url: &str) -> Result<(String, Vec<u8>), String> {
     let (meta, b64) = data_url
         .split_once(',')
@@ -214,21 +222,54 @@ fn parse_data_url(data_url: &str) -> Result<(String, Vec<u8>), String> {
         .and_then(|m| m.split(';').next())
         .filter(|m| !m.is_empty())
         .ok_or_else(|| "missing mime type".to_string())?;
+    if !is_supported_image_mime(mime) {
+        return Err("unsupported image type".to_string());
+    }
+    if b64.len() > ((MAX_IMAGE_BYTES as usize * 4) / 3) + 4 {
+        return Err("image is too large".to_string());
+    }
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(b64)
         .map_err(|e| e.to_string())?;
+    if bytes.len() as u64 > MAX_IMAGE_BYTES {
+        return Err("image is too large".to_string());
+    }
     Ok((mime.to_string(), bytes))
 }
 
-#[tauri::command]
-pub fn read_image_data(path: String) -> Result<String, String> {
-    let p = std::path::PathBuf::from(path);
-    if !p.exists() {
-        return Err("image path does not exist".into());
-    }
-    if !p.is_file() {
+fn is_within(path: &std::path::Path, root: &std::path::Path) -> bool {
+    path.starts_with(root)
+}
+
+fn approved_image_path(app: &AppHandle, path: String) -> Result<PathBuf, String> {
+    let path = PathBuf::from(path)
+        .canonicalize()
+        .map_err(|_| "image path does not exist".to_string())?;
+    if !path.is_file() {
         return Err("image path is not a file".into());
     }
+
+    let roots = [app.path().resource_dir(), app.path().app_data_dir()];
+    let approved = roots.iter().filter_map(|root| {
+        root.as_ref().ok()?.canonicalize().ok()
+    }).any(|root| is_within(&path, &root));
+    if !approved {
+        return Err("image path is outside MotionView-managed directories".into());
+    }
+
+    if !is_supported_image_mime(mime_from_ext(&path)) {
+        return Err("unsupported image type".into());
+    }
+    let metadata = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    if metadata.len() > MAX_IMAGE_BYTES {
+        return Err("image is too large".into());
+    }
+    Ok(path)
+}
+
+#[tauri::command]
+pub fn read_image_data(app: AppHandle, path: String) -> Result<String, String> {
+    let p = approved_image_path(&app, path)?;
     let bytes = std::fs::read(&p).map_err(|e| e.to_string())?;
     let mime = mime_from_ext(&p);
     let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);

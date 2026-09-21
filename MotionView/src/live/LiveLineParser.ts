@@ -21,6 +21,50 @@ export interface ParsedWaypointLine {
   readonly waypointEvent?: WaypointEvent;
 }
 
+function parseCsvLine(line: string): string[] | null {
+  const fields: string[] = [];
+  let field = "";
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index] ?? "";
+    if (quoted) {
+      if (character === '"') {
+        if (line[index + 1] === '"') {
+          field += '"';
+          index += 1;
+        } else {
+          quoted = false;
+        }
+      } else {
+        field += character;
+      }
+      continue;
+    }
+
+    if (character === ",") {
+      fields.push(field);
+      field = "";
+    } else if (character === '"') {
+      if (field.length > 0) return null;
+      quoted = true;
+    } else {
+      field += character;
+    }
+  }
+
+  if (quoted) return null;
+  fields.push(field);
+  return fields;
+}
+
+function formatCsvLine(fields: ReadonlyArray<string | number>): string {
+  return fields.map((field) => {
+    const value = String(field);
+    return /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+  }).join(",");
+}
+
 export class LiveLineParser {
   classify(line: string): string {
     return stripToTag(line);
@@ -44,7 +88,8 @@ export class LiveLineParser {
       if (!line) continue;
 
       if (line.startsWith("[POSE],")) {
-        const parts = line.split(",");
+        const parts = parseCsvLine(line);
+        if (!parts) continue;
         if (parts.length < 7) continue;
         const t = parseViewingNumber(parts[1]);
         const x = parseViewingNumber(parts[2]);
@@ -71,7 +116,8 @@ export class LiveLineParser {
       }
 
       if (line.startsWith("[WATCH],")) {
-        const parts = line.split(",");
+        const parts = parseCsvLine(line);
+        if (!parts) continue;
         if (parts.length < 5) continue;
         const t = parseViewingNumber(parts[1]);
         if (t == null) continue;
@@ -129,25 +175,11 @@ export class LiveLineParser {
 
   parseWaypointLine(line: string): ParsedWaypointLine {
     if (!line.startsWith("[WPOINT],")) return { ok: false, malformed: false };
-    const commas: number[] = [];
-    for (let index = 0; index < line.length; index += 1) if (line[index] === ",") commas.push(index);
-    if (commas.length < 4) return { ok: false, malformed: true };
+    const fields = parseCsvLine(line);
+    if (!fields || fields.length < 5) return { ok: false, malformed: true };
 
-    const fields: string[] = [];
-    let start = 0;
-    const splitCount = Math.min(commas.length, 5);
-    for (let index = 0; index < splitCount; index += 1) {
-      fields.push(line.slice(start, commas[index]));
-      start = commas[index] + 1;
-    }
-    if (fields.length < 5) {
-      fields.push(line.slice(start));
-      while (fields.length < 5) fields.push("");
-    } else {
-      fields.push(line.slice(start));
-    }
-
-    const [, rawTime, rawType, rawId, rawName, rawParams] = fields;
+    const [, rawTime, rawType, rawId, rawName] = fields;
+    const rawParams = fields.slice(5).join(",");
     const t = parseViewingNumber(rawTime);
     const type = normalizeWaypointType(rawType);
     const id = Number(rawId);
@@ -186,6 +218,6 @@ export class LiveLineParser {
     } else if (event.type === "REACHED" && event.params.remainingTime != null) {
       fields.push(event.params.remainingTime);
     }
-    return fields.join(",");
+    return formatCsvLine(fields);
   }
 }

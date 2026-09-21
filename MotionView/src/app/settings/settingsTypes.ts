@@ -9,6 +9,7 @@ export interface PersistedRobotImage {
 /** Backward-compatible shape of MotionView's persisted settings JSON. */
 export interface MotionViewSettings {
   readonly prosDir?: string;
+  readonly telemetryEnabled?: boolean;
   readonly robotImageEnabled?: boolean;
   readonly units?: string;
   readonly robotW?: string;
@@ -53,6 +54,7 @@ export interface SettingsChangedEvent {
 
 export const DEFAULT_SETTINGS: Readonly<MotionViewSettings> = {
   prosDir: "",
+  telemetryEnabled: false,
   robotImageEnabled: true,
   units: "in",
   robotW: "12",

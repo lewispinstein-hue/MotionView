@@ -243,13 +243,7 @@ canvas#c {
   gap: 3px;
   overflow-x: auto;
   scrollbar-width: none;
-  cursor: grab;
   user-select: none;
-}
-
-.viewingSidebarTabs.isDragging,
-.viewingSidebarTabs.isDragging * {
-  cursor: grabbing !important;
 }
 
 .viewingSidebarTabs::-webkit-scrollbar {
@@ -1259,11 +1253,6 @@ header.topBar {
   -ms-overflow-style: none;
 }
 
-header.topBar:hover:not(:disabled) {
-  scrollbar-width: auto;
-  scrollbar-gutter: unset;
-}
-
 header.topBar::-webkit-scrollbar {
   width: 0;
   height: 0;
@@ -1814,7 +1803,7 @@ body:not(.mode-planning) #rightPlanning {
 .modal {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;

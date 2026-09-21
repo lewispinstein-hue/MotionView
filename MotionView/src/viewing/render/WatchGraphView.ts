@@ -399,8 +399,8 @@ export class WatchGraphView {
       this.dom.panel.style.left = `${Math.max(12, Math.min(maxLeft, event.clientX - this.#dragOffset.x))}px`;
       this.dom.panel.style.top = `${Math.max(12, Math.min(maxTop, event.clientY - this.#dragOffset.y))}px`;
     } else if (this.#resizeStart) {
-      this.dom.panel.style.width = `${Math.max(420, Math.min(980, this.#resizeStart.width + event.clientX - this.#resizeStart.x))}px`;
-      this.dom.panel.style.height = `${Math.max(260, Math.min(window.innerHeight - 24, this.#resizeStart.height + event.clientY - this.#resizeStart.y))}px`;
+      this.dom.panel.style.width = `${Math.max(420, this.#resizeStart.width + event.clientX - this.#resizeStart.x)}px`;
+      this.dom.panel.style.height = `${Math.max(260, this.#resizeStart.height + event.clientY - this.#resizeStart.y)}px`;
       this.resize();
     }
   }

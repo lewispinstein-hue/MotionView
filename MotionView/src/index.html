@@ -12,7 +12,7 @@
 <body>
   <header id="topBar" class="topBar">
     <input id="file" type="file" accept=".json,.txt,.log" style="display:none" />
-    <input id="robotImageFile" type="file" accept="image/*" style="display:none" />
+    <input id="robotImageFile" type="file" accept=".png,.jpg,.jpeg,.gif,.webp,.bmp" style="display:none" />
     <div class="topBarContent">
       <div class="topBarLeft">
         <div class="topBarControlGroup" aria-label="Field controls">
@@ -411,6 +411,23 @@
               <input id="settingsShowPreviousYearFields" type="checkbox"
                 style="width:18px;height:18px;cursor:pointer" />
             </div>
+          </div>
+        </div>
+
+        <div class="divider" style="margin:10px 0;"></div>
+
+        <!-- Privacy Section -->
+        <div class="settingsSection settingsGroup" title="Choose whether MotionView may send usage analytics.">
+          <div class="settingsGroupHeader">
+            <div class="settingsGroupIcon">🔒</div>
+            <div class="settingsGroupTitle">Privacy</div>
+          </div>
+          <div class="settingsGroupBody">
+            <div class="settingsRow" style="align-items:center !important;">
+              <label class="settingsLabel" for="settingsTelemetryEnabled">Share usage analytics</label>
+              <input id="settingsTelemetryEnabled" type="checkbox" style="width:18px;height:18px;cursor:pointer" />
+            </div>
+            <p class="settingsDescription">Off by default. Analytics include app version, platform, and high-level feature usage—not imported file names, route contents, or generated code. Feedback is sent only when you choose Send feedback.</p>
           </div>
         </div>
 

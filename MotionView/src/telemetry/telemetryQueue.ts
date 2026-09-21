@@ -42,6 +42,10 @@ export class TelemetryQueue {
       // Ignore storage failures.
     }
   }
+
+  clearAutomatic() {
+    this.write(this.read().filter((event) => event.explicitUserAction === true));
+  }
 }
 
 function isQueuedTelemetryEvent(value: unknown): value is QueuedTelemetryEvent {

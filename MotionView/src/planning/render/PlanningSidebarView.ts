@@ -128,7 +128,13 @@ export class PlanningSidebarView {
       header.appendChild(meta);
       const latest = document.createElement("div");
       latest.className = "planObjectLatest";
-      latest.innerHTML = `<span class="planObjectLatestLabel">Latest</span><span class="planObjectLatestValue">${this.latestMethodName(object.id)}</span>`;
+      const latestLabel = document.createElement("span");
+      latestLabel.className = "planObjectLatestLabel";
+      latestLabel.textContent = "Latest";
+      const latestValue = document.createElement("span");
+      latestValue.className = "planObjectLatestValue";
+      latestValue.textContent = this.latestMethodName(object.id);
+      latest.append(latestLabel, latestValue);
       header.appendChild(latest);
       card.appendChild(header);
       const methods = document.createElement("div");
@@ -155,14 +161,45 @@ export class PlanningSidebarView {
       card.appendChild(methods);
       const actions = document.createElement("div");
       actions.className = "planObjectActions";
-      actions.innerHTML = `<button class="iconBtn secondaryBtn planMethodAddBtn" type="button">Add Method</button><div class="planObjectActionTools"><div class="planObjectColorWrap"><button class="iconBtn secondaryBtn planObjectColorBtn" type="button" style="color:${object.color}">${icon(colorIconSvg)}</button><div class="planObjectColorPopover${this.#openColorObjectId === object.id ? "" : " hidden"}"><input class="planObjectColorInput" type="color" value="${object.color}" /></div></div></div><button class="iconBtn secondaryBtn planObjectRemoveActionBtn" type="button">${icon(removeIconSvg)}</button>`;
-      actions.querySelector(".planMethodAddBtn")?.addEventListener("click", () => void this.addMethod(object.id));
-      actions.querySelector(".planObjectRemoveActionBtn")?.addEventListener("click", () => void this.removeObject(object.id));
-      actions.querySelector(".planObjectColorBtn")?.addEventListener("click", () => { this.#openColorObjectId = this.#openColorObjectId === object.id ? null : object.id; this.renderObjects(); });
-      actions.querySelector<HTMLInputElement>(".planObjectColorInput")?.addEventListener("input", (event) => {
+      const addMethod = document.createElement("button");
+      addMethod.className = "iconBtn secondaryBtn planMethodAddBtn";
+      addMethod.type = "button";
+      addMethod.textContent = "Add Method";
+      addMethod.addEventListener("click", () => void this.addMethod(object.id));
+
+      const actionTools = document.createElement("div");
+      actionTools.className = "planObjectActionTools";
+      const colorWrap = document.createElement("div");
+      colorWrap.className = "planObjectColorWrap";
+      const colorButton = document.createElement("button");
+      colorButton.className = "iconBtn secondaryBtn planObjectColorBtn";
+      colorButton.type = "button";
+      colorButton.style.color = object.color;
+      colorButton.innerHTML = icon(colorIconSvg);
+      colorButton.addEventListener("click", () => {
+        this.#openColorObjectId = this.#openColorObjectId === object.id ? null : object.id;
+        this.renderObjects();
+      });
+      const colorPopover = document.createElement("div");
+      colorPopover.className = `planObjectColorPopover${this.#openColorObjectId === object.id ? "" : " hidden"}`;
+      const colorInput = document.createElement("input");
+      colorInput.className = "planObjectColorInput";
+      colorInput.type = "color";
+      colorInput.value = object.color;
+      colorInput.addEventListener("input", (event) => {
         const color = (event.target as HTMLInputElement).value;
         this.planning.objects.setColor(object.id, color);
       });
+      colorPopover.appendChild(colorInput);
+      colorWrap.append(colorButton, colorPopover);
+      actionTools.appendChild(colorWrap);
+
+      const removeObject = document.createElement("button");
+      removeObject.className = "iconBtn secondaryBtn planObjectRemoveActionBtn";
+      removeObject.type = "button";
+      removeObject.innerHTML = icon(removeIconSvg);
+      removeObject.addEventListener("click", () => void this.removeObject(object.id));
+      actions.append(addMethod, actionTools, removeObject);
       card.appendChild(actions);
       card.style.setProperty("--plan-object-color", object.color || getDefaultPlanObjectColor(objectIndex));
       card.style.color = getContrastTextColor(object.color);
@@ -274,7 +311,7 @@ export class PlanningSidebarView {
     try {
       await navigator.clipboard.writeText(code);
       setStatus(`Copied generated code for ${data.waypoints.length} waypoint${data.waypoints.length === 1 ? "" : "s"}.`);
-      void planningTelemetry.templateExported(this.planning.templateExportTelemetryProperties({
+      void planningTelemetry.templateExported(this.planning.telemetryProperties({
         export_surface: "clipboard",
         exported_chars: code.length,
       }));

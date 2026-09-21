@@ -539,8 +539,13 @@ export class FieldRenderer {
     },
     loadRobotImageFromDataUrl,
     async loadRobotImageFromFile(file: File) {
-      if (!file.type.startsWith("image/")) {
-        alert("Please select an image file");
+      const supportedTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"]);
+      if (!supportedTypes.has(file.type)) {
+        alert("Please select a PNG, JPEG, GIF, WebP, or BMP image");
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        alert("Robot images must be 10 MB or smaller");
         return;
       }
       robotImagePath = typeof (file as File & { path?: string }).path === "string" && (file as File & { path?: string }).path

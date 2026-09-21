@@ -15,13 +15,6 @@ interface ShiftSyncSession {
   readonly initialScrollPositions: Partial<Record<SidebarSection, number>>;
 }
 
-interface SidebarTabDrag {
-  readonly pointerId: number;
-  readonly startX: number;
-  readonly startScrollLeft: number;
-  moved: boolean;
-}
-
 /** Owns the four virtualized Viewing lists and their coordinated updates. */
 export class ViewingSidebarView {
   readonly poses: PoseListView;
@@ -34,8 +27,6 @@ export class ViewingSidebarView {
   #shiftHeld = false;
   #shiftSync: ShiftSyncSession | null = null;
   #handledSidebarSyncCommitId = 0;
-  #tabDrag: SidebarTabDrag | null = null;
-  #suppressTabClick = false;
   readonly #scrollPositions: Record<SidebarSection, number> = { watches: 0, logs: 0, waypoints: 0, poses: 0 };
   readonly #scrollRestoreGenerations: Record<SidebarSection, number> = { watches: 0, logs: 0, waypoints: 0, poses: 0 };
 
@@ -78,7 +69,7 @@ export class ViewingSidebarView {
     for (const tab of this.dom.sectionTabs) {
       tab.addEventListener("click", () => this.setActiveSection(tab.dataset.viewingSection as SidebarSection));
     }
-    this.bindSectionGrabScroll();
+    this.bindSectionWheelScroll();
     this.dom.scrollContainer.addEventListener("scroll", () => {
       this.#scrollPositions[this.#activeSection] = this.dom.scrollContainer.scrollTop;
     }, { passive: true });
@@ -131,49 +122,18 @@ export class ViewingSidebarView {
     this.updateCounts();
   }
 
-  private bindSectionGrabScroll(): void {
+  private bindSectionWheelScroll(): void {
     const scroller = this.dom.sectionScroller;
-    scroller.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || event.pointerType !== "mouse") return;
-      this.#tabDrag = {
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startScrollLeft: scroller.scrollLeft,
-        moved: false,
-      };
-    });
-    scroller.addEventListener("pointermove", (event) => {
-      const drag = this.#tabDrag;
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      const distance = event.clientX - drag.startX;
-      if (!drag.moved && Math.abs(distance) < 4) return;
-      if (!drag.moved) {
-        // Capturing on pointerdown makes Windows WebView2 retarget the matching
-        // pointerup/click to the scroller, so a simple press on a tab never
-        // reaches that tab's click handler. Capture only after this is a drag.
-        drag.moved = true;
-        scroller.setPointerCapture(event.pointerId);
-      }
-      scroller.scrollLeft = drag.startScrollLeft - distance;
-      scroller.classList.add("isDragging");
+    scroller.addEventListener("wheel", (event) => {
+      if (event.ctrlKey || scroller.scrollWidth <= scroller.clientWidth) return;
+      const distance = event.deltaX || event.deltaY;
+      if (!distance) return;
+      const multiplier = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? scroller.clientWidth
+          : 1;
+      scroller.scrollLeft += distance * multiplier;
       event.preventDefault();
-    });
-    const finishDrag = (event: PointerEvent) => {
-      const drag = this.#tabDrag;
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      this.#tabDrag = null;
-      scroller.classList.remove("isDragging");
-      try { scroller.releasePointerCapture(event.pointerId); } catch { /* already released */ }
-      if (drag.moved && event.type === "pointerup") this.#suppressTabClick = true;
-    };
-    scroller.addEventListener("pointerup", finishDrag);
-    scroller.addEventListener("pointercancel", finishDrag);
-    scroller.addEventListener("click", (event) => {
-      if (!this.#suppressTabClick) return;
-      this.#suppressTabClick = false;
-      event.preventDefault();
-      event.stopPropagation();
-    }, true);
+    }, { passive: false });
   }
 
   private syncSharedSort(source: HTMLSelectElement, controls: readonly HTMLSelectElement[]): void {

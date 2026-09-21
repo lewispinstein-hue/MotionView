@@ -11,9 +11,13 @@ DEFAULT_ROSTER: Dict[int, str] = {}
 ELEVATED_ROSTER: Dict[int, str] = {}
 PENDING_ROSTER_EVENTS: DefaultDict[int, List[Tuple[object, ...]]] = defaultdict(list)
 MAX_PENDING_ROSTER_EVENTS_PER_ID = 100
+MAX_PENDING_ROSTER_IDS = 1_024
+MAX_PENDING_ROSTER_EVENTS_TOTAL = 4_096
+PENDING_ROSTER_EVENT_COUNT = 0
 LAST_TIMESTAMP_RAW: Optional[int] = None
 TIMESTAMP_WRAP_OFFSET = 0
 STREAM_BUFFER = bytearray()
+MAX_STREAM_BUFFER_BYTES = 256 * 1024
 
 LEVELS = {
     0: "NONE",
@@ -44,11 +48,12 @@ ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 def _reset_decoder_state() -> None:
-    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET
+    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, PENDING_ROSTER_EVENT_COUNT
 
     DEFAULT_ROSTER.clear()
     ELEVATED_ROSTER.clear()
     PENDING_ROSTER_EVENTS.clear()
+    PENDING_ROSTER_EVENT_COUNT = 0
     LAST_TIMESTAMP_RAW = None
     TIMESTAMP_WRAP_OFFSET = 0
 
@@ -195,13 +200,40 @@ def _render_pending_event(event: Tuple[object, ...], label: str) -> str:
     return ""
 
 
+def _discard_oldest_pending_event() -> bool:
+    global PENDING_ROSTER_EVENT_COUNT
+    for item_id in list(PENDING_ROSTER_EVENTS):
+        pending = PENDING_ROSTER_EVENTS[item_id]
+        if not pending:
+            PENDING_ROSTER_EVENTS.pop(item_id, None)
+            continue
+        pending.pop(0)
+        PENDING_ROSTER_EVENT_COUNT -= 1
+        if not pending:
+            PENDING_ROSTER_EVENTS.pop(item_id, None)
+        return True
+    return False
+
+
 def _queue_pending_event(item_id: int, event: Tuple[object, ...]) -> None:
-    pending = PENDING_ROSTER_EVENTS[item_id]
-    # Keep a bounded backlog per roster id so early events survive until the
-    # matching roster arrives without allowing unbounded memory growth.
+    global PENDING_ROSTER_EVENT_COUNT
+    pending = PENDING_ROSTER_EVENTS.get(item_id)
+    if pending is None:
+        if len(PENDING_ROSTER_EVENTS) >= MAX_PENDING_ROSTER_IDS:
+            return
+        pending = []
+        PENDING_ROSTER_EVENTS[item_id] = pending
+
+    # Unknown roster ids are remote input. Bound both each id's queue and the
+    # total queue, discarding the oldest unresolved event when necessary.
+    while PENDING_ROSTER_EVENT_COUNT >= MAX_PENDING_ROSTER_EVENTS_TOTAL:
+        if not _discard_oldest_pending_event():
+            break
     if len(pending) >= MAX_PENDING_ROSTER_EVENTS_PER_ID:
         pending.pop(0)
+        PENDING_ROSTER_EVENT_COUNT -= 1
     pending.append(event)
+    PENDING_ROSTER_EVENT_COUNT += 1
 
 
 def _emit_rostered_event(item_id: int, prefer_elevated: bool, event: Tuple[object, ...]) -> str:
@@ -213,6 +245,7 @@ def _emit_rostered_event(item_id: int, prefer_elevated: bool, event: Tuple[objec
 
 
 def _flush_pending_events(item_id: int) -> str:
+    global PENDING_ROSTER_EVENT_COUNT
     pending = PENDING_ROSTER_EVENTS.get(item_id)
     if not pending:
         return ""
@@ -233,6 +266,8 @@ def _flush_pending_events(item_id: int) -> str:
         PENDING_ROSTER_EVENTS[item_id] = remaining
     else:
         PENDING_ROSTER_EVENTS.pop(item_id, None)
+
+    PENDING_ROSTER_EVENT_COUNT = max(0, PENDING_ROSTER_EVENT_COUNT - (len(pending) - len(remaining)))
 
     return "".join(rendered)
 
@@ -447,7 +482,18 @@ def decode_bytes_to_str(data: Union[bytes, bytearray], encoding: str = "utf-8", 
         nul_idx = STREAM_BUFFER.find(0)
         nl_idx = STREAM_BUFFER.find(10)
 
+        delimiter_indexes = [index for index in (nul_idx, nl_idx) if index != -1]
+        next_delimiter = min(delimiter_indexes) if delimiter_indexes else -1
+        if next_delimiter > MAX_STREAM_BUFFER_BYTES:
+            del STREAM_BUFFER[:next_delimiter + 1]
+            outputs.append("[MotionView] discarded an oversized serial frame.\n")
+            continue
+
         if nul_idx == -1 and nl_idx == -1:
+            if len(STREAM_BUFFER) > MAX_STREAM_BUFFER_BYTES:
+                dropped = len(STREAM_BUFFER) - MAX_STREAM_BUFFER_BYTES
+                del STREAM_BUFFER[:dropped]
+                outputs.append("[MotionView] discarded serial data without a frame delimiter.\n")
             break
 
         if nul_idx != -1:

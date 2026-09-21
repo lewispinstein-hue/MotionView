@@ -2,6 +2,7 @@ import { invokeCommand } from "../tauri/commands";
 
 interface BridgeWindow extends Window {
   __BRIDGE_ORIGIN__?: string;
+  __BRIDGE_TOKEN__?: string;
 }
 
 export interface BridgeResponse<T> {
@@ -18,6 +19,7 @@ export interface BridgeRequestOptions {
 /** Owns bridge discovery, readiness caching, and typed HTTP requests. */
 export class BridgeService {
   #origin: string | null = null;
+  #token: string | null = null;
   #ready = false;
   #readyAt = 0;
   #lastReadyCheckAt = 0;
@@ -31,16 +33,27 @@ export class BridgeService {
     return this.origin?.replace(/^http/, "ws") ?? null;
   }
 
+  get websocketUrl(): string | null {
+    const origin = this.websocketOrigin;
+    const token = this.refreshInjectedToken();
+    return origin && token ? `${origin}/ws?token=${encodeURIComponent(token)}` : null;
+  }
+
   get available(): boolean {
     return this.origin != null;
   }
 
   async resolveOrigin(): Promise<string | null> {
     const injected = this.refreshInjectedOrigin();
-    if (injected) return injected;
+    const injectedToken = this.refreshInjectedToken();
+    if (injected && injectedToken) return injected;
     try {
-      const origin = await invokeCommand<string | null>("get_bridge_origin");
+      const [origin, token] = await Promise.all([
+        invokeCommand<string | null>("get_bridge_origin"),
+        invokeCommand<string | null>("get_bridge_token"),
+      ]);
       if (origin) this.#origin = origin;
+      if (token) this.#token = token;
     } catch {
       // The web build has no native bridge. Startup must remain functional.
     }
@@ -100,6 +113,13 @@ export class BridgeService {
     return this.#origin;
   }
 
+  private refreshInjectedToken(): string | null {
+    if (typeof window !== "object") return this.#token;
+    const injected = (window as BridgeWindow).__BRIDGE_TOKEN__;
+    if (injected) this.#token = injected;
+    return this.#token;
+  }
+
   private async request<T>(
     method: "GET" | "POST",
     path: string,
@@ -110,7 +130,8 @@ export class BridgeService {
       return { ok: false, status: 0, json: null };
     }
     const origin = await this.resolveOrigin();
-    if (!origin) return { ok: false, status: 0, json: null };
+    const token = this.refreshInjectedToken();
+    if (!origin || !token) return { ok: false, status: 0, json: null };
     if (options.waitForReady !== false && !(await this.waitUntilReady(4_000, 200))) {
       return { ok: false, status: 0, json: null };
     }
@@ -121,7 +142,10 @@ export class BridgeService {
     try {
       const response = await fetch(`${origin}${normalizedPath}`, {
         method,
-        headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+        headers: {
+          "X-MotionView-Token": token,
+          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: controller.signal,
       });

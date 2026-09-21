@@ -142,7 +142,7 @@ export class PlanningCodeExportDialog {
       this.dom.codeExportValidation.textContent = "";
       setStatus("Planning code exported.");
       this.emitChanged();
-      void planningTelemetry.templateExported(this.planning.templateExportTelemetryProperties({
+      void planningTelemetry.templateExported(this.planning.telemetryProperties({
         export_surface: "file",
         exported_chars: contents.length,
       }));

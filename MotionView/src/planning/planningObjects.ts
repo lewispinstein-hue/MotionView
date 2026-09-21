@@ -1,4 +1,4 @@
-import { createPlanMethodId, createPlanObjectId, getDefaultPlanObjectColor, getDefaultPlanObjectName } from "./planningState";
+import { createPlanMethodId, createPlanObjectId, getDefaultPlanObjectColor, getDefaultPlanObjectName, normalizePlanObjectColor } from "./planningState";
 import type { PlanningSession } from "./planningSession";
 import type { PlanningMethod, PlanningNode, PlanningNodeView, PlanningObject, PlanningObjectView } from "./planningTypes";
 
@@ -19,7 +19,7 @@ export class PlanningObjects {
     this.session.mutate("object", () => this.session.objects.push({
       id,
       name: values.name ?? getDefaultPlanObjectName(this.session.objects.length),
-      color: values.color || getDefaultPlanObjectColor(this.session.objects.length),
+      color: normalizePlanObjectColor(values.color, this.session.objects.length),
       latestMethod: values.latestMethod ?? "",
       methods: values.methods?.map((method) => ({ ...method, code: method.code ?? "" })) ?? [],
     }));
@@ -42,7 +42,11 @@ export class PlanningObjects {
   }
 
   rename(id: string, name: string): void { this.update(id, { name }); }
-  setColor(id: string, color: string): void { this.update(id, { color }); }
+  setColor(id: string, color: string): void {
+    const index = this.session.objects.findIndex((object) => object.id === id);
+    if (index < 0) return;
+    this.update(id, { color: normalizePlanObjectColor(color, index) });
+  }
   setLatestMethod(id: string, latestMethod: string): void { this.update(id, { latestMethod }); }
 
   update(id: string, values: Partial<Omit<PlanningObject, "id" | "methods">>): void {
