@@ -9,8 +9,8 @@
     </td>
     <!-- Versions -->
     <td style="padding: 10px 16px; vertical-align: middle;">
-      <img src="https://img.shields.io/badge/MotionView-v1.2.0-green?style=flat-square&cacheSeconds=60" alt="Version" style="vertical-align: middle; margin-right: 4px;">
-      <img src="https://img.shields.io/badge/MVLib-v2.0.1-green?style=flat-square&cacheSeconds=60" alt="Version" style="vertical-align: middle;">
+      <img src="https://img.shields.io/badge/MotionView-v1.3.1-green?style=flat-square&cacheSeconds=60" alt="Version" style="vertical-align: middle; margin-right: 4px;">
+      <img src="https://img.shields.io/badge/MVLib-v3.0.0-green?style=flat-square&cacheSeconds=60" alt="Version" style="vertical-align: middle;">
     </td>
   </tr>
 </table>
