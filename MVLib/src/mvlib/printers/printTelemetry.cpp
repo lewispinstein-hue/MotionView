@@ -52,6 +52,7 @@ void Logger::printTelemetry() {
 
   if (!useSpeedEstimation) {
     static auto norm = [&](const double& rpm, pros::MotorGears gearset) {
+      if (!std::isfinite(rpm)) return 0.0;
       double maxRpm = 100.0;
       if (gearset == pros::MotorGears::rpm_200) maxRpm = 200.0;
       else if (gearset == pros::MotorGears::rpm_600) maxRpm = 600.0;
