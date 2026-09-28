@@ -1,6 +1,7 @@
 #include "mvlib/core.hpp"
 #include "mvlib/private/telemetry.hpp"
 #include "mvlib/private/raii.hpp"
+#include "mvlib/private/sdCsv.hpp"
 #include <cerrno>
 #include <cmath>
 #include <cstdlib>
@@ -102,7 +103,8 @@ void Logger::printWatches() {
       if (valueStr == "t") valueStr = "true";
 
       logToSD(lvl, "[WATCH],%u,%s,%u,%s,%s", nowMs,
-              levelToString(lvl), watchId, label.c_str(), valueStr.c_str());
+              levelToString(lvl), watchId, detail::escapeSdCsvField(label).c_str(),
+              detail::escapeSdCsvField(valueStr).c_str());
     }
   }
 }

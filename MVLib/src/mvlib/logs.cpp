@@ -1,5 +1,6 @@
 #include "mvlib/core.hpp"
 #include "mvlib/private/telemetry.hpp"
+#include "mvlib/private/sdCsv.hpp"
 #include <cstdarg>
 
 namespace mvlib {
@@ -15,6 +16,10 @@ void Logger::logMessage(const LogLevel level, const char *fmt, va_list args) {
   }
 
   if (m_config.logToSD.load()) {
+    // The frontend joins everything after the 3rd comma back into the
+    // message, so commas already round-trip; only a line break needs
+    // neutralizing to keep the record on one line.
+    detail::stripSdLineBreaks(buffer);
     logToSD(level, "[LOG],%d,%s,%s", pros::millis(), levelToString(level), buffer);
   }
 }
