@@ -16,8 +16,12 @@ export class ExportDialog {
     if (this.#bound) return; this.#bound = true;
     this.dom.open.addEventListener("click", () => this.open());
     this.dom.close.addEventListener("click", () => this.close()); this.dom.cancel.addEventListener("click", () => this.close()); this.dom.confirm.addEventListener("click", () => void this.submit());
-    this.dom.pathName.addEventListener("input", () => { this.#submitError = ""; this.dom.pathName.value = pathName(this.dom.pathName.value); this.render(); });
-    this.dom.filename.addEventListener("input", () => { this.#submitError = ""; this.dom.filename.value = filename(this.dom.filename.value); this.render(); });
+    this.dom.pathName.addEventListener("input", () => { this.#submitError = ""; this.render(); });
+    this.dom.pathName.addEventListener("blur", () => { this.dom.pathName.value = pathName(this.dom.pathName.value); });
+    this.dom.pathName.addEventListener("keydown", (event) => { if (event.key === "Enter") this.dom.pathName.blur(); });
+    this.dom.filename.addEventListener("input", () => { this.#submitError = ""; this.render(); });
+    this.dom.filename.addEventListener("blur", () => { this.dom.filename.value = filename(this.dom.filename.value); });
+    this.dom.filename.addEventListener("keydown", (event) => { if (event.key === "Enter") this.dom.filename.blur(); });
     this.dom.location.addEventListener("change", () => { this.#submitError = ""; this.render(); }); this.dom.type.addEventListener("change", () => { this.#submitError = ""; this.render(); }); this.dom.customPath.addEventListener("input", () => { this.#submitError = ""; this.render(); });
     bindModalBackdropDismissal(this.dom.modal, () => this.close());
     window.addEventListener("keydown", (event) => { if (event.key === "Escape" && this.isOpen) { event.preventDefault(); event.stopImmediatePropagation(); this.close(); } }, true);
