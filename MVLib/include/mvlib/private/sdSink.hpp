@@ -155,6 +155,10 @@ public:
   /// @brief Return the selected SD-relative folder.
   const char* folder() const;
 
+  /// @brief Take and reset the count of lines dropped since the last report,
+  ///        due to the write/ready mutex being contended.
+  uint32_t takeDroppedLineCount();
+
 private:
   /// @brief Result of probing an SD folder.
   enum class FolderCheckResult : uint8_t {
@@ -216,6 +220,9 @@ private:
   char m_folder[24] = "";
   /// Whether this sink has been permanently disabled.
   bool m_locked = false;
+  /// Count of log lines dropped since the last report because the write/ready
+  /// mutex could not be acquired within its bounded wait.
+  mutable std::atomic<uint32_t> m_droppedLines{0};
 };
 
 } // namespace detail
