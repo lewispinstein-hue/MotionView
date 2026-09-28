@@ -286,26 +286,26 @@ export class FieldRenderer {
       ctx.globalAlpha = alpha * imgAlpha;
       ctx.translate(ox * scale, -oy * scale);
       ctx.rotate(r);
-      ctx.drawImage(robotImage, -(wPx * s) / 2, -(hPx * s) / 2, wPx * s, hPx * s);
+      ctx.drawImage(robotImage, -(hPx * s) / 2, -(wPx * s) / 2, hPx * s, wPx * s);
       ctx.restore();
     } else {
       ctx.fillStyle = "rgba(255,255,255,0.14)";
       ctx.strokeStyle = "rgba(255,255,255,0.85)";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.rect(-wPx / 2, -hPx / 2, wPx, hPx);
+      ctx.rect(-hPx / 2, -wPx / 2, hPx, wPx);
       ctx.fill();
       ctx.stroke();
 
       ctx.strokeStyle = "rgba(255,255,255,0.98)";
       ctx.beginPath();
-      ctx.moveTo(wPx / 2, -hPx / 2);
-      ctx.lineTo(wPx / 2, hPx / 2);
+      ctx.moveTo(hPx / 2, -wPx / 2);
+      ctx.lineTo(hPx / 2, wPx / 2);
       ctx.stroke();
     }
 
     const arrowSize = sizes.world({
-      width: wIn * 0.36,
+      width: hIn * 0.36,
       height: Math.min(wIn, hIn) * 0.28,
     });
     const arrowHeadLength = arrowSize.height * 0.8;
