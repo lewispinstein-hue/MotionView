@@ -185,20 +185,26 @@ export class ViewingProjection {
   }
 
   private rebuildWatchMarkers(): void {
-    this.#markers.length = 0;
-    for (const watch of this.data.watches) this.#markers.push(this.markerForWatch(watch));
-    this.rebuildMarkerTimeIndex();
+    this.rebuildMarkersFromSource();
     this.events.projectionChanged.emit({ kind: "replaced" });
   }
 
   private appendWatchMarkers(count: number): void {
-    const start = Math.max(0, this.data.watches.length - count);
-    for (let index = start; index < this.data.watches.length; index += 1) {
-      const watch = this.data.watches[index];
-      if (watch) this.#markers.push(this.markerForWatch(watch));
-    }
-    this.rebuildMarkerTimeIndex();
+    // appendBatch sorts all watches by timestamp after inserting the new
+    // ones, so a newly added watch is not guaranteed to land at the tail of
+    // data.watches (multiple robot tasks posting watches can interleave).
+    // Rebuilding from the authoritative sorted list, rather than assuming
+    // the last `count` entries are the new ones, avoids duplicating markers
+    // for watches that were already there and dropping markers for watches
+    // that sorted earlier than the batch's start.
+    this.rebuildMarkersFromSource();
     this.events.projectionChanged.emit({ kind: "appended", watchesAdded: count });
+  }
+
+  private rebuildMarkersFromSource(): void {
+    this.#markers.length = 0;
+    for (const watch of this.data.watches) this.#markers.push(this.markerForWatch(watch));
+    this.rebuildMarkerTimeIndex();
   }
 
   private rebuildMarkerTimeIndex(): void {
