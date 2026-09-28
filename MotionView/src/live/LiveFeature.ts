@@ -61,6 +61,10 @@ export class LiveFeature {
     return this.#initializePromise;
   }
 
+  captureHasData(text: string): boolean {
+    return this.stream.captureHasData(text);
+  }
+
   loadCapture(text: string): ViewingAppendResult {
     return this.stream.loadCapture(text);
   }

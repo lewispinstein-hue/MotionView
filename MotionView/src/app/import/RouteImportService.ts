@@ -48,7 +48,7 @@ export class RouteImportService {
       window.alert("File is too large. MotionView imports files up to 32 MB."); this.app.core.status.setStatus("File is too large to import."); input && (input.value = ""); return null;
     }
     try {
-      const result = name.endsWith(".json") ? await this.loadJson(await file.text()) : this.loadCapture(await file.text());
+      const result = name.endsWith(".json") ? await this.loadJson(await file.text()) : await this.loadCapture(await file.text());
       input && (input.value = "");
       if (result.loaded) this.app.core.status.setStatus(`Loaded ${file.name}`);
       await viewingTelemetry.fileLoaded({ file_type: result.type, file_size: file.size });
@@ -79,10 +79,13 @@ export class RouteImportService {
     this.finalize(); return { type: "json", loaded: true };
   }
 
-  loadCapture(text: string): RouteImportResult {
+  async loadCapture(text: string): Promise<RouteImportResult> {
     if (text.length > MAX_IMPORT_BYTES) throw new Error("Capture is too large to import");
+    if (!this.app.live.captureHasData(text)) throw new Error("No poses, watches, logs, waypoints, or planning data found in file.");
+    if (this.app.planning.hasData && !await this.dialogs.confirm({ title: "Replace Planning Route", message: "Importing this capture will clear the current planning route. Continue?", confirmLabel: "Replace" })) {
+      this.app.core.status.setStatus("Import cancelled."); return { type: "text-cancelled", loaded: false };
+    }
     this.app.planning.clear(); this.app.live.loadCapture(text);
-    if (!this.app.viewing.data.hasData) throw new Error("No poses, watches, logs, waypoints, or planning data found in file.");
     this.finalize(); return { type: "text", loaded: true };
   }
 
