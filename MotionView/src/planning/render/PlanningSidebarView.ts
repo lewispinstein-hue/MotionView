@@ -19,7 +19,8 @@ function icon(svg: string): string {
 function format(value: unknown, decimals = 2): string {
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
-  return number.toFixed(decimals).replace(/\.?0+$/, "");
+  const fixed = number.toFixed(decimals);
+  return decimals > 0 ? fixed.replace(/\.?0+$/, "") : fixed;
 }
 
 export class PlanningSidebarView {

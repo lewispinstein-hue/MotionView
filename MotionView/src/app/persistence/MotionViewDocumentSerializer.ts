@@ -12,7 +12,8 @@ function level(value: unknown): "DEBUG" | "INFO" | "WARN" | "ERROR" | "FATAL" {
 
 function formatNumber(value: number, decimals = 2): string {
   if (!Number.isFinite(value)) return "—";
-  return value.toFixed(decimals).replace(/\.?0+$/, "");
+  const fixed = value.toFixed(decimals);
+  return decimals > 0 ? fixed.replace(/\.?0+$/, "") : fixed;
 }
 
 export class MotionViewDocumentSerializer {

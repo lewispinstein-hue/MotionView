@@ -14,7 +14,7 @@ function parseNumeric(value: unknown): number | null {
 function formatNumberString(value: number | null, decimals = 2): string {
   if (!Number.isFinite(value)) return "—";
   const fixed = Number(value).toFixed(decimals);
-  return fixed.replace(/\.?0+$/, "");
+  return decimals > 0 ? fixed.replace(/\.?0+$/, "") : fixed;
 }
 
 export function normalizeUnits(value: unknown): MotionViewUnit {
