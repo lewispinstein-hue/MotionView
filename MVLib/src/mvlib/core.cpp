@@ -43,6 +43,11 @@ bool Logger::setRobot(Drivetrain drivetrain, bool useSpeedEstimation) {
   return true;
 }
 
+void Logger::setEstimatedSpeedMax(double maxFieldUnitsPerSecond) {
+  if (!std::isfinite(maxFieldUnitsPerSecond) || maxFieldUnitsPerSecond <= 0.0) return;
+  m_estimatedSpeedMax.store(maxFieldUnitsPerSecond);
+}
+
 bool Logger::checkRobotConfig() {
   detail::uniqueLock m(m_mutex, TIMEOUT_MAX);
 
