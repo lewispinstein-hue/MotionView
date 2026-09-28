@@ -464,6 +464,20 @@ def _decode_text_chunk(chunk: bytes, encoding: str, errors: str) -> str:
     return decoded
 
 
+def _looks_like_text_line(chunk: bytes) -> bool:
+    """True if `chunk` (ending in the 0x0A delimiter) decodes as clean text.
+
+    Used to tell a real terminal text line apart from a 0x0A byte that just
+    happens to fall inside the float/timestamp bytes of a still-arriving
+    COBS-framed binary packet (no 0x00 terminator seen yet).
+    """
+    try:
+        decoded = chunk.decode("utf-8", errors="strict")
+    except Exception:
+        return False
+    return all(ch in "\r\n\t" or ord(ch) >= 0x20 for ch in decoded)
+
+
 def decode_bytes_to_str(data: Union[bytes, bytearray], encoding: str = "utf-8", errors: str = "strict") -> str:
     """
     Stream-aware decoder that can handle mixed ASCII terminal text and MVLib
@@ -496,31 +510,43 @@ def decode_bytes_to_str(data: Union[bytes, bytearray], encoding: str = "utf-8", 
                 outputs.append("[MotionView] discarded serial data without a frame delimiter.\n")
             break
 
-        if nul_idx != -1:
-            frame = bytes(STREAM_BUFFER[:nul_idx])
-            parsed_frame = None
-            try:
-                parsed_frame = _parse_binary_frame(frame)
-            except Exception:
-                parsed_frame = None
-
-            if parsed_frame is not None:
-                del STREAM_BUFFER[:nul_idx + 1]
-                outputs.append(parsed_frame)
+        if nul_idx == -1:
+            # No 0x00 terminator yet, so this is still a partial (possibly binary)
+            # frame. A 0x0A can occur naturally inside the float/timestamp bytes of
+            # a COBS-encoded packet, so only treat it as a text line delimiter when
+            # the bytes actually look like text; otherwise wait for more data
+            # instead of slicing the still-arriving frame in half.
+            candidate = bytes(STREAM_BUFFER[:nl_idx + 1])
+            if _looks_like_text_line(candidate):
+                del STREAM_BUFFER[:nl_idx + 1]
+                outputs.append(_decode_text_chunk(candidate, encoding, errors))
                 continue
+            if len(STREAM_BUFFER) > MAX_STREAM_BUFFER_BYTES:
+                dropped = len(STREAM_BUFFER) - MAX_STREAM_BUFFER_BYTES
+                del STREAM_BUFFER[:dropped]
+                outputs.append("[MotionView] discarded serial data without a frame delimiter.\n")
+            break
 
-        if nl_idx != -1 and (nul_idx == -1 or nl_idx < nul_idx):
+        frame = bytes(STREAM_BUFFER[:nul_idx])
+        parsed_frame = None
+        try:
+            parsed_frame = _parse_binary_frame(frame)
+        except Exception:
+            parsed_frame = None
+
+        if parsed_frame is not None:
+            del STREAM_BUFFER[:nul_idx + 1]
+            outputs.append(parsed_frame)
+            continue
+
+        if nl_idx != -1 and nl_idx < nul_idx:
             chunk = bytes(STREAM_BUFFER[:nl_idx + 1])
             del STREAM_BUFFER[:nl_idx + 1]
             outputs.append(_decode_text_chunk(chunk, encoding, errors))
             continue
 
-        if nul_idx != -1:
-            frame = bytes(STREAM_BUFFER[:nul_idx])
-            del STREAM_BUFFER[:nul_idx + 1]
-            outputs.append(bytes_to_str(frame) + "\n")
-            continue
-
-        break
+        del STREAM_BUFFER[:nul_idx + 1]
+        outputs.append(bytes_to_str(frame) + "\n")
+        continue
 
     return "".join(outputs)
