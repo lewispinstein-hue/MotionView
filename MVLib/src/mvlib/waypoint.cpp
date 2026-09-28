@@ -123,18 +123,7 @@ WaypointHandle Logger::internalRegisterWaypoint(std::string name, WaypointParams
 
   if (m_config.logToTerminal.load()) {
     detail::Telemetry::getInstance().sendRoster(id, m_waypoints.back().name);
-
-    detail::WaypointCreatedPacket pkt;
-    pkt.timestamp = static_cast<uint16_t>(pros::millis());
-    pkt.id = id;
-    pkt.tarX = static_cast<float>(details.tarX);
-    pkt.tarY = static_cast<float>(details.tarY);
-    pkt.tarT = detail::packTelemetryTheta(details.tarT.value_or(0.0));
-    pkt.linTol = details.linearTol;
-    pkt.thetaTol = details.thetaTol.value_or(std::numeric_limits<float>::quiet_NaN());
-    pkt.timeout = details.timeoutMs.value_or(0);
-    pkt.retriggerable = details.retriggerable ? 1 : 0;
-    detail::Telemetry::getInstance().sendWaypointCreated(pkt);
+    sendWaypointCreatedTelemetry(m_waypoints.back());
   }
 
   if (m_config.logToSD.load()) logWaypointCreatedToSD(m_waypoints.back());
@@ -145,6 +134,20 @@ void Logger::logWaypointCreatedToSD(const InternalWaypoint& waypoint) {
   logToSD(LogLevel::OVERRIDE, "[WPOINT],%u,CREATED,%u,%s,%s",
           waypoint.startTimeMs, waypoint.id, waypoint.name.c_str(),
           formatParams(waypoint.params).c_str());
+}
+
+void Logger::sendWaypointCreatedTelemetry(const InternalWaypoint& waypoint) {
+  detail::WaypointCreatedPacket pkt;
+  pkt.timestamp = static_cast<uint16_t>(pros::millis());
+  pkt.id = waypoint.id;
+  pkt.tarX = static_cast<float>(waypoint.params.tarX);
+  pkt.tarY = static_cast<float>(waypoint.params.tarY);
+  pkt.tarT = detail::packTelemetryTheta(waypoint.params.tarT.value_or(0.0));
+  pkt.linTol = waypoint.params.linearTol;
+  pkt.thetaTol = waypoint.params.thetaTol.value_or(std::numeric_limits<float>::quiet_NaN());
+  pkt.timeout = waypoint.params.timeoutMs.value_or(0);
+  pkt.retriggerable = waypoint.params.retriggerable ? 1 : 0;
+  detail::Telemetry::getInstance().sendWaypointCreated(pkt);
 }
 
 std::optional<std::string> Logger::m_getRosterNameUnlocked(uint16_t id, bool isElevated) const {
@@ -161,6 +164,7 @@ bool Logger::resyncWaypointRoster(WPId id) {
   if (!waypoint || !waypoint->active) return false;
 
   detail::Telemetry::getInstance().sendRoster(waypoint->id, waypoint->name);
+  sendWaypointCreatedTelemetry(*waypoint);
   m_lastRosterFlush.store(pros::millis());
   return true;
 }
@@ -173,6 +177,7 @@ void Logger::resyncAllWaypointsRoster() {
   for (const auto& wp : m_waypoints) {
     if (!wp.active) continue;
     detail::Telemetry::getInstance().sendRoster(wp.id, wp.name);
+    sendWaypointCreatedTelemetry(wp);
   }
   m_lastRosterFlush.store(pros::millis());
 }

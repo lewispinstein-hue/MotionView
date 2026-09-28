@@ -732,6 +732,10 @@ private:
   /// @brief Write a waypoint creation record to the active SD log.
   void logWaypointCreatedToSD(const InternalWaypoint& waypoint);
 
+  /// @brief Send the WaypointCreated telemetry packet for a waypoint, used by
+  ///        both initial registration and roster resync so they cannot drift.
+  void sendWaypointCreatedTelemetry(const InternalWaypoint& waypoint);
+
   /// @brief Print pose data
   void printTelemetry();
 
