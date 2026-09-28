@@ -31,7 +31,7 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
         .predicate = asPredicate<double>([](const double& value) {
           return value >= kTempThreshold;
         }),
-        .label = "Left Drivetrain Overheating"
+        .label = "L Drive Overheating"
       });
     configureDefaultWatch(watch.m_id, kTrippedRepeatMs);
   }
@@ -46,7 +46,7 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
         .predicate = asPredicate<double>([](const double& value) {
           return value >= kTempThreshold;
         }),
-        .label = "Right Drivetrain Overheating"
+        .label = "R Drive Overheating"
       });
     configureDefaultWatch(watch.m_id, kTrippedRepeatMs);
   }

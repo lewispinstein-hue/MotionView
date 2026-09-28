@@ -29,6 +29,7 @@ struct LevelOverride {
   std::function<bool(const T&)> predicate;
 
   /// @brief An optional label that prints instead of the regular when the predicate is true.
+  /// @note Limited to 24 characters; longer labels are truncated with a WARN log.
   std::string label;
 };
 
