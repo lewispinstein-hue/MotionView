@@ -865,11 +865,15 @@ fn run_app() {
                 RunEvent::ExitRequested { api, .. } => {
                     let quit_ready = *app_handle.state::<QuitState>().0.lock().unwrap();
                     if !quit_ready {
-                        api.prevent_exit();
                         if let Some(win) = app_handle.get_webview_window("main") {
+                            api.prevent_exit();
                             let _ = win.emit("motionview://app-quit-requested", ());
+                            return;
                         }
-                        return;
+                        // No window left to ask the frontend to finish the exit flow (a JS
+                        // error before shutdown.bind(), a webview crash, or a close in the
+                        // first frames) -- fall through and let the exit proceed instead of
+                        // preventing it and hanging headless until force-killed.
                     }
 
                     persist_window_state(&app_handle);
