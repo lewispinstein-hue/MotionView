@@ -296,7 +296,10 @@ pub fn save_robot_image(app: AppHandle, dataUrl: String) -> Result<String, Strin
 #[allow(dead_code)]
 pub fn save_window_state(app: &AppHandle, window: &tauri::WebviewWindow) -> Result<(), String> {
     let pos = window.outer_position().map_err(|e| e.to_string())?;
-    let size = window.outer_size().map_err(|e| e.to_string())?;
+    // Restore uses set_size(), which sets the inner (client area) size, so persist the
+    // inner size here too. Saving outer_size() added the title bar/border height on every
+    // restore, growing the window a bit taller on each launch.
+    let size = window.inner_size().map_err(|e| e.to_string())?;
     let fullscreen = window.is_fullscreen().unwrap_or(false);
     let payload = serde_json::json!({
         "x": pos.x,
