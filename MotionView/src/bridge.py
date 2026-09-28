@@ -327,6 +327,9 @@ def extract_bundled_pros_archive(archive_path: Path) -> Optional[str]:
             temporary_exe = temporary_root / "motionview-pros" / f"motionview-pros{exe_ext}"
             if not temporary_exe.exists():
                 raise RuntimeError("bundled PROS archive is missing its executable")
+            if extract_root.exists():
+                _bridge_log(f"replacing stale runtime dir: {extract_root}")
+                shutil.rmtree(extract_root, ignore_errors=True)
             temporary_root.rename(extract_root)
         return _ensure_executable(expected_exe)
     except Exception:
