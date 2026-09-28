@@ -3,6 +3,7 @@ import io
 import math
 import re
 import struct
+import time
 from collections import defaultdict
 from typing import DefaultDict, Dict, List, Optional, Tuple, Union
 
@@ -16,6 +17,7 @@ MAX_PENDING_ROSTER_EVENTS_TOTAL = 4_096
 PENDING_ROSTER_EVENT_COUNT = 0
 LAST_TIMESTAMP_RAW: Optional[int] = None
 TIMESTAMP_WRAP_OFFSET = 0
+LAST_TIMESTAMP_WALL: Optional[float] = None
 STREAM_BUFFER = bytearray()
 MAX_STREAM_BUFFER_BYTES = 256 * 1024
 
@@ -48,7 +50,7 @@ ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 def _reset_decoder_state() -> None:
-    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, PENDING_ROSTER_EVENT_COUNT
+    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, LAST_TIMESTAMP_WALL, PENDING_ROSTER_EVENT_COUNT
 
     DEFAULT_ROSTER.clear()
     ELEVATED_ROSTER.clear()
@@ -56,6 +58,7 @@ def _reset_decoder_state() -> None:
     PENDING_ROSTER_EVENT_COUNT = 0
     LAST_TIMESTAMP_RAW = None
     TIMESTAMP_WRAP_OFFSET = 0
+    LAST_TIMESTAMP_WALL = None
 
 
 def _strip_ansi(text: str) -> str:
@@ -123,18 +126,31 @@ def _decode_theta(theta_raw: int) -> float:
 
 
 def _expand_timestamp(raw_timestamp: int) -> int:
-    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET
+    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, LAST_TIMESTAMP_WALL
 
+    now = time.monotonic()
     if LAST_TIMESTAMP_RAW is None:
         LAST_TIMESTAMP_RAW = raw_timestamp
+        LAST_TIMESTAMP_WALL = now
         return raw_timestamp
 
-    # PROS millis is cast down to uint16_t on the wire. Reconstruct a monotonic
-    # timestamp by detecting wrap when the stream jumps sharply backwards.
-    if raw_timestamp < LAST_TIMESTAMP_RAW and (LAST_TIMESTAMP_RAW - raw_timestamp) > 0x8000:
+    # PROS millis is cast down to uint16_t on the wire. Normally a wrap is
+    # detected by the stream jumping sharply backwards, but if no packet
+    # arrives for over half a wrap (e.g. logger.pause() across the gap
+    # between autonomous and driver control), that jump is missed and every
+    # later timestamp ends up a full wrap low. When packets have been gapped
+    # that long, pick however many wraps land closest to the elapsed wall
+    # time instead of just one.
+    gap_ms = (now - (LAST_TIMESTAMP_WALL or now)) * 1000.0
+    if gap_ms > 30_000:
+        last_expanded = TIMESTAMP_WRAP_OFFSET + LAST_TIMESTAMP_RAW
+        wraps = round((last_expanded + gap_ms - raw_timestamp) / 0x10000)
+        TIMESTAMP_WRAP_OFFSET = 0x10000 * wraps
+    elif raw_timestamp < LAST_TIMESTAMP_RAW and (LAST_TIMESTAMP_RAW - raw_timestamp) > 0x8000:
         TIMESTAMP_WRAP_OFFSET += 0x10000
 
     LAST_TIMESTAMP_RAW = raw_timestamp
+    LAST_TIMESTAMP_WALL = now
     return TIMESTAMP_WRAP_OFFSET + raw_timestamp
 
 
