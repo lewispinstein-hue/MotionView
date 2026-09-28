@@ -133,6 +133,18 @@ export class LiveStream {
     this.restartRefreshTimer();
   }
 
+  remoteExit(): Promise<void> {
+    return this.serialize(async () => {
+      if (!this.streaming && this.session.streamState !== "starting") return;
+      this.stopRefreshTimer();
+      this.session.clearPending();
+      this.session.resetParser();
+      this.setState("idle");
+      await liveTelemetry.streamingStopped();
+      this.appendConsole("[UI] Robot disconnected");
+    });
+  }
+
   async connectionClosed(): Promise<void> {
     this.stopRefreshTimer();
     this.session.clearPending();
