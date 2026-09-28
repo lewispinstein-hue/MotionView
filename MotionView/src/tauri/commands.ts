@@ -44,8 +44,8 @@ export function resolveExportDirectory(location: string, projectPath?: string): 
   });
 }
 
-export function exportPlanningCode(path: string, contents: string): Promise<FileExportResult> {
-  return invokeCommand<FileExportResult>("export_planning_code", { path, contents });
+export function exportPlanningCode(path: string, contents: string, overwrite = false): Promise<FileExportResult> {
+  return invokeCommand<FileExportResult>("export_planning_code", { path, contents, overwrite });
 }
 
 export function readSavedPaths(): Promise<string | null> { return invokeCommand<string | null>("read_saved_paths"); }

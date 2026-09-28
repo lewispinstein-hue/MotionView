@@ -2,6 +2,7 @@ import { TypedEvent } from "../app/typedEvent";
 import { setStatus } from "../app/status";
 import { exportPlanningCode, isTauriRuntime, resolveExportDirectory } from "../tauri/commands";
 import { planningTelemetry } from "../telemetry/createTelemetry";
+import type { PlanningDialogs } from "./PlanningDialogs";
 import type { PlanningDom } from "./PlanningDom";
 import type { PlanningFeature } from "./PlanningFeature";
 import { generatePlanningCode } from "./planningCode";
@@ -26,6 +27,7 @@ export class PlanningCodeExportDialog {
   constructor(
     private readonly planning: PlanningFeature,
     private readonly dom: PlanningDom,
+    private readonly dialogs: PlanningDialogs,
   ) {}
 
   bind(): void {
@@ -135,7 +137,24 @@ export class PlanningCodeExportDialog {
     const contents = sections.join("\n");
     this.dom.codeExportConfirm.disabled = true;
     try {
-      await exportPlanningCode(path, contents);
+      let overwrite = false;
+      try {
+        await exportPlanningCode(path, contents, overwrite);
+      } catch (error) {
+        if ((error instanceof Error ? error.message : String(error)) !== "exists") throw error;
+        const filename = path.split(/[\\/]/).pop() || path;
+        const confirmed = await this.dialogs.confirm({
+          title: "Replace File",
+          message: `${filename} already exists. Replace it?`,
+          confirmLabel: "Replace",
+        });
+        if (!confirmed) {
+          this.dom.codeExportValidation.textContent = "";
+          return;
+        }
+        overwrite = true;
+        await exportPlanningCode(path, contents, overwrite);
+      }
       this.dom.codeExportSuccess.textContent = "Planning code exported.";
       this.dom.codeExportSuccess.classList.remove("isError");
       this.dom.codeExportSuccess.hidden = false;
