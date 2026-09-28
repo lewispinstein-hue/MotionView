@@ -772,6 +772,16 @@ fn run_app() {
     #[cfg(windows)]
     let builder = builder.any_thread();
 
+    // Must be registered before any other plugin. Without this, launching a
+    // second instance kills the first window's live bridge (it wins the race
+    // in cleanup_previous_bridge) instead of just focusing the existing window.
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }));
+
     maybe_add_posthog_plugin(builder)
         .plugin(tauri_plugin_shell::init())
         .manage(BridgeState(Mutex::new(None)))
