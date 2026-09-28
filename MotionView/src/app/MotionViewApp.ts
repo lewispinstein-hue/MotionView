@@ -1,3 +1,4 @@
+import { EXIT_TELEMETRY_FLUSH_DEADLINE_MS } from "../telemetry/telemetryClient";
 import type { TelemetryProperties } from "../telemetry/telemetryTypes";
 import { ViewingFeature } from "../viewing/ViewingFeature";
 import { PlanningFeature } from "../planning/PlanningFeature";
@@ -87,7 +88,10 @@ export class MotionViewApp {
       try {
         await this.start();
         await this.core.telemetry.appTelemetry.exiting(properties);
-        await this.core.telemetry.telemetryClient.flush();
+        await this.core.telemetry.telemetryClient.flush({
+          maxAttempts: 1,
+          deadlineMs: EXIT_TELEMETRY_FLUSH_DEADLINE_MS,
+        });
         await this.core.tauri.finalizeAppQuit();
         this.transitionTo("exited");
       } catch (error) {

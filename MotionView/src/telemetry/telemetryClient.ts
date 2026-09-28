@@ -11,6 +11,9 @@ interface PosthogRequest {
   properties?: TelemetryProperties;
 }
 
+/** Total time budget for the exit-path flush, so app close never waits on the network. */
+export const EXIT_TELEMETRY_FLUSH_DEADLINE_MS = 2_500;
+
 export class TelemetryClient {
   private appVersion = "unknown";
   private systemInfo: SystemInfo = {};
@@ -148,10 +151,30 @@ export class TelemetryClient {
     return this.safeInvoke("plugin:posthog|alias", { request });
   }
 
-  async flush() {
+  async flush(options: { maxAttempts?: number; deadlineMs?: number } = {}) {
     const events = this.queue.read();
     if (!events.length) return;
 
+    const run = this.flushEvents(events, options.maxAttempts ?? 3);
+    if (!options.deadlineMs) {
+      await run;
+      return;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<void>((resolve) => { timer = setTimeout(resolve, options.deadlineMs); });
+    try {
+      // Whatever hasn't sent by the deadline is left for flushEvents to keep
+      // working through in the background; queue.write() only persists once
+      // it finishes, so nothing already queued is lost, just possibly resent
+      // next launch.
+      await Promise.race([run, deadline]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async flushEvents(events: QueuedTelemetryEvent[], attempts: number) {
     const remaining: QueuedTelemetryEvent[] = [];
     for (const event of events) {
       const canSend = this.enabled() || (event.explicitUserAction === true && isTauriRuntime());
@@ -160,7 +183,7 @@ export class TelemetryClient {
         continue;
       }
       try {
-        await this.withRetry(() => this.sendQueuedEvent(event, true));
+        await this.withRetry(() => this.sendQueuedEvent(event, true), attempts);
       } catch {
         remaining.push(event);
       }
