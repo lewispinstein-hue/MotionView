@@ -20,6 +20,7 @@ export class TopBarDom {
   readonly status: HTMLElement;
   readonly fileInput: HTMLInputElement;
   readonly robotImageInput: HTMLInputElement;
+  readonly customFieldImageInput: HTMLInputElement;
   readonly playButton: HTMLButtonElement;
   readonly fitButton: HTMLButtonElement;
   readonly settingsButton: HTMLButtonElement;
@@ -40,6 +41,7 @@ export class TopBarDom {
     this.status = requiredElement(document, "status");
     this.fileInput = requiredElement(document, "file");
     this.robotImageInput = requiredElement(document, "robotImageFile");
+    this.customFieldImageInput = requiredElement(document, "customFieldImageFile");
     this.playButton = requiredElement(document, "btnPlay");
     this.fitButton = requiredElement(document, "btnFit");
     this.settingsButton = requiredElement(document, "btnSettings");

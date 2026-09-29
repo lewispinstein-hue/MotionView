@@ -21,6 +21,10 @@ export function saveRobotImage(dataUrl: string): Promise<string | null> {
   return invokeCommand<string | null>("save_robot_image", { dataUrl });
 }
 
+export function saveCustomFieldImage(dataUrl: string): Promise<string | null> {
+  return invokeCommand<string | null>("save_custom_field_image", { dataUrl });
+}
+
 export function finalizeAppQuit(): Promise<void> {
   return invokeCommand<void>("finalize_app_quit");
 }

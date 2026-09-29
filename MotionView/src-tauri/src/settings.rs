@@ -6,6 +6,7 @@ use tauri::{AppHandle, Manager};
 
 const SETTINGS_FILE: &str = "user-preferences.json";
 const ROBOT_IMAGE_FILE_BASE: &str = "robot-image";
+const CUSTOM_FIELD_IMAGE_FILE_BASE: &str = "custom-field-image";
 const SAVED_PATHS_FILE: &str = "saved-paths.json";
 #[cfg(not(mobile))]
 #[allow(dead_code)]
@@ -276,20 +277,30 @@ pub fn read_image_data(app: AppHandle, path: String) -> Result<String, String> {
     Ok(format!("data:{mime};base64,{b64}"))
 }
 
-#[tauri::command]
-#[allow(non_snake_case)]
-pub fn save_robot_image(app: AppHandle, dataUrl: String) -> Result<String, String> {
-    let (mime, bytes) = parse_data_url(&dataUrl)?;
+fn save_image_data_url(app: &AppHandle, data_url: &str, file_base: &str) -> Result<String, String> {
+    let (mime, bytes) = parse_data_url(data_url)?;
     let ext = ext_from_mime(&mime);
     let dir = app
         .path()
         .app_data_dir()
         .map_err(|e: tauri::Error| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let filename = format!("{ROBOT_IMAGE_FILE_BASE}.{ext}");
+    let filename = format!("{file_base}.{ext}");
     let path = dir.join(filename);
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn save_robot_image(app: AppHandle, dataUrl: String) -> Result<String, String> {
+    save_image_data_url(&app, &dataUrl, ROBOT_IMAGE_FILE_BASE)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn save_custom_field_image(app: AppHandle, dataUrl: String) -> Result<String, String> {
+    save_image_data_url(&app, &dataUrl, CUSTOM_FIELD_IMAGE_FILE_BASE)
 }
 
 #[cfg(not(mobile))]

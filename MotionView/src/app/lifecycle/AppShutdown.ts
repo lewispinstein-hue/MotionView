@@ -2,7 +2,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { MotionViewApp } from "../MotionViewApp";
 import type { FieldRenderer } from "../../render/field";
 import type { SessionPersistence } from "../persistence";
-import { saveRobotImage } from "../../tauri/commands";
+import { saveCustomFieldImage, saveRobotImage } from "../../tauri/commands";
 
 export class AppShutdown {
   constructor(private readonly app: MotionViewApp, private readonly field: FieldRenderer, private readonly persistence: SessionPersistence) {}
@@ -28,6 +28,19 @@ export class AppShutdown {
       }
     } catch (error) {
       console.warn("Failed to persist robot image during exit:", error);
+    }
+
+    try {
+      const dataUrl = this.field.getCustomFieldImageDataUrl();
+      if (dataUrl && !this.field.getCustomFieldImagePath()) {
+        const path = await saveCustomFieldImage(dataUrl);
+        if (path) {
+          this.field.setCustomFieldImagePath(path);
+          this.app.settings.update({ customFieldImage: { path, dataUrl: null } }, "system");
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to persist custom field image during exit:", error);
     }
 
     await this.persistence.saveNow();

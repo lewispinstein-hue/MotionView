@@ -69,6 +69,10 @@ export class TopBarView {
       const input = event.target instanceof HTMLInputElement ? event.target : this.dom.robotImageInput;
       this.events.actionRequested.emit({ kind: "robot-image-selected", file: input.files?.[0] ?? null, input });
     });
+    this.dom.customFieldImageInput.addEventListener("change", (event) => {
+      const input = event.target instanceof HTMLInputElement ? event.target : this.dom.customFieldImageInput;
+      this.events.actionRequested.emit({ kind: "custom-field-image-selected", file: input.files?.[0] ?? null, input });
+    });
 
     this.app.core.status.subscribeStatus((message) => {
       this.dom.status.dataset.fullText = message;
@@ -162,6 +166,10 @@ export class TopBarView {
 
   openRobotImagePicker(): void {
     this.dom.robotImageInput.click();
+  }
+
+  openCustomFieldImagePicker(): void {
+    this.dom.customFieldImageInput.click();
   }
 
   private togglePlayback(): void {

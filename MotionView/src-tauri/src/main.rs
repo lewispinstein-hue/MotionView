@@ -784,6 +784,7 @@ fn run_app() {
             settings::was_previous_version_old,
             settings::read_image_data,
             settings::save_robot_image,
+            settings::save_custom_field_image,
             settings::read_saved_paths,
             settings::write_saved_paths,
             export::export_motionview_json,
