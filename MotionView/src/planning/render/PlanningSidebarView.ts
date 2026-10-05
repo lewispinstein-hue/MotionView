@@ -300,7 +300,7 @@ export class PlanningSidebarView {
 
   private async editTemplate(): Promise<void> {
     const previous = this.planning.exportTemplate;
-    const result = await this.dialogs.edit({ title: "Edit Template", groupTitle: "Planning Export Template", description: "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, and ${speed}.", code: previous, placeholder: "moveToPoint(${x}, ${y}, ${theta});" });
+    const result = await this.dialogs.edit({ title: "Edit Template", groupTitle: "Planning Export Template", description: "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}.", code: previous, placeholder: "moveToPoint(${x}, ${y}, ${theta});" });
     if (!result) return;
     this.planning.setExportTemplate(result.code);
     void planningTelemetry.templateUpdated(this.planning.telemetryProperties({ template_changed: previous !== this.planning.exportTemplate, template_bytes: getUtf8ByteLength(this.planning.exportTemplate) }));

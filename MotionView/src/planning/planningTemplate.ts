@@ -36,22 +36,38 @@ export function getPlanningTelemetryProperties(
   };
 }
 
+function isWaypointForwards(
+  point: Readonly<PlanningWaypoint>,
+  next: Readonly<PlanningWaypoint> | undefined,
+  theta: number,
+): boolean {
+  if (!next) return true;
+  const dx = next.x - point.x;
+  const dy = next.y - point.y;
+  if (dx === 0 && dy === 0) return true;
+  const pathTheta = Math.atan2(dx, dy) * 180 / Math.PI;
+  const delta = ((pathTheta - theta + 540) % 360) - 180;
+  return Math.abs(delta) <= 90;
+}
+
 export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
   const rawTemplate = String(options.template ?? "");
   if (!rawTemplate.trim()) return "";
 
-  const renderWaypointBlock = (point: Readonly<PlanningWaypoint>, index: number) => {
+  const renderTemplate = (template: string, point: Readonly<PlanningWaypoint>, index: number) => {
     const prev = options.waypoints[index - 1];
     const distance = prev ? Math.hypot(point.x - prev.x, point.y - prev.y) : 0;
+    const theta = options.planThetaDegAt(index);
     const replacements: Record<string, string> = {
       x: options.formatTemplateNumber(point.x),
       y: options.formatTemplateNumber(point.y),
-      theta: options.formatTemplateNumber(options.planThetaDegAt(index)),
+      theta: options.formatTemplateNumber(theta),
       distance: options.formatTemplateNumber(distance),
       iteration: String(index),
       speed: options.formatTemplateNumber(options.readPlanSpeed(point.speed, 127), 0),
+      forwards: String(isWaypointForwards(point, options.waypoints[index + 1], theta)),
     };
-    return rawTemplate.replace(/\$\{(x|y|theta|distance|iteration|speed)\}/g, (_, token) => replacements[token] ?? "");
+    return String(template || "").replace(/\$\{(x|y|theta|distance|iteration|speed|forwards)\}/g, (_, token) => replacements[token] ?? "");
   };
 
   const nodesByBucket = new Map<number, Readonly<PlanningNode>[]>();
@@ -73,7 +89,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
 
   appendBucketMethods(0);
   for (let i = 0; i < options.waypoints.length; i += 1) {
-    blocks.push(renderWaypointBlock(options.waypoints[i], i));
+    blocks.push(renderTemplate(rawTemplate, options.waypoints[i], i));
     appendBucketMethods(i + 1);
   }
 
