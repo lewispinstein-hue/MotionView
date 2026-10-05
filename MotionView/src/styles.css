@@ -3535,6 +3535,10 @@ body:not(.mode-planning) #rightPlanning {
   margin: 0 0 14px;
 }
 
+.waypointIndicatorPicker[hidden] {
+  display: none;
+}
+
 .waypointIndicatorButton {
   display: inline-flex;
   align-items: center;
