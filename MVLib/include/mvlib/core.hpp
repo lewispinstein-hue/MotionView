@@ -47,7 +47,7 @@
 #include <vector>
 #include <string>
 
-#define MVLIB_VERSION 300000 // 3.0.0
+#define MVLIB_VERSION 300001 // 3.0.1
 
 namespace mvlib {
 namespace detail {
