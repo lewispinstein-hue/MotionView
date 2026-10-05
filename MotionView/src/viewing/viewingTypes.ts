@@ -68,6 +68,8 @@ export interface ParsedLiveViewingBatch {
 export interface ViewingAppendResult {
   posesAdded: number;
   watchesAdded: number;
+  /** Exact store records inserted by this operation, after visibility is resolved. */
+  insertedWatches: readonly WatchEntryView[];
   logsAdded: number;
   waypointsAdded: number;
   hasNewData: boolean;

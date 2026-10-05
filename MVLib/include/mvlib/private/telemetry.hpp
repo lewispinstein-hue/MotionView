@@ -25,7 +25,8 @@ enum class MsgType : uint8_t {
   WPOINT = 0x02, // Waypoint state changes/offsets
   WATCH  = 0x03, // Variable watches (numeric)
   ROSTER = 0x04, // ID-to-Name mapping (The "Late Joiner" fix)
-  LOG    = 0x05  // Standard text-based logs
+  LOG    = 0x05, // Standard text-based logs
+  START  = 0x06  // Start of a fresh robot-program telemetry run
 };
 
 /**
@@ -86,6 +87,14 @@ struct __attribute__((packed)) LogPacketHeader {
   uint16_t timestamp;
 };
 
+/**
+ * Announces a new MVLib process and seeds the decoder with the full PROS
+ * millisecond clock rather than its 16-bit packet representation.
+ */
+struct __attribute__((packed)) StartPacket {
+  uint32_t timestamp;
+};
+
 static_assert(sizeof(PosePacket) == 14, "PosePacket layout changed");
 static_assert(sizeof(WaypointCreatedPacket) == 27, "WaypointCreatedPacket layout changed");
 static_assert(sizeof(WaypointStatusPacket) == 4, "WaypointStatusPacket layout changed");
@@ -93,6 +102,7 @@ static_assert(sizeof(WatchPacket) == 8, "WatchPacket layout changed");
 static_assert(sizeof(WatchTextPacketHeader) == 4, "WatchTextPacketHeader layout changed");
 static_assert(sizeof(RosterPacket) == 26, "RosterPacket layout changed");
 static_assert(sizeof(LogPacketHeader) == 2, "LogPacketHeader layout changed");
+static_assert(sizeof(StartPacket) == 4, "StartPacket layout changed");
 
 class Telemetry {
 public:
@@ -101,6 +111,7 @@ public:
   bool shouldLog(LogLevel level) const;
 
   void sendPose(const PosePacket& pkt);
+  void sendStart(uint32_t timestamp);
   void sendWaypointCreated(const WaypointCreatedPacket& pkt);
   void sendWaypointStatus(WPId id, uint8_t subType); // 2=Reached, 3=TimedOut
   void sendWatch(WatchId id, LogLevel lvl, float val, bool tripped);

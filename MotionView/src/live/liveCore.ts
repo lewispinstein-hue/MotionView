@@ -64,7 +64,8 @@ export function stripToTag(line: string) {
   const iWatch = line.indexOf("[WATCH]");
   const iLog = line.indexOf("[LOG]");
   const iWaypoint = line.indexOf("[WPOINT]");
-  const indices = [iData, iWatch, iLog, iWaypoint].filter((idx) => idx >= 0);
+  const iStart = line.indexOf("[START]");
+  const indices = [iData, iWatch, iLog, iWaypoint, iStart].filter((idx) => idx >= 0);
   const i = indices.length ? Math.min(...indices) : -1;
 
   if (i < 0) return "";

@@ -6,6 +6,8 @@
 namespace mvlib {
 
 void Logger::printWaypoints() {
+  if (m_waypoints.empty()) return;
+
   uint32_t nowMs = pros::millis();
   std::shared_ptr<std::function<std::optional<Pose>()>> poseGetter;
   std::shared_ptr<pros::Mutex> poseGetterMutex;

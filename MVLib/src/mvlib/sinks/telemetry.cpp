@@ -133,6 +133,12 @@ void Telemetry::sendPose(const PosePacket& pkt) {
            reinterpret_cast<const uint8_t*>(&pkt), sizeof(PosePacket));
 }
 
+void Telemetry::sendStart(uint32_t timestamp) {
+  const StartPacket pkt{timestamp};
+  transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::START),
+           reinterpret_cast<const uint8_t*>(&pkt), sizeof(StartPacket));
+}
+
 void Telemetry::sendWaypointCreated(const WaypointCreatedPacket& pkt) {
   // SubType 1 = Created
   transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::WPOINT, 1),

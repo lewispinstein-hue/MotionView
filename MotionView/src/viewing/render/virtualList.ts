@@ -163,6 +163,8 @@ export function createVirtualList<T>(
   let heights: number[] = [];
   let totalHeight = 0;
   const measuredHeights = new Map<string, number>();
+  const activePointerIds = new Set<number>();
+  let renderDeferredForPointer = false;
 
   function isVisible() {
     return listContainer.getClientRects().length > 0;
@@ -222,6 +224,12 @@ export function createVirtualList<T>(
   function renderNow() {
     renderQueued = false;
     if (!isVisible()) return;
+    // Do not detach a pressed row while a live refresh is pending. Browsers cancel
+    // the follow-up click when its target is removed between pointerdown/up.
+    if (activePointerIds.size > 0) {
+      renderDeferredForPointer = true;
+      return;
+    }
     if (!store.length) {
       content.replaceChildren();
       content.style.height = "0px";
@@ -375,6 +383,23 @@ export function createVirtualList<T>(
   }
 
   viewport.addEventListener("scroll", requestRender, { passive: true });
+  content.addEventListener("pointerdown", (event) => {
+    activePointerIds.add(event.pointerId);
+  }, { capture: true, passive: true });
+  const finishPointerInteraction = (event: PointerEvent) => {
+    if (!activePointerIds.delete(event.pointerId) || activePointerIds.size > 0 || !renderDeferredForPointer) return;
+    renderDeferredForPointer = false;
+    requestRender();
+  };
+  window.addEventListener("pointerup", finishPointerInteraction, { capture: true, passive: true });
+  window.addEventListener("pointercancel", finishPointerInteraction, { capture: true, passive: true });
+  window.addEventListener("blur", () => {
+    if (!activePointerIds.size) return;
+    activePointerIds.clear();
+    if (!renderDeferredForPointer) return;
+    renderDeferredForPointer = false;
+    requestRender();
+  });
   window.addEventListener("resize", requestRender);
   if (typeof ResizeObserver === "function") {
     const resizeObserver = new ResizeObserver(requestRender);

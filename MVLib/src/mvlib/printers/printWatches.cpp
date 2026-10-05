@@ -7,6 +7,7 @@
 
 namespace mvlib {
 void Logger::printWatches() {
+  if (m_watches.empty()) return;
   size_t index = 0;
 
   while (true) {

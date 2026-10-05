@@ -13,6 +13,7 @@ export interface ParsedLiveBatchResult {
   readonly batch: ParsedLiveViewingBatch;
   readonly counts: LiveCounts;
   readonly lastPoseTimestamp: number | null;
+  readonly startsNewRun: boolean;
 }
 
 export interface ParsedWaypointLine {
@@ -81,9 +82,25 @@ export class LiveLineParser {
     const waypointEvents: WaypointEvent[] = [];
     const counts = emptyLiveCounts();
     const createdWaypointIds = new Set<number>();
-    let lastPoseTimestamp = previousPoseTimestamp;
+    let startIndex = pending.startIndex;
+    let startsNewRun = false;
 
+    // A START marker is a hard data boundary. If several are received in one
+    // refresh batch, only records after the newest valid one belong to the
+    // current robot program.
     for (let index = pending.startIndex; index < pending.endIndex; index += 1) {
+      const line = stripToTag(pending.lines[index] ?? "");
+      if (!line.startsWith("[START],")) continue;
+      const parts = parseCsvLine(line);
+      const timestamp = parts?.length === 2 ? parseViewingNumber(parts[1]) : null;
+      if (timestamp == null || !Number.isSafeInteger(timestamp) || timestamp < 0) continue;
+      startIndex = index + 1;
+      startsNewRun = true;
+    }
+
+    let lastPoseTimestamp = startsNewRun ? null : previousPoseTimestamp;
+
+    for (let index = startIndex; index < pending.endIndex; index += 1) {
       const line = stripToTag(pending.lines[index] ?? "");
       if (!line) continue;
 
@@ -159,7 +176,8 @@ export class LiveLineParser {
         const parsed = this.parseWaypointLine(line);
         const event = parsed.waypointEvent;
         if (!parsed.ok || !event) continue;
-        if (event.type !== "CREATED" && !viewing.waypointById.has(event.id) && !createdWaypointIds.has(event.id)) continue;
+        const knownBeforeBatch = !startsNewRun && viewing.waypointById.has(event.id);
+        if (event.type !== "CREATED" && !knownBeforeBatch && !createdWaypointIds.has(event.id)) continue;
         waypointEvents.push(event);
         if (event.type === "CREATED") createdWaypointIds.add(event.id);
         counts.waypointsAdded += 1;
@@ -170,6 +188,7 @@ export class LiveLineParser {
       batch: { poses, watches, logs, waypointEvents },
       counts,
       lastPoseTimestamp,
+      startsNewRun,
     };
   }
 

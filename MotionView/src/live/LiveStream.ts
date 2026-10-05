@@ -15,6 +15,7 @@ const EMPTY_APPEND_RESULT: ViewingAppendResult = {
   waypointsAdded: 0,
   hasNewData: false,
   metadataChanged: false,
+  insertedWatches: [],
 };
 
 export class LiveStream {
@@ -105,7 +106,9 @@ export class LiveStream {
     if (!pending) return EMPTY_APPEND_RESULT;
     try {
       const parsed = this.parser.parse(pending, this.viewing.data, this.session.lastPoseTimestamp);
-      const result = this.viewing.appendLiveBatch(parsed.batch);
+      const result = parsed.startsNewRun
+        ? this.viewing.loadParsedBatch(parsed.batch)
+        : this.viewing.appendLiveBatch(parsed.batch);
       this.session.pending.markConsumed(pending.endIndex);
       this.session.lastPoseTimestamp = parsed.lastPoseTimestamp;
       this.metrics.accept(result);

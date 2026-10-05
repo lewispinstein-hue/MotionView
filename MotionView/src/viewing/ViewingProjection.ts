@@ -44,7 +44,7 @@ export class ViewingProjection {
     events.dataChanged.subscribe((change) => {
       if (change.kind === "replaced") this.rebuildWatchMarkers();
       else if (change.kind === "appended" && change.result.watchesAdded > 0) {
-        this.appendWatchMarkers(change.result.watchesAdded);
+        this.appendWatchMarkers(change.result.insertedWatches);
       } else if (change.kind === "cleared") this.clear();
     });
   }
@@ -191,14 +191,28 @@ export class ViewingProjection {
     this.events.projectionChanged.emit({ kind: "replaced" });
   }
 
-  private appendWatchMarkers(count: number): void {
-    const start = Math.max(0, this.data.watches.length - count);
-    for (let index = start; index < this.data.watches.length; index += 1) {
-      const watch = this.data.watches[index];
-      if (watch) this.#markers.push(this.markerForWatch(watch));
+  private appendWatchMarkers(watches: readonly ViewingDataReader["watches"][number][]): void {
+    if (!watches.length) return;
+    const additions = watches.map((watch) => this.markerForWatch(watch));
+    additions.sort((left, right) => left.t - right.t);
+    const merged: WatchMarker[] = [];
+    let existingIndex = 0;
+    let additionIndex = 0;
+    while (existingIndex < this.#markers.length || additionIndex < additions.length) {
+      const existing = this.#markers[existingIndex];
+      const addition = additions[additionIndex];
+      if (!addition || (existing && existing.t <= addition.t)) {
+        merged.push(existing!);
+        existingIndex += 1;
+      } else {
+        merged.push(addition);
+        additionIndex += 1;
+      }
     }
+    this.#markers.length = 0;
+    this.#markers.push(...merged);
     this.rebuildMarkerTimeIndex();
-    this.events.projectionChanged.emit({ kind: "appended", watchesAdded: count });
+    this.events.projectionChanged.emit({ kind: "appended", watchesAdded: additions.length });
   }
 
   private rebuildMarkerTimeIndex(): void {

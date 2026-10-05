@@ -34,6 +34,7 @@ MSG_TYPE_WPOINT = 0x02
 MSG_TYPE_WATCH = 0x03
 MSG_TYPE_ROSTER = 0x04
 MSG_TYPE_LOG = 0x05
+MSG_TYPE_START = 0x06
 
 WPOINT_CREATED = 0x01
 WPOINT_REACHED = 0x02
@@ -136,6 +137,16 @@ def _expand_timestamp(raw_timestamp: int) -> int:
 
     LAST_TIMESTAMP_RAW = raw_timestamp
     return TIMESTAMP_WRAP_OFFSET + raw_timestamp
+
+
+def _seed_timestamp(full_timestamp: int) -> int:
+    """Reset the unwrap state to an authoritative 32-bit PROS millisecond value."""
+    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET
+
+    timestamp = full_timestamp & 0xFFFF_FFFF
+    LAST_TIMESTAMP_RAW = timestamp & 0xFFFF
+    TIMESTAMP_WRAP_OFFSET = timestamp & ~0xFFFF
+    return timestamp
 
 
 def _decode_text(payload: bytes) -> str:
@@ -349,6 +360,14 @@ def _handle_log(payload: bytes, level_bits: int) -> str:
     return f"[LOG],{ts},{_decode_level(level_bits)},{msg}\n"
 
 
+def _handle_start(payload: bytes) -> str:
+    # A robot-program restart also invalidates all roster mappings and pending
+    # events; watch and waypoint IDs are allocated anew by the fresh process.
+    _reset_decoder_state()
+    timestamp = _seed_timestamp(struct.unpack("<I", payload)[0])
+    return _csv_line("[START]", timestamp)
+
+
 def _expected_payload_len(msg_type: int, subtype: int) -> Optional[int]:
     if msg_type == MSG_TYPE_POSE:
         return struct.calcsize("<HffHbb")
@@ -372,6 +391,9 @@ def _expected_payload_len(msg_type: int, subtype: int) -> Optional[int]:
 
     if msg_type == MSG_TYPE_LOG:
         return struct.calcsize("<H")
+
+    if msg_type == MSG_TYPE_START:
+        return struct.calcsize("<I")
 
     return None
 
@@ -419,6 +441,9 @@ def _parse_binary_frame(frame: bytes) -> Optional[str]:
 
     if msg_type == MSG_TYPE_LOG:
         return _handle_log(payload, level_bits)
+
+    if msg_type == MSG_TYPE_START:
+        return _handle_start(payload)
 
     return None
 

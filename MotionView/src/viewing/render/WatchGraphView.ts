@@ -153,6 +153,17 @@ export class WatchGraphView {
     this.notifyStateChanged();
   }
 
+  reset(): void {
+    this.#key = null;
+    this.#xBounds = null;
+    this.#primaryMarkers = [];
+    this.#comparisonMarkers = [];
+    this.#chart?.destroy();
+    this.#chart = null;
+    this.dom.panel.classList.add("hidden");
+    this.notifyStateChanged();
+  }
+
   resize(): void {
     this.#chart?.resize();
   }

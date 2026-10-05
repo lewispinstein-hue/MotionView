@@ -172,13 +172,14 @@ export class ViewingSession implements ViewingDataReader {
     for (const pose of poses) this.#poses.push(pose as Partial<Pose>);
     if (poses.length) this.normalizePoseSpeeds(firstPoseIndex);
 
-    let watchesAdded = 0;
+    const insertedWatches: WatchEntry[] = [];
     for (const watch of batch.watches ?? []) {
       const key = watchVisibilityKey(watch);
       const visible = this.#watchVisibility.get(key) ?? (watch.visible !== false);
       this.#watchVisibility.set(key, visible);
-      this.#watches.push({ ...watch, visible });
-      watchesAdded += 1;
+      const inserted = { ...watch, visible };
+      this.#watches.push(inserted);
+      insertedWatches.push(inserted);
     }
 
     const logsAdded = appendMany(this.#logs, batch.logs);
@@ -192,7 +193,7 @@ export class ViewingSession implements ViewingDataReader {
       if (this.applyWaypointEvent(event)) waypointsAdded += 1;
     }
 
-    if (watchesAdded) this.#watches.sort((left, right) => left.t - right.t);
+    if (insertedWatches.length) this.#watches.sort((left, right) => left.t - right.t);
     if (logsAdded) this.#logs.sort((left, right) => left.t - right.t);
     if (waypointsAdded) {
       replaceArrayContents(
@@ -205,11 +206,12 @@ export class ViewingSession implements ViewingDataReader {
     if (metadataChanged) this.#metadata = normalizedMetadata(batch.meta);
     return {
       posesAdded: poses.length,
-      watchesAdded,
+      watchesAdded: insertedWatches.length,
+      insertedWatches,
       logsAdded,
       waypointsAdded,
       metadataChanged,
-      hasNewData: poses.length > 0 || watchesAdded > 0 || logsAdded > 0 || waypointsAdded > 0 || metadataChanged,
+      hasNewData: poses.length > 0 || insertedWatches.length > 0 || logsAdded > 0 || waypointsAdded > 0 || metadataChanged,
     };
   }
 
@@ -276,6 +278,7 @@ export class ViewingSession implements ViewingDataReader {
     return {
       posesAdded: this.#poses.length,
       watchesAdded: this.#watches.length,
+      insertedWatches: this.#watches,
       logsAdded: this.#logs.length,
       waypointsAdded: this.#waypoints.length,
       metadataChanged,
