@@ -667,7 +667,10 @@
             <div class="planSelectedPanel">
               <div class="statsHeader">
                 <div class="statsTitle">Selected Waypoint</div>
-                <div class="statsHint" id="planSelIndex">—</div>
+                <div id="planSelIndicators" class="waypointIndicatorStrip" aria-label="Waypoint indicators"></div>
+                <button id="btnPlanEditWaypoint" class="iconBtn secondaryBtn planEditWaypointBtn" type="button" title="Edit selected waypoint" aria-label="Edit selected waypoint" disabled>
+                  <svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/editWaypoint.svg#icon-editWaypoint"></use></svg>
+                </button>
               </div>
               <div class="grid4" style="margin-top:10px">
                 <div>
@@ -965,6 +968,20 @@
           <button id="btnPlanTemplateClose" class="iconBtn closeBtn" title="Close">✕</button>
         </div>
         <div class="modalBody settingsBody">
+          <div id="planTemplateIndicatorPicker" class="waypointIndicatorPicker" role="group" aria-label="Waypoint indicators" hidden>
+            <button class="waypointIndicatorButton" type="button" data-waypoint-indicator="rotate" aria-label="Circular arrow" aria-pressed="false">
+              <svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/waypointRotate.svg#icon-waypointRotate"></use></svg>
+            </button>
+            <button class="waypointIndicatorButton" type="button" data-waypoint-indicator="swing" aria-label="Pivoting arrow" aria-pressed="false">
+              <svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/waypointSwing.svg#icon-waypointSwing"></use></svg>
+            </button>
+            <button class="waypointIndicatorButton" type="button" data-waypoint-indicator="forward" aria-label="Straight arrow" aria-pressed="false">
+              <svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/waypointForward.svg#icon-waypointForward"></use></svg>
+            </button>
+            <button class="waypointIndicatorButton" type="button" data-waypoint-indicator="boomerang" aria-label="Curved arrow" aria-pressed="false">
+              <svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/waypointBoomerang.svg#icon-waypointBoomerang"></use></svg>
+            </button>
+          </div>
           <div class="settingsSection settingsGroup">
             <div class="settingsGroupHeader">
               <div class="settingsGroupIcon">&lt;/&gt;</div>

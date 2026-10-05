@@ -1,5 +1,7 @@
 import type { PlanningDom } from "./PlanningDom";
 import { bindModalBackdropDismissal } from "../app/dialogs/modalDismissal";
+import { isWaypointIndicatorIcon, normalizeWaypointIndicatorIcons } from "./planningIndicators";
+import type { PlanWaypointIndicatorIcon } from "../state/models";
 
 export interface PlanningConfirmOptions {
   readonly title?: string;
@@ -19,11 +21,13 @@ export interface PlanningEditorOptions {
   readonly name?: string;
   readonly nameDescription?: string;
   readonly confirmLabel?: string;
+  readonly indicatorIcons?: readonly PlanWaypointIndicatorIcon[];
 }
 
 export interface PlanningEditorResult {
   readonly name: string;
   readonly code: string;
+  readonly indicatorIcons: readonly PlanWaypointIndicatorIcon[];
 }
 
 /** Owns Planning modal state and resolves each modal interaction exactly once. */
@@ -32,6 +36,8 @@ export class PlanningDialogs {
   #editorResolver: ((result: PlanningEditorResult | null) => void) | null = null;
   #editorUsesName = false;
   #editorUsesCode = true;
+  #editorUsesIndicators = false;
+  #editorIndicatorIcons: PlanWaypointIndicatorIcon[] = [];
   #bound = false;
 
   constructor(private readonly dom: PlanningDom) {}
@@ -46,7 +52,14 @@ export class PlanningDialogs {
     this.dom.templateClose.addEventListener("click", () => this.closeEditor(null));
     this.dom.templateCancel.addEventListener("click", () => this.closeEditor(null));
     this.dom.templateConfirm.addEventListener("click", () => this.confirmEditor());
+    this.dom.templateIndicatorPicker.addEventListener("click", (event) => this.toggleIndicator(event));
     bindModalBackdropDismissal(this.dom.templateModal, () => this.closeEditor(null));
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !this.isOpen) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.cancelOpen();
+    }, true);
   }
 
   confirm(options: PlanningConfirmOptions): Promise<boolean> {
@@ -65,6 +78,8 @@ export class PlanningDialogs {
     this.#editorResolver = null;
     this.#editorUsesName = options.name !== undefined;
     this.#editorUsesCode = options.showCode !== false;
+    this.#editorUsesIndicators = options.indicatorIcons !== undefined;
+    this.#editorIndicatorIcons = normalizeWaypointIndicatorIcons(options.indicatorIcons);
     this.dom.templateTitle.textContent = options.title;
     this.dom.templateSubtitle.textContent = options.subtitle ?? "";
     this.dom.templateGroupTitle.textContent = options.groupTitle ?? "Editor";
@@ -73,6 +88,8 @@ export class PlanningDialogs {
     this.dom.templateCode.placeholder = options.placeholder ?? "";
     this.dom.templateCode.hidden = !this.#editorUsesCode;
     this.dom.templateDescription.hidden = false;
+    this.dom.templateIndicatorPicker.hidden = !this.#editorUsesIndicators;
+    this.renderIndicatorSelection();
     this.dom.templateNameField.hidden = !this.#editorUsesName;
     this.dom.templateName.value = options.name ?? "";
     this.dom.templateNameDescription.textContent = options.nameDescription ?? "Name";
@@ -102,7 +119,7 @@ export class PlanningDialogs {
       this.dom.templateName.focus();
       return;
     }
-    this.closeEditor({ name, code: this.dom.templateCode.value });
+    this.closeEditor({ name, code: this.dom.templateCode.value, indicatorIcons: [...this.#editorIndicatorIcons] });
   }
 
   private closeConfirm(result: boolean): void {
@@ -117,6 +134,8 @@ export class PlanningDialogs {
     this.#editorResolver = null;
     this.#editorUsesName = false;
     this.#editorUsesCode = true;
+    this.#editorUsesIndicators = false;
+    this.#editorIndicatorIcons = [];
     this.hide(this.dom.templateModal);
     resolve?.(result);
   }
@@ -138,5 +157,28 @@ export class PlanningDialogs {
     if (active instanceof HTMLElement && modal.contains(active)) active.blur();
     modal.setAttribute("hidden", "");
     modal.style.display = "none";
+  }
+
+  private toggleIndicator(event: MouseEvent): void {
+    if (!this.#editorUsesIndicators || !(event.target instanceof Element)) return;
+    const button = event.target.closest<HTMLButtonElement>("[data-waypoint-indicator]");
+    const icon = button?.dataset.waypointIndicator;
+    if (!button || !isWaypointIndicatorIcon(icon)) return;
+    if (this.#editorIndicatorIcons.includes(icon)) {
+      this.#editorIndicatorIcons = this.#editorIndicatorIcons.filter((candidate) => candidate !== icon);
+    } else {
+      if (this.#editorIndicatorIcons.length === 2) this.#editorIndicatorIcons.shift();
+      this.#editorIndicatorIcons.push(icon);
+    }
+    this.renderIndicatorSelection();
+  }
+
+  private renderIndicatorSelection(): void {
+    for (const button of this.dom.templateIndicatorPicker.querySelectorAll<HTMLButtonElement>("[data-waypoint-indicator]")) {
+      const selected = isWaypointIndicatorIcon(button.dataset.waypointIndicator)
+        && this.#editorIndicatorIcons.includes(button.dataset.waypointIndicator);
+      button.classList.toggle("isSelected", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    }
   }
 }

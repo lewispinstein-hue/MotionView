@@ -4,14 +4,17 @@ import { requestDrawAll } from "../../render/renderScheduler";
 import { setStatus } from "../../app/status";
 import { currentUnitsToInches, formatDistanceFromInches } from "../../shared/units";
 import { planningTelemetry } from "../../telemetry/createTelemetry";
+import type { PlanWaypointIndicatorIcon } from "../../state/models";
 import type { PlanningDialogs } from "../PlanningDialogs";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningFeature } from "../PlanningFeature";
 import { getPlanNodeEffectiveMethod } from "../planningObjects";
+import { createWaypointIndicatorIcon } from "../planningIndicators";
 import { getUtf8ByteLength } from "../planningTemplate";
 import { generatePlanningCode } from "../planningCode";
 import { getContrastTextColor, getDefaultPlanObjectColor, getDefaultPlanObjectName } from "../planningState";
 import type { PlanningDragCoordinator } from "./PlanningDragCoordinator";
+import type { PlanningWaypointEditor } from "../PlanningWaypointEditor";
 
 function icon(svg: string): string {
   return svg.replace("<svg ", '<svg width="30" height="30" aria-hidden="true" focusable="false" ');
@@ -33,6 +36,7 @@ export class PlanningSidebarView {
     private readonly dom: PlanningDom,
     private readonly dialogs: PlanningDialogs,
     private readonly drag: PlanningDragCoordinator,
+    private readonly waypointEditor: PlanningWaypointEditor,
   ) {}
 
   bind(): void {
@@ -40,6 +44,10 @@ export class PlanningSidebarView {
     this.#bound = true;
     this.dom.addObject.addEventListener("click", () => void this.addObject());
     this.dom.editTemplate.addEventListener("click", () => void this.editTemplate());
+    this.dom.editWaypoint.addEventListener("click", () => {
+      const index = this.planning.selection.primaryWaypointIndex;
+      if (index >= 0) void this.waypointEditor.edit(index);
+    });
     this.dom.copyCode.addEventListener("click", () => void this.copyCode());
     this.bindSelectionField(this.dom.selectedX, "x");
     this.bindSelectionField(this.dom.selectedY, "y");
@@ -66,10 +74,23 @@ export class PlanningSidebarView {
       const row = document.createElement("div");
       row.className = `planItem${this.planning.selection.isWaypointSelected(index) ? " selected" : ""}`;
       row.dataset.idx = String(index);
-      row.innerHTML = `<div class="muted">#${index + 1}</div><div>X: ${formatDistanceFromInches(point.x, 2)}  Y: ${formatDistanceFromInches(point.y, 2)}  θ: ${format(point.theta, 1)}°  S: ${format(point.speed, 0)}</div>`;
+      const number = document.createElement("div");
+      number.className = "muted";
+      number.textContent = `#${index + 1}`;
+      const details = document.createElement("div");
+      details.textContent = `X: ${formatDistanceFromInches(point.x, 2)}  Y: ${formatDistanceFromInches(point.y, 2)}  θ: ${format(point.theta, 1)}°  S: ${format(point.speed, 0)}`;
+      const indicators = document.createElement("div");
+      indicators.className = "waypointIndicatorStrip waypointIndicatorStripSmall";
+      this.appendWaypointIndicators(indicators, point.indicatorIcons ?? [], "waypointIndicatorIconSmall");
+      row.append(number, details, indicators);
       row.addEventListener("click", (event) => {
         if (event.shiftKey) this.planning.selection.toggleWaypoint(index);
         else this.planning.selection.selectWaypoint(index);
+      });
+      row.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        this.planning.selection.selectWaypoint(index);
+        void this.waypointEditor.edit(index);
       });
       this.dom.list.appendChild(row);
     });
@@ -79,17 +100,28 @@ export class PlanningSidebarView {
     const point = this.planning.selection.selectedWaypoint;
     const inputs = [this.dom.selectedX, this.dom.selectedY, this.dom.selectedTheta, this.dom.selectedSpeed];
     if (!point) {
-      this.dom.selectedIndex.textContent = "—";
+      this.dom.selectedIndicators.replaceChildren();
+      this.dom.editWaypoint.disabled = true;
       for (const input of inputs) { input.value = ""; input.disabled = true; }
       return;
     }
-    this.dom.selectedIndex.textContent = `#${this.planning.selection.primaryWaypointIndex + 1}`;
+    this.dom.selectedIndicators.replaceChildren();
+    this.appendWaypointIndicators(this.dom.selectedIndicators, point.indicatorIcons ?? []);
+    this.dom.editWaypoint.disabled = false;
     for (const input of inputs) input.disabled = false;
     if (inputs.includes(document.activeElement as HTMLInputElement)) return;
     this.dom.selectedX.value = formatDistanceFromInches(point.x, 2);
     this.dom.selectedY.value = formatDistanceFromInches(point.y, 2);
     this.dom.selectedTheta.value = format(point.theta, 1);
     this.dom.selectedSpeed.value = format(point.speed, 0);
+  }
+
+  private appendWaypointIndicators(
+    target: HTMLElement,
+    icons: readonly PlanWaypointIndicatorIcon[],
+    className = "",
+  ): void {
+    for (const indicator of icons) target.appendChild(createWaypointIndicatorIcon(indicator, className));
   }
 
   renderObjects(): void {

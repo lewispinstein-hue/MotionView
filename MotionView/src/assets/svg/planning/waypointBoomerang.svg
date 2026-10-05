@@ -1,0 +1,8 @@
+<!-- MotionView waypoint indicator: curved boomerang trajectory -->
+<svg xmlns="http://www.w3.org/2000/svg" id="icon-waypointBoomerang" viewBox="0 0 24 24">
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5.8 20C5.1 14.7 2.8 7.2 6.8 3.6 10.4.5 16.5 3.8 18.2 7.5l2.3 4.2" stroke-width="1.5"/>
+    <path d="m17.8 10.5 2.7 1.2-.3-3.1" stroke-width="1.65"/>
+  </g>
+  <circle cx="5.8" cy="20" r="1.9" fill="currentColor"/>
+</svg>

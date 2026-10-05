@@ -1,5 +1,5 @@
 import type { MotionViewApp } from "../MotionViewApp";
-import { serializePlanNode } from "../../planning";
+import { normalizeWaypointIndicatorIcons, serializePlanNode } from "../../planning";
 import { normalizeWaypointType, waypointEventCount } from "../../viewing";
 import type { MotionViewSettings } from "../settings";
 
@@ -44,7 +44,18 @@ export class MotionViewDocumentSerializer {
 
   private planningDocument(planning: ReturnType<MotionViewApp["planning"]["exportData"]>): Record<string, unknown> {
     return {
-      "planned-path": planning.waypoints.map((point) => ({ x: point.x, y: point.y, theta: point.theta ?? 0, speed: Math.max(1, Math.min(127, Number(point.speed) || 127)) })),
+      "planned-path": planning.waypoints.map((point) => {
+        const indicatorIcons = normalizeWaypointIndicatorIcons(point.indicatorIcons);
+        const serialized: Record<string, unknown> = {
+          x: point.x,
+          y: point.y,
+          theta: point.theta ?? 0,
+          speed: Math.max(1, Math.min(127, Number(point.speed) || 127)),
+        };
+        if (indicatorIcons.length) serialized.indicatorIcons = indicatorIcons;
+        if (Object.prototype.hasOwnProperty.call(point, "overrideCode")) serialized.overrideCode = point.overrideCode ?? "";
+        return serialized;
+      }),
       "planned-export-template": planning.template,
       "planned-objects": planning.objects.map((object) => ({ id: object.id, name: object.name, color: object.color || null, latestMethod: object.latestMethod || "", methods: object.methods.map((method) => ({ id: method.id, name: method.name, code: method.code })) })),
       "planned-nodes": planning.nodes.map(serializePlanNode),

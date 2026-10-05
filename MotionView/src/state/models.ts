@@ -85,7 +85,11 @@ export interface PlanWaypoint {
   y: number;
   theta?: number;
   speed?: number;
+  overrideCode?: string;
+  indicatorIcons?: PlanWaypointIndicatorIcon[];
 }
+
+export type PlanWaypointIndicatorIcon = "rotate" | "swing" | "forward" | "boomerang";
 
 export interface PlanObject {
   id: string;

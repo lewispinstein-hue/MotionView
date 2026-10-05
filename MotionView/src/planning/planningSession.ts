@@ -1,5 +1,6 @@
 import type { PlanningEvents, PlanningDocumentChangeKind } from "./planningEvents";
 import { normalizePlanNodes, normalizePlanObjects } from "./planningState";
+import { normalizeWaypointIndicatorIcons } from "./planningIndicators";
 import type { PlanningNode, PlanningObject, PlanningWaypoint } from "./planningTypes";
 
 interface PlanningHistorySnapshot {
@@ -20,7 +21,16 @@ export interface PlanningMethodSelection {
 }
 
 function cloneWaypoint(point: Readonly<PlanningWaypoint>): PlanningWaypoint {
-  return { x: point.x, y: point.y, theta: point.theta ?? 0, speed: point.speed ?? 127 };
+  const cloned: PlanningWaypoint = {
+    x: point.x,
+    y: point.y,
+    theta: point.theta ?? 0,
+    speed: point.speed ?? 127,
+  };
+  const indicatorIcons = normalizeWaypointIndicatorIcons(point.indicatorIcons);
+  if (indicatorIcons.length || Object.prototype.hasOwnProperty.call(point, "indicatorIcons")) cloned.indicatorIcons = indicatorIcons;
+  if (Object.prototype.hasOwnProperty.call(point, "overrideCode")) cloned.overrideCode = String(point.overrideCode ?? "");
+  return cloned;
 }
 
 function cloneObject(object: Readonly<PlanningObject>): PlanningObject {
@@ -130,7 +140,7 @@ export class PlanningSession {
     this.replace(this.waypoints, Array.isArray(data["planned-path"])
       ? data["planned-path"].map((raw) => {
         const point = raw as Record<string, unknown>;
-        return {
+        const waypoint: PlanningWaypoint = {
           x: finiteNumber(point?.x),
           y: finiteNumber(point?.y),
           theta: finiteNumber(point?.theta),
@@ -138,6 +148,12 @@ export class PlanningSession {
             ? Math.max(1, Math.min(127, Number(point?.speed)))
             : 127,
         };
+        const indicatorIcons = normalizeWaypointIndicatorIcons(point?.indicatorIcons);
+        if (indicatorIcons.length) waypoint.indicatorIcons = indicatorIcons;
+        if (Object.prototype.hasOwnProperty.call(point || {}, "overrideCode") && typeof point?.overrideCode === "string") {
+          waypoint.overrideCode = point.overrideCode;
+        }
+        return waypoint;
       }) : []);
     this.replace(this.objects, normalizePlanObjects(data["planned-objects"]));
     this.replace(this.nodes, normalizePlanNodes(data["planned-nodes"]));

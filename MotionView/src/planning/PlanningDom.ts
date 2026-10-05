@@ -21,13 +21,14 @@ export class PlanningDom {
   readonly cursorPill: HTMLElement;
   readonly nodeTooltip: HTMLElement;
   readonly list: HTMLElement;
-  readonly selectedIndex: HTMLElement;
   readonly selectedXLabel: HTMLElement;
   readonly selectedYLabel: HTMLElement;
   readonly selectedX: HTMLInputElement;
   readonly selectedY: HTMLInputElement;
   readonly selectedTheta: HTMLInputElement;
   readonly selectedSpeed: HTMLInputElement;
+  readonly selectedIndicators: HTMLElement;
+  readonly editWaypoint: HTMLButtonElement;
   readonly objectList: HTMLElement;
   readonly addObject: HTMLButtonElement;
   readonly copyCode: HTMLButtonElement;
@@ -46,6 +47,7 @@ export class PlanningDom {
   readonly templateCancel: HTMLButtonElement;
   readonly templateConfirm: HTMLButtonElement;
   readonly templateCode: HTMLTextAreaElement;
+  readonly templateIndicatorPicker: HTMLElement;
   readonly confirmModal: HTMLElement;
   readonly confirmTitle: HTMLElement;
   readonly confirmMessage: HTMLElement;
@@ -79,13 +81,14 @@ export class PlanningDom {
     this.cursorPill = requiredElement(document, "planCursorPill");
     this.nodeTooltip = requiredElement(document, "planNodeTooltip");
     this.list = requiredElement(document, "planList");
-    this.selectedIndex = requiredElement(document, "planSelIndex");
     this.selectedXLabel = requiredElement(document, "planSelXLabel");
     this.selectedYLabel = requiredElement(document, "planSelYLabel");
     this.selectedX = requiredElement(document, "planSelX");
     this.selectedY = requiredElement(document, "planSelY");
     this.selectedTheta = requiredElement(document, "planSelTheta");
     this.selectedSpeed = requiredElement(document, "planSelSpeed");
+    this.selectedIndicators = requiredElement(document, "planSelIndicators");
+    this.editWaypoint = requiredElement(document, "btnPlanEditWaypoint");
     this.objectList = requiredElement(document, "planObjectList");
     this.addObject = requiredElement(document, "btnPlanAddObject");
     this.copyCode = requiredElement(document, "btnPlanCopyCode");
@@ -104,6 +107,7 @@ export class PlanningDom {
     this.templateCancel = requiredElement(document, "btnPlanTemplateCancel");
     this.templateConfirm = requiredElement(document, "btnPlanTemplateConfirm");
     this.templateCode = requiredElement(document, "planTemplateInput");
+    this.templateIndicatorPicker = requiredElement(document, "planTemplateIndicatorPicker");
     this.confirmModal = requiredElement(document, "planObjectDeleteModal");
     this.confirmTitle = requiredElement(document, "planObjectDeleteTitle");
     this.confirmMessage = requiredElement(document, "planObjectDeleteMessage");

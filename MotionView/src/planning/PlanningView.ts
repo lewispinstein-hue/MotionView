@@ -5,6 +5,7 @@ import { formatDistanceFromInches, getCurrentUnits } from "../shared/units";
 import type { PlanningDialogs } from "./PlanningDialogs";
 import type { PlanningDom } from "./PlanningDom";
 import type { PlanningFeature } from "./PlanningFeature";
+import { PlanningWaypointEditor } from "./PlanningWaypointEditor";
 import { PlanningDragCoordinator } from "./render/PlanningDragCoordinator";
 import { PlanningFieldView } from "./render/PlanningFieldView";
 import { PlanningSidebarView } from "./render/PlanningSidebarView";
@@ -24,8 +25,9 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
     dialogs: PlanningDialogs,
   ) {
     const drag = new PlanningDragCoordinator();
-    this.#fieldView = new PlanningFieldView(planning, field, dom, dialogs);
-    this.#sidebar = new PlanningSidebarView(planning, dom, dialogs, drag);
+    const waypointEditor = new PlanningWaypointEditor(planning, dialogs);
+    this.#fieldView = new PlanningFieldView(planning, field, dom, dialogs, waypointEditor);
+    this.#sidebar = new PlanningSidebarView(planning, dom, dialogs, drag, waypointEditor);
     this.#timeline = new PlanningTimelineView(planning, dom, dialogs, drag);
   }
 

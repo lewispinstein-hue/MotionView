@@ -1,0 +1,9 @@
+<!-- MotionView waypoint indicator: direct movement in either direction -->
+<svg xmlns="http://www.w3.org/2000/svg" id="icon-waypointForward" viewBox="0 0 24 24">
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 18V4M18 6v14" stroke-width="1.5"/>
+    <path d="m3.1 7 2.9-3 2.9 3M15.1 17l2.9 3 2.9-3" stroke-width="1.65"/>
+  </g>
+  <circle cx="6" cy="18" r="2.05" fill="currentColor"/>
+  <circle cx="18" cy="6" r="2.05" fill="currentColor"/>
+</svg>

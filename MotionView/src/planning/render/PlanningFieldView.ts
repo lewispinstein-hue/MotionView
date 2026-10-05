@@ -4,6 +4,7 @@ import { requestDrawAll } from "../../render/renderScheduler";
 import type { PlanningFeature } from "../PlanningFeature";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningDialogs } from "../PlanningDialogs";
+import type { PlanningWaypointEditor } from "../PlanningWaypointEditor";
 import { getPlanMethodTooltipName, getPlanNodeEffectiveMethod } from "../planningObjects";
 import { planningTelemetry } from "../../telemetry/createTelemetry";
 import { getUtf8ByteLength } from "../planningTemplate";
@@ -49,6 +50,7 @@ export class PlanningFieldView {
     private readonly field: FieldRenderer,
     private readonly dom: PlanningDom,
     private readonly dialogs: PlanningDialogs,
+    private readonly waypointEditor: PlanningWaypointEditor,
   ) {}
 
   bind(): void {
@@ -70,6 +72,13 @@ export class PlanningFieldView {
     this.dom.canvas.addEventListener("dblclick", (event) => {
       if (getMode() !== "planning") return;
       const point = this.canvasPoint(event as PointerEvent);
+      const waypointIndex = this.hitWaypoint(point.x, point.y);
+      if (waypointIndex >= 0) {
+        event.preventDefault();
+        this.planning.selection.selectWaypoint(waypointIndex);
+        void this.waypointEditor.edit(waypointIndex);
+        return;
+      }
       const node = this.hitNode(point.x, point.y);
       if (node) { event.preventDefault(); void this.editNode(node.id); }
     });

@@ -89,7 +89,11 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
 
   appendBucketMethods(0);
   for (let i = 0; i < options.waypoints.length; i += 1) {
-    blocks.push(renderTemplate(rawTemplate, options.waypoints[i], i));
+    const waypoint = options.waypoints[i];
+    const template = Object.prototype.hasOwnProperty.call(waypoint, "overrideCode")
+      ? String(waypoint.overrideCode ?? "")
+      : rawTemplate;
+    blocks.push(renderTemplate(template, waypoint, i));
     appendBucketMethods(i + 1);
   }
 
