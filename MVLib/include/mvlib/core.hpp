@@ -251,6 +251,16 @@ public:
   bool setRobot(Drivetrain drivetrain, bool useSpeedEstimation = false);
 
   /**
+   * @brief Set the field-units/second speed that the pose-based fallback
+   *        speed estimator (used when useSpeedEstimation is true, or no
+   *        drivetrain is configured) maps to ±127, matching the ±127 scale
+   *        the drivetrain-reported speed path already uses. Default 100.
+   * @param maxFieldUnitsPerSecond Speed, in the same units as Pose x/y, that
+   *                                should read as full speed.
+   */
+  void setEstimatedSpeedMax(double maxFieldUnitsPerSecond);
+
+  /**
    * @brief Sets the SD logging destination as either a folder or a specific file path.
    *
    * @param location      Absolute SD-relative folder or file path
@@ -761,6 +771,7 @@ private:
   std::atomic<bool> m_started{false}; // Has start() been called?
   std::atomic<bool> m_configSet{false}; // Has setRobot() been called?
   bool m_forceSpeedEstimation = false;
+  std::atomic<double> m_estimatedSpeedMax{100.0};
 
   // Timings may be updated while the logger task is running.
   std::atomic<uint32_t> m_sdBufferFlushInterval{1000};

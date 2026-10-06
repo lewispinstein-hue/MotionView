@@ -7,14 +7,27 @@
 
 namespace mvlib {
 namespace {
-float estimateSpeed(const Pose& prevPose, const Pose& pose) {
+constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
+
+// Returns the pose-based fallback speed estimate normalized to the same
+// +-127 scale the drivetrain-reported speed path uses, so both paths are
+// comparable on the wire. Sign is taken from whether the motion is forward
+// or backward relative to heading.
+double estimateSpeed(const Pose& prevPose, const Pose& pose, double maxFieldUnitsPerSecond) {
   static uint32_t prevMs = pros::millis();
   uint32_t nowMs = pros::millis();
   const float dt = (nowMs - prevMs) / 1000.0;
   const float vx = (dt > 0) ? (pose.x - prevPose.x) / dt : 0.0;
   const float vy = (dt > 0) ? (pose.y - prevPose.y) / dt : 0.0;
   prevMs = nowMs;
-  return std::sqrt(vx * vx + vy * vy);
+
+  const float magnitude = std::sqrt(vx * vx + vy * vy);
+  const float headingRad = pose.theta * kDegToRad;
+  const float forward = vx * std::cos(headingRad) + vy * std::sin(headingRad);
+  const float signedSpeed = std::copysign(magnitude, forward);
+
+  if (maxFieldUnitsPerSecond <= 0.0) return 0.0;
+  return std::clamp((signedSpeed / maxFieldUnitsPerSecond) * 127.0, -127.0, 127.0);
 }
 } // namespace
 
@@ -52,6 +65,7 @@ void Logger::printTelemetry() {
 
   if (!useSpeedEstimation) {
     static auto norm = [&](const double& rpm, pros::MotorGears gearset) {
+      if (!std::isfinite(rpm)) return 0.0;
       double maxRpm = 100.0;
       if (gearset == pros::MotorGears::rpm_200) maxRpm = 200.0;
       else if (gearset == pros::MotorGears::rpm_600) maxRpm = 600.0;
@@ -64,7 +78,8 @@ void Logger::printTelemetry() {
     static double fallbackSpeed = 0.0;
     static Pose prevPose{};
     if (pose.has_value()) {
-      leftVelocity = rightVelocity = fallbackSpeed = estimateSpeed(prevPose, pose.value());
+      leftVelocity = rightVelocity = fallbackSpeed =
+        estimateSpeed(prevPose, pose.value(), m_estimatedSpeedMax.load());
       prevPose = pose.value();
     } else {
       leftVelocity = rightVelocity = fallbackSpeed;
