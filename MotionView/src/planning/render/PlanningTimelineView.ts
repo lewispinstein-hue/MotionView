@@ -27,7 +27,7 @@ const NODE_SHIFT_MS = 320;
 const NODE_ENTER_MS = 240;
 const NODE_EXIT_MS = 220;
 const NODE_MOVE_EPSILON = 0.5;
-const NODE_TEMPLATE_DESCRIPTION = "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}. Values come from the preceding waypoint; nodes before the first waypoint use 0 and true.";
+const NODE_TEMPLATE_DESCRIPTION = "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}. Values come from the preceding waypoint; nodes before the first waypoint use the first waypoint.";
 
 interface TimelineBucketLayout {
   readonly beforeWaypoint: number;
@@ -410,7 +410,7 @@ export class PlanningTimelineView {
       PAD * 2 + EDGE_INSET * 2 + Math.max(0, waypointCount - 1) * WAYPOINT_MIN_GAP,
       PAD * 2 + 120,
     );
-    const buckets = Array.from({ length: waypointCount + 1 }, (_, beforeWaypoint) => ({
+    const buckets = Array.from({ length: waypointCount }, (_, beforeWaypoint) => ({
       beforeWaypoint,
       nodes: nodes.filter((node) => node.beforeWaypoint === beforeWaypoint).sort((a, b) => a.index - b.index || a.id.localeCompare(b.id)),
     }));
@@ -426,9 +426,8 @@ export class PlanningTimelineView {
       ? [
           Math.max(0, (baseWaypointX[0] ?? PAD) - PAD),
           ...baseWaypointX.slice(1).map((x, index) => Math.max(0, x - (baseWaypointX[index] ?? x))),
-          Math.max(0, baseContentWidth - PAD - (baseWaypointX.at(-1) ?? PAD)),
         ]
-      : [baseContentWidth - PAD * 2];
+      : [];
     const widths = baseWidths.map((width, beforeWaypoint) => {
       const count = buckets[beforeWaypoint]?.nodes.length ?? 0;
       if (!count || !waypointCount) return width;
@@ -442,7 +441,6 @@ export class PlanningTimelineView {
       cursor += widths[index] ?? 0;
       waypointX.push(cursor);
     }
-    cursor += widths[waypointCount] ?? 0;
     const contentWidth = Math.max(viewportWidth, cursor + PAD);
     const layouts = buckets.map((bucket, beforeWaypoint): TimelineBucketLayout => {
       const start = beforeWaypoint === 0 ? PAD : waypointX[beforeWaypoint - 1] ?? PAD;
@@ -464,9 +462,9 @@ export class PlanningTimelineView {
     const innerRect = this.dom.eventTimelineInner.getBoundingClientRect();
     const x = Math.max(PAD, Math.min(layout.contentWidth - PAD, clientX - innerRect.left));
     let bucket: TimelineBucketLayout | null = layout.buckets[0] ?? null;
-    if (layout.waypointX.length && x > (layout.waypointX.at(-1) ?? 0)) bucket = layout.buckets.at(-1) ?? null;
+    if (layout.waypointX.length && x > (layout.waypointX.at(-1) ?? 0)) return null;
     else if (layout.waypointX.length && x >= layout.waypointX[0]!) {
-      bucket = layout.buckets.slice(1, -1).find((candidate) => x <= candidate.end) ?? layout.buckets[1] ?? bucket;
+      bucket = layout.buckets.slice(1).find((candidate) => x <= candidate.end) ?? layout.buckets.at(-1) ?? bucket;
     }
     if (!bucket) return null;
     const dragId = this.#activeDrag?.nodeId;

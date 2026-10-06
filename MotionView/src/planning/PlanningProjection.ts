@@ -88,8 +88,8 @@ export class PlanningProjection {
       buckets.set(node.beforeWaypoint, bucket);
     }
     for (const [beforeWaypoint, nodes] of buckets) {
-      if (beforeWaypoint <= 0 || beforeWaypoint > waypoints.length) continue;
-      const endIndex = Math.min(beforeWaypoint, waypoints.length - 1);
+      if (beforeWaypoint <= 0 || beforeWaypoint >= waypoints.length) continue;
+      const endIndex = beforeWaypoint;
       const startIndex = Math.max(0, endIndex - 1);
       const start = waypoints[startIndex];
       const end = waypoints[endIndex];

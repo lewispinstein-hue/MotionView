@@ -22,7 +22,8 @@ function icon(svg: string): string {
 function format(value: unknown, decimals = 2): string {
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
-  return number.toFixed(decimals).replace(/\.?0+$/, "");
+  const fixed = number.toFixed(decimals);
+  return decimals > 0 ? fixed.replace(/\.?0+$/, "") : fixed;
 }
 
 const METHOD_TEMPLATE_DESCRIPTION = "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}. They expand when this method is emitted by a placed timeline node.";
@@ -70,8 +71,8 @@ export class PlanningSidebarView {
 
   renderWaypoints(): void {
     this.dom.list.replaceChildren();
-    this.dom.copyCode.disabled = this.planning.route.length === 0;
-    this.dom.exportCode.disabled = this.planning.route.length === 0;
+    this.dom.copyCode.disabled = this.planning.route.length < 2;
+    this.dom.exportCode.disabled = this.planning.route.length < 2;
     this.planning.route.waypoints.forEach((point, index) => {
       const row = document.createElement("div");
       row.className = `planItem${this.planning.selection.isWaypointSelected(index) ? " selected" : ""}`;
@@ -334,7 +335,7 @@ export class PlanningSidebarView {
 
   private async editTemplate(): Promise<void> {
     const previous = this.planning.exportTemplate;
-    const result = await this.dialogs.edit({ title: "Edit Template", groupTitle: "Planning Export Template", description: "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}.", code: previous, placeholder: "moveToPoint(${x}, ${y}, ${theta});" });
+    const result = await this.dialogs.edit({ title: "Edit Template", groupTitle: "Planning Export Template", description: "One block is generated from each waypoint to the next; the final waypoint emits none. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}.", code: previous, placeholder: "moveToPoint(${x}, ${y}, ${theta});" });
     if (!result) return;
     this.planning.setExportTemplate(result.code);
     void planningTelemetry.templateUpdated(this.planning.telemetryProperties({ template_changed: previous !== this.planning.exportTemplate, template_bytes: getUtf8ByteLength(this.planning.exportTemplate) }));
@@ -344,7 +345,7 @@ export class PlanningSidebarView {
     const data = this.planning.exportData();
     const code = generatePlanningCode(this.planning);
     if (!code) {
-      setStatus("Add at least one waypoint and a template before copying code.");
+      setStatus("Add at least two waypoints and a template before copying code.");
       return;
     }
     try {

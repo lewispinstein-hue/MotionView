@@ -37,16 +37,16 @@ export function getPlanningTelemetryProperties(
 }
 
 function isWaypointForwards(
-  point: Readonly<PlanningWaypoint>,
-  next: Readonly<PlanningWaypoint> | undefined,
-  theta: number,
+  start: Readonly<PlanningWaypoint>,
+  end: Readonly<PlanningWaypoint> | undefined,
+  startTheta: number,
 ): boolean {
-  if (!next) return true;
-  const dx = next.x - point.x;
-  const dy = next.y - point.y;
+  if (!end) return true;
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
   if (dx === 0 && dy === 0) return true;
   const pathTheta = Math.atan2(dx, dy) * 180 / Math.PI;
-  const delta = ((pathTheta - theta + 540) % 360) - 180;
+  const delta = ((pathTheta - startTheta + 540) % 360) - 180;
   return Math.abs(delta) <= 90;
 }
 
@@ -62,7 +62,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     forwards: "true",
   };
 
-  const replacementsForWaypoint = (point: Readonly<PlanningWaypoint>, index: number) => {
+  const replacementsForNodeWaypoint = (point: Readonly<PlanningWaypoint>, index: number) => {
     const prev = options.waypoints[index - 1];
     const distance = prev ? Math.hypot(point.x - prev.x, point.y - prev.y) : 0;
     const theta = options.planThetaDegAt(index);
@@ -77,17 +77,38 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     };
   };
 
+  const replacementsForSegment = (
+    start: Readonly<PlanningWaypoint>,
+    end: Readonly<PlanningWaypoint>,
+    index: number,
+  ) => {
+    const theta = options.planThetaDegAt(index + 1);
+    return {
+      x: options.formatTemplateNumber(end.x),
+      y: options.formatTemplateNumber(end.y),
+      theta: options.formatTemplateNumber(theta),
+      distance: options.formatTemplateNumber(Math.hypot(end.x - start.x, end.y - start.y)),
+      iteration: String(index),
+      speed: options.formatTemplateNumber(options.readPlanSpeed(start.speed, 127), 0),
+      forwards: String(isWaypointForwards(start, end, options.planThetaDegAt(index))),
+    };
+  };
+
   const renderTemplate = (template: string, replacements: Readonly<Record<string, string>>) => {
     return String(template || "").replace(/\$\{(x|y|theta|distance|iteration|speed|forwards)\}/g, (_, token) => replacements[token] ?? "");
   };
 
-  const renderWaypointTemplate = (template: string, point: Readonly<PlanningWaypoint>, index: number) =>
-    renderTemplate(template, replacementsForWaypoint(point, index));
+  const renderSegmentTemplate = (
+    template: string,
+    start: Readonly<PlanningWaypoint>,
+    end: Readonly<PlanningWaypoint>,
+    index: number,
+  ) => renderTemplate(template, replacementsForSegment(start, end, index));
 
   const renderNodeTemplate = (template: string, beforeWaypoint: number) => {
-    const index = Math.trunc(beforeWaypoint) - 1;
-    const point = index >= 0 ? options.waypoints[index] : undefined;
-    return renderTemplate(template, point ? replacementsForWaypoint(point, index) : defaultReplacements);
+    const index = Math.max(0, Math.trunc(beforeWaypoint) - 1);
+    const point = options.waypoints[index];
+    return renderTemplate(template, point ? replacementsForNodeWaypoint(point, index) : defaultReplacements);
   };
 
   const nodesByBucket = new Map<number, Readonly<PlanningNode>[]>();
@@ -108,12 +129,14 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
   };
 
   appendBucketMethods(0);
-  for (let i = 0; i < options.waypoints.length; i += 1) {
-    const waypoint = options.waypoints[i];
-    const template = Object.prototype.hasOwnProperty.call(waypoint, "overrideCode")
-      ? String(waypoint.overrideCode ?? "")
+  for (let i = 0; i < options.waypoints.length - 1; i += 1) {
+    const start = options.waypoints[i];
+    const end = options.waypoints[i + 1];
+    if (!start || !end) continue;
+    const template = Object.prototype.hasOwnProperty.call(start, "overrideCode")
+      ? String(start.overrideCode ?? "")
       : rawTemplate;
-    blocks.push(renderWaypointTemplate(template, waypoint, i));
+    blocks.push(renderSegmentTemplate(template, start, end, i));
     appendBucketMethods(i + 1);
   }
 

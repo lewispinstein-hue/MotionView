@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { createServer } from "vite";
 
 function format(value, decimals = 3) {
-  return Number(value).toFixed(decimals).replace(/\.?0+$/, "");
+  const fixed = Number(value).toFixed(decimals);
+  return decimals > 0 ? fixed.replace(/\.?0+$/, "") : fixed;
 }
 
 const server = await createServer({
@@ -14,6 +15,7 @@ const server = await createServer({
 
 try {
   const { buildPlanExportCode } = await server.ssrLoadModule("/planning/planningTemplate.ts");
+  const { generatePlanningCode } = await server.ssrLoadModule("/planning/planningCode.ts");
   const { PlanningFeature } = await server.ssrLoadModule("/planning/PlanningFeature.ts");
   const waypoints = [
     { x: 0, y: 0, theta: 0, speed: 11 },
@@ -49,12 +51,11 @@ try {
   };
 
   assert.equal(buildPlanExportCode(options), [
-    "node(0,0,0,0,0,0,true);",
     "node(0,0,0,0,0,11,true);",
     "waypoint(0,0,5,270,5,11,true);",
-    "override(1,0,5,270,5,22,false,${unknown});",
+    "node(0,0,0,0,0,11,true);",
     "segment(1,5,5,90,5,22,false);",
-    "node(2,5,5,90,5,33,true);",
+    "override(1,0,5,270,5,22,false,${unknown});",
   ].join("\n"));
 
   const legacyOptions = {
@@ -64,6 +65,32 @@ try {
     getSortedPlanNodes: () => [{ id: "legacy", objectId: "object", methodId: "method", beforeWaypoint: 0, index: 0, code: "act();" }],
   };
   assert.equal(buildPlanExportCode(legacyOptions), "act();\nmove();\nmove();");
+
+  const routeStartNodeOptions = {
+    ...options,
+    template: "move();",
+    waypoints: [
+      { x: 12.5, y: -4.25, theta: 90, speed: 84 },
+      { x: 17.5, y: -4.25, theta: 90, speed: 84 },
+    ],
+    nodes: [{ id: "route-start", objectId: "object", methodId: "method", beforeWaypoint: 0, index: 0 }],
+    getSortedPlanNodes: () => [{ id: "route-start", objectId: "object", methodId: "method", beforeWaypoint: 0, index: 0 }],
+    planThetaDegAt: (index) => [90, 90][index] ?? 0,
+  };
+  assert.equal(buildPlanExportCode(routeStartNodeOptions), [
+    "node(0,12.5,-4.25,90,0,84,true);",
+    "move();",
+  ].join("\n"));
+
+  const wholeNumberSpeedPlanning = new PlanningFeature("move(${speed});");
+  wholeNumberSpeedPlanning.load({
+    "planned-segment-export": true,
+    "planned-path": [
+      { x: 0, y: 0, theta: 0, speed: 50 },
+      { x: 0, y: 5, theta: 0, speed: 127 },
+    ],
+  });
+  assert.equal(generatePlanningCode(wholeNumberSpeedPlanning), "move(50);");
 
   const backwardsSegmentOptions = {
     ...options,
@@ -83,6 +110,16 @@ try {
     "move(58.5, true);",
     "move(58.5, false);",
   ].join("\n"));
+
+  const terminalNodePlanning = new PlanningFeature();
+  terminalNodePlanning.load({
+    "planned-segment-export": true,
+    "planned-path": waypoints,
+    "planned-objects": objects,
+    "planned-nodes": [{ id: "terminal", objectId: "object", methodId: "method", beforeWaypoint: 3, index: 0 }],
+  });
+  assert.equal(terminalNodePlanning.timeline.nodes[0]?.beforeWaypoint, 2);
+  assert.equal(terminalNodePlanning.timeline.insert("object", "method", 3, 0)?.beforeWaypoint, 2);
 
   const legacyPlanning = new PlanningFeature();
   legacyPlanning.load({

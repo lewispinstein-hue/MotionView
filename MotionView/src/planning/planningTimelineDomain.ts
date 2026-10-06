@@ -19,7 +19,7 @@ export class PlanningTimeline {
   insert(objectId: string, methodId: string, beforeWaypoint: number, index: number): PlanningNodeView | null {
     const object = this.session.objects.find((entry) => entry.id === objectId);
     if (!object?.methods.some((method) => method.id === methodId) || this.session.waypoints.length < 2) return null;
-    const bucket = Math.max(0, Math.min(this.session.waypoints.length, Math.round(beforeWaypoint || 0)));
+    const bucket = Math.max(0, Math.min(this.session.waypoints.length - 1, Math.round(beforeWaypoint || 0)));
     const insertionIndex = Math.max(0, Math.round(index || 0));
     const id = createPlanNodeId();
     this.session.mutate("node", () => {
@@ -34,7 +34,7 @@ export class PlanningTimeline {
   move(id: string, beforeWaypoint: number, index: number): PlanningNodeView | null {
     const node = this.session.nodes.find((entry) => entry.id === id);
     if (!node) return null;
-    const bucket = Math.max(0, Math.min(this.session.waypoints.length, Math.round(beforeWaypoint || 0)));
+    const bucket = Math.max(0, Math.min(this.session.waypoints.length - 1, Math.round(beforeWaypoint || 0)));
     const insertionIndex = Math.max(0, Math.round(index || 0));
     this.session.mutate("node", () => {
       this.session.nodes.splice(this.session.nodes.indexOf(node), 1);

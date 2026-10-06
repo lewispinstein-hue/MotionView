@@ -161,7 +161,7 @@ export class PlanningCodeExportDialog {
     const path = this.dom.codeExportPath.value.trim();
     let message = "";
     if (!isTauriRuntime()) message = "Code file export is available in the desktop app.";
-    else if (!code) message = "Add at least one waypoint and a template before exporting code.";
+    else if (!code) message = "Add at least two waypoints and a template before exporting code.";
     else if (!path) message = "Enter an export path including a filename.";
     this.dom.codeExportValidation.textContent = message;
     this.dom.codeExportConfirm.disabled = message.length > 0;

@@ -8,6 +8,7 @@ export interface PlanningConfirmOptions {
   readonly message: string;
   readonly confirmLabel?: string;
   readonly cancelLabel?: string;
+  readonly hideCancel?: boolean;
 }
 
 export interface PlanningEditorOptions {
@@ -69,6 +70,7 @@ export class PlanningDialogs {
     this.dom.confirmMessage.textContent = options.message;
     this.dom.confirmButton.textContent = options.confirmLabel ?? "Confirm";
     this.dom.confirmCancel.textContent = options.cancelLabel ?? "Cancel";
+    this.dom.confirmCancel.hidden = options.hideCancel === true;
     this.show(this.dom.confirmModal, this.dom.confirmModal.querySelector<HTMLElement>(".modalCard"));
     return new Promise((resolve) => { this.#confirmResolver = resolve; });
   }
@@ -125,6 +127,7 @@ export class PlanningDialogs {
   private closeConfirm(result: boolean): void {
     const resolve = this.#confirmResolver;
     this.#confirmResolver = null;
+    this.dom.confirmCancel.hidden = false;
     this.hide(this.dom.confirmModal);
     resolve?.(result);
   }

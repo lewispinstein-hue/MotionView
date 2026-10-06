@@ -46,6 +46,32 @@ function finiteNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function usesLegacyWaypointExport(data: Readonly<Record<string, unknown>>): boolean {
+  if (data["planned-segment-export"] === true) return false;
+  const meta = data.meta && typeof data.meta === "object" ? data.meta as Record<string, unknown> : null;
+  const schemaVersion = Number(meta?.SchemaVersion);
+  return !Number.isFinite(schemaVersion) || schemaVersion < 4;
+}
+
+/** Moves legacy arrival-based waypoint content onto its departing route segment. */
+function migrateLegacyWaypointExport(waypoints: PlanningWaypoint[]): void {
+  if (waypoints.length < 2) return;
+  const legacyWaypoints = waypoints.map(cloneWaypoint);
+  for (let index = 0; index < waypoints.length - 1; index += 1) {
+    const source = waypoints[index]!;
+    const destination = legacyWaypoints[index + 1]!;
+    source.speed = destination.speed;
+    if (Object.prototype.hasOwnProperty.call(destination, "overrideCode")) source.overrideCode = destination.overrideCode ?? "";
+    else delete source.overrideCode;
+    if (Object.prototype.hasOwnProperty.call(destination, "indicatorIcons")) {
+      source.indicatorIcons = normalizeWaypointIndicatorIcons(destination.indicatorIcons);
+    } else delete source.indicatorIcons;
+  }
+  const finalWaypoint = waypoints.at(-1)!;
+  delete finalWaypoint.overrideCode;
+  delete finalWaypoint.indicatorIcons;
+}
+
 export class PlanningSession {
   readonly waypoints: PlanningWaypoint[] = [];
   readonly objects: PlanningObject[] = [];
@@ -137,7 +163,7 @@ export class PlanningSession {
 
   load(value: unknown): void {
     const data = value && typeof value === "object" ? value as Record<string, unknown> : {};
-    this.replace(this.waypoints, Array.isArray(data["planned-path"])
+    const waypoints = Array.isArray(data["planned-path"])
       ? data["planned-path"].map((raw) => {
         const point = raw as Record<string, unknown>;
         const waypoint: PlanningWaypoint = {
@@ -154,7 +180,9 @@ export class PlanningSession {
           waypoint.overrideCode = point.overrideCode;
         }
         return waypoint;
-      }) : []);
+      }) : [];
+    if (usesLegacyWaypointExport(data)) migrateLegacyWaypointExport(waypoints);
+    this.replace(this.waypoints, waypoints);
     this.replace(this.objects, normalizePlanObjects(data["planned-objects"]));
     this.replace(this.nodes, normalizePlanNodes(data["planned-nodes"]));
     if (data["planned-export-template"] !== undefined) {
@@ -244,12 +272,13 @@ export class PlanningSession {
   }
 
   private maintainDocumentInvariants(): void {
-    const maxBucket = this.waypoints.length;
+    const maxBucket = Math.max(0, this.waypoints.length - 1);
+    const hasRouteSegments = this.waypoints.length >= 2;
     const objects = new Map(this.objects.map((object) => [object.id, object]));
     for (let index = this.nodes.length - 1; index >= 0; index -= 1) {
       const node = this.nodes[index];
       const object = node ? objects.get(node.objectId) : null;
-      if (!node || maxBucket < 2 || !object?.methods.some((method) => method.id === node.methodId)) {
+      if (!node || !hasRouteSegments || !object?.methods.some((method) => method.id === node.methodId)) {
         this.nodes.splice(index, 1);
         continue;
       }

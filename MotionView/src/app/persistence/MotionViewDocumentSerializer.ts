@@ -12,7 +12,8 @@ function level(value: unknown): "DEBUG" | "INFO" | "WARN" | "ERROR" | "FATAL" {
 
 function formatNumber(value: number, decimals = 2): string {
   if (!Number.isFinite(value)) return "—";
-  return value.toFixed(decimals).replace(/\.?0+$/, "");
+  const fixed = value.toFixed(decimals);
+  return decimals > 0 ? fixed.replace(/\.?0+$/, "") : fixed;
 }
 
 export class MotionViewDocumentSerializer {
@@ -56,6 +57,7 @@ export class MotionViewDocumentSerializer {
         if (Object.prototype.hasOwnProperty.call(point, "overrideCode")) serialized.overrideCode = point.overrideCode ?? "";
         return serialized;
       }),
+      "planned-segment-export": true,
       "planned-export-template": planning.template,
       "planned-objects": planning.objects.map((object) => ({ id: object.id, name: object.name, color: object.color || null, latestMethod: object.latestMethod || "", methods: object.methods.map((method) => ({ id: method.id, name: method.name, code: method.code })) })),
       "planned-nodes": planning.nodes.map(serializePlanNode),
@@ -65,7 +67,7 @@ export class MotionViewDocumentSerializer {
   private metadata(pathName: string, settings: Readonly<MotionViewSettings>): Record<string, unknown> {
     const poses = this.app.viewing.data.poses; const start = poses[0]?.t ?? null; const end = poses[poses.length - 1]?.t ?? null;
     return {
-      SchemaVersion: 3,
+      SchemaVersion: 4,
       CreationDate: new Intl.DateTimeFormat("en-GB", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date()),
       AppVersion: this.app.version, Creator: "MotionView", PathName: pathName,
       Stats: { PoseCount: poses.length, WatchCount: this.app.viewing.data.watches.length, LogCount: this.app.viewing.data.logs.length, WaypointCount: this.app.viewing.data.waypoints.length, WaypointEvents: waypointEventCount(this.app.viewing.data.waypoints), PlannedWaypointCount: this.app.planning.route.length, PlannedObjectCount: this.app.planning.objects.length, PlannedNodeCount: this.app.planning.timeline.length },
