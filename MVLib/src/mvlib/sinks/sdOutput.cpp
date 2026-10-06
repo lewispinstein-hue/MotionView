@@ -147,6 +147,15 @@ void Logger::logToSD(const LogLevel level, const char* format, ...) {
   const detail::SdWriteResult result = m_sdSink->writeV(level, format, args);
   va_end(args);
 
+  if (result.succeeded()) {
+    const uint32_t dropped = m_sdSink->takeDroppedLineCount();
+    if (dropped > 0 && m_config.logSystemInfo.load() && m_config.logToTerminal.load()) {
+      detail::Telemetry::getInstance().sendLog(
+        LogLevel::WARN, "[MVLIB] SD logging dropped %u line(s) due to lock contention.", dropped);
+    }
+    return;
+  }
+
   if (result.error != detail::SdWriteError::write &&
       result.error != detail::SdWriteError::flush) {
     return;
