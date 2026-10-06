@@ -2,6 +2,7 @@
 #include "mvlib/private/telemetry.hpp"
 #include "mvlib/private/raii.hpp"
 #include <cmath>
+#include <vector>
 
 namespace mvlib {
 
@@ -27,80 +28,94 @@ void Logger::printWaypoints() {
     }
   }
 
-  detail::uniqueLock lock(m_mutex);
-  if (!lock.isLocked()) return;
+  struct TriggeredEvent {
+    WPId id;
+    uint8_t subType;
+    const char* statusStr;
+    std::string name;
+  };
+  std::vector<TriggeredEvent> triggered;
 
-  for (auto& wp : m_waypoints) {
-    if (!wp.active) continue;
+  {
+    detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
+    if (!lock.isLocked()) return;
 
-    WaypointOffset off{};
-    if (pose) {
-      off.offX = wp.params.tarX - pose->x;
-      off.offY = wp.params.tarY - pose->y;
-      off.totalOffset = std::sqrt(off.offX * off.offX + off.offY * off.offY);
+    for (auto& wp : m_waypoints) {
+      if (!wp.active) continue;
 
-      if (wp.params.tarT.has_value()) {
-        double error = wp.params.tarT.value() - pose->theta;
-        error = std::fmod(error + 180.0, 360.0);
-        if (error < 0) error += 360.0;
-        off.offT = error - 180.0;
+      WaypointOffset off{};
+      if (pose) {
+        off.offX = wp.params.tarX - pose->x;
+        off.offY = wp.params.tarY - pose->y;
+        off.totalOffset = std::sqrt(off.offX * off.offX + off.offY * off.offY);
+
+        if (wp.params.tarT.has_value()) {
+          double error = wp.params.tarT.value() - pose->theta;
+          error = std::fmod(error + 180.0, 360.0);
+          if (error < 0) error += 360.0;
+          off.offT = error - 180.0;
+        }
+
+        bool linearReached = off.totalOffset <= wp.params.linearTol;
+        bool angularReached = !wp.params.thetaTol.has_value() ||
+                              (off.offT.has_value() && std::abs(off.offT.value()) <= wp.params.thetaTol.value());
+        off.reached = (linearReached && angularReached);
       }
 
-      bool linearReached = off.totalOffset <= wp.params.linearTol;
-      bool angularReached = !wp.params.thetaTol.has_value() ||
-                            (off.offT.has_value() && std::abs(off.offT.value()) <= wp.params.thetaTol.value());
-      off.reached = (linearReached && angularReached);
+      const bool hasTimeout = wp.params.timeoutMs.has_value();
+      const uint32_t elapsed = nowMs - wp.startTimeMs;
+      const bool expired = hasTimeout && elapsed >= wp.params.timeoutMs.value();
+
+      if (hasTimeout) {
+        off.remainingTimeout = expired ? 0 : wp.params.timeoutMs.value() - elapsed;
+        off.timedOut = expired;
+      } else {
+        off.remainingTimeout = std::nullopt;
+        off.timedOut = false;
+      }
+
+      uint8_t subType = 0;
+      bool shouldTrigger = false;
+      const char* statusStr = nullptr;
+
+      if (expired) {
+        subType = 3; // TIMEDOUT
+        statusStr = "TIMEDOUT";
+        shouldTrigger = true;
+        wp.timedOut = true;
+        wp.active = false;
+      } else if (off.reached && (!wp.prevReached || !wp.params.retriggerable)) {
+        subType = 2; // REACHED
+        statusStr = "REACHED";
+        shouldTrigger = true;
+        wp.prevReached = true;
+        wp.timedOut = false;
+        wp.reached = true;
+        wp.active = wp.params.retriggerable;
+      } else if (!off.reached && wp.prevReached) {
+        wp.prevReached = false;
+        wp.timedOut = false;
+      } else {
+        wp.timedOut = false;
+      }
+
+      if (!shouldTrigger) continue;
+      if (!m_config.printWaypoints.load()) continue;
+
+      triggered.push_back({wp.id, subType, statusStr, wp.name});
     }
+  }
 
-    const bool hasTimeout = wp.params.timeoutMs.has_value();
-    const uint32_t elapsed = nowMs - wp.startTimeMs;
-    const bool expired = hasTimeout && elapsed >= wp.params.timeoutMs.value();
-
-    if (hasTimeout) {
-      off.remainingTimeout = expired ? 0 : wp.params.timeoutMs.value() - elapsed;
-      off.timedOut = expired;
-    } else {
-      off.remainingTimeout = std::nullopt;
-      off.timedOut = false;
-    }
-
-    uint8_t subType = 0;
-    bool shouldTrigger = false;
-    const char* statusStr = nullptr;
-
-    if (expired) {
-      subType = 3; // TIMEDOUT
-      statusStr = "TIMEDOUT";
-      shouldTrigger = true;
-      wp.timedOut = true;
-      wp.active = false;
-    } else if (off.reached && (!wp.prevReached || !wp.params.retriggerable)) {
-      subType = 2; // REACHED
-      statusStr = "REACHED";
-      shouldTrigger = true;
-      wp.prevReached = true;
-      wp.timedOut = false;
-      wp.reached = true;
-      wp.active = wp.params.retriggerable;
-    } else if (!off.reached && wp.prevReached) {
-      wp.prevReached = false;
-      wp.timedOut = false;
-    } else {
-      wp.timedOut = false;
-    }
-
-    if (!shouldTrigger) continue;
-    if (!m_config.printWaypoints.load()) continue;
-
-    // Send binary through terminal
+  // Emit telemetry and SD writes outside m_mutex so I/O never blocks other
+  // tasks taking the lock (e.g. the user task racing the logger task).
+  for (const auto& event : triggered) {
     if (m_config.logToTerminal.load()) {
-      detail::Telemetry::getInstance().sendWaypointStatus(wp.id, subType);
+      detail::Telemetry::getInstance().sendWaypointStatus(event.id, event.subType);
     }
 
-    // Log standard ANSI text to the SD card.
     if (m_config.logToSD.load()) {
       logToSD(LogLevel::OVERRIDE, "[WPOINT],%u,%s,%u,%s",
-              nowMs, statusStr ? statusStr : "", wp.id, wp.name.c_str());
+              nowMs, event.statusStr ? event.statusStr : "", event.id, event.name.c_str());
     }
   }
 }

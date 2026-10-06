@@ -44,7 +44,7 @@ WaypointOffset Logger::getWaypointOffset(WPId id) {
   std::shared_ptr<pros::Mutex> poseGetterMutex;
 
   {
-    detail::uniqueLock lock(m_mutex);
+    detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
     if (!lock.isLocked()) return {};
 
     const InternalWaypoint* waypoint = m_findWaypointUnlocked(id);
@@ -96,7 +96,7 @@ WaypointOffset Logger::getWaypointOffset(WPId id) {
 }
 
 WaypointHandle Logger::internalRegisterWaypoint(std::string name, WaypointParams details) {
-  detail::uniqueLock lock(m_mutex);
+  detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked()) return WaypointHandle(0);
   if (!m_config.logToTerminal.load() && !m_config.logToSD.load()) return WaypointHandle(0);
 

@@ -102,6 +102,13 @@ private:
 
 public:
   /**
+   * @brief Check whether this handle refers to a successfully registered waypoint.
+   * \return Returns false if registration failed (e.g. the logger's mutex could not
+   *         be locked), in which case all other accessors return empty/default values.
+   */
+  bool valid() const;
+
+  /**
    * @brief Get the offset of the robot from the waypoint
    * \return Returns the offset of the waypoint in WaypointOffset struct
    */

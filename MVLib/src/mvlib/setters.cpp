@@ -89,11 +89,11 @@ const char* Logger::getBuildDate() const {
 }
 
 void Logger::setPoseGetter(std::function<std::optional<Pose>()> getter) {
-  detail::uniqueLock m(m_mutex);
+  detail::uniqueLock m(m_mutex, TIMEOUT_MAX);
   if (!m.isLocked() || !getter) {
-    _MVLIB_FORWARD_DEBUG("Unable to set pose getter because mutex failed "
-                         "to lock. Try adding delay or calling at a different "
-                         "time.");
+    _MVLIB_FORWARD_WARN("Unable to set pose getter because mutex failed "
+                        "to lock. Try adding delay or calling at a different "
+                        "time.");
     return;
   }
   _MVLIB_FORWARD_DEBUG("SetPoseGetter set callback.");

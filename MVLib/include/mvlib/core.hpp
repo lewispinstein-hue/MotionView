@@ -371,9 +371,9 @@ public:
    *   .tarX = 70,
    *   .tarY = -47,
    *   .tarT = 0,
+   *   .timeoutMs = 5_mvS,
    *   .linearTol = 2,
    *   .thetaTol = 10,
-   *   .timeoutMs = 5_mvS,
    * });
    * auto off = waypoint.getOffset();
    * logger.info("Waypoint offset: %.1f, %.1f, %.1f",

@@ -156,9 +156,9 @@ auto goalPickup = logger.addWaypoint("Goal Pickup", {
   .tarX = 48,          // Target 48 X
   .tarY = -24,         // Target -24 Y
   .tarT = 90,          // Target 90 degrees heading
+  .timeoutMs = 10_mvS, // Timeout if not reached within 10 seconds
   .linearTol = 2.0f,   // +/- 2 from target before "reached"
   .thetaTol = 10.0f,   // +/- 10 degrees before "reached"
-  .timeoutMs = 10_mvS, // Timeout if not reached within 10 seconds
 });
 
 auto off = goalPickup.getOffset();

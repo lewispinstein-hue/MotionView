@@ -3,13 +3,17 @@
 #include "mvlib/private/raii.hpp"
 
 namespace mvlib {
+bool WaypointHandle::valid() const {
+  return this->m_id != 0;
+}
+
 WaypointOffset WaypointHandle::getOffset() const {
   return Logger::getInstance().getWaypointOffset(this->m_id);
 }
 
 WaypointParams WaypointHandle::getParams() const {
   Logger& logger = Logger::getInstance();
-  detail::uniqueLock lock(logger.m_mutex);
+  detail::uniqueLock lock(logger.m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked() || logger.m_waypoints.empty()) return {};
 
   const Logger::InternalWaypoint* waypoint = logger.m_findWaypointUnlocked(this->m_id);
@@ -22,7 +26,7 @@ bool WaypointHandle::reached() const {
 
 std::string WaypointHandle::getLabel() const {
   Logger& logger = Logger::getInstance();
-  detail::uniqueLock lock(logger.m_mutex);
+  detail::uniqueLock lock(logger.m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked() || logger.m_waypoints.empty()) return {};
 
   const Logger::InternalWaypoint* waypoint = logger.m_findWaypointUnlocked(this->m_id);
@@ -35,7 +39,7 @@ bool WaypointHandle::timedOut() const {
 
 bool WaypointHandle::active() const {
   Logger& logger = Logger::getInstance();
-  detail::uniqueLock lock(logger.m_mutex);
+  detail::uniqueLock lock(logger.m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked() || logger.m_waypoints.empty()) return false;
 
   const Logger::InternalWaypoint* waypoint = logger.m_findWaypointUnlocked(this->m_id);
