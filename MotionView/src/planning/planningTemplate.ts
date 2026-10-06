@@ -52,13 +52,21 @@ function isWaypointForwards(
 
 export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
   const rawTemplate = String(options.template ?? "");
-  if (!rawTemplate.trim()) return "";
+  const defaultReplacements: Record<string, string> = {
+    x: "0",
+    y: "0",
+    theta: "0",
+    distance: "0",
+    iteration: "0",
+    speed: "0",
+    forwards: "true",
+  };
 
-  const renderTemplate = (template: string, point: Readonly<PlanningWaypoint>, index: number) => {
+  const replacementsForWaypoint = (point: Readonly<PlanningWaypoint>, index: number) => {
     const prev = options.waypoints[index - 1];
     const distance = prev ? Math.hypot(point.x - prev.x, point.y - prev.y) : 0;
     const theta = options.planThetaDegAt(index);
-    const replacements: Record<string, string> = {
+    return {
       x: options.formatTemplateNumber(point.x),
       y: options.formatTemplateNumber(point.y),
       theta: options.formatTemplateNumber(theta),
@@ -67,7 +75,19 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
       speed: options.formatTemplateNumber(options.readPlanSpeed(point.speed, 127), 0),
       forwards: String(isWaypointForwards(point, options.waypoints[index + 1], theta)),
     };
+  };
+
+  const renderTemplate = (template: string, replacements: Readonly<Record<string, string>>) => {
     return String(template || "").replace(/\$\{(x|y|theta|distance|iteration|speed|forwards)\}/g, (_, token) => replacements[token] ?? "");
+  };
+
+  const renderWaypointTemplate = (template: string, point: Readonly<PlanningWaypoint>, index: number) =>
+    renderTemplate(template, replacementsForWaypoint(point, index));
+
+  const renderNodeTemplate = (template: string, beforeWaypoint: number) => {
+    const index = Math.trunc(beforeWaypoint) - 1;
+    const point = index >= 0 ? options.waypoints[index] : undefined;
+    return renderTemplate(template, point ? replacementsForWaypoint(point, index) : defaultReplacements);
   };
 
   const nodesByBucket = new Map<number, Readonly<PlanningNode>[]>();
@@ -83,7 +103,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     for (const node of bucketNodes) {
       const method = getPlanNodeEffectiveMethod(options.objects, node);
       if (!method) continue;
-      blocks.push(String(method.code || ""));
+      blocks.push(renderNodeTemplate(String(method.code || ""), beforeWaypoint));
     }
   };
 
@@ -93,9 +113,10 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     const template = Object.prototype.hasOwnProperty.call(waypoint, "overrideCode")
       ? String(waypoint.overrideCode ?? "")
       : rawTemplate;
-    blocks.push(renderTemplate(template, waypoint, i));
+    blocks.push(renderWaypointTemplate(template, waypoint, i));
     appendBucketMethods(i + 1);
   }
 
-  return blocks.join("\n");
+  const code = blocks.join("\n");
+  return /\S/.test(code) ? code : "";
 }

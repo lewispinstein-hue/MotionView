@@ -10,7 +10,8 @@
   "scripts": {
     "py:clean": "node scripts/clean_py.js",
     "py:build": "node scripts/build_py.js",
-    "test:live": "node scripts/test_live_regressions.mjs",
+    "test:live": "node scripts/tests/live_regressions.mjs",
+    "test:planning": "node scripts/tests/planning_templates.mjs",
     "typecheck": "tsc --noEmit",
     "dev:web": "vite --config vite.config.js",
     "build:web": "vite build --config vite.config.js",

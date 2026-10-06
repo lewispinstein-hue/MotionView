@@ -188,7 +188,7 @@ export class WaypointListView {
       this.viewing.navigation.setTimelineHover(null);
       this.viewing.navigation.selectWaypoint(waypoint, event);
       const poseIndex = this.viewing.projection.waypointPoseIndex(waypoint, event.t);
-      if (poseIndex != null) this.viewing.navigation.selectPose(poseIndex, { preserveDetails: true });
+      if (poseIndex != null) this.viewing.navigation.selectPose(poseIndex, { preserveDetails: true, markSelected: false });
       this.highlight(true);
     };
     element.addEventListener("pointerdown", (pointerEvent) => {

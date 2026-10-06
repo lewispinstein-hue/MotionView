@@ -2959,6 +2959,10 @@ body:not(.mode-planning) #rightPlanning {
   align-items: center;
 }
 
+#rightPlanning .planSelectedPanel .waypointIndicatorStrip {
+  margin-left: auto;
+}
+
 #rightPlanning .planEditWaypointBtn {
   width: 30px;
   height: 30px;

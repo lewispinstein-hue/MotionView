@@ -28,6 +28,12 @@ export function normalizeWaypointIndicatorIcons(value: unknown): PlanWaypointInd
   return icons;
 }
 
+/** Returns a stable visual order without changing the stored selection order. */
+export function orderWaypointIndicatorIcons(value: readonly PlanWaypointIndicatorIcon[]): PlanWaypointIndicatorIcon[] {
+  const icons = normalizeWaypointIndicatorIcons(value);
+  return icons.sort((left, right) => WAYPOINT_INDICATOR_ICONS.indexOf(left) - WAYPOINT_INDICATOR_ICONS.indexOf(right));
+}
+
 export function createWaypointIndicatorIcon(icon: PlanWaypointIndicatorIcon, className = ""): SVGSVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.classList.add("waypointIndicatorIcon");

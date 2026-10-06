@@ -69,6 +69,11 @@ export class ViewingSidebarView {
     for (const tab of this.dom.sectionTabs) {
       tab.addEventListener("click", () => this.setActiveSection(tab.dataset.viewingSection as SidebarSection));
     }
+    this.dom.scrollContainer.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || !(event.target instanceof Element)) return;
+      if (event.target.closest(".viewingSidebarToolbar, .watchItem, button, input, select, label, a")) return;
+      this.viewing.navigation.clearSelection();
+    });
     this.bindSectionWheelScroll();
     this.dom.scrollContainer.addEventListener("scroll", () => {
       this.#scrollPositions[this.#activeSection] = this.dom.scrollContainer.scrollTop;
@@ -150,6 +155,7 @@ export class ViewingSidebarView {
 
   private setActiveSection(section: SidebarSection): void {
     if (!(["watches", "logs", "waypoints", "poses"] as const).includes(section)) return;
+    if (section !== this.#activeSection) this.viewing.navigation.clearSelection();
     this.#scrollPositions[this.#activeSection] = this.dom.scrollContainer.scrollTop;
     this.#activeSection = section;
     for (const tab of this.dom.sectionTabs) {

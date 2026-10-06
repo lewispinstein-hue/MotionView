@@ -9,7 +9,7 @@ import type { PlanningDialogs } from "../PlanningDialogs";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningFeature } from "../PlanningFeature";
 import { getPlanNodeEffectiveMethod } from "../planningObjects";
-import { createWaypointIndicatorIcon } from "../planningIndicators";
+import { createWaypointIndicatorIcon, orderWaypointIndicatorIcons } from "../planningIndicators";
 import { getUtf8ByteLength } from "../planningTemplate";
 import { generatePlanningCode } from "../planningCode";
 import { getContrastTextColor, getDefaultPlanObjectColor, getDefaultPlanObjectName } from "../planningState";
@@ -24,6 +24,8 @@ function format(value: unknown, decimals = 2): string {
   if (!Number.isFinite(number)) return "—";
   return number.toFixed(decimals).replace(/\.?0+$/, "");
 }
+
+const METHOD_TEMPLATE_DESCRIPTION = "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}. They expand when this method is emitted by a placed timeline node.";
 
 export class PlanningSidebarView {
   #editingObjectId: string | null = null;
@@ -121,7 +123,7 @@ export class PlanningSidebarView {
     icons: readonly PlanWaypointIndicatorIcon[],
     className = "",
   ): void {
-    for (const indicator of icons) target.appendChild(createWaypointIndicatorIcon(indicator, className));
+    for (const indicator of orderWaypointIndicatorIcons(icons)) target.appendChild(createWaypointIndicatorIcon(indicator, className));
   }
 
   renderObjects(): void {
@@ -304,7 +306,7 @@ export class PlanningSidebarView {
   private async addMethod(objectId: string): Promise<void> {
     const object = this.planning.objects.get(objectId);
     if (!object) return;
-    const result = await this.dialogs.edit({ title: "Add Method", subtitle: `Create a new method for ${object.name}.`, groupTitle: "Method", description: "Enter a method name and optional code.", name: "", code: "" });
+    const result = await this.dialogs.edit({ title: "Add Method", subtitle: `Create a new method for ${object.name}.`, groupTitle: "Method", description: METHOD_TEMPLATE_DESCRIPTION, name: "", code: "" });
     if (!result) return;
     this.planning.objects.addMethod(objectId, result);
     void planningTelemetry.methodCreated(this.planning.telemetryProperties({ method_code_chars: result.code.length, method_code_bytes: getUtf8ByteLength(result.code) }));
@@ -315,7 +317,7 @@ export class PlanningSidebarView {
     if (!method) return;
     const previousName = method.name;
     const previousCode = method.code;
-    const result = await this.dialogs.edit({ title: "Edit Method", groupTitle: "Method", name: method.name, code: method.code });
+    const result = await this.dialogs.edit({ title: "Edit Method", groupTitle: "Method", description: METHOD_TEMPLATE_DESCRIPTION, name: method.name, code: method.code });
     if (!result || (result.name === previousName && result.code === previousCode)) return;
     this.planning.objects.updateMethod(objectId, methodId, result);
     void planningTelemetry.methodUpdated(this.planning.telemetryProperties({ method_name_changed: result.name !== previousName, method_code_changed: result.code !== previousCode, method_code_chars: result.code.length, method_code_bytes: getUtf8ByteLength(result.code) }));

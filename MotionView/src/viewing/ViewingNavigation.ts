@@ -5,6 +5,7 @@ import type { ViewingDataReader, WatchMarker, WaypointEventView, WaypointView } 
 /** Owns Viewing selection and navigation state without knowing about DOM rendering. */
 export class ViewingNavigation {
   #selectedIndex = 0;
+  #selectedPoseIndex: number | null = null;
   #selectedWatch: Readonly<WatchMarker> | null = null;
   #selectedLog: Readonly<LogEntry> | null = null;
   #selectedWaypointId: number | string | null = null;
@@ -37,6 +38,7 @@ export class ViewingNavigation {
   }
 
   get selectedIndex(): number { return this.#selectedIndex; }
+  get selectedPoseIndex(): number | null { return this.#selectedPoseIndex; }
   get selectedWatch(): Readonly<WatchMarker> | null { return this.#selectedWatch; }
   get selectedLog(): Readonly<LogEntry> | null { return this.#selectedLog; }
   get selectedLogTime(): number | null { return this.#selectedLog?.t ?? null; }
@@ -73,10 +75,14 @@ export class ViewingNavigation {
     this.emit("live-state");
   }
 
-  selectPose(index: number, options: Readonly<{ preserveDetails?: boolean }> = {}): void {
+  selectPose(index: number, options: Readonly<{ preserveDetails?: boolean; markSelected?: boolean }> = {}): void {
     this.#selectedIndex = Math.max(0, Math.min(this.data.poses.length - 1, Math.trunc(index)));
     this.#lastManualIndex = this.#selectedIndex;
-    if (!options.preserveDetails) this.clearDetails(false);
+    if (options.markSelected !== false) this.#selectedPoseIndex = this.#selectedIndex;
+    if (!options.preserveDetails) {
+      this.clearDetails(false);
+      this.clearWaypointSelection(false);
+    }
     this.emit("selection");
   }
 
@@ -85,18 +91,23 @@ export class ViewingNavigation {
   }
 
   selectWatch(marker: Readonly<WatchMarker>): void {
+    this.#selectedPoseIndex = null;
     this.#selectedWatch = marker;
     this.#selectedLog = null;
+    this.clearWaypointSelection(false);
     this.emit("selection");
   }
 
   selectLog(entry: Readonly<LogEntry> | null): void {
+    this.#selectedPoseIndex = null;
     this.#selectedLog = entry;
     this.#selectedWatch = null;
+    this.clearWaypointSelection(false);
     this.emit("selection");
   }
 
   selectWaypoint(waypoint: WaypointView, event: WaypointEventView | null = null): void {
+    this.#selectedPoseIndex = null;
     this.#selectedWaypointId = waypoint.id;
     this.#selectedWaypointEventTime = event?.t ?? waypoint.latestActiveEvent?.t ?? waypoint.createdTime ?? null;
     this.#selectedWaypointEvent = event;
@@ -135,6 +146,7 @@ export class ViewingNavigation {
   lockTrack(pose: Readonly<Pose>, index: number): void {
     this.#selectedIndex = Math.max(0, Math.min(this.data.poses.length - 1, Math.trunc(index)));
     this.#lastManualIndex = this.#selectedIndex;
+    this.#selectedPoseIndex = this.#selectedIndex;
     this.clearDetails(false);
     this.#trackLockPose = pose;
     this.#trackLockIndex = this.#selectedIndex;
@@ -154,6 +166,22 @@ export class ViewingNavigation {
     if (emit) this.emit("selection");
   }
 
+  /** Clears the visible list or marker selection without moving the playback cursor. */
+  clearSelection(emit = true): void {
+    const changed = this.#selectedPoseIndex != null
+      || this.#selectedWatch != null
+      || this.#selectedLog != null
+      || this.#selectedWaypointId != null
+      || this.#selectedWaypointEventTime != null
+      || this.#selectedWaypointEvent != null
+      || this.#hoveredWaypointId != null;
+    this.#selectedPoseIndex = null;
+    this.#selectedWatch = null;
+    this.#selectedLog = null;
+    this.clearWaypointSelection(false);
+    if (emit && changed) this.emit("selection");
+  }
+
   clearWaypointSelection(emit = true): void {
     this.#selectedWaypointId = null;
     this.#selectedWaypointEventTime = null;
@@ -164,6 +192,7 @@ export class ViewingNavigation {
 
   reset(): void {
     this.#selectedIndex = 0;
+    this.#selectedPoseIndex = null;
     this.#lastManualIndex = 0;
     this.#selectedWatch = null;
     this.#selectedLog = null;

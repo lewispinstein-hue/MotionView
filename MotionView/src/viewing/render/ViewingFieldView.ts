@@ -234,14 +234,16 @@ export class ViewingFieldView implements ViewingFieldLayer {
       this.viewing.navigation.setTrackHover(null);
       this.viewing.navigation.selectWaypoint(waypoint, waypoint.latestActiveEvent);
       const index = this.viewing.projection.waypointPoseIndex(waypoint);
-      if (index != null) this.viewing.navigation.selectPose(index, { preserveDetails: true });
+      if (index != null) this.viewing.navigation.selectPose(index, { preserveDetails: true, markSelected: false });
       return;
     }
-    if (!this.viewing.navigation.livestreaming) {
-      if (trackHit) {
-        this.viewing.playback.pause();
-        this.viewing.navigation.lockTrack(trackHit.pose, trackHit.index);
-      } else this.viewing.navigation.clearTrackLock();
+    if (!this.viewing.navigation.livestreaming && trackHit) {
+      this.viewing.navigation.clearSelection(false);
+      this.viewing.playback.pause();
+      this.viewing.navigation.lockTrack(trackHit.pose, trackHit.index);
+    } else if (!trackHit) {
+      this.viewing.navigation.clearTrackLock();
+      this.viewing.navigation.clearSelection();
     }
   }
 

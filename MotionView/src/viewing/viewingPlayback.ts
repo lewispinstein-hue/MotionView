@@ -116,7 +116,7 @@ export class ViewingPlayback {
     this.#lastWallTime = wallTime;
     this.#timeMs = Math.min(range.end, (this.#timeMs ?? range.start) + elapsed);
     this.#pose = this.projection.interpolatePose(this.#timeMs);
-    this.navigation.selectPose(this.projection.findFloorIndex(this.#timeMs), { preserveDetails: true });
+    this.navigation.selectPose(this.projection.findFloorIndex(this.#timeMs), { preserveDetails: true, markSelected: false });
     this.events.playbackChanged.emit({ kind: "frame" });
     if (this.#timeMs >= range.end) this.pause();
     else this.#frame = requestAnimationFrame(this.tick);

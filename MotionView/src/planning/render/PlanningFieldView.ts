@@ -28,6 +28,7 @@ const NODE_LONG = 12;
 const NODE_THICK = 3.75;
 const NODE_TICK = 10;
 const NODE_BORDER = 1.5;
+const NODE_TEMPLATE_DESCRIPTION = "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}. Values come from the preceding waypoint; nodes before the first waypoint use 0 and true.";
 
 function normalizeDegrees(value: number): number {
   return ((value % 360) + 360) % 360;
@@ -36,7 +37,10 @@ function normalizeDegrees(value: number): number {
 export class PlanningFieldView {
   #pointerId: number | null = null;
   #dragStart: Readonly<{ x: number; y: number }> | null = null;
+  #dragStartScreen: Readonly<{ x: number; y: number }> | null = null;
   #dragPoints: readonly DragPoint[] = [];
+  #dragMoved = false;
+  #suppressWaypointEditorUntil = 0;
   #selectionRect: SelectionRect | null = null;
   #thetaIndex = -1;
   #thetaStart = 0;
@@ -75,6 +79,7 @@ export class PlanningFieldView {
       const waypointIndex = this.hitWaypoint(point.x, point.y);
       if (waypointIndex >= 0) {
         event.preventDefault();
+        if (performance.now() < this.#suppressWaypointEditorUntil) return;
         this.planning.selection.selectWaypoint(waypointIndex);
         void this.waypointEditor.edit(waypointIndex);
         return;
@@ -225,6 +230,8 @@ export class PlanningFieldView {
       if (!this.planning.selection.isWaypointSelected(hit)) this.planning.selection.selectWaypoint(hit);
       const world = this.field.screenToWorld(point.x, point.y);
       this.#dragStart = world;
+      this.#dragStartScreen = point;
+      this.#dragMoved = false;
       const indices = this.planning.selection.isWaypointSelected(hit)
         ? [...this.planning.selection.waypointIndices]
         : [hit];
@@ -279,6 +286,9 @@ export class PlanningFieldView {
       return;
     }
     if (this.#dragStart) {
+      if (this.#dragStartScreen && Math.hypot(point.x - this.#dragStartScreen.x, point.y - this.#dragStartScreen.y) > 3) {
+        this.#dragMoved = true;
+      }
       const dx = world.x - this.#dragStart.x;
       const dy = world.y - this.#dragStart.y;
       this.planning.route.updateMany(this.#dragPoints.map((entry) => {
@@ -309,6 +319,7 @@ export class PlanningFieldView {
     } else if (this.#thetaIndex >= 0 || this.#dragStart) {
       if (event.type === "pointercancel") this.planning.history.cancel();
       else this.planning.history.commit();
+      if (this.#dragMoved) this.#suppressWaypointEditorUntil = performance.now() + 350;
     } else {
       const panned = this.field.endPan(event.pointerId);
       if (!panned && event.type !== "pointercancel" && this.#pendingAdd) {
@@ -328,7 +339,9 @@ export class PlanningFieldView {
     this.releaseCapture(event.pointerId);
     this.#pointerId = null;
     this.#dragStart = null;
+    this.#dragStartScreen = null;
     this.#dragPoints = [];
+    this.#dragMoved = false;
     this.#thetaIndex = -1;
     this.#thetaOriginal = [];
     this.#pendingAdd = null;
@@ -502,7 +515,7 @@ export class PlanningFieldView {
     const node = this.planning.timeline.get(nodeId);
     const method = node ? getPlanNodeEffectiveMethod(this.planning.objects.items, node) : null;
     if (!node || !method) return;
-    const result = await this.dialogs.edit({ title: "Edit Placed Node", groupTitle: "Node Code", description: "These code changes only apply to this placed node.", code: method.code });
+    const result = await this.dialogs.edit({ title: "Edit Placed Node", groupTitle: "Node Code", description: NODE_TEMPLATE_DESCRIPTION, code: method.code });
     if (!result) return;
     const changed = this.planning.timeline.setCodeOverride(nodeId, result.code);
     if (changed.changed) void planningTelemetry.timelineNodeUpdated(this.planning.telemetryProperties({ node_override_created: !changed.hadOverride && changed.hasOverride, node_override_cleared: changed.hadOverride && !changed.hasOverride, node_code_chars: result.code.length, node_code_bytes: getUtf8ByteLength(result.code) }));

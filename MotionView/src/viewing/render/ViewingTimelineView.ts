@@ -57,6 +57,7 @@ export class ViewingTimelineView implements ViewingRenderLayer {
         );
       } else {
         this.watchTooltip.hide();
+        this.viewing.navigation.clearSelection(false);
         const time = this.xToTime(x);
         this.viewing.playback.pause();
         this.viewing.playback.setTime(time);

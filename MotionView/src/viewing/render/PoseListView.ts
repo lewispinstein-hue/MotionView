@@ -48,7 +48,11 @@ export class PoseListView {
 
   highlight(scroll = false): void {
     if (scroll) {
-      const selected = this.viewing.navigation.selectedIndex;
+      const selected = this.viewing.navigation.selectedPoseIndex;
+      if (selected == null) {
+        this.#list.refresh();
+        return;
+      }
       const index = Array.from(this.#list.getItems()).findIndex((item) => item.index === selected);
       if (index >= 0) this.#list.scrollToIndex(index, 12);
     }
@@ -90,7 +94,7 @@ export class PoseListView {
       : "—";
     const element = document.createElement("div");
     element.className = "watchItem poseItem";
-    if (index === this.viewing.navigation.selectedIndex) element.classList.add("selected");
+    if (index === this.viewing.navigation.selectedPoseIndex) element.classList.add("selected");
     if (index === this.#previewIndex) element.classList.add("previewSelected");
     element.dataset.idx = String(index);
     element.innerHTML = `<div class="watchItemContent poseItemContent"><div class="watchItemHeader">

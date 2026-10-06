@@ -27,6 +27,7 @@ const NODE_SHIFT_MS = 320;
 const NODE_ENTER_MS = 240;
 const NODE_EXIT_MS = 220;
 const NODE_MOVE_EPSILON = 0.5;
+const NODE_TEMPLATE_DESCRIPTION = "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}. Values come from the preceding waypoint; nodes before the first waypoint use 0 and true.";
 
 interface TimelineBucketLayout {
   readonly beforeWaypoint: number;
@@ -523,7 +524,7 @@ export class PlanningTimelineView {
     const node = this.planning.timeline.get(nodeId);
     const method = node ? getPlanNodeEffectiveMethod(this.planning.objects.items, node) : null;
     if (!node || !method) return;
-    const result = await this.dialogs.edit({ title: "Edit Placed Node", groupTitle: "Node Code", description: "These code changes only apply to this placed node.", code: method.code });
+    const result = await this.dialogs.edit({ title: "Edit Placed Node", groupTitle: "Node Code", description: NODE_TEMPLATE_DESCRIPTION, code: method.code });
     if (!result) return;
     const changed = this.planning.timeline.setCodeOverride(nodeId, result.code);
     if (changed.changed) void planningTelemetry.timelineNodeUpdated(this.planning.telemetryProperties({ node_override_created: !changed.hadOverride && changed.hasOverride, node_override_cleared: changed.hadOverride && !changed.hasOverride, node_code_chars: result.code.length, node_code_bytes: getUtf8ByteLength(result.code) }));
