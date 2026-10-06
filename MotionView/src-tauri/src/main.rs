@@ -772,6 +772,16 @@ fn run_app() {
     #[cfg(windows)]
     let builder = builder.any_thread();
 
+    // Must be registered before any other plugin. Without this, launching a
+    // second instance kills the first window's live bridge (it wins the race
+    // in cleanup_previous_bridge) instead of just focusing the existing window.
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }));
+
     maybe_add_posthog_plugin(builder)
         .plugin(tauri_plugin_shell::init())
         .manage(BridgeState(Mutex::new(None)))
@@ -784,6 +794,7 @@ fn run_app() {
             settings::was_previous_version_old,
             settings::read_image_data,
             settings::save_robot_image,
+            settings::save_custom_field_image,
             settings::read_saved_paths,
             settings::write_saved_paths,
             export::export_motionview_json,
@@ -865,11 +876,15 @@ fn run_app() {
                 RunEvent::ExitRequested { api, .. } => {
                     let quit_ready = *app_handle.state::<QuitState>().0.lock().unwrap();
                     if !quit_ready {
-                        api.prevent_exit();
                         if let Some(win) = app_handle.get_webview_window("main") {
+                            api.prevent_exit();
                             let _ = win.emit("motionview://app-quit-requested", ());
+                            return;
                         }
-                        return;
+                        // No window left to ask the frontend to finish the exit flow (a JS
+                        // error before shutdown.bind(), a webview crash, or a close in the
+                        // first frames) -- fall through and let the exit proceed instead of
+                        // preventing it and hanging headless until force-killed.
                     }
 
                     persist_window_state(&app_handle);

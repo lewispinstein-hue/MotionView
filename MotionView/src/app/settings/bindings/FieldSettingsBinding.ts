@@ -1,6 +1,6 @@
 import type { TopBarView } from "../../topBar";
 import type { FieldRenderer } from "../../../render/field";
-import { DEFAULT_FIELD_KEY, getValidFieldKey, getVisibleFieldImages, normalizeFieldCompetition } from "../../../render/field/fieldImages";
+import { CUSTOM_FIELD_KEY, DEFAULT_FIELD_KEY, getValidFieldKey, getVisibleFieldImages, normalizeFieldCompetition } from "../../../render/field/fieldImages";
 import { requestDrawAll } from "../../../render/renderScheduler";
 import type { SettingsDom } from "../SettingsDom";
 import type { SettingsFeature } from "../SettingsFeature";
@@ -10,6 +10,11 @@ import { viewingTelemetry } from "../../../telemetry/createTelemetry";
 function number(value: unknown, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function positiveNumber(value: unknown, fallback: number): number {
+  const parsed = number(value, fallback);
+  return parsed > 0 ? parsed : fallback;
 }
 
 export class FieldSettingsBinding {
@@ -33,6 +38,9 @@ export class FieldSettingsBinding {
     this.field.events.fieldImageLoaded.subscribe(({ fieldKey }) => void viewingTelemetry.fieldImageLoaded({ field: fieldKey }));
     this.dom.fieldCompetition.addEventListener("change", () => this.settings.update({ fieldCompetition: normalizeFieldCompetition(this.dom.fieldCompetition.value) }));
     this.dom.showPreviousYears.addEventListener("change", () => this.settings.update({ showPreviousYearFields: this.dom.showPreviousYears.checked }));
+    this.dom.customFieldWidth.addEventListener("change", () => this.settings.update({ customFieldWidthIn: this.dom.customFieldWidth.value }));
+    this.dom.customFieldHeight.addEventListener("change", () => this.settings.update({ customFieldHeightIn: this.dom.customFieldHeight.value }));
+    this.field.events.customFieldImageAvailabilityChanged.subscribe(() => this.refreshImageControls());
     this.dom.fieldRotation.addEventListener("change", () => this.settings.update({ fieldRotation: this.dom.fieldRotation.value }));
     this.dom.robotWidth.addEventListener("input", () => this.settings.update({ robotW: this.dom.robotWidth.value }));
     this.dom.robotHeight.addEventListener("input", () => this.settings.update({ robotH: this.dom.robotHeight.value }));
@@ -78,18 +86,55 @@ export class FieldSettingsBinding {
     }, "system");
   }
 
+  async handleCustomFieldImageFile(file: File | null, input?: HTMLInputElement | null): Promise<void> {
+    if (!file) return;
+    try {
+      await this.field.loadCustomFieldImageFromFile(file);
+      this.settings.update({
+        customFieldImage: {
+          path: this.field.getCustomFieldImagePath(),
+          dataUrl: this.field.getCustomFieldImagePath() ? null : this.field.getCustomFieldImageDataUrl(),
+        },
+        selectedField: CUSTOM_FIELD_KEY,
+      }, "system");
+    } catch (error) {
+      console.error("Error loading custom field image:", error);
+    } finally {
+      if (input) input.value = "";
+    }
+  }
+
   private async apply(values: Readonly<MotionViewSettings>, keys: readonly (keyof MotionViewSettings)[]): Promise<void> {
     const changed = (...wanted: (keyof MotionViewSettings)[]) => wanted.some((key) => keys.includes(key));
-    if (changed("fieldCompetition", "showPreviousYearFields", "selectedField")) {
+    if (changed("customFieldWidthIn", "customFieldHeightIn")) {
+      this.dom.customFieldWidth.value = String(values.customFieldWidthIn ?? 144);
+      this.dom.customFieldHeight.value = String(values.customFieldHeightIn ?? 144);
+      this.field.setCustomFieldDimensions({
+        w: positiveNumber(values.customFieldWidthIn, 144),
+        h: positiveNumber(values.customFieldHeightIn, 144),
+      });
+      if (this.topBar.selectedField === CUSTOM_FIELD_KEY) await this.field.loadFieldImage(CUSTOM_FIELD_KEY);
+    }
+    if (changed("customFieldImage") && values.customFieldImage) {
+      this.field.setCustomFieldImagePath(values.customFieldImage.path ?? null);
+      this.field.setCustomFieldImageDataUrl(values.customFieldImage.dataUrl ?? null);
+      if (!values.customFieldImage.dataUrl && values.customFieldImage.path) {
+        await this.field.loadCustomFieldImageFromPath(values.customFieldImage.path);
+      }
+    }
+    if (changed("fieldCompetition", "showPreviousYearFields", "selectedField", "customFieldImage")) {
       const previous = this.topBar.selectedField;
       const competition = normalizeFieldCompetition(values.fieldCompetition);
       const showPreviousYearFields = values.showPreviousYearFields !== false;
-      const fields = getVisibleFieldImages({ competition, showPreviousYearFields });
-      const selected = getValidFieldKey(values.selectedField ?? DEFAULT_FIELD_KEY, { competition, showPreviousYearFields });
+      const hasCustomFieldImage = this.field.hasCustomFieldImage();
+      const fields = getVisibleFieldImages({ competition, showPreviousYearFields, hasCustomFieldImage });
+      const selected = getValidFieldKey(values.selectedField ?? DEFAULT_FIELD_KEY, { competition, showPreviousYearFields, hasCustomFieldImage });
       this.dom.fieldCompetition.value = competition;
       this.dom.showPreviousYears.checked = showPreviousYearFields;
       this.topBar.setFieldOptions(fields, selected);
-      if (selected && (selected !== previous || !this.field.hasFieldImage())) await this.field.loadFieldImage(selected);
+      if (selected && (selected !== previous || !this.field.hasFieldImage() || (selected === CUSTOM_FIELD_KEY && changed("customFieldImage")))) {
+        await this.field.loadFieldImage(selected);
+      }
       if (values.selectedField !== selected) this.settings.update({ selectedField: selected }, "system");
     }
     if (changed("playbackSpeed")) this.topBar.setPlaybackSpeed(number(values.playbackSpeed, 1));
@@ -149,5 +194,6 @@ export class FieldSettingsBinding {
     this.dom.robotImageToggle.checked = this.field.isRobotImageEnabled();
     this.dom.robotImageControls.hidden = !(this.field.isRobotImageEnabled() && this.field.isRobotImageReady());
     if (this.dom.sidebarRobotImageControls) this.dom.sidebarRobotImageControls.hidden = !this.field.isRobotImageReady();
+    this.dom.customFieldControls.hidden = !this.field.hasCustomFieldImage();
   }
 }

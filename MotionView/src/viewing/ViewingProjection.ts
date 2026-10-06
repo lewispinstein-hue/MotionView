@@ -185,9 +185,7 @@ export class ViewingProjection {
   }
 
   private rebuildWatchMarkers(): void {
-    this.#markers.length = 0;
-    for (const watch of this.data.watches) this.#markers.push(this.markerForWatch(watch));
-    this.rebuildMarkerTimeIndex();
+    this.rebuildMarkersFromSource();
     this.events.projectionChanged.emit({ kind: "replaced" });
   }
 
@@ -213,6 +211,12 @@ export class ViewingProjection {
     this.#markers.push(...merged);
     this.rebuildMarkerTimeIndex();
     this.events.projectionChanged.emit({ kind: "appended", watchesAdded: additions.length });
+  }
+
+  private rebuildMarkersFromSource(): void {
+    this.#markers.length = 0;
+    for (const watch of this.data.watches) this.#markers.push(this.markerForWatch(watch));
+    this.rebuildMarkerTimeIndex();
   }
 
   private rebuildMarkerTimeIndex(): void {

@@ -1,6 +1,7 @@
 #include "mvlib/watches.hpp"
 #include "mvlib/core.hpp"
 #include "mvlib/private/telemetry.hpp"
+#include "mvlib/private/sdCsv.hpp"
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
@@ -111,7 +112,8 @@ std::string Logger::evaluateWatch(WatchId id, bool emit) {
     if (valueStr == "t") valueStr = "true";
 
     logToSD(lvl, "[WATCH],%u,%s,%u,%s,%s", nowMs,
-            levelToString(lvl), id, label.c_str(), valueStr.c_str());
+            levelToString(lvl), id, detail::escapeSdCsvField(label).c_str(),
+            detail::escapeSdCsvField(valueStr).c_str());
   }
 
   return valueStr;

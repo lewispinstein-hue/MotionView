@@ -194,6 +194,12 @@ export class PlanningFieldView {
 
   private pointerDown(event: PointerEvent): void {
     if (getMode() !== "planning") return;
+    // A focused sidebar field holds its own undo transaction open until blur.
+    // beginTransaction() is a no-op while one is already open, so without this
+    // a canvas drag started while a field is focused would run with no
+    // transaction at all: blur() commits the field's transaction synchronously
+    // so the drag can open its own right after.
+    if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur();
     const point = this.canvasPoint(event);
     this.#pointerId = event.pointerId;
     this.dom.canvas.setPointerCapture(event.pointerId);

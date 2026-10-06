@@ -12,6 +12,10 @@ export class SettingsDom {
   readonly sidebarUnits: HTMLSelectElement | null;
   readonly fieldCompetition: HTMLSelectElement;
   readonly showPreviousYears: HTMLInputElement;
+  readonly uploadCustomFieldImageButton: HTMLButtonElement;
+  readonly customFieldControls: HTMLElement;
+  readonly customFieldWidth: HTMLInputElement;
+  readonly customFieldHeight: HTMLInputElement;
   readonly fieldRotation: HTMLSelectElement;
   readonly robotWidth: HTMLInputElement;
   readonly robotHeight: HTMLInputElement;
@@ -49,6 +53,10 @@ export class SettingsDom {
     this.sidebarUnits = optionalElement("unitsSelect", HTMLSelectElement, document);
     this.fieldCompetition = requiredElement("settingsFieldCompetition", HTMLSelectElement, document);
     this.showPreviousYears = requiredElement("settingsShowPreviousYearFields", HTMLInputElement, document);
+    this.uploadCustomFieldImageButton = requiredElement("btnUploadCustomFieldImage", HTMLButtonElement, document);
+    this.customFieldControls = requiredElement("settingsCustomFieldControls", HTMLElement, document);
+    this.customFieldWidth = requiredElement("settingsCustomFieldWidth", HTMLInputElement, document);
+    this.customFieldHeight = requiredElement("settingsCustomFieldHeight", HTMLInputElement, document);
     this.fieldRotation = requiredElement("settingsFieldRotation", HTMLSelectElement, document);
     this.robotWidth = requiredElement("settingsRobotW", HTMLInputElement, document);
     this.robotHeight = requiredElement("settingsRobotH", HTMLInputElement, document);

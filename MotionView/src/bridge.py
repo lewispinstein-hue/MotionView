@@ -327,6 +327,9 @@ def extract_bundled_pros_archive(archive_path: Path) -> Optional[str]:
             temporary_exe = temporary_root / "motionview-pros" / f"motionview-pros{exe_ext}"
             if not temporary_exe.exists():
                 raise RuntimeError("bundled PROS archive is missing its executable")
+            if extract_root.exists():
+                _bridge_log(f"replacing stale runtime dir: {extract_root}")
+                shutil.rmtree(extract_root, ignore_errors=True)
             temporary_root.rename(extract_root)
         return _ensure_executable(expected_exe)
     except Exception:
@@ -862,6 +865,7 @@ class ProsTerminalRunner:
         if self.proc.stdout is None:
             return
 
+        proc = self.proc
         while True:
             line = await self.proc.stdout.readline()
             if not line:
@@ -869,6 +873,16 @@ class ProsTerminalRunner:
             text = line.decode("utf-8", errors="replace").rstrip("\r\n")
             if text.strip():
                 self._enqueue_broadcast(text)
+
+        # The child hit EOF on its own (robot unplugged, brain rebooted, etc.)
+        # rather than via stop()/kill(), which cancel this task before it can
+        # reach here. Reap it and tell the frontend so it doesn't stay stuck
+        # in "streaming" until the user notices and clicks Stop.
+        returncode = await proc.wait()
+        async with self._op_lock:
+            if self.proc is proc:
+                self._prune_exited_process_state()
+                self._enqueue_broadcast(f"[UI] terminal exited (code {returncode})")
 
 
 runner = ProsTerminalRunner()

@@ -177,7 +177,14 @@ export class LiveLineParser {
         const event = parsed.waypointEvent;
         if (!parsed.ok || !event) continue;
         const knownBeforeBatch = !startsNewRun && viewing.waypointById.has(event.id);
-        if (event.type !== "CREATED" && !knownBeforeBatch && !createdWaypointIds.has(event.id)) continue;
+        const alreadyKnown = knownBeforeBatch || createdWaypointIds.has(event.id);
+        if (event.type === "CREATED") {
+          // A resent CREATED (roster resync) for a waypoint we already have would
+          // otherwise reset its event history and active state; ignore it.
+          if (alreadyKnown) continue;
+        } else if (!alreadyKnown) {
+          continue;
+        }
         waypointEvents.push(event);
         if (event.type === "CREATED") createdWaypointIds.add(event.id);
         counts.waypointsAdded += 1;

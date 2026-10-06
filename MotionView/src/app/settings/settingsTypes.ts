@@ -36,6 +36,9 @@ export interface MotionViewSettings {
   readonly robotImgRot?: string | number;
   readonly robotImgAlpha?: string | number;
   readonly robotImage?: PersistedRobotImage;
+  readonly customFieldImage?: PersistedRobotImage;
+  readonly customFieldWidthIn?: string | number;
+  readonly customFieldHeightIn?: string | number;
   readonly fieldRotation?: string | number;
   readonly layoutLeftSidebarWidth?: number;
   readonly layoutRightSidebarWidthViewing?: number;
@@ -81,6 +84,9 @@ export const DEFAULT_SETTINGS: Readonly<MotionViewSettings> = {
   robotImgAlpha: 100,
   fieldRotation: 0,
   robotImage: { path: null, dataUrl: null },
+  customFieldImage: { path: null, dataUrl: null },
+  customFieldWidthIn: 144,
+  customFieldHeightIn: 144,
   layoutLeftSidebarWidth: 360,
   layoutRightSidebarWidthViewing: 370,
   layoutRightSidebarWidthPlanning: 370,

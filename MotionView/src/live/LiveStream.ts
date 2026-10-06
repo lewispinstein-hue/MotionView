@@ -121,6 +121,14 @@ export class LiveStream {
     }
   }
 
+  captureHasData(text: string): boolean {
+    const lines = String(text ?? "").split(/\r?\n/);
+    const pending = { lines, startIndex: 0, endIndex: lines.length };
+    const { batch } = this.parser.parse(pending, this.viewing.data, null);
+    return (batch.poses?.length ?? 0) > 0 || (batch.watches?.length ?? 0) > 0
+      || (batch.logs?.length ?? 0) > 0 || (batch.waypointEvents?.length ?? 0) > 0;
+  }
+
   loadCapture(text: string): ViewingAppendResult {
     const lines = String(text ?? "").split(/\r?\n/);
     const pending = { lines, startIndex: 0, endIndex: lines.length };
@@ -134,6 +142,18 @@ export class LiveStream {
 
   connectionOpened(): void {
     this.restartRefreshTimer();
+  }
+
+  remoteExit(): Promise<void> {
+    return this.serialize(async () => {
+      if (!this.streaming && this.session.streamState !== "starting") return;
+      this.stopRefreshTimer();
+      this.session.clearPending();
+      this.session.resetParser();
+      this.setState("idle");
+      await liveTelemetry.streamingStopped();
+      this.appendConsole("[UI] Robot disconnected");
+    });
   }
 
   async connectionClosed(): Promise<void> {

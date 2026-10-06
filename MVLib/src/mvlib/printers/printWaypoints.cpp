@@ -1,6 +1,7 @@
 #include "mvlib/core.hpp"
 #include "mvlib/private/telemetry.hpp"
 #include "mvlib/private/raii.hpp"
+#include "mvlib/private/sdCsv.hpp"
 #include <cmath>
 
 namespace mvlib {
@@ -100,7 +101,7 @@ void Logger::printWaypoints() {
     // Log standard ANSI text to the SD card.
     if (m_config.logToSD.load()) {
       logToSD(LogLevel::OVERRIDE, "[WPOINT],%u,%s,%u,%s",
-              nowMs, statusStr ? statusStr : "", wp.id, wp.name.c_str());
+              nowMs, statusStr ? statusStr : "", wp.id, detail::escapeSdCsvField(wp.name).c_str());
     }
   }
 }

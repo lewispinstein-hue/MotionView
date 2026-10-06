@@ -255,7 +255,11 @@ export class PlanningSidebarView {
   }
 
   private bindSelectionField(input: HTMLInputElement, field: "x" | "y" | "theta" | "speed"): void {
-    input.addEventListener("focus", () => this.planning.history.begin("route"));
+    // Tracks whether the transaction currently open was the one this field's
+    // own focus began, so blur only ever commits/cancels its own transaction
+    // rather than one a canvas drag opened after taking over focus.
+    let ownsTransaction = false;
+    input.addEventListener("focus", () => { this.planning.history.begin("route"); ownsTransaction = true; });
     input.addEventListener("input", () => {
       const index = this.planning.selection.primaryWaypointIndex;
       const point = this.planning.selection.selectedWaypoint;
@@ -270,10 +274,19 @@ export class PlanningSidebarView {
       else this.planning.route.updateField(index, field, Math.max(-127, Math.min(127, value)));
       requestDrawAll();
     });
-    input.addEventListener("blur", () => this.planning.history.commit());
+    input.addEventListener("blur", () => {
+      if (!ownsTransaction) return;
+      ownsTransaction = false;
+      this.planning.history.commit();
+    });
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter") { event.preventDefault(); input.blur(); }
-      else if (event.key === "Escape") { event.preventDefault(); this.planning.history.cancel(); input.blur(); }
+      else if (event.key === "Escape") {
+        event.preventDefault();
+        ownsTransaction = false;
+        this.planning.history.cancel();
+        input.blur();
+      }
     });
   }
 

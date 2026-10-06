@@ -22,7 +22,10 @@ export class LiveView {
     this.live.events.connectionChanged.subscribe(() => this.renderControls());
     this.live.events.streamChanged.subscribe(() => this.renderControls());
     this.live.events.projectChanged.subscribe((event) => {
-      if (this.dom.projectInput && this.dom.projectInput.value !== event.path) this.dom.projectInput.value = event.path;
+      const input = this.dom.projectInput;
+      if (input && input.value !== event.path && document.activeElement !== input && input.value.trim() !== event.path) {
+        input.value = event.path;
+      }
       this.renderProject();
       this.renderControls();
     });

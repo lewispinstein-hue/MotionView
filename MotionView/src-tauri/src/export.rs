@@ -121,7 +121,11 @@ pub fn resolve_export_directory(
 }
 
 #[tauri::command]
-pub fn export_planning_code(path: String, contents: String) -> Result<ExportResult, String> {
+pub fn export_planning_code(
+    path: String,
+    contents: String,
+    overwrite: bool,
+) -> Result<ExportResult, String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
         return Err("export path is required".to_string());
@@ -144,6 +148,11 @@ pub fn export_planning_code(path: String, contents: String) -> Result<ExportResu
             "export parent is not a folder: {}",
             parent.display()
         ));
+    }
+    if !overwrite && export_path.exists() {
+        // A distinct, non-sentence error string so the frontend can recognize this case
+        // and offer an in-app overwrite confirmation instead of failing outright.
+        return Err("exists".to_string());
     }
     std::fs::write(&export_path, contents).map_err(|e| {
         format!(

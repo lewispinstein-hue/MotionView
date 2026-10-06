@@ -627,6 +627,12 @@ private:
       w.id = m_nextId++;
       w.label = std::move(label);
       w.elevatedLabel = ov.label;
+      if (w.elevatedLabel.size() > 24) {
+        Logger::getInstance().warn(
+          "[MVLIB] watch() elevated label \"%s\" exceeds 24 characters and will be truncated on the wire.",
+          w.elevatedLabel.c_str());
+        w.elevatedLabel.resize(24);
+      }
       w.baseLevel = baseLevel;
       w.intervalMs = intervalMs;
       w.onChange = onChange;

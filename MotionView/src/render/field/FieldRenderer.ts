@@ -1,9 +1,9 @@
 import { getMode } from "../../app/modeController";
 import { setStatus } from "../../app/status";
-import { isTauriRuntime, readImageData, resolveResourcePath, saveRobotImage } from "../../tauri/commands";
+import { isTauriRuntime, readImageData, resolveResourcePath, saveCustomFieldImage, saveRobotImage } from "../../tauri/commands";
 import { requestDrawAll } from "../renderScheduler";
 import { FieldRendererEvents } from "./FieldRendererEvents";
-import { getFieldBounds } from "./fieldImages";
+import { CUSTOM_FIELD_KEY, getFieldBounds } from "./fieldImages";
 import { configureFieldTransform } from "./fieldTransform";
 import { FieldSizeScaler } from "./FieldSizeScaler";
 import type { FieldBounds, FieldPose, PlanningFieldLayer, RobotDimensions, RobotImageTransform, ScreenPoint, ViewingFieldLayer } from "./fieldTypes";
@@ -46,6 +46,14 @@ export class FieldRenderer {
   declare hasFieldImage: () => boolean;
   declare setFieldRotationDeg: (deg: number) => void;
   declare loadFieldImage: (fieldKey: string) => Promise<void>;
+  declare hasCustomFieldImage: () => boolean;
+  declare loadCustomFieldImageFromFile: (file: File) => Promise<void>;
+  declare loadCustomFieldImageFromPath: (path: string | null) => Promise<void>;
+  declare getCustomFieldImagePath: () => string | null;
+  declare setCustomFieldImagePath: (path: string | null) => void;
+  declare getCustomFieldImageDataUrl: () => string | null;
+  declare setCustomFieldImageDataUrl: (dataUrl: string | null) => void;
+  declare setCustomFieldDimensions: (dimensions: Readonly<{ w: number; h: number }>) => void;
   declare loadRobotImage: () => void;
   declare loadRobotImageFromPath: (path: string | null) => Promise<void>;
   declare loadRobotImageFromDataUrl: (dataUrl: string | null) => void;
@@ -86,6 +94,10 @@ export class FieldRenderer {
   let robotImageEnabled = true;
   let robotImagePath: string | null = null;
   let robotImageDataUrl: string | null = null;
+  let customFieldImagePath: string | null = null;
+  let customFieldImageDataUrl: string | null = null;
+  let customFieldWidthIn = 144;
+  let customFieldHeightIn = 144;
   const robotImgTx: RobotImageTransform = { scale: 1, offXIn: 0, offYIn: 0, rotDeg: 0, alpha: 1 };
   let fieldRotationDeg = 0;
   let fieldRotationRad = 0;
@@ -286,26 +298,26 @@ export class FieldRenderer {
       ctx.globalAlpha = alpha * imgAlpha;
       ctx.translate(ox * scale, -oy * scale);
       ctx.rotate(r);
-      ctx.drawImage(robotImage, -(wPx * s) / 2, -(hPx * s) / 2, wPx * s, hPx * s);
+      ctx.drawImage(robotImage, -(hPx * s) / 2, -(wPx * s) / 2, hPx * s, wPx * s);
       ctx.restore();
     } else {
       ctx.fillStyle = "rgba(255,255,255,0.14)";
       ctx.strokeStyle = "rgba(255,255,255,0.85)";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.rect(-wPx / 2, -hPx / 2, wPx, hPx);
+      ctx.rect(-hPx / 2, -wPx / 2, hPx, wPx);
       ctx.fill();
       ctx.stroke();
 
       ctx.strokeStyle = "rgba(255,255,255,0.98)";
       ctx.beginPath();
-      ctx.moveTo(wPx / 2, -hPx / 2);
-      ctx.lineTo(wPx / 2, hPx / 2);
+      ctx.moveTo(hPx / 2, -wPx / 2);
+      ctx.lineTo(hPx / 2, wPx / 2);
       ctx.stroke();
     }
 
     const arrowSize = sizes.world({
-      width: wIn * 0.36,
+      width: hIn * 0.36,
       height: Math.min(wIn, hIn) * 0.28,
     });
     const arrowHeadLength = arrowSize.height * 0.8;
@@ -461,6 +473,35 @@ export class FieldRenderer {
         setStatus("No field image is available for the selected competition.");
         return;
       }
+      if (fieldKey === CUSTOM_FIELD_KEY) {
+        if (!customFieldImageDataUrl) {
+          fieldImg = null;
+          draw();
+          setStatus("No custom field image has been uploaded.");
+          return;
+        }
+        await new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            fieldImg = img;
+            const half = { w: customFieldWidthIn / 2, h: customFieldHeightIn / 2 };
+            fieldBounds = { minX: -half.w, maxX: half.w, minY: -half.h, maxY: half.h, pad: FIELD_BOUNDS_IN.pad };
+            bounds = { ...fieldBounds };
+            renderer.resizeCanvas();
+            requestDrawAll();
+            self.events.fieldImageLoaded.emit({ fieldKey });
+            resolve();
+          };
+          img.onerror = () => {
+            fieldImg = null;
+            draw();
+            setStatus("Could not load the custom field image.");
+            resolve();
+          };
+          img.src = customFieldImageDataUrl!;
+        });
+        return;
+      }
       let imgSrc = fieldKey;
       if (isTauriRuntime()) {
         try {
@@ -496,6 +537,73 @@ export class FieldRenderer {
         };
         img.src = imgSrc;
       });
+    },
+    hasCustomFieldImage() {
+      return !!(customFieldImagePath || customFieldImageDataUrl);
+    },
+    async loadCustomFieldImageFromFile(file: File) {
+      const supportedTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"]);
+      if (!supportedTypes.has(file.type)) {
+        alert("Please select a PNG, JPEG, GIF, WebP, or BMP image");
+        throw new Error("unsupported custom field image type");
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        alert("Custom field images must be 10 MB or smaller");
+        throw new Error("custom field image is too large");
+      }
+      customFieldImagePath = null;
+      await new Promise<void>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const dataUrl = typeof event.target?.result === "string" ? event.target.result : "";
+          customFieldImageDataUrl = dataUrl;
+          self.events.customFieldImageAvailabilityChanged.emit({ available: true });
+          try {
+            if (dataUrl) {
+              const savedPath = await saveCustomFieldImage(dataUrl);
+              if (savedPath) customFieldImagePath = String(savedPath);
+            }
+          } catch (saveErr) {
+            console.warn("Failed to persist custom field image to app data:", saveErr);
+          }
+          resolve();
+        };
+        reader.onerror = () => {
+          setStatus("Failed to read custom field image file.");
+          reject(new Error("failed to read custom field image file"));
+        };
+        reader.readAsDataURL(file);
+      });
+    },
+    async loadCustomFieldImageFromPath(path: string | null) {
+      if (!path) return;
+      try {
+        const dataUrl = await readImageData(path);
+        customFieldImageDataUrl = dataUrl;
+        customFieldImagePath = path;
+        self.events.customFieldImageAvailabilityChanged.emit({ available: true });
+      } catch (error) {
+        console.error("Failed to load custom field image from path:", error);
+        setStatus(`Failed to load custom field image from path: ${error instanceof Error ? error.message : error}`);
+      }
+    },
+    getCustomFieldImagePath() {
+      return customFieldImagePath;
+    },
+    setCustomFieldImagePath(path: string | null) {
+      customFieldImagePath = path;
+    },
+    getCustomFieldImageDataUrl() {
+      return customFieldImageDataUrl;
+    },
+    setCustomFieldImageDataUrl(dataUrl: string | null) {
+      customFieldImageDataUrl = dataUrl;
+    },
+    setCustomFieldDimensions(dimensions: Readonly<{ w: number; h: number }>) {
+      const w = Number(dimensions.w);
+      const h = Number(dimensions.h);
+      if (Number.isFinite(w) && w > 0) customFieldWidthIn = w;
+      if (Number.isFinite(h) && h > 0) customFieldHeightIn = h;
     },
     loadRobotImage() {
       if (robotImgLoadTried) return;

@@ -65,6 +65,20 @@ class MotionViewSerialDecoderTests(unittest.TestCase):
         decoder._parse_binary_frame(frame(decoder.MSG_TYPE_ROSTER, fresh_roster_payload))
         self.assertEqual(decoder.DEFAULT_ROSTER[7], "Fresh Label")
 
+    def test_keeps_a_partial_cobs_frame_with_an_in_band_newline(self) -> None:
+        # The timestamp's low byte survives COBS encoding as 0x0A.  Supplying
+        # only that prefix must not cause the decoder to mistake it for a text
+        # line delimiter and discard the rest of the binary pose packet.
+        payload = struct.pack("<HffHbb", 10, 1.0, 2.0, 0, 0, 0)
+        encoded = frame(decoder.MSG_TYPE_POSE, payload) + b"\0"
+        newline_index = encoded.index(b"\x0A")
+
+        self.assertEqual(decoder.decode_bytes_to_str(encoded[:newline_index + 1]), "")
+        self.assertEqual(
+            decoder.decode_bytes_to_str(encoded[newline_index + 1:]),
+            "[POSE],10,1.00,2.00,0.00,0,0\n",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

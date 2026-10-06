@@ -21,6 +21,10 @@ export function saveRobotImage(dataUrl: string): Promise<string | null> {
   return invokeCommand<string | null>("save_robot_image", { dataUrl });
 }
 
+export function saveCustomFieldImage(dataUrl: string): Promise<string | null> {
+  return invokeCommand<string | null>("save_custom_field_image", { dataUrl });
+}
+
 export function finalizeAppQuit(): Promise<void> {
   return invokeCommand<void>("finalize_app_quit");
 }
@@ -44,8 +48,8 @@ export function resolveExportDirectory(location: string, projectPath?: string): 
   });
 }
 
-export function exportPlanningCode(path: string, contents: string): Promise<FileExportResult> {
-  return invokeCommand<FileExportResult>("export_planning_code", { path, contents });
+export function exportPlanningCode(path: string, contents: string, overwrite = false): Promise<FileExportResult> {
+  return invokeCommand<FileExportResult>("export_planning_code", { path, contents, overwrite });
 }
 
 export function readSavedPaths(): Promise<string | null> { return invokeCommand<string | null>("read_saved_paths"); }

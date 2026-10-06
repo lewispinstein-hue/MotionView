@@ -13,6 +13,7 @@
   <header id="topBar" class="topBar">
     <input id="file" type="file" accept=".json,.txt,.log" style="display:none" />
     <input id="robotImageFile" type="file" accept=".png,.jpg,.jpeg,.gif,.webp,.bmp" style="display:none" />
+    <input id="customFieldImageFile" type="file" accept=".png,.jpg,.jpeg,.gif,.webp,.bmp" style="display:none" />
     <div class="topBarContent">
       <div class="topBarLeft">
         <div class="topBarControlGroup" aria-label="Field controls">
@@ -410,6 +411,27 @@
               <label class="settingsLabel" for="settingsShowPreviousYearFields">Show previous years' fields</label>
               <input id="settingsShowPreviousYearFields" type="checkbox"
                 style="width:18px;height:18px;cursor:pointer" />
+            </div>
+            <div class="divider" style="margin:10px 0;"></div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px" title="Upload your own field layout PNG to use instead of the built-in field images">
+              <button id="btnUploadCustomFieldImage" class="iconBtn secondaryBtn" style="font-size:12px">Upload
+                Custom Field Image</button>
+            </div>
+            <div id="settingsCustomFieldControls" class="imageControls" hidden>
+              <div class="grid2">
+                <div>
+                  <label class="fieldLabel">Field width (in)</label>
+                  <input id="settingsCustomFieldWidth" type="number" step="1" min="1" value="144"
+                    class="settingsInput" />
+                </div>
+                <div>
+                  <label class="fieldLabel">Field height (in)</label>
+                  <input id="settingsCustomFieldHeight" type="number" step="1" min="1" value="144"
+                    class="settingsInput" />
+                </div>
+              </div>
+              <p class="settingsDescription">Uploading selects the custom image in the Field dropdown. Width/height
+                set the real-world size of your image for scaling.</p>
             </div>
           </div>
         </div>

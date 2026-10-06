@@ -50,7 +50,7 @@ const topBar = new TopBarView(app, fieldRenderer, TopBarDom.from());
 
 const planningDom = PlanningDom.from();
 const planningDialogs = new PlanningDialogs(planningDom);
-const planningCodeExportDialog = new PlanningCodeExportDialog(app.planning, planningDom);
+const planningCodeExportDialog = new PlanningCodeExportDialog(app.planning, planningDom, planningDialogs);
 const planningView = new PlanningView(app.planning, fieldRenderer, planningDom, planningDialogs);
 const planningInput = new PlanningInput(app.planning, fieldRenderer, planningDialogs);
 
@@ -128,6 +128,7 @@ persistence.bind();
 planningLayout.changed.subscribe(() => layoutSettings.capture());
 viewingLayout.changed.subscribe(() => layoutSettings.capture());
 settingsView.robotImageRequested.subscribe(() => topBar.openRobotImagePicker());
+settingsView.customFieldImageRequested.subscribe(() => topBar.openCustomFieldImagePicker());
 app.live.events.projectChanged.subscribe(() => {
   planningCodeExportDialog.setProjectPath(app.live.project.valid ? app.live.project.path : "");
 });
@@ -135,6 +136,7 @@ app.live.events.projectChanged.subscribe(() => {
 topBar.events.actionRequested.subscribe((action) => {
   if (action.kind === "file-selected") void importer.openFile(action.file, action.input);
   else if (action.kind === "robot-image-selected") void fieldSettings.handleRobotImageFile(action.file, action.input);
+  else if (action.kind === "custom-field-image-selected") void fieldSettings.handleCustomFieldImageFile(action.file, action.input);
   else if (action.kind === "clear-requested") void (action.clearAll ? appCommands.clearAll() : appCommands.clearCurrent());
   else if (action.kind === "settings-requested") {
     if (app.live.project.path && !app.live.project.valid) void app.live.project.validate();

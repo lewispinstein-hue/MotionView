@@ -27,6 +27,11 @@ export const FIELD_IMAGES: readonly FieldOption[] = [
 
 export const DEFAULT_FIELD_KEY = FIELD_IMAGES[7].key; // Temporarily 7 until a demo route for override is made
 
+/** Reserved field key selecting the user's own uploaded field image (see FieldRenderer). */
+export const CUSTOM_FIELD_KEY = "custom-field-image";
+
+export const CUSTOM_FIELD_OPTION: FieldOption = { key: CUSTOM_FIELD_KEY, label: "Custom Field Image" };
+
 export function normalizeFieldCompetition(value: unknown): FieldCompetition {
   return value === "vU" || value === "v5" || value === "iq" ? value : "all";
 }
@@ -38,12 +43,14 @@ export function isFieldCurrentYear(field: FieldOption): boolean {
 export function getVisibleFieldImages(options: {
   competition: FieldCompetition;
   showPreviousYearFields: boolean;
+  hasCustomFieldImage?: boolean;
 }): readonly FieldOption[] {
-  return FIELD_IMAGES.filter((field) => {
+  const fields = FIELD_IMAGES.filter((field) => {
     if (options.competition !== "all" && field.comp !== options.competition) return false;
     if (options.showPreviousYearFields) return true;
     return isFieldCurrentYear(field) || field.label.includes("Field Perimeter");
   });
+  return options.hasCustomFieldImage ? [...fields, CUSTOM_FIELD_OPTION] : fields;
 }
 
 export function getValidFieldKey(
@@ -51,6 +58,7 @@ export function getValidFieldKey(
   options: {
     competition: FieldCompetition;
     showPreviousYearFields: boolean;
+    hasCustomFieldImage?: boolean;
   },
 ): string {
   const visibleFields = getVisibleFieldImages(options);

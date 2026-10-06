@@ -95,7 +95,9 @@ export class LiveConnection {
         resolve(true);
       });
       socket.addEventListener("message", (event) => {
+        if (this.session.socket !== socket) return;
         if (typeof event.data !== "string" || !this.stream.acceptingData) return;
+        if (event.data.startsWith("[UI] terminal exited")) void this.stream.remoteExit();
         const tagged = this.parser.classify(event.data);
         if (tagged) this.session.pending.push(tagged);
         const parsedWaypoint = tagged.startsWith("[WPOINT],") ? this.parser.parseWaypointLine(tagged) : null;
@@ -107,11 +109,17 @@ export class LiveConnection {
         this.appendConsole(`${color}|\x1b[0m ${displayLine}`);
       });
       socket.addEventListener("error", () => {
+        if (this.session.socket !== socket) return;
         this.appendConsole("[WS] error");
       });
       socket.addEventListener("close", () => {
+        if (this.session.socket !== socket) {
+          clearTimeout(timeout);
+          if (!settled) { settled = true; resolve(false); }
+          return;
+        }
         clearTimeout(timeout);
-        if (this.session.socket === socket) this.session.socket = null;
+        this.session.socket = null;
         const wasActive = this.state !== "disconnected";
         void this.stream.connectionClosed().finally(() => {
           this.setState("disconnected");

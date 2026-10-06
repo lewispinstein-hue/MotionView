@@ -2,6 +2,7 @@
 #include "mvlib/private/telemetry.hpp"
 #include "mvlib/waypoint.hpp"
 #include "mvlib/private/raii.hpp"
+#include "mvlib/private/sdCsv.hpp"
 #include <limits>
 #include <cmath>
 #include <cstdio>
@@ -143,7 +144,7 @@ WaypointHandle Logger::internalRegisterWaypoint(std::string name, WaypointParams
 
 void Logger::logWaypointCreatedToSD(const InternalWaypoint& waypoint) {
   logToSD(LogLevel::OVERRIDE, "[WPOINT],%u,CREATED,%u,%s,%s",
-          waypoint.startTimeMs, waypoint.id, waypoint.name.c_str(),
+          waypoint.startTimeMs, waypoint.id, detail::escapeSdCsvField(waypoint.name).c_str(),
           formatParams(waypoint.params).c_str());
 }
 

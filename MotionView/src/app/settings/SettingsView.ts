@@ -5,6 +5,7 @@ import type { SettingsDom } from "./SettingsDom";
 
 export class SettingsView {
   readonly robotImageRequested = new TypedEvent<Record<string, never>>();
+  readonly customFieldImageRequested = new TypedEvent<Record<string, never>>();
   #bound = false;
 
   constructor(private readonly field: FieldRenderer, private readonly dom: SettingsDom) {}
@@ -15,6 +16,7 @@ export class SettingsView {
     this.close();
     this.dom.closeButton.addEventListener("click", () => this.close());
     this.dom.uploadRobotImageButton.addEventListener("click", () => this.robotImageRequested.emit({}));
+    this.dom.uploadCustomFieldImageButton.addEventListener("click", () => this.customFieldImageRequested.emit({}));
     bindModalBackdropDismissal(this.dom.modal, () => this.close());
     window.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || !this.isOpen) return;
@@ -28,6 +30,7 @@ export class SettingsView {
 
   open(): void {
     this.refreshRobotImageAvailability();
+    this.refreshCustomFieldImageAvailability();
     this.dom.modal.removeAttribute("hidden");
     this.dom.modal.style.display = "flex";
     requestAnimationFrame(() => this.dom.modal.querySelector<HTMLElement>(".modalCard")?.focus());
@@ -43,5 +46,9 @@ export class SettingsView {
     this.dom.robotImageToggle.checked = this.field.isRobotImageEnabled();
     this.dom.robotImageControls.hidden = !(available && this.field.isRobotImageEnabled());
     if (this.dom.sidebarRobotImageControls) this.dom.sidebarRobotImageControls.hidden = !available;
+  }
+
+  refreshCustomFieldImageAvailability(): void {
+    this.dom.customFieldControls.hidden = !this.field.hasCustomFieldImage();
   }
 }
