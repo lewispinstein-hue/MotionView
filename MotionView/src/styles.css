@@ -3593,6 +3593,27 @@ body:not(.mode-planning) #rightPlanning {
   line-height: 1.45;
 }
 
+.planConfirmDontShowAgain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.planConfirmDontShowAgain[hidden] {
+  display: none;
+}
+
+.planConfirmDontShowAgain input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+}
+
 /* Remove ugly native select styling */
 .settingsSelect {
   appearance: none;

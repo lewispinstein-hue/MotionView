@@ -81,11 +81,11 @@ export class RouteImportService {
 
   async loadCapture(text: string): Promise<RouteImportResult> {
     if (text.length > MAX_IMPORT_BYTES) throw new Error("Capture is too large to import");
-    if (!this.app.live.captureHasData(text)) throw new Error("No poses, watches, logs, waypoints, or planning data found in file.");
-    if (this.app.planning.hasData && !await this.dialogs.confirm({ title: "Replace Planning Route", message: "Importing this capture will clear the current planning route. Continue?", confirmLabel: "Replace" })) {
-      this.app.core.status.setStatus("Import cancelled."); return { type: "text-cancelled", loaded: false };
-    }
-    this.app.planning.clear(); this.app.live.loadCapture(text);
+    if (!this.app.live.captureHasData(text)) throw new Error("No poses, watches, logs, or waypoints found in file.");
+    // Capture files only carry viewing telemetry. Preserve the user's planning
+    // route; a JSON import with planned-path data is the explicit replacement
+    // path and handles its own confirmation above.
+    this.app.live.loadCapture(text);
     this.finalize(); return { type: "text", loaded: true };
   }
 

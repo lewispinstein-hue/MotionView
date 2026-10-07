@@ -51,6 +51,8 @@ export class PlanningDom {
   readonly confirmModal: HTMLElement;
   readonly confirmTitle: HTMLElement;
   readonly confirmMessage: HTMLElement;
+  readonly confirmDontShowAgainRow: HTMLElement;
+  readonly confirmDontShowAgain: HTMLInputElement;
   readonly confirmClose: HTMLButtonElement;
   readonly confirmCancel: HTMLButtonElement;
   readonly confirmButton: HTMLButtonElement;
@@ -111,6 +113,8 @@ export class PlanningDom {
     this.confirmModal = requiredElement(document, "planObjectDeleteModal");
     this.confirmTitle = requiredElement(document, "planObjectDeleteTitle");
     this.confirmMessage = requiredElement(document, "planObjectDeleteMessage");
+    this.confirmDontShowAgainRow = requiredElement(document, "planConfirmDontShowAgainRow");
+    this.confirmDontShowAgain = requiredElement(document, "planConfirmDontShowAgain");
     this.confirmClose = requiredElement(document, "btnPlanObjectDeleteClose");
     this.confirmCancel = requiredElement(document, "btnPlanObjectDeleteCancel");
     this.confirmButton = requiredElement(document, "btnPlanObjectDeleteConfirm");

@@ -39,6 +39,7 @@ export interface MotionViewSettings {
   readonly customFieldImage?: PersistedRobotImage;
   readonly customFieldWidthIn?: string | number;
   readonly customFieldHeightIn?: string | number;
+  readonly skipPlanningCodeExportOverwriteConfirmation?: boolean;
   readonly fieldRotation?: string | number;
   readonly layoutLeftSidebarWidth?: number;
   readonly layoutRightSidebarWidthViewing?: number;
@@ -87,6 +88,7 @@ export const DEFAULT_SETTINGS: Readonly<MotionViewSettings> = {
   customFieldImage: { path: null, dataUrl: null },
   customFieldWidthIn: 144,
   customFieldHeightIn: 144,
+  skipPlanningCodeExportOverwriteConfirmation: false,
   layoutLeftSidebarWidth: 360,
   layoutRightSidebarWidthViewing: 370,
   layoutRightSidebarWidthPlanning: 370,

@@ -8,9 +8,16 @@ const server = await createServer({
   appType: "custom",
 });
 
+const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+globalThis.requestAnimationFrame = (callback) => {
+  callback(Date.now());
+  return 0;
+};
+
 try {
   const { LiveLineParser } = await server.ssrLoadModule("/live/LiveLineParser.ts");
   const { ViewingFeature } = await server.ssrLoadModule("/viewing/ViewingFeature.ts");
+  const { RouteImportService } = await server.ssrLoadModule("/app/import/RouteImportService.ts");
 
   {
     const viewing = new ViewingFeature();
@@ -80,7 +87,33 @@ try {
     );
   }
 
+  {
+    let planningCleared = false;
+    let captureLoaded = false;
+    let fieldEnabled = false;
+    const importer = new RouteImportService({
+      planning: {
+        hasData: true,
+        clear() { planningCleared = true; },
+      },
+      live: {
+        captureHasData: () => true,
+        loadCapture() { captureLoaded = true; },
+      },
+    }, {}, {
+      setFieldEnabled() { fieldEnabled = true; },
+    }, "");
+
+    const result = await importer.loadCapture("[POSE],0,1,2,0,0,0");
+    assert.equal(result.loaded, true);
+    assert.equal(captureLoaded, true);
+    assert.equal(planningCleared, false, "viewing-only captures must preserve the planning route");
+    assert.equal(fieldEnabled, true);
+  }
+
   console.log("Live-stream regression tests passed.");
 } finally {
+  if (originalRequestAnimationFrame) globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+  else delete globalThis.requestAnimationFrame;
   await server.close();
 }

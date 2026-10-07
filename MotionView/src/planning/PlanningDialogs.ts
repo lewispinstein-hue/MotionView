@@ -9,6 +9,12 @@ export interface PlanningConfirmOptions {
   readonly confirmLabel?: string;
   readonly cancelLabel?: string;
   readonly hideCancel?: boolean;
+  readonly showDontShowAgain?: boolean;
+}
+
+export interface PlanningConfirmResult {
+  readonly confirmed: boolean;
+  readonly dontShowAgain: boolean;
 }
 
 export interface PlanningEditorOptions {
@@ -33,7 +39,7 @@ export interface PlanningEditorResult {
 
 /** Owns Planning modal state and resolves each modal interaction exactly once. */
 export class PlanningDialogs {
-  #confirmResolver: ((confirmed: boolean) => void) | null = null;
+  #confirmResolver: ((result: PlanningConfirmResult) => void) | null = null;
   #editorResolver: ((result: PlanningEditorResult | null) => void) | null = null;
   #editorUsesName = false;
   #editorUsesCode = true;
@@ -64,6 +70,10 @@ export class PlanningDialogs {
   }
 
   confirm(options: PlanningConfirmOptions): Promise<boolean> {
+    return this.confirmWithResult(options).then((result) => result.confirmed);
+  }
+
+  confirmWithResult(options: PlanningConfirmOptions): Promise<PlanningConfirmResult> {
     this.closeConfirm(false);
     this.#confirmResolver = null;
     this.dom.confirmTitle.textContent = options.title ?? "Confirm";
@@ -71,6 +81,8 @@ export class PlanningDialogs {
     this.dom.confirmButton.textContent = options.confirmLabel ?? "Confirm";
     this.dom.confirmCancel.textContent = options.cancelLabel ?? "Cancel";
     this.dom.confirmCancel.hidden = options.hideCancel === true;
+    this.dom.confirmDontShowAgain.checked = false;
+    this.dom.confirmDontShowAgainRow.hidden = options.showDontShowAgain !== true;
     this.show(this.dom.confirmModal, this.dom.confirmModal.querySelector<HTMLElement>(".modalCard"));
     return new Promise((resolve) => { this.#confirmResolver = resolve; });
   }
@@ -128,8 +140,11 @@ export class PlanningDialogs {
     const resolve = this.#confirmResolver;
     this.#confirmResolver = null;
     this.dom.confirmCancel.hidden = false;
+    const dontShowAgain = result && !this.dom.confirmDontShowAgainRow.hidden && this.dom.confirmDontShowAgain.checked;
+    this.dom.confirmDontShowAgain.checked = false;
+    this.dom.confirmDontShowAgainRow.hidden = true;
     this.hide(this.dom.confirmModal);
-    resolve?.(result);
+    resolve?.({ confirmed: result, dontShowAgain });
   }
 
   private closeEditor(result: PlanningEditorResult | null): void {

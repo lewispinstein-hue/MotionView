@@ -5,6 +5,7 @@ import { planningTelemetry } from "../telemetry/createTelemetry";
 import type { PlanningDialogs } from "./PlanningDialogs";
 import type { PlanningDom } from "./PlanningDom";
 import type { PlanningFeature } from "./PlanningFeature";
+import type { SettingsFeature } from "../app/settings";
 import { generatePlanningCode } from "./planningCode";
 import { bindModalBackdropDismissal } from "../app/dialogs/modalDismissal";
 
@@ -28,6 +29,7 @@ export class PlanningCodeExportDialog {
     private readonly planning: PlanningFeature,
     private readonly dom: PlanningDom,
     private readonly dialogs: PlanningDialogs,
+    private readonly appSettings: SettingsFeature,
   ) {}
 
   bind(): void {
@@ -137,20 +139,25 @@ export class PlanningCodeExportDialog {
     const contents = sections.join("\n");
     this.dom.codeExportConfirm.disabled = true;
     try {
-      let overwrite = false;
+      let overwrite = this.appSettings.current.skipPlanningCodeExportOverwriteConfirmation === true;
       try {
         await exportPlanningCode(path, contents, overwrite);
       } catch (error) {
         if ((error instanceof Error ? error.message : String(error)) !== "exists") throw error;
         const filename = path.split(/[\\/]/).pop() || path;
-        const confirmed = await this.dialogs.confirm({
+        const result = await this.dialogs.confirmWithResult({
           title: "Replace File",
           message: `${filename} already exists. Replace it?`,
           confirmLabel: "Replace",
+          showDontShowAgain: true,
         });
-        if (!confirmed) {
+        if (!result.confirmed) {
           this.dom.codeExportValidation.textContent = "";
           return;
+        }
+        if (result.dontShowAgain) {
+          this.appSettings.update({ skipPlanningCodeExportOverwriteConfirmation: true });
+          await this.appSettings.saveNow();
         }
         overwrite = true;
         await exportPlanningCode(path, contents, overwrite);
