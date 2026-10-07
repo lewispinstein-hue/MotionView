@@ -3351,6 +3351,24 @@ body:not(.mode-planning) #rightPlanning {
   color: currentColor;
 }
 
+@keyframes planCopyCodeSuccess {
+  from {
+    background: rgba(63, 194, 118, 0.86);
+    color: #f4fff8;
+    box-shadow: 0 0 0 1px rgba(100, 235, 150, 0.34), 0 0 18px rgba(63, 194, 118, 0.3);
+  }
+
+  to {
+    background: rgba(255, 255, 255, 0.075);
+    color: #e9eef7;
+    box-shadow: none;
+  }
+}
+
+#rightPlanning #btnPlanCopyCode.isCopySuccess {
+  animation: planCopyCodeSuccess 750ms ease-out;
+}
+
 #rightPlanning #btnPlanExportCode svg {
   width: 24px;
   height: 24px;

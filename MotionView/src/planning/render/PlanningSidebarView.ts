@@ -32,6 +32,7 @@ export class PlanningSidebarView {
   #editingObjectId: string | null = null;
   #selectObjectName = false;
   #openColorObjectId: string | null = null;
+  #copySuccessTimer: number | null = null;
   #bound = false;
 
   constructor(
@@ -363,6 +364,7 @@ export class PlanningSidebarView {
     }
     try {
       await navigator.clipboard.writeText(code);
+      this.flashCopySuccess();
       setStatus(`Copied generated code for ${data.waypoints.length} waypoint${data.waypoints.length === 1 ? "" : "s"}.`);
       void planningTelemetry.templateExported(this.planning.telemetryProperties({
         export_surface: "clipboard",
@@ -371,6 +373,17 @@ export class PlanningSidebarView {
     } catch (error) {
       setStatus(`Failed to copy code: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  private flashCopySuccess(): void {
+    if (this.#copySuccessTimer !== null) window.clearTimeout(this.#copySuccessTimer);
+    this.dom.copyCode.classList.remove("isCopySuccess");
+    void this.dom.copyCode.offsetWidth;
+    this.dom.copyCode.classList.add("isCopySuccess");
+    this.#copySuccessTimer = window.setTimeout(() => {
+      this.dom.copyCode.classList.remove("isCopySuccess");
+      this.#copySuccessTimer = null;
+    }, 750);
   }
 
   private commitObjectName(id: string, name: string): void {
