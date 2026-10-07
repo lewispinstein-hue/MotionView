@@ -159,5 +159,5 @@ export function getPlanMethodNumber(objects: readonly PlanningObjectView[], obje
 export function getPlanMethodTooltipName(name: unknown): string {
   const value = String(name || "").trim();
   if (!value) return "Method";
-  return value.length > 10 ? `${value.slice(0, 10)}…` : value;
+  return value.length > 24 ? `${value.slice(0, 24)}…` : value;
 }

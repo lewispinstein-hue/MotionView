@@ -17,6 +17,8 @@ try {
   const { buildPlanExportCode } = await server.ssrLoadModule("/planning/planningTemplate.ts");
   const { generatePlanningCode } = await server.ssrLoadModule("/planning/planningCode.ts");
   const { PlanningFeature } = await server.ssrLoadModule("/planning/PlanningFeature.ts");
+  const { getPlanMethodTooltipName } = await server.ssrLoadModule("/planning/planningObjects.ts");
+  const { constrainTimelineTooltipPosition } = await server.ssrLoadModule("/planning/render/PlanningTimelineView.ts");
   const waypoints = [
     { x: 0, y: 0, theta: 0, speed: 11 },
     { x: 0, y: 5, theta: 270, speed: 22, overrideCode: "segment(${iteration},${x},${y},${theta},${distance},${speed},${forwards});" },
@@ -120,6 +122,17 @@ try {
   });
   assert.equal(terminalNodePlanning.timeline.nodes[0]?.beforeWaypoint, 2);
   assert.equal(terminalNodePlanning.timeline.insert("object", "method", 3, 0)?.beforeWaypoint, 2);
+
+  assert.equal(getPlanMethodTooltipName("123456789012345678901234"), "123456789012345678901234");
+  assert.equal(getPlanMethodTooltipName("1234567890123456789012345"), "123456789012345678901234…");
+  assert.deepEqual(
+    constrainTimelineTooltipPosition(4, 4, 180, 40, 300, 200),
+    { left: 16, top: 16 },
+  );
+  assert.deepEqual(
+    constrainTimelineTooltipPosition(295, 195, 180, 40, 300, 200),
+    { left: 112, top: 152 },
+  );
 
   const legacyPlanning = new PlanningFeature();
   legacyPlanning.load({

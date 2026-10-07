@@ -1191,7 +1191,6 @@ label {
   left: 0;
   top: 0;
   z-index: 140;
-  max-width: 220px;
   padding: 6px 9px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
@@ -1199,7 +1198,10 @@ label {
   color: #e6eef8;
   font-size: 12px;
   line-height: 1.35;
-  white-space: nowrap;
+  max-width: min(220px, calc(100vw - 16px));
+  box-sizing: border-box;
+  white-space: normal;
+  overflow-wrap: anywhere;
   pointer-events: none;
   opacity: 0;
   transform: translateY(4px);

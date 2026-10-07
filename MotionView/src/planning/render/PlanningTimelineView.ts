@@ -21,6 +21,8 @@ const INSERT_HALF = (NODE_WIDTH + NODE_GAP) / 2;
 const WAYPOINT_MIN_GAP = 48;
 const PLAN_PIXELS_PER_INCH = 2;
 const MAX_PLAN_LENGTH_WIDTH = 8_000;
+const TOOLTIP_OFFSET = 12;
+const TOOLTIP_EDGE_INSET = 8;
 
 // Animation timings
 const NODE_SHIFT_MS = 320;
@@ -63,6 +65,22 @@ type TimelineNodeAnimation =
 interface TimelineExitAnimation extends TimelineNodeSnapshot {
   readonly start: number;
   readonly duration: number;
+}
+
+export function constrainTimelineTooltipPosition(
+  pointerX: number,
+  pointerY: number,
+  tooltipWidth: number,
+  tooltipHeight: number,
+  viewportWidth = window.innerWidth,
+  viewportHeight = window.innerHeight,
+): Readonly<{ left: number; top: number }> {
+  const maxLeft = Math.max(TOOLTIP_EDGE_INSET, viewportWidth - tooltipWidth - TOOLTIP_EDGE_INSET);
+  const maxTop = Math.max(TOOLTIP_EDGE_INSET, viewportHeight - tooltipHeight - TOOLTIP_EDGE_INSET);
+  return {
+    left: Math.max(TOOLTIP_EDGE_INSET, Math.min(pointerX + TOOLTIP_OFFSET, maxLeft)),
+    top: Math.max(TOOLTIP_EDGE_INSET, Math.min(pointerY + TOOLTIP_OFFSET, maxTop)),
+  };
 }
 
 export class PlanningTimelineView {
@@ -540,8 +558,14 @@ export class PlanningTimelineView {
   }
 
   private positionTooltip(x: number, y: number): void {
-    this.dom.nodeTooltip.style.left = `${x + 12}px`;
-    this.dom.nodeTooltip.style.top = `${y + 12}px`;
+    const position = constrainTimelineTooltipPosition(
+      x,
+      y,
+      this.dom.nodeTooltip.offsetWidth,
+      this.dom.nodeTooltip.offsetHeight,
+    );
+    this.dom.nodeTooltip.style.left = `${position.left}px`;
+    this.dom.nodeTooltip.style.top = `${position.top}px`;
   }
 
   private hideTooltip(): void {
