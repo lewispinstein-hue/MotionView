@@ -383,7 +383,7 @@ export class PlanningSidebarView {
     this.#copySuccessTimer = window.setTimeout(() => {
       this.dom.copyCode.classList.remove("isCopySuccess");
       this.#copySuccessTimer = null;
-    }, 750);
+    }, 1250);
   }
 
   private commitObjectName(id: string, name: string): void {

@@ -3366,7 +3366,7 @@ body:not(.mode-planning) #rightPlanning {
 }
 
 #rightPlanning #btnPlanCopyCode.isCopySuccess {
-  animation: planCopyCodeSuccess 750ms ease-out;
+  animation: planCopyCodeSuccess 1250ms ease-out;
 }
 
 #rightPlanning #btnPlanExportCode svg {
