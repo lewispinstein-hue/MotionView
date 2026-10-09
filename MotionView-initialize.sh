@@ -45,6 +45,46 @@ command_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
+linux_dbus_install_command() {
+  local distro_id=""
+  if [ -r /etc/os-release ]; then
+    # /etc/os-release is the standard distribution identity file.
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    distro_id="${ID:-}"
+  fi
+
+  case "$distro_id" in
+    debian|ubuntu|linuxmint|pop)
+      printf '%s' 'sudo apt update && sudo apt install libdbus-1-dev pkg-config'
+      ;;
+    fedora|rhel|centos|rocky|almalinux)
+      printf '%s' 'sudo dnf install dbus-devel pkgconf-pkg-config'
+      ;;
+    arch|manjaro|endeavouros)
+      printf '%s' 'sudo pacman -S --needed dbus pkgconf'
+      ;;
+    opensuse*|sles)
+      printf '%s' 'sudo zypper install dbus-1-devel pkg-config'
+      ;;
+    *)
+      printf '%s' 'install your distribution’s DBus development package and pkg-config'
+      ;;
+  esac
+}
+
+check_linux_tauri_dependencies() {
+  [ "$(uname -s)" = "Linux" ] || return
+
+  if ! command_exists pkg-config; then
+    die "Linux source builds require pkg-config and the DBus development files because MotionView's single-instance plugin uses DBus. Run: $(linux_dbus_install_command)"
+  fi
+
+  if ! pkg-config --exists 'dbus-1 >= 1.6'; then
+    die "The DBus development files are missing. MotionView's Linux single-instance plugin needs dbus-1.pc; PKG_CONFIG_PATH does not need to be set after the distribution package is installed. Run: $(linux_dbus_install_command)"
+  fi
+}
+
 for arg in "$@"; do
   case "$arg" in
     --build-sidecars)
@@ -68,6 +108,8 @@ for arg in "$@"; do
 done
 
 [ -d "$APP_DIR" ] || die "MotionView directory not found at $APP_DIR"
+
+check_linux_tauri_dependencies
 
 PYTHON_BIN="${PYTHON:-}"
 if [ "$SKIP_PYTHON" -eq 0 ] && [ -z "$PYTHON_BIN" ]; then
