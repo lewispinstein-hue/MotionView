@@ -92,7 +92,7 @@ export class LiveLineParser {
       const line = stripToTag(pending.lines[index] ?? "");
       if (!line.startsWith("[START],")) continue;
       const parts = parseCsvLine(line);
-      const timestamp = parts?.length === 2 ? parseViewingNumber(parts[1]) : null;
+      const timestamp = parts && parts.length >= 2 ? parseViewingNumber(parts[1]) : null;
       if (timestamp == null || !Number.isSafeInteger(timestamp) || timestamp < 0) continue;
       startIndex = index + 1;
       startsNewRun = true;

@@ -1,20 +1,30 @@
 #pragma once
 
 /**
- * @file telemetry.hpp
+ * @file terminalOut.hpp
  * @brief Internal MVLib telemetry engine
  */
 
-#include "mvlib/core.hpp"
+#include "mvlib/types.hpp"
+#include "mvlib/watches.hpp"
+#include "mvlib/waypoint.hpp"
+#include "mvlib/private/getOdomProvider.hpp"
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cmath>
+#include <memory>
+#include "pros/rtos.hpp"
 #include <string>
 
 namespace mvlib {
 namespace detail {
 inline constexpr size_t kTelemetryMaxTextBytes = 511;
+
+enum class LogSource : uint8_t {
+  USER    = 0x00,
+  SYSTEM  = 0x01
+};
 
 /**
  * @enum MsgType
@@ -93,6 +103,8 @@ struct __attribute__((packed)) LogPacketHeader {
  */
 struct __attribute__((packed)) StartPacket {
   uint32_t timestamp;
+  OdomProvider provider;
+  uint32_t version;
 };
 
 static_assert(sizeof(PosePacket) == 14, "PosePacket layout changed");
@@ -102,7 +114,7 @@ static_assert(sizeof(WatchPacket) == 8, "WatchPacket layout changed");
 static_assert(sizeof(WatchTextPacketHeader) == 4, "WatchTextPacketHeader layout changed");
 static_assert(sizeof(RosterPacket) == 26, "RosterPacket layout changed");
 static_assert(sizeof(LogPacketHeader) == 2, "LogPacketHeader layout changed");
-static_assert(sizeof(StartPacket) == 4, "StartPacket layout changed");
+static_assert(sizeof(StartPacket) == 9, "StartPacket layout changed");
 
 class Telemetry {
 public:
@@ -111,13 +123,13 @@ public:
   bool shouldLog(LogLevel level) const;
 
   void sendPose(const PosePacket& pkt);
-  void sendStart(uint32_t timestamp);
+  void sendStart(uint32_t timestamp, OdomProvider provider, uint32_t version);
   void sendWaypointCreated(const WaypointCreatedPacket& pkt);
   void sendWaypointStatus(WPId id, uint8_t subType); // 2=Reached, 3=TimedOut
   void sendWatch(WatchId id, LogLevel lvl, float val, bool tripped);
   void sendWatchText(WatchId id, LogLevel lvl, const std::string& text, bool tripped);
   void sendRoster(uint16_t id, const std::string& name, bool isElevated = false);
-  void sendLog(LogLevel level, const char *fmt, ...);
+  void sendLog(LogLevel level, LogSource source, const char *fmt, ...);
   void notifyTransmitTask();
 
 private:
@@ -131,4 +143,4 @@ private:
   void transmit(uint8_t header, const uint8_t *data, size_t len); // Use raw header
 };
 } // namespace mvlib
-} // namespace telemetry
+} // namespace detail

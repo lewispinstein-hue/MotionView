@@ -1,5 +1,5 @@
 #include "mvlib/core.hpp"
-#include "mvlib/private/telemetry.hpp"
+#include "mvlib/private/terminalOut.hpp"
 #include "mvlib/private/raii.hpp"
 #include <cerrno>
 #include <cmath>

@@ -12,8 +12,9 @@
 #ifndef _MVLIB_OPTIONAL_USED
 #define _MVLIB_OPTIONAL_USED "okapi"
 #include "mvlib/core.hpp" // IWYU pragma: keep
-#include "okapi/api.h" // IWYU pragma: keep
 #include "mvlib/types.hpp" // IWYU pragma: keep
+#include "mvlib/private/getOdomProvider.hpp"
+#include "okapi/api.h" // IWYU pragma: keep
 
 #include <optional>
 
@@ -70,7 +71,7 @@ inline void setOdom(okapi::OdomChassisController *chassis,
     const float thDeg = s.theta.convert(okapi::deg);
 
     return Pose{xIn, yIn, thDeg};
-  });
+  }, detail::OdomProvider::okApi);
 }
 } //
 #endif // _MVLIB_OPTIONAL_USED

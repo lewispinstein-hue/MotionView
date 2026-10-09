@@ -13,12 +13,12 @@
 #define _MVLIB_OPTIONAL_USED "ezTemplate"
 #include "mvlib/core.hpp" // IWYU pragma: keep
 #include "mvlib/types.hpp" // IWYU pragma: keep
+#include "mvlib/private/getOdomProvider.hpp"
 #include "EZ-Template/api.hpp"  // IWYU pragma: keep
 
 #include <optional>
 
 namespace mvlib {
-
 /**
  * @brief Attach EZ-Template odometry to the Logger.
  *
@@ -55,7 +55,7 @@ inline void setOdom(ez::Drive *chassis) {
     const float thDeg = chassis->odom_theta_get();
 
     return Pose{xIn, yIn, thDeg};
-  });
+  }, detail::OdomProvider::ezTemplate);
 }
 } // namespace mvlib
 #endif // _MVLIB_OPTIONAL_USED

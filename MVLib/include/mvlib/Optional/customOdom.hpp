@@ -13,12 +13,12 @@
 #define _MVLIB_OPTIONAL_USED "customOdom"
 #include "mvlib/core.hpp" // IWYU pragma: keep
 #include "mvlib/types.hpp"
+#include "mvlib/private/getOdomProvider.hpp"
 
 #include <optional>
 #include <type_traits>
 
 namespace mvlib {
-
 /**
  * @brief Attach an arbitrary pose/odometry getter to the Logger.
  *
@@ -74,7 +74,7 @@ inline void setOdom(Fn&& poseGetter) {
   auto getter = std::forward<Fn>(poseGetter);
   mvlib::Logger::getInstance().setPoseGetter([getter = std::move(getter)]() mutable -> std::optional<Pose> {
     return getter();
-  });
+  }, detail::OdomProvider::custom);
 }
 
 template <class Fn>

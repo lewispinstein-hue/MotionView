@@ -1,10 +1,9 @@
 #include "mvlib/core.hpp"
-#include "mvlib/private/telemetry.hpp"
-#include "mvlib/types.hpp"
-#define _MVLIB_PREVENT_MACRO_CLEANUP
-#include "mvlib/private/forwardLogMacros.h"
+#include "mvlib/private/getOdomProvider.hpp"
 #include "mvlib/private/raii.hpp"
 #include "mvlib/private/sdSink.hpp"
+#include "mvlib/private/terminalOut.hpp"
+#include "mvlib/types.hpp"
 
 #include <cstdio>
 
@@ -12,43 +11,54 @@ namespace mvlib {
 
 void Logger::setLogToTerminal(bool v) {
   m_config.logToTerminal.store(v);
-  _MVLIB_FORWARD_DEBUG("logToTerminal() set to: %d", v);
+  logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
+             "logToTerminal() set to: %d", v);
 }
 
 void Logger::setLogToSD(bool v) {
   detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
-  if (!lock.isLocked()) return;
+  if (!lock.isLocked())
+    return;
 
   if (m_started.load() || m_sdSink->locked()) {
-    _MVLIB_FORWARD_WARN("setLogToSD() called after logger start — ignored. Set value: %d", v);
+    logMessage(
+        LogLevel::WARN, detail::LogSource::SYSTEM,
+        "setLogToSD() called after logger start — ignored. Set value: %d", v);
+
     return;
   }
   m_config.logToSD.store(v);
-  _MVLIB_FORWARD_DEBUG("logToSD set to: %d", v);
+  logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM, "logToSD set to: %d",
+             v);
 }
 
 void Logger::setPrintWatches(bool v) {
   m_config.printWatches.store(v);
-  _MVLIB_FORWARD_DEBUG("printWatches set to: %d", v);
+  logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
+             "printWatches set to: %d", v);
 }
 
 void Logger::setPrintTelemetry(bool v) {
   m_config.printTelemetry.store(v);
-  _MVLIB_FORWARD_DEBUG("printTelemetry set to: %d", v);
+  logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
+             "printTelemetry set to: %d", v);
 }
 
 void Logger::setPrintWaypoints(bool v) {
   m_config.printWaypoints.store(v);
-  _MVLIB_FORWARD_DEBUG("printWaypoints set to: %d", v);
+  logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
+             "printWaypoints set to: %d", v);
 }
 
 void Logger::setLogSystemInfo(bool v) {
   m_config.logSystemInfo.store(v);
-  _MVLIB_FORWARD_DEBUG("logSystemInfo set to: %d", v);
+  logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
+             "logSystemInfo set to: %d", v);
 }
 
 void Logger::setTimings(LoggerTimings timings) {
-  _MVLIB_FORWARD_DEBUG("SetTimings changed");
+  logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM, "SetTimings changed");
+
   m_sdBufferFlushInterval.store(timings.sdBufferFlushInterval);
   m_stdoutBufferFlushInterval.store(timings.stdoutBufferFlushInterval);
   m_sdPollingRate.store(timings.sdPollingRate);
@@ -58,46 +68,60 @@ void Logger::setTimings(LoggerTimings timings) {
 }
 
 void Logger::setMinLogLevel(LogLevel level) {
-  if (level == LogLevel::OVERRIDE) return;
+  if (level == LogLevel::OVERRIDE)
+    return;
 
   // Telemetry engine is now the source of truth for the min log level
   detail::Telemetry::getInstance().setMinLevel(level);
-  _MVLIB_FORWARD_DEBUG("SetMinLogLevel set to: %d", (int)level);
+  logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
+             "SetMinLogLevel set to: %d", static_cast<int>(level));
 }
 
 void Logger::setBuildDate(const char *buildDate) {
   detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
-  if (!lock.isLocked()) return;
+  if (!lock.isLocked())
+    return;
 
   if (m_started.load() || m_sdSink->locked()) {
-    _MVLIB_FORWARD_WARN("setBuildDate() called after logger start — ignored.");
+    logMessage(LogLevel::WARN, detail::LogSource::SYSTEM,
+               "setBuildDate() called after logger start — ignored.");
+
     return;
   }
 
   if (!buildDate || buildDate[0] == '\0') {
     m_userBuildDate[0] = '\0';
-    _MVLIB_FORWARD_DEBUG("setBuildDate() cleared user build date.");
+    logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
+               "setBuildDate() cleared user build date.");
+
     return;
   }
 
   snprintf(m_userBuildDate, sizeof(m_userBuildDate), "%s", buildDate);
-  _MVLIB_FORWARD_DEBUG("setBuildDate() set user build date to: %s", m_userBuildDate);
+  logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
+             "setBuildDate() set user build date to: %s", m_userBuildDate);
 }
 
-const char* Logger::getBuildDate() const {
+const char *Logger::getBuildDate() const {
   return m_userBuildDate[0] != '\0' ? m_userBuildDate : __DATE__;
 }
 
-void Logger::setPoseGetter(std::function<std::optional<Pose>()> getter) {
+void Logger::setPoseGetter(std::function<std::optional<Pose>()> getter,
+                           detail::OdomProvider provider) {
   detail::uniqueLock m(m_mutex);
   if (!m.isLocked() || !getter) {
-    _MVLIB_FORWARD_DEBUG("Unable to set pose getter because mutex failed "
-                         "to lock. Try adding delay or calling at a different "
-                         "time.");
+    logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
+               "Unable to set pose getter because mutex failed to lock. Try "
+               "adding delay or "
+               "calling at a different time.");
+
     return;
   }
-  _MVLIB_FORWARD_DEBUG("SetPoseGetter set callback.");
-  m_getPose = std::make_shared<std::function<std::optional<Pose>()>>(std::move(getter));
+  m_getPose =
+      std::make_shared<std::function<std::optional<Pose>()>>(std::move(getter));
   m_poseGetterMutex = std::make_shared<pros::Mutex>();
+  m_odomProvider = provider;
+  logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
+             "SetPoseGetter set callback.");
 }
 } // namespace mvlib

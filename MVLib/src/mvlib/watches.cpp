@@ -1,6 +1,6 @@
 #include "mvlib/watches.hpp"
 #include "mvlib/core.hpp"
-#include "mvlib/private/telemetry.hpp"
+#include "mvlib/private/terminalOut.hpp"
 #include "mvlib/private/sdCsv.hpp"
 #include <algorithm>
 #include <cerrno>

@@ -27,8 +27,9 @@ def cobs_encode(data: bytes) -> bytes:
     return bytes(encoded)
 
 
-def frame(message_type: int, payload: bytes) -> bytes:
-    return cobs_encode(bytes([(message_type & 0x07) << 5]) + payload)
+def frame(message_type: int, payload: bytes, level: int = 0, subtype: int = 0) -> bytes:
+    header = ((message_type & 0x07) << 5) | ((level & 0x07) << 2) | (subtype & 0x03)
+    return cobs_encode(bytes([header]) + payload)
 
 
 class MotionViewSerialDecoderTests(unittest.TestCase):
@@ -44,11 +45,18 @@ class MotionViewSerialDecoderTests(unittest.TestCase):
         self.assertEqual(decoder._expand_timestamp(4_464), 70_000)
 
         decoded = decoder._parse_binary_frame(
-            frame(decoder.MSG_TYPE_START, struct.pack("<I", 0))
+            frame(decoder.MSG_TYPE_START, struct.pack("<IBI", 0, 2, 300_001))
         )
 
-        self.assertEqual(decoded, "[START],0\n")
+        self.assertEqual(decoded, "[START],0,2,300001\n")
         self.assertEqual(decoder._expand_timestamp(120), 120)
+
+    def test_accepts_a_legacy_start_frame(self) -> None:
+        decoded = decoder._parse_binary_frame(
+            frame(decoder.MSG_TYPE_START, struct.pack("<I", 1_250))
+        )
+
+        self.assertEqual(decoded, "[START],1250\n")
 
     def test_start_clears_roster_before_the_new_run_repopulates_it(self) -> None:
         roster_payload = struct.pack("<H24s", 7, b"Previous Label\0")
@@ -56,7 +64,7 @@ class MotionViewSerialDecoderTests(unittest.TestCase):
         self.assertEqual(decoder.DEFAULT_ROSTER[7], "Previous Label")
 
         decoder._parse_binary_frame(
-            frame(decoder.MSG_TYPE_START, struct.pack("<I", 1_250))
+            frame(decoder.MSG_TYPE_START, struct.pack("<IBI", 1_250, 0, 300_001))
         )
         self.assertFalse(decoder.DEFAULT_ROSTER)
         self.assertFalse(decoder.ELEVATED_ROSTER)
@@ -64,6 +72,34 @@ class MotionViewSerialDecoderTests(unittest.TestCase):
         fresh_roster_payload = struct.pack("<H24s", 7, b"Fresh Label\0")
         decoder._parse_binary_frame(frame(decoder.MSG_TYPE_ROSTER, fresh_roster_payload))
         self.assertEqual(decoder.DEFAULT_ROSTER[7], "Fresh Label")
+
+    def test_system_log_has_the_mvlib_prefix(self) -> None:
+        payload = struct.pack("<H", 1_250) + b"Logger started"
+
+        decoded = decoder._parse_binary_frame(
+            frame(
+                decoder.MSG_TYPE_LOG,
+                payload,
+                level=2,
+                subtype=decoder.LOG_SOURCE_SYSTEM,
+            )
+        )
+
+        self.assertEqual(decoded, "[LOG],1250,INFO,[MVLIB] Logger started\n")
+
+    def test_user_log_is_not_prefixed(self) -> None:
+        payload = struct.pack("<H", 1_250) + b"Autonomous started"
+
+        decoded = decoder._parse_binary_frame(
+            frame(
+                decoder.MSG_TYPE_LOG,
+                payload,
+                level=2,
+                subtype=decoder.LOG_SOURCE_USER,
+            )
+        )
+
+        self.assertEqual(decoded, "[LOG],1250,INFO,Autonomous started\n")
 
     def test_keeps_a_partial_cobs_frame_with_an_in_band_newline(self) -> None:
         # The timestamp's low byte survives COBS encoding as 0x0A.  Supplying

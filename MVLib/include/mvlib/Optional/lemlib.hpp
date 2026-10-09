@@ -13,6 +13,7 @@
 #define _MVLIB_OPTIONAL_USED "lemlib"
 #include "mvlib/core.hpp" // IWYU pragma: keep
 #include "mvlib/types.hpp" // IWYU pragma: keep
+#include "mvlib/private/getOdomProvider.hpp"
 
 /*
  * Depending on your version of LemLib, this include might be outdated.
@@ -54,7 +55,7 @@ inline void setOdom(lemlib::Chassis *chassis) {
     if (!chassis) return std::nullopt;
     auto p = chassis->getPose();
     return Pose{p.x, p.y, p.theta};
-  });
+  }, detail::OdomProvider::lemlib);
 }
 } // namespace mvlib
 #endif // _MVLIB_OPTIONAL_USED

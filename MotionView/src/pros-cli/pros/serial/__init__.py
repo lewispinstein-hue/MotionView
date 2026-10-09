@@ -36,6 +36,12 @@ MSG_TYPE_ROSTER = 0x04
 MSG_TYPE_LOG = 0x05
 MSG_TYPE_START = 0x06
 
+LOG_SOURCE_USER = 0x00
+LOG_SOURCE_SYSTEM = 0x01
+
+START_LEGACY_FORMAT = "<I"
+START_FORMAT = "<IBI"
+
 WPOINT_CREATED = 0x01
 WPOINT_REACHED = 0x02
 WPOINT_TIMEDOUT = 0x03
@@ -354,9 +360,11 @@ def _handle_roster(payload: bytes, subtype: int) -> str:
     return _flush_pending_events(item_id)
 
 
-def _handle_log(payload: bytes, level_bits: int) -> str:
+def _handle_log(payload: bytes, level_bits: int, source: int) -> str:
     ts = _expand_timestamp(struct.unpack("<H", payload[:2])[0])
     msg = _decode_text(payload[2:])
+    if source == LOG_SOURCE_SYSTEM:
+        msg = f"[MVLIB] {msg}"
     return f"[LOG],{ts},{_decode_level(level_bits)},{msg}\n"
 
 
@@ -364,7 +372,12 @@ def _handle_start(payload: bytes) -> str:
     # A robot-program restart also invalidates all roster mappings and pending
     # events; watch and waypoint IDs are allocated anew by the fresh process.
     _reset_decoder_state()
-    timestamp = _seed_timestamp(struct.unpack("<I", payload)[0])
+    if len(payload) == struct.calcsize(START_FORMAT):
+        timestamp, provider, version = struct.unpack(START_FORMAT, payload)
+        _seed_timestamp(timestamp)
+        return _csv_line("[START]", timestamp, provider, version)
+
+    timestamp = _seed_timestamp(struct.unpack(START_LEGACY_FORMAT, payload)[0])
     return _csv_line("[START]", timestamp)
 
 
@@ -393,7 +406,7 @@ def _expected_payload_len(msg_type: int, subtype: int) -> Optional[int]:
         return struct.calcsize("<H")
 
     if msg_type == MSG_TYPE_START:
-        return struct.calcsize("<I")
+        return struct.calcsize(START_FORMAT)
 
     return None
 
@@ -424,6 +437,12 @@ def _parse_binary_frame(frame: bytes) -> Optional[str]:
     elif msg_type == MSG_TYPE_WPOINT and subtype == WPOINT_CREATED:
         if len(payload) not in (expected_len, expected_len + 1):
             return None
+    elif msg_type == MSG_TYPE_START:
+        if len(payload) not in (
+            struct.calcsize(START_LEGACY_FORMAT),
+            struct.calcsize(START_FORMAT),
+        ):
+            return None
     elif len(payload) != expected_len:
         return None
 
@@ -440,7 +459,7 @@ def _parse_binary_frame(frame: bytes) -> Optional[str]:
         return _handle_roster(payload, subtype)
 
     if msg_type == MSG_TYPE_LOG:
-        return _handle_log(payload, level_bits)
+        return _handle_log(payload, level_bits, subtype)
 
     if msg_type == MSG_TYPE_START:
         return _handle_start(payload)

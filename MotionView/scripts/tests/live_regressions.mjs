@@ -29,7 +29,7 @@ try {
     const parsed = parser.parse({
       lines: [
         "[WATCH],69950,INFO,1,Stale,2",
-        "[START],0",
+        "[START],0,2,300001",
         "[POSE],0,2,3,0,0,0",
         "[WATCH],20,INFO,1,Fresh,3000",
       ],

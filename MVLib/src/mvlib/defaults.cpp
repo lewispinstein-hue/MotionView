@@ -1,6 +1,4 @@
 #include "mvlib/core.hpp"
-#define _MVLIB_PREVENT_MACRO_CLEANUP
-#include "mvlib/private/forwardLogMacros.h"
 #include "pros/misc.hpp"
 #include "pros/rtos.hpp"
 #include <cstdint>
@@ -10,9 +8,11 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
   DefaultWatches w = watches;
   bool retval = true;
   if (!m_configSet || !configValid()) {
-    _MVLIB_FORWARD_WARN("Drivetrain watches could not be set because config is not "
-                        "set or invalid! Did you make sure to set config before default "
-                        "watches?");
+    logMessage(LogLevel::WARN, detail::LogSource::SYSTEM,
+               "Drivetrain watches could not be set because config is not set "
+               "or invalid! "
+               "Did you make sure to set config before default watches?");
+
     w.leftDrivetrainWatchdog = false;
     w.rightDrivetrainWatchdog = false;
     retval = false;
@@ -23,31 +23,32 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
 
   if (w.leftDrivetrainWatchdog) {
     const WatchHandle watch = Logger::getInstance().watch(
-      "Left Drivetrain OK", LogLevel::INFO, WatchMode::onChange, 750,
-      [this]() {
-        return m_pLeftDrivetrain ? m_pLeftDrivetrain->get_temperature() : 0.0;
-      }, LevelOverride<double>{
-        .elevatedLevel = LogLevel::WARN,
-        .predicate = asPredicate<double>([](const double& value) {
-          return value >= kTempThreshold;
-        }),
-        .label = "L Drive Overheating"
-      });
+        "Left Drivetrain OK", LogLevel::INFO, WatchMode::onChange, 750,
+        [this]() {
+          return m_pLeftDrivetrain ? m_pLeftDrivetrain->get_temperature() : 0.0;
+        },
+        LevelOverride<double>{.elevatedLevel = LogLevel::WARN,
+                              .predicate =
+                                  asPredicate<double>([](const double &value) {
+                                    return value >= kTempThreshold;
+                                  }),
+                              .label = "L Drive Overheating"});
     configureDefaultWatch(watch.m_id, kTrippedRepeatMs);
   }
 
   if (w.rightDrivetrainWatchdog) {
     const WatchHandle watch = Logger::getInstance().watch(
-      "Right Drivetrain OK", LogLevel::INFO, WatchMode::onChange, 750,
-      [this]() {
-        return m_pRightDrivetrain ? m_pRightDrivetrain->get_temperature() : 0.0;
-      }, LevelOverride<double>{
-        .elevatedLevel = LogLevel::WARN,
-        .predicate = asPredicate<double>([](const double& value) {
-          return value >= kTempThreshold;
-        }),
-        .label = "R Drive Overheating"
-      });
+        "Right Drivetrain OK", LogLevel::INFO, WatchMode::onChange, 750,
+        [this]() {
+          return m_pRightDrivetrain ? m_pRightDrivetrain->get_temperature()
+                                    : 0.0;
+        },
+        LevelOverride<double>{.elevatedLevel = LogLevel::WARN,
+                              .predicate =
+                                  asPredicate<double>([](const double &value) {
+                                    return value >= kTempThreshold;
+                                  }),
+                              .label = "R Drive Overheating"});
     configureDefaultWatch(watch.m_id, kTrippedRepeatMs);
   }
 
@@ -57,33 +58,32 @@ bool Logger::setDefaultWatches(const DefaultWatches watches) {
     constexpr double kMaxBatteryVoltage = 13.25;
 
     const WatchHandle temperatureWatch = Logger::getInstance().watch(
-      "Battery Temp OK", LogLevel::INFO, WatchMode::onChange, 750,
-      []() {
-        return pros::battery::get_temperature();
-      }, LevelOverride<double>{
-        .elevatedLevel = LogLevel::WARN,
-        .predicate = asPredicate<double>([](const double& value) {
-          return value >= kBatteryTempThreshold;
-        }),
-        .label = "Battery Temp High"
-      });
+        "Battery Temp OK", LogLevel::INFO, WatchMode::onChange, 750,
+        []() { return pros::battery::get_temperature(); },
+        LevelOverride<double>{.elevatedLevel = LogLevel::WARN,
+                              .predicate =
+                                  asPredicate<double>([](const double &value) {
+                                    return value >= kBatteryTempThreshold;
+                                  }),
+                              .label = "Battery Temp High"});
     configureDefaultWatch(temperatureWatch.m_id, kTrippedRepeatMs);
 
     const WatchHandle voltageWatch = Logger::getInstance().watch(
-      "Battery Voltage OK", LogLevel::INFO, WatchMode::onChange, 750,
-      []() {
-        return static_cast<double>(pros::battery::get_voltage()) / 1000.0;
-      }, LevelOverride<double>{
-        .elevatedLevel = LogLevel::WARN,
-        .predicate = asPredicate<double>([](const double& v) {
-          return v < kMinBatteryVoltage || v > kMaxBatteryVoltage;
-      }),
-        .label = "Battery Voltage Warning"
-      });
+        "Battery Voltage OK", LogLevel::INFO, WatchMode::onChange, 750,
+        []() {
+          return static_cast<double>(pros::battery::get_voltage()) / 1000.0;
+        },
+        LevelOverride<double>{
+            .elevatedLevel = LogLevel::WARN,
+            .predicate = asPredicate<double>([](const double &v) {
+              return v < kMinBatteryVoltage || v > kMaxBatteryVoltage;
+            }),
+            .label = "Battery Voltage Warning"});
     configureDefaultWatch(voltageWatch.m_id, kTrippedRepeatMs);
   }
 
-  _MVLIB_FORWARD_DEBUG("setDefaultWatches set all applicable watches");
+  logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
+             "setDefaultWatches set all applicable watches");
 
   return retval;
 }

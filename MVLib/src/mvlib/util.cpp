@@ -1,5 +1,4 @@
 #include "mvlib/core.hpp"
-#include <utility>
 
 namespace mvlib {
 const char* Logger::levelToString(LogLevel level) const {
@@ -12,7 +11,7 @@ const char* Logger::levelToString(LogLevel level) const {
     case LogLevel::OVERRIDE: return "OVERRIDE";
     default:                 return "UNKNOWN";
   }
-  std::unreachable();
+  __builtin_unreachable();
 }
 
 bool Logger::configValid() const {

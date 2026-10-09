@@ -1,4 +1,4 @@
-#include "mvlib/private/telemetry.hpp"
+#include "mvlib/private/terminalOut.hpp"
 #include "mvlib/core.hpp"
 #include "pros/rtos.hpp"
 #include <algorithm>
@@ -133,8 +133,8 @@ void Telemetry::sendPose(const PosePacket& pkt) {
            reinterpret_cast<const uint8_t*>(&pkt), sizeof(PosePacket));
 }
 
-void Telemetry::sendStart(uint32_t timestamp) {
-  const StartPacket pkt{timestamp};
+void Telemetry::sendStart(uint32_t timestamp, OdomProvider provider, uint32_t version) {
+  const StartPacket pkt{timestamp, provider, version};
   transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::START),
            reinterpret_cast<const uint8_t*>(&pkt), sizeof(StartPacket));
 }
@@ -199,7 +199,7 @@ void Telemetry::sendRoster(uint16_t id, const std::string& name, bool isElevated
            reinterpret_cast<const uint8_t*>(&pkt), sizeof(RosterPacket));
 }
 
-void Telemetry::sendLog(LogLevel level, const char *fmt, ...) {
+void Telemetry::sendLog(LogLevel level, LogSource source, const char *fmt, ...) {
   if (!shouldLog(level)) return;
 
   // Format the string
@@ -224,7 +224,8 @@ void Telemetry::sendLog(LogLevel level, const char *fmt, ...) {
   memcpy(payload.data(), &header, sizeof(LogPacketHeader));
   memcpy(payload.data() + sizeof(LogPacketHeader), textBuf.data(), static_cast<size_t>(textLen));
 
-  transmit(encodeMsgAll(level, MsgType::LOG), payload.data(), totalPayloadSize);
+  uint8_t subType = static_cast<uint8_t>(source);
+  transmit(encodeMsgAll(level, MsgType::LOG, subType), payload.data(), totalPayloadSize);
 }
 
 // The background consumer task
