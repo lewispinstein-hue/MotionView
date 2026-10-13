@@ -26,23 +26,32 @@ EXCLUDE_COLD_LIBRARIES:=
 
 # Set this to 1 to add additional rules to compile your project as a PROS library template
 IS_LIBRARY:=1
-# TODO: CHANGE THIS! 
-# Be sure that your header files are in the include directory inside of a folder with the
-# same name as what you set LIBNAME to below.
+
+CREATE_TEMPLATE_FLAGS += --kernels ">=4.2.1,<5.0.0"
 LIBNAME:=libmvlib
-VERSION:=3.0.1
+VERSION:=3.0.1-alpha.0
 
 # EXCLUDE_SRC_FROM_LIB= $(SRCDIR)/unpublishedfile.c
 # this line excludes opcontrol.c and similar files
 EXCLUDE_SRC_FROM_LIB+=$(foreach file, $(SRCDIR)/main,$(foreach cext,$(CEXTS),$(file).$(cext)) $(foreach cxxext,$(CXXEXTS),$(file).$(cxxext)))
 
-# files that get distributed to every user (beyond your source archive) - add
-# whatever files you want here. This line is configured to add all header files
-# that are in the directory include/LIBNAME
-TEMPLATE_FILES := $(shell find include/mvlib -name "*.h" -o -name "*.hpp")
+# Headers installed by both precompiled-library templates.
+TEMPLATE_FILES := $(shell find include/mvlib -type f \( -name "*.h" -o -name "*.hpp" \))
 .DEFAULT_GOAL=quick
 
 ################################################################################
 ################################################################################
 ########## Nothing below this line should be edited by typical users ###########
 -include ./common.mk
+
+PROS ?= pros
+EZ_TEMPLATE_NAME := libmvlib-ez-template
+EZ_TEMPLATE_ZIP := $(ROOT)/$(EZ_TEMPLATE_NAME)@$(VERSION).zip
+EZ_TEMPLATE_FILES := $(shell find include/mvlib src/mvlib -type f \( -name "*.h" -o -name "*.hpp" -o -name "*.cpp" \))
+
+.PHONY: ez-template
+ez-template:
+	$(PROS) conductor create-template . $(EZ_TEMPLATE_NAME) $(VERSION) $(foreach file,$(EZ_TEMPLATE_FILES),--system "$(file)") --target v5 --kernels ">=4.1.1,<=4.2.2" --destination "$(EZ_TEMPLATE_ZIP)"
+
+.PHONY: template
+template:: ez-template
