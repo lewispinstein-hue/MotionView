@@ -16,7 +16,9 @@ const server = await createServer({
 try {
   const { buildPlanExportCode } = await server.ssrLoadModule("/planning/planningTemplate.ts");
   const { generatePlanningCode } = await server.ssrLoadModule("/planning/planningCode.ts");
+  const { getWaypointIndicatorTooltip } = await server.ssrLoadModule("/planning/planningIndicators.ts");
   const { PlanningFeature } = await server.ssrLoadModule("/planning/PlanningFeature.ts");
+  assert.equal(getWaypointIndicatorTooltip("forward"), "moveToPoint • Linear Motion");
   const { getPlanMethodTooltipName } = await server.ssrLoadModule("/planning/planningObjects.ts");
   const { constrainTimelineTooltipPosition } = await server.ssrLoadModule("/planning/render/PlanningTimelineView.ts");
   const waypoints = [

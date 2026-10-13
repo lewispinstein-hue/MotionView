@@ -13,6 +13,17 @@ const ICON_HREFS: Record<PlanWaypointIndicatorIcon, string> = {
   boomerang: `${boomerangIconUrl}#icon-waypointBoomerang`,
 };
 
+const ICON_TOOLTIPS: Record<PlanWaypointIndicatorIcon, string> = {
+  rotate: "turnToHeading • Rotational Motion",
+  swing: "swingToHeading • Swing Motion",
+  forward: "moveToPoint • Linear Motion",
+  boomerang: "moveToPose • Boomerang Motion",
+};
+
+export function getWaypointIndicatorTooltip(icon: PlanWaypointIndicatorIcon): string {
+  return ICON_TOOLTIPS[icon];
+}
+
 export function isWaypointIndicatorIcon(value: unknown): value is PlanWaypointIndicatorIcon {
   return typeof value === "string" && WAYPOINT_INDICATOR_ICONS.includes(value as PlanWaypointIndicatorIcon);
 }
@@ -39,6 +50,7 @@ export function createWaypointIndicatorIcon(icon: PlanWaypointIndicatorIcon, cla
   svg.classList.add("waypointIndicatorIcon");
   if (className) svg.classList.add(className);
   svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("title", getWaypointIndicatorTooltip(icon));
   svg.setAttribute("aria-hidden", "true");
   svg.setAttribute("focusable", "false");
   const use = document.createElementNS("http://www.w3.org/2000/svg", "use");

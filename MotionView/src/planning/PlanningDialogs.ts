@@ -1,6 +1,6 @@
 import type { PlanningDom } from "./PlanningDom";
 import { bindModalBackdropDismissal } from "../app/dialogs/modalDismissal";
-import { isWaypointIndicatorIcon, normalizeWaypointIndicatorIcons } from "./planningIndicators";
+import { getWaypointIndicatorTooltip, isWaypointIndicatorIcon, normalizeWaypointIndicatorIcons } from "./planningIndicators";
 import type { PlanWaypointIndicatorIcon } from "../state/models";
 
 export interface PlanningConfirmOptions {
@@ -193,8 +193,13 @@ export class PlanningDialogs {
 
   private renderIndicatorSelection(): void {
     for (const button of this.dom.templateIndicatorPicker.querySelectorAll<HTMLButtonElement>("[data-waypoint-indicator]")) {
-      const selected = isWaypointIndicatorIcon(button.dataset.waypointIndicator)
-        && this.#editorIndicatorIcons.includes(button.dataset.waypointIndicator);
+      const icon = button.dataset.waypointIndicator;
+      const selected = isWaypointIndicatorIcon(icon) && this.#editorIndicatorIcons.includes(icon);
+      if (isWaypointIndicatorIcon(icon)) {
+        const tooltip = getWaypointIndicatorTooltip(icon);
+        button.title = tooltip;
+        button.setAttribute("aria-label", tooltip);
+      }
       button.classList.toggle("isSelected", selected);
       button.setAttribute("aria-pressed", String(selected));
     }
