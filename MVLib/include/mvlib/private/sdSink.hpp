@@ -70,7 +70,9 @@ struct SdInitResult {
   char formattedTime[20] = "";
 
   /// @brief Return whether initialization opened a writable file.
-  bool succeeded() const { return error == SdInitError::none; }
+  bool succeeded() const {
+    return error == SdInitError::none; 
+  }
 };
 
 /** @brief Failure encountered while writing an SD log record. */
@@ -88,7 +90,9 @@ struct SdWriteResult {
   int errorNumber = 0;
 
   /// @brief Return whether the record was written and flushed when required.
-  bool succeeded() const { return error == SdWriteError::none; }
+  bool succeeded() const {
+    return error == SdWriteError::none;
+  }
 };
 
 /**

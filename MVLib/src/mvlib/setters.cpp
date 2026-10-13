@@ -102,10 +102,6 @@ void Logger::setBuildDate(const char *buildDate) {
              "setBuildDate() set user build date to: %s", m_userBuildDate);
 }
 
-const char *Logger::getBuildDate() const {
-  return m_userBuildDate[0] != '\0' ? m_userBuildDate : __DATE__;
-}
-
 void Logger::setPoseGetter(std::function<std::optional<Pose>()> getter,
                            detail::OdomProvider provider) {
   detail::uniqueLock m(m_mutex);

@@ -34,6 +34,7 @@
 #include "private/misc.hpp"
 #include "private/raii.hpp"
 #include "private/terminalOut.hpp"
+#include "private/sdSink.hpp"
 #include "pros/motor_group.hpp"
 #include "pros/rtos.hpp"
 #include "renderHelper.hpp"
@@ -49,13 +50,9 @@
 #include <utility>
 #include <vector>
 
-#define MVLIB_VERSION 300001 // 3.0.1
+#define MVLIB_VERSION 30'00'01 // 3.0.1
 
 namespace mvlib {
-namespace detail {
-class SdSink;
-}
-
 /**
  * @class Logger
  * @brief Singleton logging + telemetry manager.
@@ -82,10 +79,10 @@ public:
    */
   struct Drivetrain {
     /// @brief Left drivetrain motors for velocity.
-    pros::MotorGroup *leftDrivetrain;
+    pros::MotorGroup* leftDrivetrain;
 
     /// @brief Right drivetrain motors for velocity.
-    pros::MotorGroup *rightDrivetrain;
+    pros::MotorGroup* rightDrivetrain;
   };
 
   /**
@@ -95,12 +92,6 @@ public:
   [[nodiscard]] static Logger &getInstance();
 
   ~Logger();
-
-  /// @brief Backward-compatible spelling for the SD missing-folder policy.
-  using MissingFolderPolicy = mvlib::MissingFolderPolicy;
-
-  /// @brief Backward-compatible spelling for the SD existing-file policy.
-  using ExistingFilePolicy = mvlib::ExistingFilePolicy;
 
   // ------------------------------------------------------------------------
   // Lifecycle
@@ -203,14 +194,6 @@ public:
    *       MVLib's archive build date.
    */
   void setBuildDate(const char *buildDate);
-
-  /**
-   * @brief Return the active build date used for RTC validation.
-   *
-   * \return User-provided build date when set, otherwise MVLib's archive
-   *         build date.
-   */
-  [[nodiscard]] const char *getBuildDate() const;
 
   // ------------------------------------------------------------------------
   // Setup

@@ -11,8 +11,9 @@ bool Logger::initSDLogger() {
   if (m_sdSink->locked())
     return false;
 
+  const char* buildDate = m_userBuildDate[0] != '\0' ? m_userBuildDate : __DATE__;
   const detail::SdInitResult result =
-      m_sdSink->init(getBuildDate(), m_userBuildDate[0] != '\0');
+      m_sdSink->init(buildDate, m_userBuildDate[0] != '\0');
 
   if (result.error == detail::SdInitError::cardMissing) {
     logMessage(LogLevel::WARN, detail::LogSource::SYSTEM,
