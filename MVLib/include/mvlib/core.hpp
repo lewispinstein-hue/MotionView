@@ -104,6 +104,9 @@ public:
    * - Call once after configuration and (optionally) setRobot().
    *
    * @note SD logging may become locked after start() if a failure is detected.
+   * @note With terminal output enabled, start() sends a fresh MotionView
+   *       session boundary followed by current watch and active waypoint
+   *       metadata for enabled output categories.
    */
   void start();
 
@@ -129,7 +132,9 @@ public:
   /**
    * @brief Enable/disable terminal logging.
    *
-   * @note This can typically be changed at runtime.
+   * @note This can be changed at runtime. Re-enabling terminal output begins a
+   *       fresh MotionView session and re-sends current watch and active
+   *       waypoint metadata.
    */
   void setLogToTerminal(bool v);
 
@@ -150,6 +155,8 @@ public:
 
   /**
    * @brief Enable/disable printing of registered watches.
+   *
+   * @note Re-enabling watch output re-sends the current watch roster.
    */
   void setPrintWatches(bool v);
 
@@ -158,6 +165,7 @@ public:
    *
    * @note Waypoint reach and timeout evaluation continues while output is
    * disabled.
+   * @note Re-enabling waypoint output re-sends active waypoint definitions.
    */
   void setPrintWaypoints(bool v);
 
@@ -390,8 +398,8 @@ public:
   }
 
   /**
-   * @brief Re-send roster entries for all active waypoints. Use this to fix
-   * issues of waypoints not appearing in MotionView.
+   * @brief Re-send metadata for all active waypoints. Use this to fix issues
+   *        of waypoints not appearing in MotionView.
    *
    * @note Inactive waypoints are intentionally omitted so they stay dropped
    *       from the viewer roster.
@@ -524,8 +532,6 @@ private:
   /// @brief Initialize the owned SD sink.
   bool initSDLogger();
 
-  detail::OdomProvider getOdomProvider() const;
-
   /**
    * @brief Convert a LogLevel to a printable string.
    * @param level Log level to convert.
@@ -595,6 +601,12 @@ private:
 
   /// @brief Re-send the roster entry for a single watch.
   bool resyncWatchRoster(WatchId id);
+
+  /// @brief Emit one watch roster while m_mutex is held.
+  void sendWatchRosterLocked(const InternalWatch &watch);
+
+  /// @brief Emit every watch roster while m_mutex is held.
+  void sendAllWatchRostersLocked();
 
   /// @brief Configure the output policy used by built-in watchdog watches.
   void configureDefaultWatch(WatchId id, uint32_t trippedRepeatIntervalMs);
@@ -751,11 +763,27 @@ private:
   /// @brief Re-send the roster entry for a single waypoint.
   bool resyncWaypointRoster(WPId id);
 
+  /// @brief Emit active waypoint metadata while m_mutex is held.
+  void sendActiveWaypointMetadataLocked();
+
   /// @brief Print all waypoints that are due
   void printWaypoints();
 
   /// @brief Write a waypoint creation record to the active SD log.
   void logWaypointCreatedToSD(const InternalWaypoint &waypoint);
+
+  /// @brief Emit a waypoint's roster and creation definition while m_mutex is
+  ///        held. The caller must have established a terminal session.
+  void sendWaypointMetadataLocked(const InternalWaypoint &waypoint);
+
+  /// @brief Start a terminal session before emitting a terminal packet.
+  ///
+  /// This is safe to call while m_mutex is held.
+  bool ensureTerminalSession();
+
+  /// @brief Force a new terminal-session boundary and replay current state.
+  ///        The caller must hold m_mutex.
+  bool restartTerminalSessionLocked();
 
   /// @brief Print pose data
   void printTelemetry();
@@ -787,6 +815,7 @@ private:
   LoggerConfig m_config{};
 
   pros::Mutex m_mutex;
+  pros::Mutex m_terminalSessionMutex;
 
   char m_userBuildDate[12] = "";
 
@@ -815,7 +844,8 @@ private:
   std::shared_ptr<pros::Mutex> m_poseGetterMutex = nullptr;
 
   // Telemetry
-  detail::OdomProvider m_odomProvider = detail::OdomProvider::none;
+  std::atomic<detail::OdomProvider> m_odomProvider{detail::OdomProvider::none};
+  bool m_terminalSessionStarted = false;
 
   std::atomic<uint32_t> m_lastRosterFlush{0};
   uint32_t m_lastTerminalFlush{0};

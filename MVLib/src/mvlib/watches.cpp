@@ -31,31 +31,39 @@ std::optional<std::string> Logger::m_getWatchNameUnlocked(WatchId id, bool isEle
 void Logger::resyncAllWatchesRoster() {
   detail::uniqueLock lock(m_mutex);
   if (!lock.isLocked()) return;
-  if (m_watches.empty() || !m_config.logToTerminal.load()) return;
+  if (m_watches.empty()) return;
+  if (!ensureTerminalSession()) return;
 
-  for (const auto& watch : m_watches) {
-    detail::Telemetry::getInstance().sendRoster(watch.id, watch.label, false);
-    if (!watch.elevatedLabel.empty()) {
-      detail::Telemetry::getInstance().sendRoster(watch.id, watch.elevatedLabel, true);
-    }
-  }
+  sendAllWatchRostersLocked();
   m_lastRosterFlush.store(pros::millis());
 }
 
 bool Logger::resyncWatchRoster(WatchId id) {
   detail::uniqueLock lock(m_mutex);
   if (!lock.isLocked()) return false;
-  if (m_watches.empty() || !m_config.logToTerminal.load()) return false;
+  if (m_watches.empty()) return false;
 
   InternalWatch* watch = m_findWatchUnlocked(id);
   if (!watch || !watch->active) return false;
+  if (!ensureTerminalSession()) return false;
 
-  detail::Telemetry::getInstance().sendRoster(watch->id, watch->label, false);
-  if (!watch->elevatedLabel.empty()) {
-    detail::Telemetry::getInstance().sendRoster(watch->id, watch->elevatedLabel, true);
-  }
+  sendWatchRosterLocked(*watch);
   m_lastRosterFlush.store(pros::millis());
   return true;
+}
+
+void Logger::sendWatchRosterLocked(const InternalWatch& watch) {
+  detail::Telemetry::getInstance().sendRoster(watch.id, watch.label, false);
+  if (!watch.elevatedLabel.empty()) {
+    detail::Telemetry::getInstance().sendRoster(watch.id,
+                                                 watch.elevatedLabel, true);
+  }
+}
+
+void Logger::sendAllWatchRostersLocked() {
+  for (const auto& watch : m_watches) {
+    sendWatchRosterLocked(watch);
+  }
 }
 
 std::string Logger::evaluateWatch(WatchId id, bool emit) {
@@ -88,7 +96,7 @@ std::string Logger::evaluateWatch(WatchId id, bool emit) {
 
   nowMs = pros::millis();
 
-  if (m_config.logToTerminal.load()) {
+  if (ensureTerminalSession()) {
     bool sentAsBinary = false;
 
     if (!valueStr.empty()) {

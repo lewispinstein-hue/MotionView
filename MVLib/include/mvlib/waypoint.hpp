@@ -78,11 +78,12 @@ struct WaypointOffset {
   /// @brief Time remaining before the waypoint times out
   std::optional<uint32_t> remainingTimeout = std::nullopt;
 
-  /// @brief True if the waypoint is currently within tolerance or has been
-  ///        reached before.
+  /// @brief True after periodic waypoint evaluation observes the waypoint
+  ///        within tolerance.
   ///
-  /// @note For retriggerable waypoints, this remains true after the first reach
-  ///       even if the robot later leaves the tolerance window.
+  /// @note This state is latched for every waypoint. For retriggerable
+  ///       waypoints it remains true even if the robot later leaves the
+  ///       tolerance window.
   bool reached;
 
   /// @brief True if the waypoint has timed out
@@ -122,10 +123,12 @@ public:
   /**
    * @brief Check if the robot has reached the waypoint.
    *
-   * \return Returns true if the robot has ever been within tolerance before.
+   * \return Returns true after periodic waypoint evaluation observes the robot
+   *         within tolerance.
    *
-   * @note For retriggerable waypoints, this returns true after the first reach
-   *       and stays true even if the robot later leaves the tolerance window.
+   * @note This remains true after the first reach, even if the robot later
+   *       leaves the tolerance window. Retriggerable waypoints can still emit
+   *       later reach edges after leaving and re-entering tolerance.
    */
   bool reached() const;
 
@@ -145,7 +148,8 @@ public:
   bool active() const;
 
   /**
-   * @brief Re-send this waypoint's roster entry over telemetry.
+   * @brief Re-send this waypoint's roster entry and creation definition over
+   *        telemetry.
    * \return Returns true if the waypoint exists and was re-sent.
    */
   bool resyncRoster() const;

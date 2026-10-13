@@ -10,7 +10,15 @@
 namespace mvlib {
 
 void Logger::setLogToTerminal(bool v) {
-  m_config.logToTerminal.store(v);
+  const bool wasEnabled = m_config.logToTerminal.exchange(v);
+  if (!v) {
+    detail::uniqueLock sessionLock(m_terminalSessionMutex, TIMEOUT_MAX);
+    if (sessionLock.isLocked()) m_terminalSessionStarted = false;
+  } else if (!wasEnabled && m_started.load()) {
+    detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
+    if (lock.isLocked()) restartTerminalSessionLocked();
+  }
+
   logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
              "logToTerminal() set to: %d", v);
 }
@@ -33,7 +41,9 @@ void Logger::setLogToSD(bool v) {
 }
 
 void Logger::setPrintWatches(bool v) {
-  m_config.printWatches.store(v);
+  const bool wasEnabled = m_config.printWatches.exchange(v);
+  if (v && !wasEnabled) resyncAllWatchesRoster();
+
   logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
              "printWatches set to: %d", v);
 }
@@ -45,7 +55,9 @@ void Logger::setPrintTelemetry(bool v) {
 }
 
 void Logger::setPrintWaypoints(bool v) {
-  m_config.printWaypoints.store(v);
+  const bool wasEnabled = m_config.printWaypoints.exchange(v);
+  if (v && !wasEnabled) resyncAllWaypointsRoster();
+
   logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
              "printWaypoints set to: %d", v);
 }
@@ -116,7 +128,7 @@ void Logger::setPoseGetter(std::function<std::optional<Pose>()> getter,
   m_getPose =
       std::make_shared<std::function<std::optional<Pose>()>>(std::move(getter));
   m_poseGetterMutex = std::make_shared<pros::Mutex>();
-  m_odomProvider = provider;
+  m_odomProvider.store(provider);
   logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
              "SetPoseGetter set callback.");
 }

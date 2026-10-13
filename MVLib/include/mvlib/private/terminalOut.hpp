@@ -123,7 +123,8 @@ public:
   bool shouldLog(LogLevel level) const;
 
   void sendPose(const PosePacket& pkt);
-  void sendStart(uint32_t timestamp, OdomProvider provider, uint32_t version);
+  bool sendStart(uint32_t timestamp, OdomProvider provider,
+                 uint32_t version);
   void sendWaypointCreated(const WaypointCreatedPacket& pkt);
   void sendWaypointStatus(WPId id, uint8_t subType); // 2=Reached, 3=TimedOut
   void sendWatch(WatchId id, LogLevel lvl, float val, bool tripped);
@@ -140,7 +141,8 @@ private:
   std::atomic<LogLevel> m_minLevel;
   std::unique_ptr<pros::Task> m_transmitHandleTask = nullptr;
   void writeFrameDirect(const uint8_t *data, size_t len);
-  void transmit(uint8_t header, const uint8_t *data, size_t len); // Use raw header
+  bool transmit(uint8_t header, const uint8_t *data,
+                size_t len); // Use raw header
 };
-} // namespace mvlib
 } // namespace detail
+} // namespace mvlib

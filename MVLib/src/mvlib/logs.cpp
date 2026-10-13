@@ -12,7 +12,7 @@ void Logger::logMessage(const LogLevel level, detail::LogSource source, const ch
   char buffer[1024];
   vsnprintf(buffer, sizeof(buffer), fmt, args);
 
-  if (m_config.logToTerminal.load()) {
+  if (ensureTerminalSession()) {
     detail::Telemetry::getInstance().sendLog(level, source, "%s", buffer);
   }
 

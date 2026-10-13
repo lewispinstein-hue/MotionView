@@ -7,8 +7,6 @@
 namespace mvlib {
 
 void Logger::printWaypoints() {
-  if (m_waypoints.empty()) return;
-
   uint32_t nowMs = pros::millis();
   std::shared_ptr<std::function<std::optional<Pose>()>> poseGetter;
   std::shared_ptr<pros::Mutex> poseGetterMutex;
@@ -30,6 +28,7 @@ void Logger::printWaypoints() {
 
   detail::uniqueLock lock(m_mutex);
   if (!lock.isLocked()) return;
+  if (m_waypoints.empty()) return;
 
   for (auto& wp : m_waypoints) {
     if (!wp.active) continue;
@@ -94,7 +93,7 @@ void Logger::printWaypoints() {
     if (!m_config.printWaypoints.load()) continue;
 
     // Send binary through terminal
-    if (m_config.logToTerminal.load()) {
+    if (ensureTerminalSession()) {
       detail::Telemetry::getInstance().sendWaypointStatus(wp.id, subType);
     }
 

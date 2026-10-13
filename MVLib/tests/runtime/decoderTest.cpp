@@ -7,7 +7,7 @@
  * sensors, or controller input.
  *
  * The fixture deliberately produces:
- * - a START frame followed by samples that arrive before their watch rosters;
+ * - a START frame followed by a complete watch and waypoint metadata replay;
  * - DEBUG, INFO, WARN, and ERROR log records;
  * - numeric, text, boolean, and predicate/elevated-label watches;
  * - waypoint CREATED, REACHED, and TIMEDOUT records; and
@@ -161,8 +161,8 @@ void initialize() {
 
   mvlib::setOdom(decoderFixturePose);
 
-  // Register before start so the forced samples below precede their rosters.
-  // That confirms the decoder buffers samples until it learns the ID mapping.
+  // Register before start so logger.start() must replay the full roster after
+  // its START boundary.
   auto numberWatch = logger.watch(
     "Decoder Number", LogLevel::INFO, WatchMode::onInterval, 80_mvMs,
     [] { return readState([](const FixtureState& state) { return state.numericValue; }); },
@@ -180,15 +180,15 @@ void initialize() {
     "Decoder Enabled", LogLevel::DEBUG, WatchMode::onChange, 50_mvMs,
     [] { return readState([](const FixtureState& state) { return state.enabled; }); });
 
-  // Logger::start() emits START before every other telemetry frame.
+  // Logger::start() emits a fresh START boundary followed by all current
+  // watch and waypoint metadata.
   logger.start();
   logger.debug("Decoder fixture: debug log");
   logger.info("Decoder fixture: info log");
   logger.warn("Decoder fixture: warning log");
   logger.error("Decoder fixture: error log");
 
-  // These records intentionally precede ROSTER packets. A correct decoder
-  // holds them briefly and then associates them with the names below.
+  // Force representative watch values after the start replay.
   numberWatch.evaluate(true);
   textWatch.evaluate(true);
   boolWatch.evaluate(true);

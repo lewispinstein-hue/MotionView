@@ -73,7 +73,7 @@ void Logger::printTelemetry() {
   }
 
   // Send binary through terminal
-  if (m_config.logToTerminal.load()) {
+  if (ensureTerminalSession()) {
     detail::PosePacket pkt;
     pkt.timestamp = static_cast<uint16_t>(pros::millis());
     pkt.x = static_cast<float>(pose.value().x);

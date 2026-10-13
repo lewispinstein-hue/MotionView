@@ -18,7 +18,9 @@ constexpr size_t kTelemetryMaxRawFrameBytes = kTelemetryMaxPayloadBytes + 1;
 constexpr size_t kTelemetryMaxEncodedFrameBytes = kTelemetryMaxRawFrameBytes +
                  (kTelemetryMaxRawFrameBytes / 254) + 2;
 
-constexpr size_t kTelemetryQueueCapacity = 64;
+// Leave headroom for a burst of state-replay frames while the IO task begins
+// draining the queue.
+constexpr size_t kTelemetryQueueCapacity = 96;
 constexpr uint32_t kTelemetryQueueLockTimeoutMs = 2;
 constexpr uint32_t kTelemetryWriteRetryDelayMs = 15;
 constexpr size_t kTelemetryMaxWriteRetries = 8;
@@ -28,6 +30,7 @@ constexpr uint32_t kTelemetryWaitForDataTimeoutMs = 12;
 struct TelemetryFrame {
   std::array<uint8_t, kTelemetryMaxEncodedFrameBytes> bytes{};
   size_t len{0};
+  uint8_t priority{0};
 };
 
 std::array<TelemetryFrame, kTelemetryQueueCapacity> telemetryQueue{};
@@ -37,26 +40,92 @@ size_t telemetryQueueCount = 0;
 pros::Mutex telemetryQueueMutex;
 pros::Mutex telemetryWriteMutex;
 
-bool enqueueTelemetryFrame(const uint8_t* data, size_t len) {
+constexpr uint8_t kPriorityPose = 0;
+constexpr uint8_t kPriorityDebug = 1;
+constexpr uint8_t kPriorityInfo = 2;
+constexpr uint8_t kPriorityWarn = 3;
+constexpr uint8_t kPriorityError = 4;
+constexpr uint8_t kPriorityFatal = 5;
+constexpr uint8_t kPriorityRoster = 6;
+constexpr uint8_t kPriorityWaypoint = 7;
+constexpr uint8_t kPriorityStart = 8;
+
+constexpr uint8_t logLevelPriority(uint8_t encodedLevel) {
+  switch (encodedLevel) {
+  case static_cast<uint8_t>(LogLevel::FATAL):
+  case 0x07: // LogLevel::OVERRIDE on the wire.
+    return kPriorityFatal;
+  case static_cast<uint8_t>(LogLevel::ERROR):
+    return kPriorityError;
+  case static_cast<uint8_t>(LogLevel::WARN):
+    return kPriorityWarn;
+  case static_cast<uint8_t>(LogLevel::INFO):
+    return kPriorityInfo;
+  case static_cast<uint8_t>(LogLevel::DEBUG):
+    return kPriorityDebug;
+  default:
+    return kPriorityPose;
+  }
+}
+
+// Lifecycle records have fixed priority. Logs and watches are then ordered by
+// severity, so critical watch output can replace verbose logging.
+constexpr uint8_t telemetryPriority(uint8_t header) {
+  switch (static_cast<MsgType>(header >> 5)) {
+  case MsgType::START:
+    return kPriorityStart;
+  case MsgType::WPOINT:
+    return kPriorityWaypoint;
+  case MsgType::ROSTER:
+    return kPriorityRoster;
+  case MsgType::LOG:
+  case MsgType::WATCH:
+    return logLevelPriority((header >> 2) & 0x07);
+  case MsgType::POSE:
+  default:
+    return kPriorityPose;
+  }
+}
+
+static_assert(telemetryPriority(encodeMsgAll(LogLevel::FATAL, MsgType::WATCH)) >
+                  telemetryPriority(encodeMsgAll(LogLevel::DEBUG, MsgType::LOG)),
+              "A fatal watch must outrank a debug log");
+
+bool enqueueTelemetryFrame(const uint8_t* data, size_t len, uint8_t priority) {
   if (!telemetryQueueMutex.take(kTelemetryQueueLockTimeoutMs)) return false;
 
-  const bool hasCapacity = telemetryQueueCount < kTelemetryQueueCapacity;
-  if (hasCapacity) {
-    auto& slot = telemetryQueue[telemetryQueueTail];
-    memcpy(slot.bytes.data(), data, len);
-    slot.len = len;
+  TelemetryFrame* slot = nullptr;
+  if (telemetryQueueCount < kTelemetryQueueCapacity) {
+    slot = &telemetryQueue[telemetryQueueTail];
     telemetryQueueTail = (telemetryQueueTail + 1) % kTelemetryQueueCapacity;
     ++telemetryQueueCount;
+  } else {
+    // Replace the oldest lower-priority frame in place. Avoid shifting a full
+    // queue of encoded frames while the robot control loop is producing data.
+    for (size_t offset = 0; offset < telemetryQueueCount; ++offset) {
+      const size_t index =
+          (telemetryQueueHead + offset) % kTelemetryQueueCapacity;
+      if (telemetryQueue[index].priority < priority) {
+        slot = &telemetryQueue[index];
+        break;
+      }
+    }
+  }
+
+  if (slot) {
+    memcpy(slot->bytes.data(), data, len);
+    slot->len = len;
+    slot->priority = priority;
   }
 
   telemetryQueueMutex.give();
 
   // If we successfully added a frame, wake up the background tasks
-  if (hasCapacity) {
+  if (slot) {
     Telemetry::getInstance().notifyTransmitTask();
   }
 
-  return hasCapacity;
+  return slot != nullptr;
 }
 
 bool dequeueTelemetryFrame(TelemetryFrame& frame) {
@@ -128,15 +197,16 @@ int8_t packTelemetryVelocity(double velocity) {
 // --- High-Level Senders ---
 
 void Telemetry::sendPose(const PosePacket& pkt) {
-  // Pose is high-priority system data, so it gets OVERRIDE level
+  // Pose samples bypass the log-level filter.
   transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::POSE),
            reinterpret_cast<const uint8_t*>(&pkt), sizeof(PosePacket));
 }
 
-void Telemetry::sendStart(uint32_t timestamp, OdomProvider provider, uint32_t version) {
+bool Telemetry::sendStart(uint32_t timestamp, OdomProvider provider,
+                          uint32_t version) {
   const StartPacket pkt{timestamp, provider, version};
-  transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::START),
-           reinterpret_cast<const uint8_t*>(&pkt), sizeof(StartPacket));
+  return transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::START),
+                  reinterpret_cast<const uint8_t*>(&pkt), sizeof(StartPacket));
 }
 
 void Telemetry::sendWaypointCreated(const WaypointCreatedPacket& pkt) {
@@ -289,8 +359,8 @@ void Telemetry::writeFrameDirect(const uint8_t *data, size_t len) {
  * Consistent Overhead Byte Stuffing (COBS)
  * Prevents 0x00 bytes in the data stream by using them as frame delimiters.
  */
-void Telemetry::transmit(uint8_t header, const uint8_t *data, size_t len) {
-  if (data == nullptr || len > kTelemetryMaxPayloadBytes) return;
+bool Telemetry::transmit(uint8_t header, const uint8_t *data, size_t len) {
+  if (data == nullptr || len > kTelemetryMaxPayloadBytes) return false;
 
   // Uninitialized buffer for speed
   std::array<uint8_t, kTelemetryMaxEncodedFrameBytes> encodedBuf;
@@ -324,8 +394,10 @@ void Telemetry::transmit(uint8_t header, const uint8_t *data, size_t len) {
   encodedBuf[codePos] = code;
   encodedBuf[writePos++] = 0x00; // Final Delimiter
 
-  // If the queue is full, drop the packet rather than stalling the control loop.
-  enqueueTelemetryFrame(encodedBuf.data(), writePos);
+  // When the queue is full, lower-priority samples are discarded before
+  // lifecycle and diagnostic records. Never stall the robot control loop.
+  return enqueueTelemetryFrame(encodedBuf.data(), writePos,
+                               telemetryPriority(header));
 }
-} // namespace mvlib
 } // namespace detail
+} // namespace mvlib
