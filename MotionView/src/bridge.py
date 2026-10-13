@@ -882,7 +882,13 @@ class ProsTerminalRunner:
         async with self._op_lock:
             if self.proc is proc:
                 self._prune_exited_process_state()
-                self._enqueue_broadcast(f"[UI] terminal exited (code {returncode})")
+                if returncode == 0:
+                    # This control marker lets the frontend clear its live
+                    # streaming state without adding a misleading success
+                    # exit diagnostic to the console.
+                    self._enqueue_broadcast("[INTERNAL] terminal closed")
+                else:
+                    self._enqueue_broadcast(f"[UI] terminal exited (code {returncode})")
 
 
 runner = ProsTerminalRunner()

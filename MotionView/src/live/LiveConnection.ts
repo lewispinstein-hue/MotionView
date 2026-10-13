@@ -97,6 +97,10 @@ export class LiveConnection {
       socket.addEventListener("message", (event) => {
         if (this.session.socket !== socket) return;
         if (typeof event.data !== "string" || !this.stream.acceptingData) return;
+        if (event.data === "[INTERNAL] terminal closed") {
+          void this.stream.remoteExit();
+          return;
+        }
         if (event.data.startsWith("[UI] terminal exited")) void this.stream.remoteExit();
         const tagged = this.parser.classify(event.data);
         if (tagged) this.session.pending.push(tagged);
