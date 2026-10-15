@@ -173,8 +173,7 @@ bool Logger::setLoggingLocation(const char *location,
   if (result.usedRootFallback) {
     logMessage(LogLevel::WARN, detail::LogSource::SYSTEM,
                "setLoggingLocation() could not find the path specified. "
-               "Falling back to SD "
-               "root. Path: %s",
+               "Falling back to SD root. Path: %s",
                location);
   }
   if (result.overwroteExistingFile) {

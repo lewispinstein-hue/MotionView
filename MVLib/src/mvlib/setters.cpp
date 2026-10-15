@@ -16,7 +16,7 @@ void Logger::setLogToTerminal(bool v) {
     if (sessionLock.isLocked()) m_terminalSessionStarted = false;
   } else if (!wasEnabled && m_started.load()) {
     detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
-    if (lock.isLocked()) restartTerminalSessionLocked();
+    if (lock.isLocked()) syncTerminalSessionLocked();
   }
 
   logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,

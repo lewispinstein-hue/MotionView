@@ -8,7 +8,7 @@
  *
  * The fixture deliberately produces:
  * - a START frame followed by a complete watch and waypoint metadata replay;
- * - DEBUG, INFO, WARN, and ERROR log records;
+ * - a pre-start INFO log plus DEBUG, INFO, WARN, and ERROR log records;
  * - numeric, text, boolean, and predicate/elevated-label watches;
  * - waypoint CREATED, REACHED, and TIMEDOUT records; and
  * - a changing pose stream for 68 seconds, which crosses the uint16_t
@@ -160,9 +160,10 @@ void initialize() {
   });
 
   mvlib::setOdom(decoderFixturePose);
+  logger.info("Decoder fixture: pre-start log must survive logger.start()");
 
-  // Register before start so logger.start() must replay the full roster after
-  // its START boundary.
+  // Register before start so direct output establishes the session and
+  // logger.start() must replay the complete roster without replacing it.
   auto numberWatch = logger.watch(
     "Decoder Number", LogLevel::INFO, WatchMode::onInterval, 80_mvMs,
     [] { return readState([](const FixtureState& state) { return state.numericValue; }); },
@@ -180,8 +181,7 @@ void initialize() {
     "Decoder Enabled", LogLevel::DEBUG, WatchMode::onChange, 50_mvMs,
     [] { return readState([](const FixtureState& state) { return state.enabled; }); });
 
-  // Logger::start() emits a fresh START boundary followed by all current
-  // watch and waypoint metadata.
+  // Logger::start() replays all current watch and waypoint metadata.
   logger.start();
   logger.debug("Decoder fixture: debug log");
   logger.info("Decoder fixture: info log");

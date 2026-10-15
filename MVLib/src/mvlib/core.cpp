@@ -104,18 +104,19 @@ bool Logger::ensureTerminalSession() {
   return true;
 }
 
-bool Logger::restartTerminalSessionLocked() {
+bool Logger::syncTerminalSessionLocked() {
   if (!m_config.logToTerminal.load()) return false;
 
   detail::uniqueLock sessionLock(m_terminalSessionMutex, TIMEOUT_MAX);
   if (!sessionLock.isLocked() || !m_config.logToTerminal.load()) return false;
 
-  m_terminalSessionStarted = false;
-  if (!detail::Telemetry::getInstance().sendStart(
-          pros::millis(), m_odomProvider.load(), MVLIB_VERSION)) {
-    return false;
+  if (!m_terminalSessionStarted) {
+    if (!detail::Telemetry::getInstance().sendStart(
+            pros::millis(), m_odomProvider.load(), MVLIB_VERSION)) {
+      return false;
+    }
+    m_terminalSessionStarted = true;
   }
-  m_terminalSessionStarted = true;
 
   if (m_config.printWatches.load()) sendAllWatchRostersLocked();
   if (m_config.printWaypoints.load()) sendActiveWaypointMetadataLocked();
@@ -142,10 +143,9 @@ void Logger::start() {
       return;
     }
 
-    // START is a hard decoder boundary, so replay the current roster and
-    // waypoint definitions immediately after it. This also replaces any
-    // pre-start packets emitted by direct Logger calls.
-    restartTerminalSessionLocked();
+    // Keep pre-start logs in their existing session, then make the current
+    // watch and waypoint definitions available to a newly attached viewer.
+    syncTerminalSessionLocked();
 
     // SD init
     if (m_config.logToSD.load() && !m_sdSink->ready()) {

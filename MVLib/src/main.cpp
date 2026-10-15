@@ -49,7 +49,7 @@ void initialize() {
 
   // Make the SD card log to /usd/logs/MVLib_test.log
   logger.setLoggingLocation("/logs/MVLib_test.log");
-  
+
   mvlib::WaypointHandle leftGoalWP =
     logger.addWaypoint("Left Goal", {
       .tarX = 10,  // Target 10 x

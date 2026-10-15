@@ -104,9 +104,10 @@ public:
    * - Call once after configuration and (optionally) setRobot().
    *
    * @note SD logging may become locked after start() if a failure is detected.
-   * @note With terminal output enabled, start() sends a fresh MotionView
-   *       session boundary followed by current watch and active waypoint
-   *       metadata for enabled output categories.
+   * @note With terminal output enabled, start() begins a MotionView session
+   *       if needed, then re-sends current watch and active waypoint metadata
+   *       for enabled output categories. Logs sent before start() remain in
+   *       the same session.
    */
   void start();
 
@@ -781,9 +782,9 @@ private:
   /// This is safe to call while m_mutex is held.
   bool ensureTerminalSession();
 
-  /// @brief Force a new terminal-session boundary and replay current state.
+  /// @brief Start a terminal session if needed and replay current state.
   ///        The caller must hold m_mutex.
-  bool restartTerminalSessionLocked();
+  bool syncTerminalSessionLocked();
 
   /// @brief Print pose data
   void printTelemetry();
