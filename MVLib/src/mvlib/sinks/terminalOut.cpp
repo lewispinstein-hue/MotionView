@@ -94,38 +94,62 @@ static_assert(telemetryPriority(encodeMsgAll(LogLevel::FATAL, MsgType::WATCH)) >
 bool enqueueTelemetryFrame(const uint8_t* data, size_t len, uint8_t priority) {
   if (!telemetryQueueMutex.take(kTelemetryQueueLockTimeoutMs)) return false;
 
-  TelemetryFrame* slot = nullptr;
+  bool enqueued = false;
   if (telemetryQueueCount < kTelemetryQueueCapacity) {
-    slot = &telemetryQueue[telemetryQueueTail];
+    TelemetryFrame& slot = telemetryQueue[telemetryQueueTail];
+    memcpy(slot.bytes.data(), data, len);
+    slot.len = len;
+    slot.priority = priority;
     telemetryQueueTail = (telemetryQueueTail + 1) % kTelemetryQueueCapacity;
     ++telemetryQueueCount;
+    enqueued = true;
   } else {
-    // Replace the oldest lower-priority frame in place. Avoid shifting a full
-    // queue of encoded frames while the robot control loop is producing data.
+    // Remove the oldest lower-priority frame, then append the new record at
+    // the tail. Replacing a slot in place would put a new packet before older
+    // packets still ahead of it in the ring. That breaks the frontend's
+    // timestamp unwrapping and can make a live stream appear to stop.
+    size_t discardOffset = telemetryQueueCount;
     for (size_t offset = 0; offset < telemetryQueueCount; ++offset) {
       const size_t index =
           (telemetryQueueHead + offset) % kTelemetryQueueCapacity;
       if (telemetryQueue[index].priority < priority) {
-        slot = &telemetryQueue[index];
+        discardOffset = offset;
         break;
       }
     }
-  }
 
-  if (slot) {
-    memcpy(slot->bytes.data(), data, len);
-    slot->len = len;
-    slot->priority = priority;
+    if (discardOffset < telemetryQueueCount) {
+      for (size_t offset = discardOffset; offset + 1 < telemetryQueueCount;
+           ++offset) {
+        const size_t destination =
+            (telemetryQueueHead + offset) % kTelemetryQueueCapacity;
+        const size_t source =
+            (telemetryQueueHead + offset + 1) % kTelemetryQueueCapacity;
+        telemetryQueue[destination] = telemetryQueue[source];
+      }
+      telemetryQueueTail =
+          (telemetryQueueTail + kTelemetryQueueCapacity - 1) %
+          kTelemetryQueueCapacity;
+      --telemetryQueueCount;
+
+      TelemetryFrame& slot = telemetryQueue[telemetryQueueTail];
+      memcpy(slot.bytes.data(), data, len);
+      slot.len = len;
+      slot.priority = priority;
+      telemetryQueueTail = (telemetryQueueTail + 1) % kTelemetryQueueCapacity;
+      ++telemetryQueueCount;
+      enqueued = true;
+    }
   }
 
   telemetryQueueMutex.give();
 
   // If we successfully added a frame, wake up the background tasks
-  if (slot) {
+  if (enqueued) {
     Telemetry::getInstance().notifyTransmitTask();
   }
 
-  return slot != nullptr;
+  return enqueued;
 }
 
 bool dequeueTelemetryFrame(TelemetryFrame& frame) {
