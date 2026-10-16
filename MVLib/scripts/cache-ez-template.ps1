@@ -23,6 +23,22 @@ function Fail {
     throw $Message
 }
 
+function Invoke-ProsMake {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [Parameter(Mandatory = $true)][string]$FailureSummary
+    )
+
+    $output = @(& pros @Arguments 2>&1)
+    $exitCode = $LASTEXITCODE
+    $output | ForEach-Object { Write-Host $_ }
+
+    if ($exitCode -ne 0) {
+        $diagnostic = ($output | Select-Object -Last 40 | Out-String).Trim()
+        throw "$FailureSummary with exit code $exitCode.`nLast PROS output:`n$diagnostic"
+    }
+}
+
 $projectRoot = (Get-Location).Path
 while (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'project.pros') -PathType Leaf)) {
     $parent = Split-Path -LiteralPath $projectRoot -Parent
@@ -46,6 +62,7 @@ if ($null -eq $prosCommand) {
 
 $sourceDir = Join-Path $projectRoot $sourceRelativePath
 $archivePath = Join-Path $projectRoot $archiveRelativePath
+$temporaryArchivePath = "$archivePath.tmp"
 
 if (-not (Test-Path -LiteralPath $sourceDir -PathType Container)) {
     if (Test-Path -LiteralPath $archivePath -PathType Leaf) {
@@ -65,10 +82,10 @@ $sourceMoved = $false
 $archiveReplaced = $false
 
 $makeRules = @'
-MVLIB_CACHE_ARCHIVE := $(FWDIR)/libmvlib.a
-MVLIB_CACHE_TEMP_ARCHIVE := $(MVLIB_CACHE_ARCHIVE).tmp
-MVLIB_CACHE_SOURCES := $(shell find "$(SRCDIR)/mvlib" -type f \( -name '*.c' -o -name '*.s' -o -name '*.S' -o -name '*.cpp' -o -name '*.c++' -o -name '*.cc' \) | sort)
-MVLIB_CACHE_OBJECTS := $(sort $(addprefix $(BINDIR)/,$(patsubst $(SRCDIR)/%,%.o,$(MVLIB_CACHE_SOURCES))))
+MVLIB_CACHE_ARCHIVE := $(FWDIR)/libmvlib.a.tmp
+mvlib_rwildcard = $(foreach path,$(wildcard $(1)/*),$(call mvlib_rwildcard,$(path),$(2)) $(filter $(subst *,%,$(2)),$(path)))
+MVLIB_CACHE_SOURCES := $(sort $(call mvlib_rwildcard,$(SRCDIR)/mvlib,*.c) $(call mvlib_rwildcard,$(SRCDIR)/mvlib,*.s) $(call mvlib_rwildcard,$(SRCDIR)/mvlib,*.S) $(call mvlib_rwildcard,$(SRCDIR)/mvlib,*.cpp) $(call mvlib_rwildcard,$(SRCDIR)/mvlib,*.c++) $(call mvlib_rwildcard,$(SRCDIR)/mvlib,*.cc))
+MVLIB_CACHE_OBJECTS := $(addprefix $(BINDIR)/,$(patsubst $(SRCDIR)/%,%.o,$(MVLIB_CACHE_SOURCES)))
 
 ifeq ($(strip $(MVLIB_CACHE_SOURCES)),)
 $(error No compilable MVLib sources were found in $(SRCDIR)/mvlib)
@@ -76,14 +93,7 @@ endif
 
 .PHONY: mvlib-cache
 mvlib-cache: $(MVLIB_CACHE_OBJECTS)
-	@mkdir -p "$(dir $(MVLIB_CACHE_ARCHIVE))"
-	@rm -f "$(MVLIB_CACHE_TEMP_ARCHIVE)"
-	$(AR) rcs "$(MVLIB_CACHE_TEMP_ARCHIVE)" $(MVLIB_CACHE_OBJECTS)
-	@test -s "$(MVLIB_CACHE_TEMP_ARCHIVE)"
-	@members="$$( $(AR) t "$(MVLIB_CACHE_TEMP_ARCHIVE)" | wc -l | tr -d '[:space:]' )"; \
-		expected="$(words $(MVLIB_CACHE_OBJECTS))"; \
-		test "$$members" -eq "$$expected"
-	@mv -f "$(MVLIB_CACHE_TEMP_ARCHIVE)" "$(MVLIB_CACHE_ARCHIVE)"
+	$(AR) rcs "$(MVLIB_CACHE_ARCHIVE)" $(MVLIB_CACHE_OBJECTS)
 '@
 
 Push-Location $projectRoot
@@ -95,17 +105,17 @@ try {
         $archiveBackup = Join-Path $workDir 'libmvlib.a.previous'
         Copy-Item -LiteralPath $archivePath -Destination $archiveBackup
     }
+    Remove-Item -LiteralPath $temporaryArchivePath -Force -ErrorAction SilentlyContinue
 
     Write-Info "Compiling MVLib with this project's PROS toolchain."
-    & pros make --project $projectRoot -- -f Makefile -f $buildRules mvlib-cache
-    if ($LASTEXITCODE -ne 0) {
-        throw "The MVLib archive build failed with exit code $LASTEXITCODE."
+    Invoke-ProsMake -Arguments @('make', '--project', $projectRoot, '--', '-f', 'Makefile', '-f', $buildRules, 'mvlib-cache') -FailureSummary 'The MVLib archive build failed'
+
+    if (-not (Test-Path -LiteralPath $temporaryArchivePath -PathType Leaf) -or (Get-Item -LiteralPath $temporaryArchivePath).Length -eq 0) {
+        throw "The compiler did not create $archiveRelativePath.tmp."
     }
     $archiveReplaced = $true
-
-    if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf) -or (Get-Item -LiteralPath $archivePath).Length -eq 0) {
-        throw "The compiler did not create $archiveRelativePath."
-    }
+    Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
+    Move-Item -LiteralPath $temporaryArchivePath -Destination $archivePath
 
     $sourceBackup = Join-Path $workDir 'mvlib-source'
     Move-Item -LiteralPath $sourceDir -Destination $sourceBackup
@@ -113,10 +123,7 @@ try {
     Remove-Item -LiteralPath (Join-Path $projectRoot 'bin/mvlib'), (Join-Path $projectRoot '.d/mvlib') -Recurse -Force -ErrorAction SilentlyContinue
 
     Write-Info 'Verifying an archive-only build.'
-    & pros make --project $projectRoot quick
-    if ($LASTEXITCODE -ne 0) {
-        throw "The archive-only verification build failed with exit code $LASTEXITCODE."
-    }
+    Invoke-ProsMake -Arguments @('make', '--project', $projectRoot, 'quick') -FailureSummary 'The archive-only verification build failed'
 
     if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf) -or (Get-Item -LiteralPath $archivePath).Length -eq 0) {
         throw "$archiveRelativePath disappeared during verification."
@@ -144,6 +151,7 @@ catch {
     throw
 }
 finally {
+    Remove-Item -LiteralPath $temporaryArchivePath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $buildRules -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $workDir -Recurse -Force -ErrorAction SilentlyContinue
     Pop-Location

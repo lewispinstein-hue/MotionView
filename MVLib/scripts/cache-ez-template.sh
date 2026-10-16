@@ -29,6 +29,7 @@ cd "$project_root"
 
 source_dir="$project_root/$SOURCE_RELATIVE_PATH"
 archive_path="$project_root/$ARCHIVE_RELATIVE_PATH"
+temporary_archive_path="$archive_path.tmp"
 
 if [[ ! -d "$source_dir" ]]; then
   [[ -s "$archive_path" ]] && {
@@ -68,6 +69,7 @@ cleanup() {
   fi
 
   rm -f "$build_rules"
+  rm -f "$temporary_archive_path"
   rm -rf "$work_dir"
   exit "$status"
 }
@@ -77,12 +79,13 @@ if [[ -f "$archive_path" ]]; then
   archive_backup="$work_dir/libmvlib.a.previous"
   cp -p "$archive_path" "$archive_backup"
 fi
+rm -f "$temporary_archive_path"
 
 cat >"$build_rules" <<'MAKEFILE'
-MVLIB_CACHE_ARCHIVE := $(FWDIR)/libmvlib.a
-MVLIB_CACHE_TEMP_ARCHIVE := $(MVLIB_CACHE_ARCHIVE).tmp
-MVLIB_CACHE_SOURCES := $(shell find "$(SRCDIR)/mvlib" -type f \( -name '*.c' -o -name '*.s' -o -name '*.S' -o -name '*.cpp' -o -name '*.c++' -o -name '*.cc' \) | sort)
-MVLIB_CACHE_OBJECTS := $(sort $(addprefix $(BINDIR)/,$(patsubst $(SRCDIR)/%,%.o,$(MVLIB_CACHE_SOURCES))))
+MVLIB_CACHE_ARCHIVE := $(FWDIR)/libmvlib.a.tmp
+mvlib_rwildcard = $(foreach path,$(wildcard $(1)/*),$(call mvlib_rwildcard,$(path),$(2)) $(filter $(subst *,%,$(2)),$(path)))
+MVLIB_CACHE_SOURCES := $(sort $(call mvlib_rwildcard,$(SRCDIR)/mvlib,*.c) $(call mvlib_rwildcard,$(SRCDIR)/mvlib,*.s) $(call mvlib_rwildcard,$(SRCDIR)/mvlib,*.S) $(call mvlib_rwildcard,$(SRCDIR)/mvlib,*.cpp) $(call mvlib_rwildcard,$(SRCDIR)/mvlib,*.c++) $(call mvlib_rwildcard,$(SRCDIR)/mvlib,*.cc))
+MVLIB_CACHE_OBJECTS := $(addprefix $(BINDIR)/,$(patsubst $(SRCDIR)/%,%.o,$(MVLIB_CACHE_SOURCES)))
 
 ifeq ($(strip $(MVLIB_CACHE_SOURCES)),)
 $(error No compilable MVLib sources were found in $(SRCDIR)/mvlib)
@@ -90,21 +93,15 @@ endif
 
 .PHONY: mvlib-cache
 mvlib-cache: $(MVLIB_CACHE_OBJECTS)
-	@mkdir -p "$(dir $(MVLIB_CACHE_ARCHIVE))"
-	@rm -f "$(MVLIB_CACHE_TEMP_ARCHIVE)"
-	$(AR) rcs "$(MVLIB_CACHE_TEMP_ARCHIVE)" $(MVLIB_CACHE_OBJECTS)
-	@test -s "$(MVLIB_CACHE_TEMP_ARCHIVE)"
-	@members="$$( $(AR) t "$(MVLIB_CACHE_TEMP_ARCHIVE)" | wc -l | tr -d '[:space:]' )"; \
-		expected="$(words $(MVLIB_CACHE_OBJECTS))"; \
-		test "$$members" -eq "$$expected"
-	@mv -f "$(MVLIB_CACHE_TEMP_ARCHIVE)" "$(MVLIB_CACHE_ARCHIVE)"
+	$(AR) rcs "$(MVLIB_CACHE_ARCHIVE)" $(MVLIB_CACHE_OBJECTS)
 MAKEFILE
 
 info "Compiling MVLib with this project's PROS toolchain."
 pros make --project "$project_root" -- -f Makefile -f "$build_rules" mvlib-cache
-archive_replaced=1
 
-[[ -s "$archive_path" ]] || die "The compiler did not create $ARCHIVE_RELATIVE_PATH."
+[[ -s "$temporary_archive_path" ]] || die "The compiler did not create $ARCHIVE_RELATIVE_PATH.tmp."
+archive_replaced=1
+mv -f "$temporary_archive_path" "$archive_path"
 
 source_backup="$work_dir/mvlib-source"
 mv "$source_dir" "$source_backup"
