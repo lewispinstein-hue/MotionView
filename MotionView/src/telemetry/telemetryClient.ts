@@ -2,6 +2,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../tauri/commands";
 import { TelemetryQueue } from "./telemetryQueue";
+import { createTelemetryId } from "./telemetryIds";
 import type { QueuedTelemetryEvent, SystemInfo, TelemetryCaptureOptions, TelemetryEventName, TelemetryProperties } from "./telemetryTypes";
 
 interface PosthogRequest {
@@ -13,6 +14,12 @@ interface PosthogRequest {
 
 /** Total time budget for the exit-path flush, so app close never waits on the network. */
 export const EXIT_TELEMETRY_FLUSH_DEADLINE_MS = 2_500;
+export const VIEWER_SESSION_ID_PROPERTY = "viewer_session_id";
+
+/** Stamps identity at capture time so retries remain grouped with their origin. */
+export function withViewerSessionId(properties: TelemetryProperties, viewerSessionId: string): TelemetryProperties {
+  return { ...properties, [VIEWER_SESSION_ID_PROPERTY]: viewerSessionId };
+}
 
 export class TelemetryClient {
   private appVersion = "unknown";
@@ -24,6 +31,12 @@ export class TelemetryClient {
   private analyticsInitialization: Promise<void> | null = null;
   private debounceUntilByKey = new Map<string, number>();
   private readonly queue = new TelemetryQueue();
+  /** New for each application process; written into events before they queue. */
+  private readonly viewerSessionId = createTelemetryId();
+
+  getViewerSessionId(): string {
+    return this.viewerSessionId;
+  }
 
   enabled(): boolean {
     return this.analyticsEnabled && isTauriRuntime();
@@ -85,7 +98,9 @@ export class TelemetryClient {
 
     const queuedEvent: QueuedTelemetryEvent = {
       event,
-      properties: { ...properties },
+      // Session identity belongs to the captured event, not send-time global
+      // properties. A retry in a later app launch must retain its origin.
+      properties: withViewerSessionId(properties, this.viewerSessionId),
       createdAt: new Date().toISOString(),
       explicitUserAction: explicitlySubmitted,
     };
@@ -197,6 +212,9 @@ export class TelemetryClient {
     const queuedMs = wasQueued && Number.isFinite(createdAtMs) ? Math.max(0, sentAt.getTime() - createdAtMs) : 0;
     const properties = {
       ...this.globalProperties(),
+      // Pre-session events from older releases receive the current session;
+      // events captured by this release override this with their origin ID.
+      [VIEWER_SESSION_ID_PROPERTY]: this.viewerSessionId,
       ...event.properties,
       event_created_at: event.createdAt,
       event_sent_at: sentAt.toISOString(),

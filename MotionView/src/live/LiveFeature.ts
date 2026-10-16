@@ -84,6 +84,12 @@ export class LiveFeature {
     this.events.consoleChanged.emit({ kind: "reset" });
   }
 
+  /** Clears the current live output without interrupting an active stream. */
+  clearActiveOutput(): void {
+    this.stream.discardPending();
+    this.events.consoleChanged.emit({ kind: "reset" });
+  }
+
   finalizeTelemetry(): Promise<void> {
     return this.metrics.finalizeTelemetry();
   }

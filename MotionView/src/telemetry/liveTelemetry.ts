@@ -38,6 +38,18 @@ export class LiveTelemetry {
     return this.telemetry.capture("livestream_metrics", properties);
   }
 
+  liveRunStarted(properties: TelemetryProperties) {
+    return this.telemetry.capture("live_run_started", properties);
+  }
+
+  liveRunFatalError(properties: TelemetryProperties) {
+    return this.telemetry.capture("live_run_fatal_error", properties);
+  }
+
+  liveRunEnded(properties: TelemetryProperties) {
+    return this.telemetry.capture("live_run_ended", properties);
+  }
+
   private consumeCurrentStreamingSeconds() {
     this.stopStreamingClock();
     const seconds = Math.round(this.currentSessionMs / 1000);

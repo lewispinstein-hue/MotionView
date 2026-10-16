@@ -3,7 +3,7 @@ import { liveTelemetry } from "../telemetry/createTelemetry";
 import type { ViewingFeature } from "../viewing/ViewingFeature";
 import type { ViewingAppendResult } from "../viewing/viewingTypes";
 import type { LiveEvents } from "./LiveEvents";
-import type { LiveLineParser } from "./LiveLineParser";
+import type { LiveLineParser, ParsedLiveBatchResult } from "./LiveLineParser";
 import type { LiveMetrics } from "./LiveMetrics";
 import type { LiveSession } from "./LiveSession";
 import type { LiveApiResponse, LiveStreamState } from "./liveTypes";
@@ -20,6 +20,7 @@ const EMPTY_APPEND_RESULT: ViewingAppendResult = {
 
 export class LiveStream {
   #command: Promise<unknown> = Promise.resolve();
+  #lastBatchFailure: string | null = null;
 
   constructor(
     private readonly session: LiveSession,
@@ -84,6 +85,7 @@ export class LiveStream {
         this.setState(wasStreaming ? "streaming" : "idle");
         return false;
       }
+      this.metrics.endRun(force ? "force_stop" : "manual_stop");
       this.session.clearPending();
       this.session.resetParser();
       this.setState("idle");
@@ -104,19 +106,34 @@ export class LiveStream {
     }
     const pending = this.session.pending.batch();
     if (!pending) return EMPTY_APPEND_RESULT;
+    let parsed: ParsedLiveBatchResult | null = null;
     try {
-      const parsed = this.parser.parse(pending, this.viewing.data, this.session.lastPoseTimestamp);
+      parsed = this.parser.parse(pending, this.viewing.data, this.session.lastPoseTimestamp);
+      if (parsed.runStart) this.metrics.beginRun(parsed.runStart);
       const result = parsed.startsNewRun
         ? this.viewing.loadParsedBatch(parsed.batch)
         : this.viewing.appendLiveBatch(parsed.batch);
       this.session.pending.markConsumed(pending.endIndex);
       this.session.lastPoseTimestamp = parsed.lastPoseTimestamp;
-      this.metrics.accept(result);
+      this.#lastBatchFailure = null;
+      this.metrics.accept(result, parsed.batch);
       if (result.hasNewData) {
         this.events.batchAccepted.emit({ result, pendingLineCount: this.pendingLineCount });
       }
       return result;
-    } catch {
+    } catch (error) {
+      // Never let one malformed record or rendering-side exception pin the
+      // pending buffer forever. Previously the same batch was retried on each
+      // refresh, so every subsequent valid telemetry record was stranded
+      // behind it until the fixed-size buffer eventually overflowed.
+      this.session.pending.markConsumed(pending.endIndex);
+      if (parsed) this.session.lastPoseTimestamp = parsed.lastPoseTimestamp;
+      const detail = error instanceof Error && error.message ? error.message : "unknown error";
+      if (detail !== this.#lastBatchFailure) {
+        this.#lastBatchFailure = detail;
+        this.appendConsole(`[UI] Skipped a live-data batch (${detail}). Streaming will continue.`);
+      }
+      console.error("MotionView could not process a live-data batch:", error);
       return EMPTY_APPEND_RESULT;
     }
   }
@@ -136,7 +153,6 @@ export class LiveStream {
     const result = this.viewing.loadParsedBatch(parsed.batch);
     this.session.resetParser();
     this.session.clearPending();
-    this.metrics.accept(result);
     return result;
   }
 
@@ -148,6 +164,7 @@ export class LiveStream {
     return this.serialize(async () => {
       if (!this.streaming && this.session.streamState !== "starting") return;
       this.stopRefreshTimer();
+      this.metrics.endRun("terminal_disconnected");
       this.session.clearPending();
       this.session.resetParser();
       this.setState("idle");
@@ -158,6 +175,7 @@ export class LiveStream {
 
   async connectionClosed(): Promise<void> {
     this.stopRefreshTimer();
+    this.metrics.endRun("connection_closed");
     this.session.clearPending();
     this.session.resetParser();
     if (this.streaming || this.session.streamState === "stopping") await liveTelemetry.streamingStopped();
@@ -168,6 +186,15 @@ export class LiveStream {
   reset(): void {
     this.session.clearPending();
     this.session.resetParser();
+  }
+
+  /**
+   * Drops records that arrived before a visible-data clear without resetting
+   * the active stream's parser state. Resetting that state while the robot is
+   * still sending data can break continuity until the whole app is reloaded.
+   */
+  discardPending(): void {
+    this.session.clearPending();
   }
 
   private restartRefreshTimer(): void {

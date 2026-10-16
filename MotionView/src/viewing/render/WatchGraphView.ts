@@ -26,6 +26,8 @@ function numericValue(value: unknown): number | null {
 
 export class WatchGraphView {
   #key: string | null = null;
+  #label = "Watch";
+  #watchId: number | null = null;
   #chart: Chart | null = null;
   #xBounds: Readonly<{ minimum: number; maximum: number }> | null = null;
   #primaryMarkers: readonly Readonly<WatchMarker>[] = [];
@@ -122,6 +124,8 @@ export class WatchGraphView {
       return;
     }
     this.#key = key;
+    this.#label = marker.watch.label || "Watch";
+    this.#watchId = marker.watch.id;
     this.dom.panel.classList.remove("hidden");
     this.render();
     this.notifyStateChanged();
@@ -154,13 +158,15 @@ export class WatchGraphView {
   }
 
   reset(): void {
-    this.#key = null;
     this.#xBounds = null;
     this.#primaryMarkers = [];
     this.#comparisonMarkers = [];
     this.#chart?.destroy();
     this.#chart = null;
-    this.dom.panel.classList.add("hidden");
+    // A new robot-program run replaces Viewing data. Keep an open graph tied
+    // to its watch identity so it can show empty values until that watch
+    // arrives again, just like a pinned watch panel does.
+    this.render();
     this.notifyStateChanged();
   }
 
@@ -187,8 +193,12 @@ export class WatchGraphView {
     this.#primaryMarkers = primary;
     this.#comparisonMarkers = comparison;
     const representative = primary[primary.length - 1]?.watch;
-    this.dom.title.textContent = representative?.label || "Watch";
-    this.dom.subtitle.textContent = representative?.id == null ? "ID: —" : `ID: ${representative.id}`;
+    if (representative) {
+      this.#label = representative.label || "Watch";
+      this.#watchId = representative.id;
+    }
+    this.dom.title.textContent = this.#label;
+    this.dom.subtitle.textContent = this.#watchId == null ? "ID: —" : `ID: ${this.#watchId}`;
     this.renderCompareOptions();
     this.renderStats(primary, comparison);
     const datasets: ChartDataset<"line", Array<{ x: number; y: number }>>[] = [];
@@ -344,7 +354,7 @@ export class WatchGraphView {
   private renderStats(primary: readonly Readonly<WatchMarker>[], comparison: readonly Readonly<WatchMarker>[]): void {
     const write = (markers: readonly Readonly<WatchMarker>[], count: HTMLElement, average: HTMLElement, minimum: HTMLElement, maximum: HTMLElement) => {
       const values = markers.map((marker) => numericValue(marker.watch.value)).filter((value): value is number => value != null);
-      count.textContent = String(values.length);
+      count.textContent = values.length ? String(values.length) : "—";
       average.textContent = values.length ? formatNumber(values.reduce((sum, value) => sum + value, 0) / values.length, 3) : "—";
       minimum.textContent = values.length ? formatNumber(Math.min(...values), 3) : "—";
       maximum.textContent = values.length ? formatNumber(Math.max(...values), 3) : "—";

@@ -79,8 +79,12 @@ export class AppCommands {
   }
 
   private clearViewing(): void {
+    // A live stream stays active across a field clear. Keep the parser's
+    // timestamp/session state so the next WebSocket records continue to be
+    // accepted, while discarding records that were buffered before the clear.
+    if (this.app.live.stream.streaming) this.app.live.clearActiveOutput();
+    else this.app.live.reset();
     this.app.viewing.clear();
-    this.app.live.reset();
   }
 
   private async confirmPlanningClear(message: string): Promise<boolean> {

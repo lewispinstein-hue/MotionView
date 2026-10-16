@@ -8,12 +8,15 @@ import {
 } from "../viewing/routeNormalization";
 import type { ParsedLiveViewingBatch, ViewingDataReader } from "../viewing/viewingTypes";
 import { emptyLiveCounts, stripToTag, type LiveCounts, type LivePendingBatch } from "./liveCore";
+import type { LiveRunStart } from "./liveTypes";
 
 export interface ParsedLiveBatchResult {
   readonly batch: ParsedLiveViewingBatch;
   readonly counts: LiveCounts;
   readonly lastPoseTimestamp: number | null;
   readonly startsNewRun: boolean;
+  /** Present for the newest valid START marker in this batch. */
+  readonly runStart: LiveRunStart | null;
 }
 
 export interface ParsedWaypointLine {
@@ -66,6 +69,37 @@ function formatCsvLine(fields: ReadonlyArray<string | number>): string {
   }).join(",");
 }
 
+const ODOM_PROVIDER_NAMES: Readonly<Record<number, string>> = {
+  0: "none",
+  1: "unknown",
+  2: "custom",
+  3: "lemlib",
+  4: "ez_template",
+  5: "okapi",
+};
+
+function parseRunStart(line: string): LiveRunStart | null {
+  const parts = parseCsvLine(line);
+  const robotStartTimestampMs = parts && parts.length >= 2 ? parseViewingNumber(parts[1]) : null;
+  if (robotStartTimestampMs == null || !Number.isSafeInteger(robotStartTimestampMs) || robotStartTimestampMs < 0) return null;
+
+  const rawProvider = parts && parts.length >= 4 ? parseViewingNumber(parts[2]) : null;
+  const odomProviderId = rawProvider != null && Number.isInteger(rawProvider) && rawProvider >= 0 && rawProvider <= 0xff
+    ? rawProvider
+    : null;
+  const rawVersion = parts && parts.length >= 4 ? parseViewingNumber(parts[3]) : null;
+  const mvlibVersionEncoded = rawVersion != null && Number.isSafeInteger(rawVersion) && rawVersion >= 0 && rawVersion <= 0xffff_ffff
+    ? rawVersion
+    : null;
+
+  return {
+    robotStartTimestampMs,
+    odomProviderId,
+    odomProvider: odomProviderId == null ? "unknown" : (ODOM_PROVIDER_NAMES[odomProviderId] ?? "unknown"),
+    mvlibVersionEncoded,
+  };
+}
+
 export class LiveLineParser {
   classify(line: string): string {
     return stripToTag(line);
@@ -83,7 +117,7 @@ export class LiveLineParser {
     const counts = emptyLiveCounts();
     const createdWaypointIds = new Set<number>();
     let startIndex = pending.startIndex;
-    let startsNewRun = false;
+    let runStart: LiveRunStart | null = null;
 
     // A START marker is a hard data boundary. If several are received in one
     // refresh batch, only records after the newest valid one belong to the
@@ -91,13 +125,13 @@ export class LiveLineParser {
     for (let index = pending.startIndex; index < pending.endIndex; index += 1) {
       const line = stripToTag(pending.lines[index] ?? "");
       if (!line.startsWith("[START],")) continue;
-      const parts = parseCsvLine(line);
-      const timestamp = parts && parts.length >= 2 ? parseViewingNumber(parts[1]) : null;
-      if (timestamp == null || !Number.isSafeInteger(timestamp) || timestamp < 0) continue;
+      const start = parseRunStart(line);
+      if (!start) continue;
       startIndex = index + 1;
-      startsNewRun = true;
+      runStart = start;
     }
 
+    const startsNewRun = runStart != null;
     let lastPoseTimestamp = startsNewRun ? null : previousPoseTimestamp;
 
     for (let index = startIndex; index < pending.endIndex; index += 1) {
@@ -196,6 +230,7 @@ export class LiveLineParser {
       counts,
       lastPoseTimestamp,
       startsNewRun,
+      runStart,
     };
   }
 
