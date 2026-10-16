@@ -68,7 +68,7 @@ export class FloatingInfoView {
       values.x.textContent = formatNumber(pose.x, 2);
       values.y.textContent = formatNumber(pose.y, 2);
       values.theta.textContent = `${formatNumber(pose.theta, 2)}°`;
-      values.time.textContent = `${formatNumber((pose.t ?? 0) / 1000, 2)}s`;
+      values.time.textContent = `${formatNumber(pose.t ?? 0, 0)}ms`;
       values.averageSpeed.textContent = formatNumber(pose.speed_raw, 2);
       values.leftVelocity.textContent = formatNumber(pose.l_vel, 2);
       values.rightVelocity.textContent = formatNumber(pose.r_vel, 2);
@@ -77,7 +77,7 @@ export class FloatingInfoView {
     }
     const reference = fieldPose?.t ?? null;
     const closest = this.closestWatch(reference);
-    values.watchTime.textContent = closest ? `${formatNumber(closest.t / 1000, 2)}s` : "—";
+    values.watchTime.textContent = closest ? `${formatNumber(closest.t, 0)}ms` : "—";
     values.watchLabel.textContent = closest?.label || "—";
     values.watchValue.textContent = closest?.value == null ? "—" : String(closest.value);
     this.refreshPinnedPanels();

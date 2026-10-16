@@ -24,6 +24,7 @@ export class LogListView {
       scrollContainer: dom.scrollContainer,
       getKey: (entry) => this.keyFor(entry),
       renderItem: (entry) => this.createItem(entry),
+      syncItem: (row, entry) => this.syncItem(row, entry),
     });
     if (!list) throw new Error("MotionView could not initialize the log virtual list.");
     this.#list = list;
@@ -95,8 +96,6 @@ export class LogListView {
     const style = levelStyle(entry.level);
     const element = document.createElement("div");
     element.className = "watchItem logItem";
-    if (entry === this.viewing.navigation.selectedLog) element.classList.add("selected");
-    if (this.#previewKey === this.keyFor(entry)) element.classList.add("previewSelected");
     element.dataset.t = String(entry.t);
     element.innerHTML = `<div class="watchItemContent logItemContent"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -138,6 +137,12 @@ export class LogListView {
       selectLog();
     });
     return element;
+  }
+
+  private syncItem(element: HTMLElement, entry: Readonly<LogEntry>): void {
+    element.classList.toggle("selected", entry === this.viewing.navigation.selectedLog);
+    element.classList.toggle("previewSelected", this.#previewKey === this.keyFor(entry));
+    element.dataset.t = String(entry.t);
   }
 
   private keyFor(entry: Readonly<LogEntry>): string {

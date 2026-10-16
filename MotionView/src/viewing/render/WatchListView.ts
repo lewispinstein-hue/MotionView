@@ -32,6 +32,7 @@ export class WatchListView {
       scrollContainer: dom.scrollContainer,
       getKey: (marker) => this.keyFor(marker),
       renderItem: (marker) => this.createItem(marker),
+      syncItem: (row, marker) => this.syncItem(row, marker),
     });
     if (!list) throw new Error("MotionView could not initialize the watch virtual list.");
     this.#list = list;
@@ -126,8 +127,6 @@ export class WatchListView {
       : booleanValue === "false" ? " isBooleanFalse" : "";
     const element = document.createElement("div");
     element.className = "watchItem";
-    if (this.viewing.navigation.selectedWatch === marker) element.classList.add("selected");
-    if (this.#previewKey === itemKey) element.classList.add("previewSelected");
     element.dataset.t = String(marker.t);
     element.dataset.watchKey = itemKey;
     const icon = (svg: string) => `<span class="watchActionIcon">${svg}</span>`;
@@ -139,6 +138,7 @@ export class WatchListView {
       <div class="watchTitleGroup"><span class="pill level watchLevelPill" style="background:${style.fill};color:${style.text}">${style.name}</span><span class="watchLabel eventSelectableText">${escapeHtml(watch.label)}</span></div>
       <div class="watchMeta"><div class="watchTimestamp muted"><span class="eventSelectableText">${formatNumber(marker.t / 1000, 2)}s</span></div><div class="watchActions watchActionsPill watchActionsFull pill">
         ${pinButton}${visibilityButton}${graphButton}</div></div></div><div class="bigValue${booleanClass}"><span class="eventSelectableText">${escapeHtml(watch.value ?? "")}</span></div></div>`;
+    this.syncItem(element, marker);
     this.constrainTextSelection(element);
     element.addEventListener("pointerenter", () => {
       if (!this.viewing.playback.isPlaying) this.viewing.navigation.setTimelineHover(marker.t);
@@ -173,7 +173,7 @@ export class WatchListView {
     for (const button of element.querySelectorAll<HTMLButtonElement>(".watchVisibilityBtn")) {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
-        this.viewing.setWatchVisibility(watch, !visible);
+        this.viewing.setWatchVisibility(watch, watch.visible === false);
       });
     }
     for (const button of element.querySelectorAll<HTMLButtonElement>(".watchPinBtn")) {
@@ -191,6 +191,30 @@ export class WatchListView {
       });
     }
     return element;
+  }
+
+  private syncItem(element: HTMLElement, marker: Readonly<WatchMarker>): void {
+    const watch = marker.watch;
+    const itemKey = this.keyFor(marker);
+    const visible = watch.visible !== false;
+    element.classList.toggle("selected", this.viewing.navigation.selectedWatch === marker);
+    element.classList.toggle("previewSelected", this.#previewKey === itemKey);
+    element.dataset.t = String(marker.t);
+    element.dataset.watchKey = itemKey;
+
+    const visibilityButton = element.querySelector<HTMLButtonElement>(".watchVisibilityBtn");
+    if (visibilityButton) {
+      visibilityButton.classList.toggle("isOff", !visible);
+      const action = visible ? "Hide" : "Show";
+      visibilityButton.title = `${action} watch`;
+      visibilityButton.setAttribute("aria-label", `${action} watch`);
+      const icon = visibilityButton.querySelector<HTMLElement>(".watchActionIcon");
+      const iconSvg = visible ? visibleWatchIconSvg : invisibleWatchIconSvg;
+      if (icon && icon.innerHTML !== iconSvg) icon.innerHTML = iconSvg;
+    }
+
+    element.querySelector(".watchPinBtn")?.classList.toggle("isOn", this.floatingInfo.isWatchPinned(watch.id ?? null));
+    element.querySelector(".watchGraphBtn")?.classList.toggle("isOn", this.watchGraph.isOpenFor(marker));
   }
 
   private keyFor(marker: Readonly<WatchMarker>): string {

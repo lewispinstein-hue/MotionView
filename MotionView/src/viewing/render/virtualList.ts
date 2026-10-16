@@ -120,6 +120,8 @@ export interface VirtualListOptions<T> {
   scrollContainer?: HTMLElement;
   getKey(item: T, index: number): string;
   renderItem(item: T, index: number): HTMLElement | null;
+  /** Updates a retained row when its stable item key remains in view. */
+  syncItem?: (row: HTMLElement, item: T, index: number) => void;
   syncRowLayout?: (row: HTMLElement) => void;
 }
 
@@ -145,6 +147,7 @@ export function createVirtualList<T>(
     scrollContainer,
     getKey,
     renderItem,
+    syncItem = () => {},
     syncRowLayout = () => {},
   }: VirtualListOptions<T>,
 ): VirtualList<T> | null {
@@ -165,6 +168,7 @@ export function createVirtualList<T>(
   const measuredHeights = new Map<string, number>();
   const activePointerIds = new Set<number>();
   let renderDeferredForPointer = false;
+  let pendingItems: { items: T[]; resetScroll: boolean; preserveScroll: boolean } | null = null;
 
   function isVisible() {
     return listContainer.getClientRects().length > 0;
@@ -230,6 +234,7 @@ export function createVirtualList<T>(
       renderDeferredForPointer = true;
       return;
     }
+    flushPendingItems();
     if (!store.length) {
       content.replaceChildren();
       content.style.height = "0px";
@@ -244,22 +249,39 @@ export function createVirtualList<T>(
     const startIndex = Math.max(0, lowerBoundTop(startPx));
     const endIndex = Math.min(store.length, Math.max(startIndex + 1, upperBoundTop(endPx)));
 
-    const frag = document.createDocumentFragment();
     const renderedRows: Array<{ key: string; row: HTMLElement }> = [];
+    const existingRows = new Map<string, HTMLElement>();
+    for (const row of content.children) {
+      if (!(row instanceof HTMLElement) || !row.dataset.virtualListKey) continue;
+      existingRows.set(row.dataset.virtualListKey, row);
+    }
     let layoutDirty = false;
 
     for (let i = startIndex; i < endIndex; i += 1) {
       const item = store.get(i) as T;
-      const row = renderItem(item, i);
+      const key = getKey(item, i);
+      const row = existingRows.get(key) ?? renderItem(item, i);
       if (!row) continue;
       row.classList.add("virtualListRow");
       row.style.top = `${tops[i]}px`;
-      const key = getKey(item, i);
+      row.dataset.virtualListKey = key;
+      syncItem(row, item, i);
       renderedRows.push({ key, row });
-      frag.appendChild(row);
     }
 
-    content.replaceChildren(frag);
+    // Keep matching rows in the document. Replacing the whole fragment causes
+    // pointerleave/pointerenter churn under a stationary cursor and can detach
+    // an icon button while the user is trying to click it during live updates.
+    let nextChild: ChildNode | null = content.firstChild;
+    for (const { row } of renderedRows) {
+      if (row !== nextChild) content.insertBefore(row, nextChild);
+      nextChild = row.nextSibling;
+    }
+    while (nextChild) {
+      const stale = nextChild;
+      nextChild = stale.nextSibling;
+      stale.remove();
+    }
 
     for (let i = 0; i < renderedRows.length; i += 1) {
       const { key, row } = renderedRows[i];
@@ -357,6 +379,25 @@ export function createVirtualList<T>(
   }
 
   function setItems(nextItems: ArrayLike<T>, { resetScroll = false, preserveScroll = true } = {}) {
+    if (activePointerIds.size > 0) {
+      // Applying the new layout can move the sidebar before the browser sends
+      // click. Keep the old rows and scroll position for this interaction;
+      // the latest snapshot is reconciled on the next animation frame.
+      pendingItems = {
+        items: Array.from(nextItems),
+        resetScroll,
+        preserveScroll,
+      };
+      renderDeferredForPointer = true;
+      return;
+    }
+    // A newer non-interactive render supersedes any snapshot deferred by a
+    // now-finished pointer interaction.
+    pendingItems = null;
+    setItemsNow(nextItems, { resetScroll, preserveScroll });
+  }
+
+  function setItemsNow(nextItems: ArrayLike<T>, { resetScroll, preserveScroll }: { resetScroll: boolean; preserveScroll: boolean }) {
     const anchor = preserveScroll && !resetScroll ? captureScrollAnchor() : null;
     if (nextItems && typeof nextItems.length === "number") store.setItems(nextItems);
     else store.clear();
@@ -373,7 +414,15 @@ export function createVirtualList<T>(
     requestRender();
   }
 
+  function flushPendingItems() {
+    const pending = pendingItems;
+    if (!pending) return;
+    pendingItems = null;
+    setItemsNow(pending.items, pending);
+  }
+
   function clear({ resetScroll = false } = {}) {
+    pendingItems = null;
     store.clear();
     measuredHeights.clear();
     recomputeLayout();

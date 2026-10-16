@@ -24,6 +24,7 @@ export class PoseListView {
       scrollContainer: dom.scrollContainer,
       getKey: (item) => String(item.index),
       renderItem: (item) => this.createItem(item.index),
+      syncItem: (row, item) => this.syncItem(row, item.index),
     });
     if (!list) throw new Error("MotionView could not initialize the pose virtual list.");
     this.#list = list;
@@ -94,8 +95,6 @@ export class PoseListView {
       : "—";
     const element = document.createElement("div");
     element.className = "watchItem poseItem";
-    if (index === this.viewing.navigation.selectedPoseIndex) element.classList.add("selected");
-    if (index === this.#previewIndex) element.classList.add("previewSelected");
     element.dataset.idx = String(index);
     element.innerHTML = `<div class="watchItemContent poseItemContent"><div class="watchItemHeader">
       <div class="watchTitleGroup"><span class="pill level watchLevelPill poseIndexPill" style="background:rgba(174, 190, 211, 0.85);color:#081018">${index + 1}</span></div>
@@ -117,5 +116,11 @@ export class PoseListView {
       this.viewing.navigation.selectPose(index);
     }, { passive: false });
     return element;
+  }
+
+  private syncItem(element: HTMLElement, index: number): void {
+    element.classList.toggle("selected", index === this.viewing.navigation.selectedPoseIndex);
+    element.classList.toggle("previewSelected", index === this.#previewIndex);
+    element.dataset.idx = String(index);
   }
 }
