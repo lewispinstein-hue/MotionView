@@ -68,7 +68,7 @@ export class FloatingInfoView {
       values.x.textContent = formatNumber(pose.x, 2);
       values.y.textContent = formatNumber(pose.y, 2);
       values.theta.textContent = `${formatNumber(pose.theta, 2)}°`;
-      values.time.textContent = `${formatNumber(pose.t ?? 0, 0)}ms`;
+      values.time.textContent = pose.t == null ? "—" : `${(pose.t / 1000).toFixed(3)}s`;
       values.averageSpeed.textContent = formatNumber(pose.speed_raw, 2);
       values.leftVelocity.textContent = formatNumber(pose.l_vel, 2);
       values.rightVelocity.textContent = formatNumber(pose.r_vel, 2);
