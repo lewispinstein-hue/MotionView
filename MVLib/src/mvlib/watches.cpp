@@ -29,7 +29,7 @@ std::optional<std::string> Logger::m_getWatchNameUnlocked(WatchId id, bool isEle
 }
 
 void Logger::resyncAllWatchesRoster() {
-  detail::uniqueLock lock(m_mutex);
+  detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked()) return;
   if (m_watches.empty()) return;
   if (!ensureTerminalSession()) return;
@@ -39,7 +39,7 @@ void Logger::resyncAllWatchesRoster() {
 }
 
 bool Logger::resyncWatchRoster(WatchId id) {
-  detail::uniqueLock lock(m_mutex);
+  detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked()) return false;
   if (m_watches.empty()) return false;
 
@@ -78,7 +78,7 @@ std::string Logger::evaluateWatch(WatchId id, bool emit) {
   {
     // Manual watch evaluation intentionally invokes the stored evaluator directly
     // so stateful watch closures keep their internal transition/debounce state.
-    detail::uniqueLock lock(m_mutex);
+    detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
     if (!lock.isLocked()) return {};
     if (m_watches.empty()) return {};
 

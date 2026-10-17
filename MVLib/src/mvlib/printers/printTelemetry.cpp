@@ -7,14 +7,23 @@
 
 namespace mvlib {
 namespace {
-float estimateSpeed(const Pose& prevPose, const Pose& pose) {
+double estimateSpeed(const Pose& prevPose, const Pose& pose) {
   static uint32_t prevMs = pros::millis();
   uint32_t nowMs = pros::millis();
-  const float dt = (nowMs - prevMs) / 1000.0;
-  const float vx = (dt > 0) ? (pose.x - prevPose.x) / dt : 0.0;
-  const float vy = (dt > 0) ? (pose.y - prevPose.y) / dt : 0.0;
+  const double dt = (nowMs - prevMs) / 1000.0;
+  const double vx = (dt > 0) ? (pose.x - prevPose.x) / dt : 0.0;
+  const double vy = (dt > 0) ? (pose.y - prevPose.y) / dt : 0.0;
   prevMs = nowMs;
-  return std::sqrt(vx * vx + vy * vy);
+
+  const double magnitude = std::sqrt(vx * vx + vy * vy);
+  // MotionView poses use 0 degrees facing +Y, rather than the mathematical
+  // convention of 0 degrees on +X. Project onto that reported heading to
+  // distinguish forward from backward odometry motion.
+  constexpr double kDegreesToRadians = 3.14159265358979323846 / 180.0;
+  const double headingRadians = pose.theta * kDegreesToRadians;
+  const double forward = vx * std::sin(headingRadians) +
+                         vy * std::cos(headingRadians);
+  return std::copysign(magnitude, forward);
 }
 } // namespace
 
@@ -22,7 +31,9 @@ void Logger::printTelemetry() {
   std::optional<Pose> pose = std::nullopt;
   std::shared_ptr<std::function<std::optional<Pose>()>> poseGetter;
   std::shared_ptr<pros::Mutex> poseGetterMutex;
-  double leftVelocity, rightVelocity = 0.0;
+  double leftVelocity = 0.0;
+  double rightVelocity = 0.0;
+  bool hasNonFiniteVelocity = false;
 
   {
     detail::uniqueLock lock(m_mutex);
@@ -51,16 +62,23 @@ void Logger::printTelemetry() {
     !configValid() || m_forceSpeedEstimation;
 
   if (!useSpeedEstimation) {
-    static auto norm = [&](const double& rpm, pros::MotorGears gearset) {
-      if (!std::isfinite(rpm)) return 0.0;
+    static auto norm = [](const double& rpm, pros::MotorGears gearset) {
       double maxRpm = 100.0;
       if (gearset == pros::MotorGears::rpm_200) maxRpm = 200.0;
       else if (gearset == pros::MotorGears::rpm_600) maxRpm = 600.0;
       return std::clamp((rpm / maxRpm) * 127.0, -127.0, 127.0);
     };
 
-    leftVelocity = norm(m_pLeftDrivetrain->get_actual_velocity(), m_pLeftDrivetrain->get_gearing());
-    rightVelocity = norm(m_pRightDrivetrain->get_actual_velocity(), m_pRightDrivetrain->get_gearing());
+    const double leftRpm = m_pLeftDrivetrain->get_actual_velocity();
+    const double rightRpm = m_pRightDrivetrain->get_actual_velocity();
+    hasNonFiniteVelocity =
+        !std::isfinite(leftRpm) || !std::isfinite(rightRpm);
+    leftVelocity = hasNonFiniteVelocity
+                       ? leftRpm
+                       : norm(leftRpm, m_pLeftDrivetrain->get_gearing());
+    rightVelocity = hasNonFiniteVelocity
+                        ? rightRpm
+                        : norm(rightRpm, m_pRightDrivetrain->get_gearing());
   } else {
     static double fallbackSpeed = 0.0;
     static Pose prevPose{};
@@ -72,16 +90,26 @@ void Logger::printTelemetry() {
     }
   }
 
+  hasNonFiniteVelocity = hasNonFiniteVelocity || !std::isfinite(leftVelocity) ||
+                         !std::isfinite(rightVelocity);
+
   // Send binary through terminal
   if (ensureTerminalSession()) {
-    detail::PosePacket pkt;
-    pkt.timestamp = static_cast<uint16_t>(pros::millis());
-    pkt.x = static_cast<float>(pose.value().x);
-    pkt.y = static_cast<float>(pose.value().y);
-    pkt.theta = detail::packTelemetryTheta(pose.value().theta);
-    pkt.leftVel = detail::packTelemetryVelocity(leftVelocity);
-    pkt.rightVel = detail::packTelemetryVelocity(rightVelocity);
-    detail::Telemetry::getInstance().sendPose(pkt);
+    const uint16_t timestamp = static_cast<uint16_t>(pros::millis());
+    const float x = static_cast<float>(pose->x);
+    const float y = static_cast<float>(pose->y);
+    const uint16_t theta = detail::packTelemetryTheta(pose->theta);
+    if (hasNonFiniteVelocity) {
+      detail::PoseRawVelocityPacket pkt{timestamp, x, y, theta,
+                                         static_cast<float>(leftVelocity),
+                                         static_cast<float>(rightVelocity)};
+      detail::Telemetry::getInstance().sendPoseWithRawVelocities(pkt);
+    } else {
+      detail::PosePacket pkt{timestamp, x, y, theta,
+                              detail::packTelemetryVelocity(leftVelocity),
+                              detail::packTelemetryVelocity(rightVelocity)};
+      detail::Telemetry::getInstance().sendPose(pkt);
+    }
   }
 
   // Log standard ANSI text to the SD card.

@@ -105,7 +105,7 @@ bool Logger::initSDLogger() {
 bool Logger::setLoggingLocation(const char *location,
                                 MissingFolderPolicy folderPolicy,
                                 ExistingFilePolicy filePolicy) {
-  detail::uniqueLock lock(m_mutex);
+  detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked() || m_started.load() || m_sdSink->locked())
     return false;
 
@@ -202,8 +202,6 @@ bool Logger::setLoggingLocation(const char *location,
 }
 
 void Logger::logToSD(const LogLevel level, const char *format, ...) {
-  if (!m_sdSink->ready())
-    return;
   if (!detail::Telemetry::getInstance().shouldLog(level))
     return;
 
@@ -211,6 +209,18 @@ void Logger::logToSD(const LogLevel level, const char *format, ...) {
   va_start(args, format);
   const detail::SdWriteResult result = m_sdSink->writeV(level, format, args);
   va_end(args);
+
+  if (result.succeeded()) {
+    const uint32_t dropped = m_sdSink->takeDroppedLineCount();
+    if (dropped > 0 && m_config.logSystemInfo.load() &&
+        m_config.logToTerminal.load()) {
+      detail::Telemetry::getInstance().sendLog(
+          LogLevel::WARN, detail::LogSource::SYSTEM,
+          "SD logging dropped %u record(s) while another task was flushing.",
+          dropped);
+    }
+    return;
+  }
 
   if (result.error != detail::SdWriteError::write &&
       result.error != detail::SdWriteError::flush) {

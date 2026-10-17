@@ -56,6 +56,18 @@ try {
     assert.deepEqual([...viewing.data.poses].map((pose) => pose.t), [0]);
     assert.deepEqual(viewing.data.watches.map((watch) => watch.label), ["Fresh"]);
 
+    const invalidVelocity = parser.parse({
+      lines: [
+        "[POSE],30,3,4,0,NaN,Infinity",
+        "[POSE],31,4,5,0,0,0",
+      ],
+      startIndex: 0,
+      endIndex: 2,
+    }, viewing.data, 20);
+    assert.deepEqual(invalidVelocity.batch.poses?.map((pose) => pose.t), [31]);
+    assert.equal(invalidVelocity.lastPoseTimestamp, 31,
+      "an invalid velocity pose must leave a visible timeline gap while preserving timestamp order");
+
     const startOnly = parser.parse({ lines: ["[START],0"], startIndex: 0, endIndex: 1 }, viewing.data, 0);
     assert.equal(startOnly.startsNewRun, true);
     viewing.loadParsedBatch(startOnly.batch);

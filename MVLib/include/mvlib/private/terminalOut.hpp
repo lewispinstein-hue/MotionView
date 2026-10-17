@@ -62,6 +62,23 @@ struct __attribute__((packed)) PosePacket {
   int8_t rightVel;
 };
 
+/**
+ * @brief Pose frame used when either drivetrain velocity is non-finite.
+ *
+ * The normal pose frame intentionally uses compact int8 velocity values. This
+ * extended frame preserves the original floating-point values so MotionView
+ * can show NaN/Infinity in its live console and leave the route discontinuity
+ * visible instead of converting a motor error into a believable speed.
+ */
+struct __attribute__((packed)) PoseRawVelocityPacket {
+  uint16_t timestamp;
+  float x;
+  float y;
+  uint16_t theta;
+  float leftVel;
+  float rightVel;
+};
+
 struct __attribute__((packed)) WaypointCreatedPacket {
   uint16_t timestamp;
   uint16_t id;
@@ -108,6 +125,7 @@ struct __attribute__((packed)) StartPacket {
 };
 
 static_assert(sizeof(PosePacket) == 14, "PosePacket layout changed");
+static_assert(sizeof(PoseRawVelocityPacket) == 20, "PoseRawVelocityPacket layout changed");
 static_assert(sizeof(WaypointCreatedPacket) == 27, "WaypointCreatedPacket layout changed");
 static_assert(sizeof(WaypointStatusPacket) == 4, "WaypointStatusPacket layout changed");
 static_assert(sizeof(WatchPacket) == 8, "WatchPacket layout changed");
@@ -123,6 +141,7 @@ public:
   bool shouldLog(LogLevel level) const;
 
   void sendPose(const PosePacket& pkt);
+  void sendPoseWithRawVelocities(const PoseRawVelocityPacket& pkt);
   bool sendStart(uint32_t timestamp, OdomProvider provider,
                  uint32_t version);
   void sendWaypointCreated(const WaypointCreatedPacket& pkt);

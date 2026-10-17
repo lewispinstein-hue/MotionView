@@ -141,6 +141,12 @@ public:
   /// @brief Return whether the sink currently has an open writable file.
   bool ready() const;
 
+  /**
+   * @brief Take and reset the number of records dropped while the sink mutex
+   *        was contended beyond its short write budget.
+   */
+  uint32_t takeDroppedLineCount();
+
   /// @brief Return whether further SD configuration and output are disabled.
   bool locked() const;
 
@@ -220,6 +226,8 @@ private:
   char m_folder[24] = "";
   /// Whether this sink has been permanently disabled.
   bool m_locked = false;
+  /// Records discarded because another SD write held the mutex too long.
+  std::atomic<uint32_t> m_droppedLines{0};
 };
 
 } // namespace detail

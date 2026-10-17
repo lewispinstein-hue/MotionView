@@ -50,7 +50,7 @@
 #include <utility>
 #include <vector>
 
-#define MVLIB_VERSION 30'00'01 // 3.0.1
+#define MVLIB_VERSION 30'00'02 // 3.0.2
 
 namespace mvlib {
 /**
@@ -70,6 +70,12 @@ namespace mvlib {
  * undefined behavior during decoding. Use Logger::info(), warn(), etc. for safe
  * logging. Standard print functions may work in some cases, but it is not
  * guaranteed.
+ *
+ * @note Public configuration and handle operations wait until MVLib's logger
+ *       state lock is available. They return a real state snapshot rather than
+ *       silently returning a default value because the background logger task
+ *       happened to be updating. The wait duration depends on concurrent
+ *       logger work and any terminal-session synchronization in progress.
  */
 class Logger {
 public:
@@ -211,6 +217,9 @@ public:
   /**
    * @brief Provide a custom pose getter (for any odometry library).
    * @param getter Callable that returns a Pose or std::nullopt if unavailable.
+   *
+   * @note This call blocks until the logger state lock is available. It does
+   *       not fail merely because the periodic logger task is updating.
    *
    * @note Prefer the adapter that matches your odometry library from
    *       include/mvlib/Optional when one is available.
@@ -367,6 +376,8 @@ public:
    * @note String literal names longer than 24 characters are rejected at
    *       compile time. Live MotionView roster packets preserve 23 visible
    *       characters because the telemetry name field is null-terminated.
+   * @note This call blocks until the logger state lock is available, then
+   *       returns a handle for the waypoint actually registered.
    *
    * \b Example
    * @code
@@ -374,9 +385,9 @@ public:
    *   .tarX = 70,
    *   .tarY = -47,
    *   .tarT = 0,
+   *   .timeoutMs = 5_mvS,
    *   .linearTol = 2,
    *   .thetaTol = 10,
-   *   .timeoutMs = 5_mvS,
    * });
    * auto off = waypoint.getOffset();
    * logger.info("Waypoint offset: %.1f, %.1f, %.1f",
@@ -477,6 +488,9 @@ public:
    * @note When terminal watch output is enabled, MVLib sends the watch roster
    *       label immediately after registration so its first emitted sample can
    *       be resolved by MotionView.
+   * @note This call blocks until the logger state lock is available. It does
+   *       not return an invalid handle merely because MVLib is performing a
+   *       periodic update.
    * @note Adding a watch is computationally expensive. Don't call
    * logger.watch() repeatedly. Additionally, if the same .watch() is called
    *       multiple times, each watch will be separate and logged independently.
@@ -631,7 +645,9 @@ private:
    * @param onChange If true, print only on change after the debounce interval.
    * \return Assigned WatchId.
    *
-   * @note If the watch failed to add, it will return (WatchId)-1.
+   * @note This method waits for the logger state lock instead of using a
+   *       best-effort try-lock. A returned (WatchId)-1 therefore indicates an
+   *       exceptional registration failure, not ordinary task contention.
    */
   template <class T, class Getter>
   WatchId addWatch(std::string label, const LogLevel baseLevel,
@@ -639,7 +655,7 @@ private:
                    LevelOverride<T> ov, bool onChange = false) {
     WatchId id{};
     {
-      detail::uniqueLock lock(m_mutex);
+      detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
       if (!lock.isLocked())
         return static_cast<WatchId>(-1);
 

@@ -214,6 +214,8 @@ uint16_t packTelemetryTheta(double degrees) {
 }
 
 int8_t packTelemetryVelocity(double velocity) {
+  // Non-finite values use PoseRawVelocityPacket instead, so this helper only
+  // packs finite values for the compact on-wire representation.
   if (!std::isfinite(velocity)) return 0;
   return static_cast<int8_t>(std::lround(std::clamp(velocity, -127.0, 127.0)));
 }
@@ -224,6 +226,15 @@ void Telemetry::sendPose(const PosePacket& pkt) {
   // Pose samples bypass the log-level filter.
   transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::POSE),
            reinterpret_cast<const uint8_t*>(&pkt), sizeof(PosePacket));
+}
+
+void Telemetry::sendPoseWithRawVelocities(const PoseRawVelocityPacket& pkt) {
+  // Subtype 1 identifies the extended floating-point velocity payload. It is
+  // emitted only for NaN/Infinity values, which must never be silently
+  // converted into normal-looking compact telemetry.
+  transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::POSE, 1),
+           reinterpret_cast<const uint8_t*>(&pkt),
+           sizeof(PoseRawVelocityPacket));
 }
 
 bool Telemetry::sendStart(uint32_t timestamp, OdomProvider provider,

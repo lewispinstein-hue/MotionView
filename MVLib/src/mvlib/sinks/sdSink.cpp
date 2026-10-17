@@ -383,10 +383,18 @@ SdInitResult SdSink::init(const char* buildDate, bool userBuildDateProvided) {
   return result;
 }
 
+namespace {
+// A flush can briefly block on real SD media. Give another writer a chance to
+// finish without allowing a log call to consume a meaningful control-loop
+// slice.
+constexpr uint32_t kSdWriteLockTimeoutMs = 5;
+} // namespace
+
 SdWriteResult SdSink::writeV(LogLevel level, const char* format, va_list args) {
   SdWriteResult result;
-  uniqueLock lock(m_mutex);
+  uniqueLock lock(m_mutex, kSdWriteLockTimeoutMs);
   if (!lock.isLocked()) {
+    m_droppedLines.fetch_add(1, std::memory_order_relaxed);
     result.error = SdWriteError::busy;
     return result;
   }
@@ -434,8 +442,12 @@ void SdSink::setFlushInterval(uint32_t flushIntervalMs) {
 }
 
 bool SdSink::ready() const {
-  uniqueLock lock(m_mutex);
+  uniqueLock lock(m_mutex, kSdWriteLockTimeoutMs);
   return lock.isLocked() && m_file && !m_locked;
+}
+
+uint32_t SdSink::takeDroppedLineCount() {
+  return m_droppedLines.exchange(0, std::memory_order_relaxed);
 }
 
 bool SdSink::locked() const {

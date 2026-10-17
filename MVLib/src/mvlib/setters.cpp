@@ -116,12 +116,11 @@ void Logger::setBuildDate(const char *buildDate) {
 
 void Logger::setPoseGetter(std::function<std::optional<Pose>()> getter,
                            detail::OdomProvider provider) {
-  detail::uniqueLock m(m_mutex);
+  detail::uniqueLock m(m_mutex, TIMEOUT_MAX);
   if (!m.isLocked() || !getter) {
-    logMessage(LogLevel::DEBUG, detail::LogSource::SYSTEM,
-               "Unable to set pose getter because mutex failed to lock. Try "
-               "adding delay or "
-               "calling at a different time.");
+    logMessage(LogLevel::WARN, detail::LogSource::SYSTEM,
+               "Unable to set pose getter because its state lock could not "
+               "be acquired.");
 
     return;
   }

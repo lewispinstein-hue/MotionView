@@ -3,6 +3,7 @@ import io
 import math
 import re
 import struct
+import time
 from collections import defaultdict
 from typing import DefaultDict, Dict, List, Optional, Tuple, Union
 
@@ -16,6 +17,7 @@ MAX_PENDING_ROSTER_EVENTS_TOTAL = 4_096
 PENDING_ROSTER_EVENT_COUNT = 0
 LAST_TIMESTAMP_RAW: Optional[int] = None
 TIMESTAMP_WRAP_OFFSET = 0
+LAST_TIMESTAMP_WALL: Optional[float] = None
 STREAM_BUFFER = bytearray()
 MAX_STREAM_BUFFER_BYTES = 256 * 1024
 
@@ -36,6 +38,9 @@ MSG_TYPE_ROSTER = 0x04
 MSG_TYPE_LOG = 0x05
 MSG_TYPE_START = 0x06
 
+POSE_COMPACT = 0x00
+POSE_RAW_VELOCITIES = 0x01
+
 LOG_SOURCE_USER = 0x00
 LOG_SOURCE_SYSTEM = 0x01
 
@@ -55,7 +60,7 @@ ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 def _reset_decoder_state() -> None:
-    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, PENDING_ROSTER_EVENT_COUNT
+    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, LAST_TIMESTAMP_WALL, PENDING_ROSTER_EVENT_COUNT
 
     DEFAULT_ROSTER.clear()
     ELEVATED_ROSTER.clear()
@@ -63,6 +68,7 @@ def _reset_decoder_state() -> None:
     PENDING_ROSTER_EVENT_COUNT = 0
     LAST_TIMESTAMP_RAW = None
     TIMESTAMP_WRAP_OFFSET = 0
+    LAST_TIMESTAMP_WALL = None
 
 
 def _strip_ansi(text: str) -> str:
@@ -130,28 +136,40 @@ def _decode_theta(theta_raw: int) -> float:
 
 
 def _expand_timestamp(raw_timestamp: int) -> int:
-    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET
+    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, LAST_TIMESTAMP_WALL
+
+    now = time.monotonic()
 
     if LAST_TIMESTAMP_RAW is None:
         LAST_TIMESTAMP_RAW = raw_timestamp
+        LAST_TIMESTAMP_WALL = now
         return raw_timestamp
 
     # PROS millis is cast down to uint16_t on the wire. Reconstruct a monotonic
-    # timestamp by detecting wrap when the stream jumps sharply backwards.
-    if raw_timestamp < LAST_TIMESTAMP_RAW and (LAST_TIMESTAMP_RAW - raw_timestamp) > 0x8000:
+    # timestamp by detecting wrap when the stream jumps sharply backwards. If
+    # packets stop for longer than half a wrap, that backwards jump can be
+    # missed; wall time then selects the nearest number of elapsed wraps.
+    gap_ms = (now - (LAST_TIMESTAMP_WALL if LAST_TIMESTAMP_WALL is not None else now)) * 1_000.0
+    if gap_ms > 30_000:
+        last_expanded = TIMESTAMP_WRAP_OFFSET + LAST_TIMESTAMP_RAW
+        wraps = round((last_expanded + gap_ms - raw_timestamp) / 0x10000)
+        TIMESTAMP_WRAP_OFFSET = 0x10000 * max(0, wraps)
+    elif raw_timestamp < LAST_TIMESTAMP_RAW and (LAST_TIMESTAMP_RAW - raw_timestamp) > 0x8000:
         TIMESTAMP_WRAP_OFFSET += 0x10000
 
     LAST_TIMESTAMP_RAW = raw_timestamp
+    LAST_TIMESTAMP_WALL = now
     return TIMESTAMP_WRAP_OFFSET + raw_timestamp
 
 
 def _seed_timestamp(full_timestamp: int) -> int:
     """Reset the unwrap state to an authoritative 32-bit PROS millisecond value."""
-    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET
+    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, LAST_TIMESTAMP_WALL
 
     timestamp = full_timestamp & 0xFFFF_FFFF
     LAST_TIMESTAMP_RAW = timestamp & 0xFFFF
     TIMESTAMP_WRAP_OFFSET = timestamp & ~0xFFFF
+    LAST_TIMESTAMP_WALL = time.monotonic()
     return timestamp
 
 
@@ -289,8 +307,21 @@ def _flush_pending_events(item_id: int) -> str:
     return "".join(rendered)
 
 
-def _handle_pose(payload: bytes) -> str:
-    ts, x, y, theta_raw, left_vel, right_vel = struct.unpack("<HffHbb", payload)
+def _format_pose_velocity(value: float) -> str:
+    if isinstance(value, int):
+        return str(value)
+    if math.isnan(value):
+        return "NaN"
+    if math.isinf(value):
+        return "Infinity" if value > 0 else "-Infinity"
+    return f"{value:.2f}"
+
+
+def _handle_pose(payload: bytes, subtype: int) -> str:
+    if subtype == POSE_RAW_VELOCITIES:
+        ts, x, y, theta_raw, left_vel, right_vel = struct.unpack("<HffHff", payload)
+    else:
+        ts, x, y, theta_raw, left_vel, right_vel = struct.unpack("<HffHbb", payload)
     ts = _expand_timestamp(ts)
     return _csv_line(
         "[POSE]",
@@ -298,8 +329,8 @@ def _handle_pose(payload: bytes) -> str:
         f"{x:.2f}",
         f"{y:.2f}",
         f"{_decode_theta(theta_raw):.2f}",
-        left_vel,
-        right_vel,
+        _format_pose_velocity(left_vel),
+        _format_pose_velocity(right_vel),
     )
 
 
@@ -383,6 +414,10 @@ def _handle_start(payload: bytes) -> str:
 
 def _expected_payload_len(msg_type: int, subtype: int) -> Optional[int]:
     if msg_type == MSG_TYPE_POSE:
+        if subtype == POSE_RAW_VELOCITIES:
+            return struct.calcsize("<HffHff")
+        if subtype != POSE_COMPACT:
+            return None
         return struct.calcsize("<HffHbb")
 
     if msg_type == MSG_TYPE_WPOINT:
@@ -447,7 +482,7 @@ def _parse_binary_frame(frame: bytes) -> Optional[str]:
         return None
 
     if msg_type == MSG_TYPE_POSE:
-        return _handle_pose(payload)
+        return _handle_pose(payload, subtype)
 
     if msg_type == MSG_TYPE_WPOINT:
         return _handle_waypoint(payload, subtype)

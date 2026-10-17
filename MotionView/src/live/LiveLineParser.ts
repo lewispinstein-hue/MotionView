@@ -149,8 +149,14 @@ export class LiveLineParser {
         const leftVelocity = parseViewingNumber(parts[5]);
         const rightVelocity = parseViewingNumber(parts[6]);
         if (t == null || x == null || y == null || (lastPoseTimestamp != null && t <= lastPoseTimestamp)) continue;
-        const left = leftVelocity ?? 0;
-        const right = rightVelocity ?? 0;
+        // Preserve non-finite drivetrain readings in the live console, but do
+        // not render a route point that would make a disconnected motor look
+        // like valid telemetry. Advance the timestamp so delayed older points
+        // cannot fill that intentional gap.
+        if (leftVelocity == null || rightVelocity == null) {
+          lastPoseTimestamp = t;
+          continue;
+        }
         poses.push({
           t,
           x,
@@ -158,7 +164,7 @@ export class LiveLineParser {
           theta: theta ?? 0,
           l_vel: leftVelocity,
           r_vel: rightVelocity,
-          speed_raw: (Math.abs(left) + Math.abs(right)) / 2,
+          speed_raw: (Math.abs(leftVelocity) + Math.abs(rightVelocity)) / 2,
           speed_norm: 0,
         });
         lastPoseTimestamp = t;

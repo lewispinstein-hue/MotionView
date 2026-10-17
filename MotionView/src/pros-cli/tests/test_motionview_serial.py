@@ -1,5 +1,6 @@
 import struct
 import unittest
+from unittest.mock import patch
 
 import pros.serial as decoder
 
@@ -50,6 +51,24 @@ class MotionViewSerialDecoderTests(unittest.TestCase):
 
         self.assertEqual(decoded, "[START],0,2,300001\n")
         self.assertEqual(decoder._expand_timestamp(120), 120)
+
+    def test_expands_a_wrap_missed_during_a_long_packet_gap(self) -> None:
+        with patch.object(decoder.time, "monotonic", side_effect=[0.0, 35.0]):
+            self.assertEqual(decoder._expand_timestamp(50_000), 50_000)
+            # 85,000ms wraps to 19,464. Its backwards jump is less than half
+            # a uint16 range, so the legacy decoder would miss this rollover.
+            self.assertEqual(decoder._expand_timestamp(19_464), 85_000)
+
+    def test_expands_multiple_wraps_during_a_long_packet_gap(self) -> None:
+        with patch.object(decoder.time, "monotonic", side_effect=[0.0, 135.0]):
+            self.assertEqual(decoder._expand_timestamp(50_000), 50_000)
+            self.assertEqual(decoder._expand_timestamp(53_928), 185_000)
+
+    def test_start_seeds_the_wall_clock_for_the_next_pose(self) -> None:
+        with patch.object(decoder.time, "monotonic", side_effect=[0.0, 40.0, 40.02]):
+            self.assertEqual(decoder._expand_timestamp(50_000), 50_000)
+            self.assertEqual(decoder._seed_timestamp(100_000), 100_000)
+            self.assertEqual(decoder._expand_timestamp(34_484), 100_020)
 
     def test_accepts_a_legacy_start_frame(self) -> None:
         decoded = decoder._parse_binary_frame(
@@ -113,6 +132,15 @@ class MotionViewSerialDecoderTests(unittest.TestCase):
         self.assertEqual(
             decoder.decode_bytes_to_str(encoded[newline_index + 1:]),
             "[POSE],10,1.00,2.00,0.00,0,0\n",
+        )
+
+    def test_decodes_non_finite_pose_velocities_for_the_live_console(self) -> None:
+        payload = struct.pack("<HffHff", 10, 1.0, 2.0, 0, float("nan"), float("-inf"))
+        self.assertEqual(
+            decoder._parse_binary_frame(
+                frame(decoder.MSG_TYPE_POSE, payload, subtype=decoder.POSE_RAW_VELOCITIES)
+            ),
+            "[POSE],10,1.00,2.00,0.00,NaN,-Infinity\n",
         )
 
 

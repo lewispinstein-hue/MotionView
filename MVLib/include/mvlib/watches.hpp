@@ -77,6 +77,10 @@ enum class WatchMode : uint8_t {
 /**
  * @class WatchHandle
  * @brief A handle to a registered watch
+ *
+ * @note Accessors wait for MVLib's logger state lock and return consistent
+ *       watch state. They do not use a best-effort try-lock that can turn
+ *       ordinary background updates into default values.
  */
 class WatchHandle {
 private:
@@ -88,7 +92,7 @@ private:
 public:
   /**
    * @brief Check if the handle is valid. A watch is invalid if there
-   *        was an error registering it (e.g. mutex lock failed to acquire).
+   *        was an exceptional error registering it.
    *
    * \return True if the watch is valid, false otherwise
    *

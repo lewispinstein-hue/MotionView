@@ -93,6 +93,10 @@ struct WaypointOffset {
 /**
  * @class WaypointHandle
  * @brief A handle to a waypoint. Returned from logger.addWaypoint().
+ *
+ * @note Accessors wait for MVLib's logger state lock and return a consistent
+ *       state snapshot. They do not use a best-effort try-lock that can turn
+ *       normal contention into false offsets or status values.
  */
 class WaypointHandle {
 private:
@@ -102,6 +106,14 @@ private:
   explicit WaypointHandle(WPId id) : m_id(id) {}
 
 public:
+  /**
+   * @brief Return whether this handle refers to a registered waypoint.
+   *
+   * @note Registration waits for the logger state lock, so false indicates
+   *       that no waypoint was registered, rather than routine contention.
+   */
+  bool valid() const;
+
   /**
    * @brief Get the offset of the robot from the waypoint
    * \return Returns the offset of the waypoint in WaypointOffset struct

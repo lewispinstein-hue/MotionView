@@ -9,7 +9,7 @@ bool WatchHandle::valid() const {
 bool WatchHandle::active() const {
   if (!this->valid()) return false;
   Logger& logger = Logger::getInstance();
-  detail::uniqueLock lock(logger.m_mutex);
+  detail::uniqueLock lock(logger.m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked() || logger.m_watches.empty()) return false;
 
   const Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);
@@ -19,7 +19,7 @@ bool WatchHandle::active() const {
 void WatchHandle::setActive(bool v) {
   if (!this->valid()) return;
   Logger& logger = Logger::getInstance();
-  detail::uniqueLock lock(logger.m_mutex);
+  detail::uniqueLock lock(logger.m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked() || logger.m_watches.empty()) return;
 
   Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);
@@ -30,7 +30,7 @@ void WatchHandle::setActive(bool v) {
 uint32_t WatchHandle::intervalMs() const {
   if (!this->valid()) return static_cast<uint32_t>(-1);
   Logger& logger = Logger::getInstance();
-  detail::uniqueLock lock(logger.m_mutex);
+  detail::uniqueLock lock(logger.m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked() || logger.m_watches.empty()) return static_cast<uint32_t>(-1);
 
   const Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);
@@ -40,7 +40,7 @@ uint32_t WatchHandle::intervalMs() const {
 WatchMode WatchHandle::type() const {
   if (!this->valid()) return WatchMode::onInterval;
   Logger& logger = Logger::getInstance();
-  detail::uniqueLock lock(logger.m_mutex);
+  detail::uniqueLock lock(logger.m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked() || logger.m_watches.empty()) return WatchMode::onInterval;
 
   const Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);
@@ -52,7 +52,7 @@ WatchMode WatchHandle::type() const {
 void WatchHandle::setIntervalMs(uint32_t intervalMs) {
   if (!this->valid()) return;
   Logger& logger = Logger::getInstance();
-  detail::uniqueLock lock(logger.m_mutex);
+  detail::uniqueLock lock(logger.m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked() || logger.m_watches.empty()) return;
 
   Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);
@@ -63,7 +63,7 @@ void WatchHandle::setIntervalMs(uint32_t intervalMs) {
 void WatchHandle::setType(WatchMode type) {
   if (!this->valid()) return;
   Logger& logger = Logger::getInstance();
-  detail::uniqueLock lock(logger.m_mutex);
+  detail::uniqueLock lock(logger.m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked() || logger.m_watches.empty()) return;
 
   Logger::InternalWatch* watch = logger.m_findWatchUnlocked(this->m_id);

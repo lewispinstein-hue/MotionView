@@ -45,7 +45,7 @@ WaypointOffset Logger::getWaypointOffset(WPId id) {
   std::shared_ptr<pros::Mutex> poseGetterMutex;
 
   {
-    detail::uniqueLock lock(m_mutex);
+    detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
     if (!lock.isLocked()) return {};
 
     const InternalWaypoint* waypoint = m_findWaypointUnlocked(id);
@@ -97,36 +97,40 @@ WaypointOffset Logger::getWaypointOffset(WPId id) {
 }
 
 WaypointHandle Logger::internalRegisterWaypoint(std::string name, WaypointParams details) {
-  detail::uniqueLock lock(m_mutex);
-  if (!lock.isLocked()) return WaypointHandle(0);
-  if (!m_config.logToTerminal.load() && !m_config.logToSD.load()) return WaypointHandle(0);
+  InternalWaypoint waypointForOutput;
+  bool emitCreation = false;
+  WPId id = 0;
 
-  WPId id = m_nextId++;
-  InternalWaypoint wp;
-  wp.id = id;
-  wp.name = std::move(name);
-  wp.startTimeMs = pros::millis();
-  wp.active = true;
-  wp.timedOut = false;
-  wp.createdWithOutputEnabled = m_config.printWaypoints.load();
+  {
+    detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
+    if (!lock.isLocked()) return WaypointHandle(0);
+    if (!m_config.logToTerminal.load() && !m_config.logToSD.load()) return WaypointHandle(0);
 
-  if (details.tarT.has_value() && !details.thetaTol.has_value())
-    details.thetaTol = details.linearTol;
+    id = m_nextId++;
+    InternalWaypoint wp;
+    wp.id = id;
+    wp.name = std::move(name);
+    wp.startTimeMs = pros::millis();
+    wp.active = true;
+    wp.timedOut = false;
+    wp.createdWithOutputEnabled = m_config.printWaypoints.load();
 
-  if (!details.tarT.has_value() && details.thetaTol.has_value())
-    details.thetaTol = std::nullopt;
+    if (details.tarT.has_value() && !details.thetaTol.has_value())
+      details.thetaTol = details.linearTol;
 
-  wp.params = details;
+    if (!details.tarT.has_value() && details.thetaTol.has_value())
+      details.thetaTol = std::nullopt;
 
-  m_waypoints.push_back(std::move(wp));
-
-  if (!m_waypoints.back().createdWithOutputEnabled) return WaypointHandle(id);
-
-  if (ensureTerminalSession()) {
-    sendWaypointMetadataLocked(m_waypoints.back());
+    wp.params = details;
+    m_waypoints.push_back(std::move(wp));
+    emitCreation = m_waypoints.back().createdWithOutputEnabled;
+    if (emitCreation) waypointForOutput = m_waypoints.back();
   }
 
-  if (m_config.logToSD.load()) logWaypointCreatedToSD(m_waypoints.back());
+  if (!emitCreation) return WaypointHandle(id);
+
+  if (ensureTerminalSession()) sendWaypointMetadataLocked(waypointForOutput);
+  if (m_config.logToSD.load()) logWaypointCreatedToSD(waypointForOutput);
   return WaypointHandle(id);
 }
 
@@ -159,7 +163,7 @@ std::optional<std::string> Logger::m_getRosterNameUnlocked(uint16_t id, bool isE
 }
 
 bool Logger::resyncWaypointRoster(WPId id) {
-  detail::uniqueLock lock(m_mutex);
+  detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked()) return false;
   if (m_waypoints.empty()) return false;
 
@@ -173,7 +177,7 @@ bool Logger::resyncWaypointRoster(WPId id) {
 }
 
 void Logger::resyncAllWaypointsRoster() {
-  detail::uniqueLock lock(m_mutex);
+  detail::uniqueLock lock(m_mutex, TIMEOUT_MAX);
   if (!lock.isLocked()) return;
   if (m_waypoints.empty()) return;
   if (!ensureTerminalSession()) return;
