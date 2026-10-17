@@ -106,6 +106,7 @@ export class ViewingTimelineView implements ViewingRenderLayer {
       const previous = poses[index - 1];
       const pose = poses[index];
       if (!previous || !pose || previous.t == null || pose.t == null) continue;
+      if (previous.speed_norm == null || pose.speed_norm == null) continue;
       const x0 = this.timeToX(previous.t);
       const x1 = this.timeToX(pose.t);
       const y0 = height - 6 - previous.speed_norm * (height - 12);

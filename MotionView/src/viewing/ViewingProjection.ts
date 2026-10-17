@@ -31,6 +31,11 @@ function lerpAngleDegrees(start: number, end: number, amount: number): number {
   return normalizeDegrees(start + delta * amount);
 }
 
+function interpolateOptional(first: number | null, second: number | null, amount: number): number | null {
+  if (first == null || second == null) return null;
+  return first + (second - first) * amount;
+}
+
 /** Readonly, incrementally maintained values derived from raw Viewing data. */
 export class ViewingProjection {
   readonly #markers: WatchMarker[] = [];
@@ -139,10 +144,10 @@ export class ViewingProjection {
       x: first.x + (second.x - first.x) * amount,
       y: first.y + (second.y - first.y) * amount,
       theta: lerpAngleDegrees(first.theta, second.theta, amount),
-      l_vel: (first.l_vel ?? 0) + ((second.l_vel ?? 0) - (first.l_vel ?? 0)) * amount,
-      r_vel: (first.r_vel ?? 0) + ((second.r_vel ?? 0) - (first.r_vel ?? 0)) * amount,
-      speed_raw: first.speed_raw + (second.speed_raw - first.speed_raw) * amount,
-      speed_norm: first.speed_norm + (second.speed_norm - first.speed_norm) * amount,
+      l_vel: interpolateOptional(first.l_vel, second.l_vel, amount),
+      r_vel: interpolateOptional(first.r_vel, second.r_vel, amount),
+      speed_raw: interpolateOptional(first.speed_raw, second.speed_raw, amount),
+      speed_norm: interpolateOptional(first.speed_norm, second.speed_norm, amount),
     });
   }
 

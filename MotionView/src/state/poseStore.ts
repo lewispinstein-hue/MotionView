@@ -11,7 +11,7 @@ export interface PoseStore extends PoseReader {
   push(pose: Partial<Pose> | null | undefined): number;
   reserve(capacity: number): void;
   clear(): void;
-  setSpeedNorm(index: number, value: number): void;
+  setSpeedNorm(index: number, value: number | null): void;
   toArray(): Pose[];
 }
 
@@ -72,8 +72,8 @@ export function createPoseStore(initialCapacity = 1024): PoseStore {
       theta: thetaValues[index],
       l_vel: readNullable(lVelValues[index]),
       r_vel: readNullable(rVelValues[index]),
-      speed_raw: speedRawValues[index],
-      speed_norm: speedNormValues[index],
+      speed_raw: readNullable(speedRawValues[index]),
+      speed_norm: readNullable(speedNormValues[index]),
     };
   }
 
@@ -87,8 +87,8 @@ export function createPoseStore(initialCapacity = 1024): PoseStore {
     thetaValues[length] = Number(pose.theta) || 0;
     lVelValues[length] = writeNullable(pose.l_vel);
     rVelValues[length] = writeNullable(pose.r_vel);
-    speedRawValues[length] = Number(pose.speed_raw) || 0;
-    speedNormValues[length] = Number(pose.speed_norm) || 0;
+    speedRawValues[length] = writeNullable(pose.speed_raw);
+    speedNormValues[length] = writeNullable(pose.speed_norm);
 
     length += 1;
     return length;
@@ -106,9 +106,9 @@ export function createPoseStore(initialCapacity = 1024): PoseStore {
     return out;
   }
 
-  function setSpeedNorm(index: number, value: number) {
+  function setSpeedNorm(index: number, value: number | null) {
     if (!Number.isInteger(index) || index < 0 || index >= length) return;
-    speedNormValues[index] = Number(value) || 0;
+    speedNormValues[index] = writeNullable(value);
   }
 
   const api = {

@@ -58,15 +58,30 @@ try {
 
     const invalidVelocity = parser.parse({
       lines: [
-        "[POSE],30,3,4,0,NaN,Infinity",
+        "[POSE],30,3,4,0,NaN,42",
         "[POSE],31,4,5,0,0,0",
       ],
       startIndex: 0,
       endIndex: 2,
     }, viewing.data, 20);
-    assert.deepEqual(invalidVelocity.batch.poses?.map((pose) => pose.t), [31]);
+    assert.deepEqual(invalidVelocity.batch.poses?.map((pose) => pose.t), [30, 31]);
+    assert.deepEqual(invalidVelocity.batch.poses?.map((pose) => ({
+      l_vel: pose.l_vel,
+      r_vel: pose.r_vel,
+      speed_raw: pose.speed_raw,
+    })), [
+      { l_vel: null, r_vel: null, speed_raw: null },
+      { l_vel: 0, r_vel: 0, speed_raw: 0 },
+    ]);
     assert.equal(invalidVelocity.lastPoseTimestamp, 31,
-      "an invalid velocity pose must leave a visible timeline gap while preserving timestamp order");
+      "a pose with invalid speeds must preserve timestamp order");
+    viewing.appendLiveBatch(invalidVelocity.batch);
+    assert.deepEqual([...viewing.data.poses].map((pose) => pose.t), [0, 30, 31]);
+    const navigableInvalidPose = viewing.projection.interpolatePose(30);
+    assert.deepEqual({ t: navigableInvalidPose?.t, x: navigableInvalidPose?.x, y: navigableInvalidPose?.y },
+      { t: 30, x: 3, y: 4 });
+    assert.equal(navigableInvalidPose?.speed_raw, null,
+      "invalid speed must remain absent while the pose is still navigable");
 
     const startOnly = parser.parse({ lines: ["[START],0"], startIndex: 0, endIndex: 1 }, viewing.data, 0);
     assert.equal(startOnly.startsNewRun, true);

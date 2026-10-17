@@ -253,7 +253,12 @@ export class ViewingSession implements ViewingDataReader {
   private normalizePoseSpeeds(startIndex: number): void {
     const denominator = (this.#maximumSpeed - this.#minimumSpeed) || 1;
     for (let index = Math.max(0, startIndex); index < this.#poses.length; index += 1) {
-      const speed = Math.abs(this.#poses[index]?.speed_raw ?? 0);
+      const speedRaw = this.#poses[index]?.speed_raw;
+      if (speedRaw == null) {
+        this.#poses.setSpeedNorm(index, null);
+        continue;
+      }
+      const speed = Math.abs(speedRaw);
       const normalized = Math.max(0, Math.min(1, (speed - this.#minimumSpeed) / denominator));
       this.#poses.setSpeedNorm(index, normalized);
     }

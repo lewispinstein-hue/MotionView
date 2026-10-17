@@ -39,11 +39,11 @@ export function normalizePoses(value: unknown, toNumber: NumberParser = parseVie
       x: pose.x,
       y: pose.y,
       theta: typeof pose.theta === "number" ? pose.theta : (toNumber(pose.theta) ?? 0),
-      l_vel: typeof pose.l_vel === "number" ? pose.l_vel : toNumber(pose.l_vel),
-      r_vel: typeof pose.r_vel === "number" ? pose.r_vel : toNumber(pose.r_vel),
-      speed_raw: typeof pose.speed_raw === "number"
-        ? pose.speed_raw
-        : (typeof pose.speed === "number" ? pose.speed : (toNumber(pose.speed) ?? 0)),
+      l_vel: toNumber(pose.l_vel),
+      r_vel: toNumber(pose.r_vel),
+      speed_raw: "speed_raw" in pose
+        ? toNumber(pose.speed_raw)
+        : ("speed" in pose ? toNumber(pose.speed) : 0),
       speed_norm: 0,
     });
   }

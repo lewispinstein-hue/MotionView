@@ -23,7 +23,7 @@ export class MotionViewDocumentSerializer {
     const planning = this.app.planning.exportData();
     return JSON.stringify({
       ...this.planningDocument(planning),
-      "robot-path": this.app.viewing.data.poses.map((pose) => ({ t: pose.t ?? null, x: pose.x, y: pose.y, theta: pose.theta ?? 0, l_vel: pose.l_vel ?? null, r_vel: pose.r_vel ?? null, speed_raw: pose.speed_raw ?? 0 })),
+      "robot-path": this.app.viewing.data.poses.map((pose) => ({ t: pose.t ?? null, x: pose.x, y: pose.y, theta: pose.theta ?? 0, l_vel: pose.l_vel ?? null, r_vel: pose.r_vel ?? null, speed_raw: pose.speed_raw ?? null })),
       watches: this.app.viewing.data.watches.map((watch) => ({ t: watch.t ?? null, id: Number.isInteger(watch.id) ? watch.id : null, visible: watch.visible !== false, level: watch.level ?? "INFO", label: watch.label ?? "", value: watch.value ?? "" })),
       logs: this.app.viewing.data.logs.map((entry) => ({ t: entry.t ?? null, level: level(entry.level), label: entry.label ?? "", value: entry.message ?? entry.value ?? "", isSystem: entry.isSystem === true })),
       waypoints: this.app.viewing.data.waypoints.map((waypoint) => ({ id: waypoint.id, name: waypoint.name, createdTime: waypoint.createdTime ?? null, createdEvent: waypoint.createdEvent ?? null, events: waypoint.events ?? [] })),
@@ -35,7 +35,7 @@ export class MotionViewDocumentSerializer {
     if (type !== "viewing") Object.assign(payload, this.planningDocument(this.app.planning.exportData()));
     if (type !== "planning") {
       const viewing = this.app.viewing.exportData();
-      payload.poses = viewing.poses.map((pose) => ({ t: pose.t ?? null, x: pose.x, y: pose.y, theta: pose.theta ?? 0, l_vel: pose.l_vel ?? null, r_vel: pose.r_vel ?? null, speed: pose.speed_raw ?? 0 }));
+      payload.poses = viewing.poses.map((pose) => ({ t: pose.t ?? null, x: pose.x, y: pose.y, theta: pose.theta ?? 0, l_vel: pose.l_vel ?? null, r_vel: pose.r_vel ?? null, speed: pose.speed_raw ?? null }));
       payload.watches = viewing.watches.map((watch) => ({ t: watch.t ?? null, id: Number.isInteger(watch.id) ? watch.id : null, visible: watch.visible !== false, level: watch.level ?? "INFO", label: watch.label ?? "", value: watch.value ?? "" }));
       payload.logs = viewing.logs.map((entry) => ({ t: entry.t ?? null, level: level(entry.level), label: entry.label ?? "", value: entry.isSystem ? `[MVLIB] ${entry.message ?? entry.value ?? ""}` : entry.message ?? entry.value ?? "" }));
       payload.waypoints = viewing.waypoints.map((waypoint) => ({ id: waypoint.id, name: waypoint.name ?? "", events: waypoint.events.map((event) => ({ t: event.t ?? null, type: normalizeWaypointType(event.type), id: Number.isInteger(event.id) ? event.id : null, name: event.name ?? "", params: event.params ? { ...event.params } : {} })) }));

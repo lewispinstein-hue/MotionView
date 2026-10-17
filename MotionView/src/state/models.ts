@@ -5,8 +5,8 @@ export interface Pose {
   theta: number;
   l_vel: number | null;
   r_vel: number | null;
-  speed_raw: number;
-  speed_norm: number;
+  speed_raw: number | null;
+  speed_norm: number | null;
 }
 
 export interface WatchEntry {

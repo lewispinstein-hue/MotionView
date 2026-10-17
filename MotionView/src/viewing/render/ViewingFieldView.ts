@@ -86,10 +86,16 @@ export class ViewingFieldView implements ViewingFieldLayer {
         pose.x * transform.unitsToInches + transform.offsetXInches,
         pose.y * transform.unitsToInches + transform.offsetYInches,
       );
-      const gradient = context.createLinearGradient(start.x, start.y, end.x, end.y);
-      gradient.addColorStop(0, heatColorFromNorm(previous.speed_norm ?? 0));
-      gradient.addColorStop(1, heatColorFromNorm(pose.speed_norm ?? 0));
-      context.strokeStyle = gradient;
+      if (previous.speed_norm == null || pose.speed_norm == null) {
+        // Pose coordinates remain valid for route navigation, but this segment
+        // intentionally carries no speed value to colorize.
+        context.strokeStyle = "rgba(174, 190, 211, 0.42)";
+      } else {
+        const gradient = context.createLinearGradient(start.x, start.y, end.x, end.y);
+        gradient.addColorStop(0, heatColorFromNorm(previous.speed_norm));
+        gradient.addColorStop(1, heatColorFromNorm(pose.speed_norm));
+        context.strokeStyle = gradient;
+      }
       context.beginPath();
       context.moveTo(start.x, start.y);
       context.lineTo(end.x, end.y);
