@@ -1,3 +1,4 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]   
 #[cfg(not(target_os = "macos"))]
 use sha2::{Digest, Sha256};
 #[cfg(not(target_os = "macos"))]
