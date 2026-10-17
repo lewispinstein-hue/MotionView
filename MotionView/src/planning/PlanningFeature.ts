@@ -82,7 +82,6 @@ export class PlanningFeature {
       plan_objects: this.objects.length,
       plan_methods: this.objects.methodCount,
       plan_nodes: this.timeline.length,
-      template_chars: this.exportTemplate.length,
       ...extra,
     };
   }

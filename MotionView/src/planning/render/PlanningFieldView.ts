@@ -7,7 +7,6 @@ import type { PlanningDialogs } from "../PlanningDialogs";
 import type { PlanningWaypointEditor } from "../PlanningWaypointEditor";
 import { getPlanMethodTooltipName, getPlanNodeEffectiveMethod } from "../planningObjects";
 import { planningTelemetry } from "../../telemetry/createTelemetry";
-import { getUtf8ByteLength } from "../planningTemplate";
 import { formatDistanceFromInches } from "../../shared/units";
 
 interface SelectionRect { x0: number; y0: number; x1: number; y1: number }
@@ -524,6 +523,6 @@ export class PlanningFieldView {
     const result = await this.dialogs.edit({ title: "Edit Placed Node", groupTitle: "Node Code", description: NODE_TEMPLATE_DESCRIPTION, code: method.code });
     if (!result) return;
     const changed = this.planning.timeline.setCodeOverride(nodeId, result.code);
-    if (changed.changed) void planningTelemetry.timelineNodeUpdated(this.planning.telemetryProperties({ node_override_created: !changed.hadOverride && changed.hasOverride, node_override_cleared: changed.hadOverride && !changed.hasOverride, node_code_chars: result.code.length, node_code_bytes: getUtf8ByteLength(result.code) }));
+    if (changed.changed) void planningTelemetry.timelineNodeUpdated(this.planning.telemetryProperties({ node_override_created: !changed.hadOverride && changed.hasOverride, node_override_cleared: changed.hadOverride && !changed.hasOverride }));
   }
 }

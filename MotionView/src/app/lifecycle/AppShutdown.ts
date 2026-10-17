@@ -53,7 +53,7 @@ export class AppShutdown {
 
     try {
       const seconds = performance.now() / 1000;
-      await this.app.finalizeExit({ uptime: Number((seconds > 60 ? seconds / 60 : seconds).toFixed(2)) });
+      await this.app.finalizeExit({ uptime: Number(seconds.toFixed(2)) });
     } catch (error) {
       console.error("Failed to finalize app quit:", error);
     }

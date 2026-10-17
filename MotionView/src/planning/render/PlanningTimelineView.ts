@@ -7,7 +7,6 @@ import type { PlanningFeature } from "../PlanningFeature";
 import type { PlanningNodeView } from "../planningTypes";
 import { getPlanMethodNumber, getPlanNodeEffectiveMethod, hasPlanNodeMethodOverride } from "../planningObjects";
 import { getContrastTextColor, getDefaultPlanObjectColor } from "../planningState";
-import { getUtf8ByteLength } from "../planningTemplate";
 import type { PlanningMethodDrag, PlanningDragCoordinator } from "./PlanningDragCoordinator";
 
 const PAD = 6;
@@ -282,7 +281,7 @@ export class PlanningTimelineView {
       if (node) {
         this.planning.selection.selectNode(node.id);
         const telemetry = drag.source === "sidebar" ? planningTelemetry.timelineNodeCreated : planningTelemetry.timelineNodeMoved;
-        void telemetry.call(planningTelemetry, this.planning.telemetryProperties({ before_waypoint: node.beforeWaypoint, node_index: node.index }));
+        void telemetry.call(planningTelemetry, this.planning.telemetryProperties());
       }
     }
     this.cancelDrag();
@@ -543,7 +542,7 @@ export class PlanningTimelineView {
     const result = await this.dialogs.edit({ title: "Edit Placed Node", groupTitle: "Node Code", description: NODE_TEMPLATE_DESCRIPTION, code: method.code });
     if (!result) return;
     const changed = this.planning.timeline.setCodeOverride(nodeId, result.code);
-    if (changed.changed) void planningTelemetry.timelineNodeUpdated(this.planning.telemetryProperties({ node_override_created: !changed.hadOverride && changed.hasOverride, node_override_cleared: changed.hadOverride && !changed.hasOverride, node_code_chars: result.code.length, node_code_bytes: getUtf8ByteLength(result.code) }));
+    if (changed.changed) void planningTelemetry.timelineNodeUpdated(this.planning.telemetryProperties({ node_override_created: !changed.hadOverride && changed.hasOverride, node_override_cleared: changed.hadOverride && !changed.hasOverride }));
   }
 
   private showTooltip(text: string, x: number, y: number, edited: boolean): void {

@@ -31,7 +31,6 @@ export interface PlanningTelemetrySnapshot {
   plan_objects: number;
   plan_methods: number;
   plan_nodes: number;
-  template_chars: number;
   [key: string]: unknown;
 }
 

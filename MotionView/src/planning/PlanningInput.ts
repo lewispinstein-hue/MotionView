@@ -50,7 +50,7 @@ export class PlanningInput {
         const node = this.planning.timeline.get(nodeId);
         if (node) {
           this.planning.timeline.remove(nodeId);
-          void planningTelemetry.timelineNodeRemoved(this.planning.telemetryProperties({ before_waypoint: node.beforeWaypoint }));
+          void planningTelemetry.timelineNodeRemoved(this.planning.telemetryProperties());
         }
         return true;
       }

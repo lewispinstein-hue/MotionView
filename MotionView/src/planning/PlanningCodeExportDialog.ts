@@ -170,7 +170,6 @@ export class PlanningCodeExportDialog {
       this.emitChanged();
       void planningTelemetry.templateExported(this.planning.telemetryProperties({
         export_surface: "file",
-        exported_chars: contents.length,
       }));
     } catch (error) {
       this.dom.codeExportSuccess.textContent = `Failed to export file: ${error instanceof Error ? error.message : String(error)}`;

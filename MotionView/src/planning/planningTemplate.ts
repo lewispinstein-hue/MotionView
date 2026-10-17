@@ -1,4 +1,4 @@
-import type { PlanningNode, PlanningNodeView, PlanningObject, PlanningObjectView, PlanningTelemetrySnapshot, PlanningWaypoint, PlanningWaypointView } from "./planningTypes";
+import type { PlanningNode, PlanningNodeView, PlanningObjectView, PlanningWaypoint, PlanningWaypointView } from "./planningTypes";
 import { getPlanNodeEffectiveMethod } from "./planningObjects";
 
 export interface BuildPlanExportCodeOptions {
@@ -10,30 +10,6 @@ export interface BuildPlanExportCodeOptions {
   formatTemplateNumber(value: unknown, decimals?: number): string;
   planThetaDegAt(index: number): number;
   getSortedPlanNodes(): readonly PlanningNodeView[];
-}
-
-export function getUtf8ByteLength(value: unknown) {
-  const text = String(value ?? "");
-  if (typeof TextEncoder === "function") return new TextEncoder().encode(text).length;
-  return text.length;
-}
-
-export function getPlanningTelemetryProperties(
-  waypoints: readonly Readonly<PlanningWaypoint>[],
-  objects: readonly Readonly<PlanningObject>[],
-  nodes: readonly Readonly<PlanningNode>[],
-  template: string,
-  extra: Record<string, unknown> = {},
-): PlanningTelemetrySnapshot {
-  const methodCount = objects.reduce((sum, obj) => sum + (Array.isArray(obj.methods) ? obj.methods.length : 0), 0);
-  return {
-    plan_waypoints: waypoints.length,
-    plan_objects: objects.length,
-    plan_methods: methodCount,
-    plan_nodes: nodes.length,
-    template_chars: String(template || "").length,
-    ...extra,
-  };
 }
 
 function isWaypointForwards(
