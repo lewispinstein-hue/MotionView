@@ -29,7 +29,7 @@ IS_LIBRARY:=1
 
 CREATE_TEMPLATE_FLAGS += --kernels ">=4.2.1,<5.0.0"
 LIBNAME:=libmvlib
-VERSION:=3.0.1-alpha.0
+VERSION:=3.0.1-alpha.1
 
 # EXCLUDE_SRC_FROM_LIB= $(SRCDIR)/unpublishedfile.c
 # this line excludes opcontrol.c and similar files
