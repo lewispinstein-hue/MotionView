@@ -1,4 +1,4 @@
-import type { TelemetryClient } from "./telemetryClient";
+import type { TelemetryClient } from "./TelemetryClient";
 
 const FEEDBACK_RATE_LIMIT_MS = 5 * 60 * 1000;
 const LAST_SUBMISSION_STORAGE_KEY = "motionview.feedback.last-submitted-at";
@@ -11,7 +11,10 @@ function formatDuration(milliseconds: number): string {
 }
 
 export type FeedbackProduct = "motionview" | "mvlib";
-export type FeedbackType = "bug_report" | "feature_request" | "general_feedback";
+export type FeedbackType =
+  | "bug_report"
+  | "feature_request"
+  | "general_feedback";
 export type FeedbackArea = "viewing" | "planning" | "other";
 
 export interface FeedbackSubmission {
@@ -35,15 +38,24 @@ export class FeedbackTelemetry {
     if (this.remainingRateLimitMs() > 0) return "rate_limited";
     // Feedback owns its persisted cooldown. A second telemetry-client debounce
     // can retain an old value when this setting changes during development.
-    const sent = await this.telemetry.capture("feedback_submitted", this.propertiesFor(submission), { explicitUserAction: true });
+    const sent = await this.telemetry.capture(
+      "feedback_submitted",
+      this.propertiesFor(submission),
+      { explicitUserAction: true },
+    );
     this.recordSubmission();
     return sent ? "sent" : "queued";
   }
 
   remainingRateLimitMs(now = Date.now()): number {
     try {
-      const storedAt = Number(localStorage.getItem(LAST_SUBMISSION_STORAGE_KEY));
-      const submittedAt = Math.max(this.lastSubmissionAt, Number.isFinite(storedAt) ? storedAt : 0);
+      const storedAt = Number(
+        localStorage.getItem(LAST_SUBMISSION_STORAGE_KEY),
+      );
+      const submittedAt = Math.max(
+        this.lastSubmissionAt,
+        Number.isFinite(storedAt) ? storedAt : 0,
+      );
       return Math.max(0, submittedAt + FEEDBACK_RATE_LIMIT_MS - now);
     } catch {
       return Math.max(0, this.lastSubmissionAt + FEEDBACK_RATE_LIMIT_MS - now);
@@ -58,13 +70,18 @@ export class FeedbackTelemetry {
   private recordSubmission(): void {
     this.lastSubmissionAt = Date.now();
     try {
-      localStorage.setItem(LAST_SUBMISSION_STORAGE_KEY, String(this.lastSubmissionAt));
+      localStorage.setItem(
+        LAST_SUBMISSION_STORAGE_KEY,
+        String(this.lastSubmissionAt),
+      );
     } catch {
       // The in-memory debounce still protects this running app.
     }
   }
 
-  private propertiesFor(submission: FeedbackSubmission): Record<string, unknown> {
+  private propertiesFor(
+    submission: FeedbackSubmission,
+  ): Record<string, unknown> {
     return {
       description: submission.description,
       product: submission.product,

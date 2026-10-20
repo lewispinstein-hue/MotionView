@@ -1,4 +1,7 @@
-function requiredElement<T extends HTMLElement>(document: Document, id: string): T {
+function requiredElement<T extends HTMLElement>(
+  document: Document,
+  id: string,
+): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`MotionView Planning UI requires #${id}.`);
   return element as T;
@@ -71,14 +74,32 @@ export class PlanningDom {
   private constructor(document: Document) {
     this.canvas = requiredElement(document, "c");
     this.timelineCanvas = requiredElement(document, "planningTimelineCanvas");
-    this.timelineViewport = requiredElement(document, "planningTimelineViewport");
+    this.timelineViewport = requiredElement(
+      document,
+      "planningTimelineViewport",
+    );
     this.timelineContent = requiredElement(document, "planningTimelineContent");
     this.eventTimeline = requiredElement(document, "planningEventTimeline");
-    this.eventTimelineInner = requiredElement(document, "planningEventTimelineInner");
-    this.eventTimelineHint = requiredElement(document, "planningEventTimelineHint");
-    this.timelineWaypointLayer = requiredElement(document, "planningTimelineWaypointLayer");
-    this.timelineNodeLayer = requiredElement(document, "planningTimelineNodeLayer");
-    this.timelineDropLine = requiredElement(document, "planningTimelineDropLine");
+    this.eventTimelineInner = requiredElement(
+      document,
+      "planningEventTimelineInner",
+    );
+    this.eventTimelineHint = requiredElement(
+      document,
+      "planningEventTimelineHint",
+    );
+    this.timelineWaypointLayer = requiredElement(
+      document,
+      "planningTimelineWaypointLayer",
+    );
+    this.timelineNodeLayer = requiredElement(
+      document,
+      "planningTimelineNodeLayer",
+    );
+    this.timelineDropLine = requiredElement(
+      document,
+      "planningTimelineDropLine",
+    );
     this.timePill = requiredElement(document, "planTimePill");
     this.pointPill = requiredElement(document, "planPointPill");
     this.latestPill = requiredElement(document, "planLatestPill");
@@ -101,34 +122,67 @@ export class PlanningDom {
     this.templateModal = requiredElement(document, "planTemplateModal");
     this.templateTitle = requiredElement(document, "planTemplateTitle");
     this.templateSubtitle = requiredElement(document, "planTemplateSubtitle");
-    this.templateGroupTitle = requiredElement(document, "planTemplateGroupTitle");
-    this.templateDescription = requiredElement(document, "planTemplateDescription");
+    this.templateGroupTitle = requiredElement(
+      document,
+      "planTemplateGroupTitle",
+    );
+    this.templateDescription = requiredElement(
+      document,
+      "planTemplateDescription",
+    );
     this.templateNameField = requiredElement(document, "planTemplateNameField");
-    this.templateNameDescription = requiredElement(document, "planTemplateNameDescription");
+    this.templateNameDescription = requiredElement(
+      document,
+      "planTemplateNameDescription",
+    );
     this.templateName = requiredElement(document, "planTemplateNameInput");
-    this.templateValidation = requiredElement(document, "planTemplateValidation");
+    this.templateValidation = requiredElement(
+      document,
+      "planTemplateValidation",
+    );
     this.templateClose = requiredElement(document, "btnPlanTemplateClose");
     this.templateCancel = requiredElement(document, "btnPlanTemplateCancel");
     this.templateConfirm = requiredElement(document, "btnPlanTemplateConfirm");
     this.templateCode = requiredElement(document, "planTemplateInput");
-    this.templateIndicatorPicker = requiredElement(document, "planTemplateIndicatorPicker");
+    this.templateIndicatorPicker = requiredElement(
+      document,
+      "planTemplateIndicatorPicker",
+    );
     this.confirmModal = requiredElement(document, "planObjectDeleteModal");
     this.confirmTitle = requiredElement(document, "planObjectDeleteTitle");
     this.confirmMessage = requiredElement(document, "planObjectDeleteMessage");
-    this.confirmDontShowAgainRow = requiredElement(document, "planConfirmDontShowAgainRow");
-    this.confirmDontShowAgain = requiredElement(document, "planConfirmDontShowAgain");
+    this.confirmDontShowAgainRow = requiredElement(
+      document,
+      "planConfirmDontShowAgainRow",
+    );
+    this.confirmDontShowAgain = requiredElement(
+      document,
+      "planConfirmDontShowAgain",
+    );
     this.confirmClose = requiredElement(document, "btnPlanObjectDeleteClose");
     this.confirmCancel = requiredElement(document, "btnPlanObjectDeleteCancel");
-    this.confirmButton = requiredElement(document, "btnPlanObjectDeleteConfirm");
+    this.confirmButton = requiredElement(
+      document,
+      "btnPlanObjectDeleteConfirm",
+    );
     this.codeExportModal = requiredElement(document, "planCodeExportModal");
     this.codeExportClose = requiredElement(document, "btnPlanCodeExportClose");
-    this.codeExportCancel = requiredElement(document, "btnPlanCodeExportCancel");
-    this.codeExportConfirm = requiredElement(document, "btnPlanCodeExportConfirm");
+    this.codeExportCancel = requiredElement(
+      document,
+      "btnPlanCodeExportCancel",
+    );
+    this.codeExportConfirm = requiredElement(
+      document,
+      "btnPlanCodeExportConfirm",
+    );
     this.codeExportHeader = requiredElement(document, "planCodeExportHeader");
     this.codeExportFooter = requiredElement(document, "planCodeExportFooter");
     this.codeExportTarget = requiredElement(document, "planCodeExportTarget");
     this.codeExportPath = requiredElement(document, "planCodeExportPath");
-    this.codeExportValidation = requiredElement(document, "planCodeExportValidation");
+    this.codeExportValidation = requiredElement(
+      document,
+      "planCodeExportValidation",
+    );
     this.codeExportSuccess = requiredElement(document, "planCodeExportSuccess");
   }
 

@@ -13,9 +13,12 @@ export function captureScrollAnchor(
 ): ScrollAnchor | null {
   if (!container) return null;
   const containerRect = container.getBoundingClientRect();
-  const items = Array.from(container.querySelectorAll<HTMLElement>(itemSelector));
+  const items = Array.from(
+    container.querySelectorAll<HTMLElement>(itemSelector),
+  );
   const nearTop = container.scrollTop <= 12;
-  const nearBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 12;
+  const nearBottom =
+    container.scrollTop + container.clientHeight >= container.scrollHeight - 12;
 
   for (const item of items) {
     const rect = item.getBoundingClientRect();
@@ -56,7 +59,9 @@ export function restoreScrollAnchor(
 
   if (anchor.key != null) {
     const containerRect = container.getBoundingClientRect();
-    const items = Array.from(container.querySelectorAll<HTMLElement>(itemSelector));
+    const items = Array.from(
+      container.querySelectorAll<HTMLElement>(itemSelector),
+    );
     const item = items.find((candidate) => getKey(candidate) === anchor.key);
     if (item) {
       const rect = item.getBoundingClientRect();

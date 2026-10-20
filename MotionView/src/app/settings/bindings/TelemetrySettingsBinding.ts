@@ -1,4 +1,4 @@
-import type { TelemetryClient } from "../../../telemetry/telemetryClient";
+import type { TelemetryClient } from "../../../telemetry/TelemetryClient";
 import type { SettingsDom } from "../SettingsDom";
 import type { SettingsFeature } from "../SettingsFeature";
 import type { MotionViewSettings } from "../settingsTypes";
@@ -16,9 +16,13 @@ export class TelemetrySettingsBinding {
   bind(): void {
     if (this.#bound) return;
     this.#bound = true;
-    this.settings.changed.subscribe(({ settings, keys, source }) => this.apply(settings, keys, source));
+    this.settings.changed.subscribe(({ settings, keys, source }) =>
+      this.apply(settings, keys, source),
+    );
     this.dom.telemetryEnabled.addEventListener("change", () => {
-      this.settings.update({ telemetryEnabled: this.dom.telemetryEnabled.checked });
+      this.settings.update({
+        telemetryEnabled: this.dom.telemetryEnabled.checked,
+      });
     });
   }
 

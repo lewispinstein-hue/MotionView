@@ -1,4 +1,10 @@
-import type { LogEntry, Pose, WatchEntry, Waypoint, WaypointEvent } from "../state/models";
+import type {
+  LogEntry,
+  Pose,
+  WatchEntry,
+  Waypoint,
+  WaypointEvent,
+} from "../state/models";
 import { createPoseStore, type PoseStore } from "../state/poseStore";
 import {
   buildWaypointState,
@@ -19,7 +25,8 @@ function appendMany<T>(target: T[], items: readonly T[] | undefined): number {
   if (!items?.length) return 0;
   const start = target.length;
   target.length += items.length;
-  for (let index = 0; index < items.length; index += 1) target[start + index] = items[index];
+  for (let index = 0; index < items.length; index += 1)
+    target[start + index] = items[index];
   return items.length;
 }
 
@@ -30,11 +37,13 @@ function replaceArrayContents<T>(target: T[], items: readonly T[]): void {
 
 function normalizedMetadata(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null;
 }
 
-export function watchVisibilityKey(watch: Pick<WatchEntry, "id" | "t">): string {
+export function watchVisibilityKey(
+  watch: Pick<WatchEntry, "id" | "t">,
+): string {
   const id = Number(watch.id);
   return Number.isInteger(id) ? `id:${id}` : `entry:${Number(watch.t)}`;
 }
@@ -78,15 +87,20 @@ export class ViewingSession implements ViewingDataReader {
   }
 
   get hasData(): boolean {
-    return this.#poses.length > 0
-      || this.#watches.length > 0
-      || this.#logs.length > 0
-      || this.#waypoints.length > 0;
+    return (
+      this.#poses.length > 0 ||
+      this.#watches.length > 0 ||
+      this.#logs.length > 0 ||
+      this.#waypoints.length > 0
+    );
   }
 
   load(data: unknown): void {
-    const object = data && typeof data === "object" ? data as Record<string, unknown> : {};
-    const rawPoses = Array.isArray(object.poses) ? object.poses : object["robot-path"];
+    const object =
+      data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const rawPoses = Array.isArray(object.poses)
+      ? object.poses
+      : object["robot-path"];
     const poses = normalizePoses(rawPoses);
     const watches = normalizeWatches(object.watches ?? object.watch);
     const logs = normalizeLogs(object.logs ?? object.log);
@@ -98,12 +112,16 @@ export class ViewingSession implements ViewingDataReader {
     replaceArrayContents(this.#watches, watches);
     replaceArrayContents(this.#logs, logs);
     replaceArrayContents(this.#waypoints, waypointState.waypoints);
-    for (const [id, waypoint] of waypointState.waypointsById) this.#waypointById.set(id, waypoint);
+    for (const [id, waypoint] of waypointState.waypointsById)
+      this.#waypointById.set(id, waypoint);
     this.#metadata = normalizedMetadata(object.meta);
     this.rebuildWatchVisibility();
     this.normalizePoseSpeeds(0);
 
-    this.events.dataChanged.emit({ kind: "replaced", result: this.currentResult(true) });
+    this.events.dataChanged.emit({
+      kind: "replaced",
+      result: this.currentResult(true),
+    });
   }
 
   loadParsedBatch(batch: ParsedLiveViewingBatch): ViewingAppendResult {
@@ -118,7 +136,8 @@ export class ViewingSession implements ViewingDataReader {
 
   appendLiveBatch(batch: ParsedLiveViewingBatch): ViewingAppendResult {
     const result = this.appendBatch(batch);
-    if (result.hasNewData) this.events.dataChanged.emit({ kind: "appended", result });
+    if (result.hasNewData)
+      this.events.dataChanged.emit({ kind: "appended", result });
     return result;
   }
 
@@ -133,18 +152,32 @@ export class ViewingSession implements ViewingDataReader {
     this.#watchVisibility.set(key, nextVisible);
     let changed = false;
     for (const candidate of this.#watches) {
-      if (watchVisibilityKey(candidate) !== key || candidate.visible === nextVisible) continue;
+      if (
+        watchVisibilityKey(candidate) !== key ||
+        candidate.visible === nextVisible
+      )
+        continue;
       candidate.visible = nextVisible;
       changed = true;
     }
-    if (changed) this.events.dataChanged.emit({ kind: "watch-visibility", key, visible: nextVisible });
+    if (changed)
+      this.events.dataChanged.emit({
+        kind: "watch-visibility",
+        key,
+        visible: nextVisible,
+      });
   }
 
   setSpeedRange(minimum: number, maximum: number): void {
     let nextMinimum = Number.isFinite(minimum) ? minimum : 0;
     let nextMaximum = Number.isFinite(maximum) ? maximum : 127;
-    if (nextMinimum > nextMaximum) [nextMinimum, nextMaximum] = [nextMaximum, nextMinimum];
-    if (nextMinimum === this.#minimumSpeed && nextMaximum === this.#maximumSpeed) return;
+    if (nextMinimum > nextMaximum)
+      [nextMinimum, nextMaximum] = [nextMaximum, nextMinimum];
+    if (
+      nextMinimum === this.#minimumSpeed &&
+      nextMaximum === this.#maximumSpeed
+    )
+      return;
     this.#minimumSpeed = nextMinimum;
     this.#maximumSpeed = nextMaximum;
     this.normalizePoseSpeeds(0);
@@ -175,7 +208,7 @@ export class ViewingSession implements ViewingDataReader {
     const insertedWatches: WatchEntry[] = [];
     for (const watch of batch.watches ?? []) {
       const key = watchVisibilityKey(watch);
-      const visible = this.#watchVisibility.get(key) ?? (watch.visible !== false);
+      const visible = this.#watchVisibility.get(key) ?? watch.visible !== false;
       this.#watchVisibility.set(key, visible);
       const inserted = { ...watch, visible };
       this.#watches.push(inserted);
@@ -193,12 +226,15 @@ export class ViewingSession implements ViewingDataReader {
       if (this.applyWaypointEvent(event)) waypointsAdded += 1;
     }
 
-    if (insertedWatches.length) this.#watches.sort((left, right) => left.t - right.t);
+    if (insertedWatches.length)
+      this.#watches.sort((left, right) => left.t - right.t);
     if (logsAdded) this.#logs.sort((left, right) => left.t - right.t);
     if (waypointsAdded) {
       replaceArrayContents(
         this.#waypoints,
-        [...this.#waypointById.values()].sort((left, right) => (left.createdTime ?? 0) - (right.createdTime ?? 0)),
+        [...this.#waypointById.values()].sort(
+          (left, right) => (left.createdTime ?? 0) - (right.createdTime ?? 0),
+        ),
       );
     }
 
@@ -211,7 +247,12 @@ export class ViewingSession implements ViewingDataReader {
       logsAdded,
       waypointsAdded,
       metadataChanged,
-      hasNewData: poses.length > 0 || insertedWatches.length > 0 || logsAdded > 0 || waypointsAdded > 0 || metadataChanged,
+      hasNewData:
+        poses.length > 0 ||
+        insertedWatches.length > 0 ||
+        logsAdded > 0 ||
+        waypointsAdded > 0 ||
+        metadataChanged,
     };
   }
 
@@ -219,14 +260,19 @@ export class ViewingSession implements ViewingDataReader {
     if (event.type === "CREATED") {
       const targetX = Number(event.params.tarX);
       const targetY = Number(event.params.tarY);
-      const targetTheta = event.params.tarT == null ? null : Number(event.params.tarT);
+      const targetTheta =
+        event.params.tarT == null ? null : Number(event.params.tarT);
       if (!Number.isFinite(targetX) || !Number.isFinite(targetY)) return false;
       this.#waypointById.set(event.id, {
         id: event.id,
         name: event.name,
         createdTime: event.t,
         createdEvent: event,
-        target: { x: targetX, y: targetY, theta: Number.isFinite(targetTheta) ? targetTheta : null },
+        target: {
+          x: targetX,
+          y: targetY,
+          theta: Number.isFinite(targetTheta) ? targetTheta : null,
+        },
         retriggerable: !!event.params.retriggerable,
         events: [event],
         active: true,
@@ -242,31 +288,46 @@ export class ViewingSession implements ViewingDataReader {
     waypoint.events.push(event);
     waypoint.events.sort((left, right) => left.t - right.t);
     waypoint.latestEvent = event;
-    if (event.type === "TIMEDOUT" || (!waypoint.retriggerable && event.type === "REACHED")) {
+    if (
+      event.type === "TIMEDOUT" ||
+      (!waypoint.retriggerable && event.type === "REACHED")
+    ) {
       waypoint.active = false;
       waypoint.terminalEvent = event;
     }
-    if (!waypoint.terminalEvent || event.t <= waypoint.terminalEvent.t) waypoint.latestActiveEvent = event;
+    if (!waypoint.terminalEvent || event.t <= waypoint.terminalEvent.t)
+      waypoint.latestActiveEvent = event;
     return true;
   }
 
   private normalizePoseSpeeds(startIndex: number): void {
-    const denominator = (this.#maximumSpeed - this.#minimumSpeed) || 1;
-    for (let index = Math.max(0, startIndex); index < this.#poses.length; index += 1) {
+    const denominator = this.#maximumSpeed - this.#minimumSpeed || 1;
+    for (
+      let index = Math.max(0, startIndex);
+      index < this.#poses.length;
+      index += 1
+    ) {
       const speedRaw = this.#poses[index]?.speed_raw;
       if (speedRaw == null) {
         this.#poses.setSpeedNorm(index, null);
         continue;
       }
       const speed = Math.abs(speedRaw);
-      const normalized = Math.max(0, Math.min(1, (speed - this.#minimumSpeed) / denominator));
+      const normalized = Math.max(
+        0,
+        Math.min(1, (speed - this.#minimumSpeed) / denominator),
+      );
       this.#poses.setSpeedNorm(index, normalized);
     }
   }
 
   private rebuildWatchVisibility(): void {
     this.#watchVisibility.clear();
-    for (const watch of this.#watches) this.#watchVisibility.set(watchVisibilityKey(watch), watch.visible !== false);
+    for (const watch of this.#watches)
+      this.#watchVisibility.set(
+        watchVisibilityKey(watch),
+        watch.visible !== false,
+      );
   }
 
   private clearStorage(): void {

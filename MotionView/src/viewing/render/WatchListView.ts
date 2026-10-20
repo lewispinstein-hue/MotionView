@@ -8,7 +8,14 @@ import type { ViewingListsDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
 import type { WatchMarker } from "../viewingTypes";
 import { createVirtualList, type VirtualList } from "./virtualList";
-import { escapeHtml, formatNumber, isGraphableWatchValue, levelSortRank, levelStyle, normalizeLogLevel } from "../viewingPresentation";
+import {
+  escapeHtml,
+  formatNumber,
+  isGraphableWatchValue,
+  levelSortRank,
+  levelStyle,
+  normalizeLogLevel,
+} from "../viewingPresentation";
 import type { FloatingInfoView } from "./FloatingInfoView";
 import type { WatchGraphView } from "./WatchGraphView";
 
@@ -34,7 +41,10 @@ export class WatchListView {
       renderItem: (marker) => this.createItem(marker),
       syncItem: (row, marker) => this.syncItem(row, marker),
     });
-    if (!list) throw new Error("MotionView could not initialize the watch virtual list.");
+    if (!list)
+      throw new Error(
+        "MotionView could not initialize the watch virtual list.",
+      );
     this.#list = list;
   }
 
@@ -44,7 +54,9 @@ export class WatchListView {
     });
   }
 
-  get itemCount(): number { return this.#itemCount; }
+  get itemCount(): number {
+    return this.#itemCount;
+  }
 
   setSearch(value: string): void {
     this.#searchTerm = value.trim().toLocaleLowerCase();
@@ -60,13 +72,25 @@ export class WatchListView {
   }
 
   render(): void {
-    const items = this.viewing.projection.watchMarkers.filter((marker) => this.filterMatches(marker.watch) && this.searchMatches(marker.watch));
+    const items = this.viewing.projection.watchMarkers.filter(
+      (marker) =>
+        this.filterMatches(marker.watch) && this.searchMatches(marker.watch),
+    );
     const mode = this.dom.watchSort.value;
     items.sort((left, right) => {
-      if (mode === "level") return levelSortRank(right.watch.level) - levelSortRank(left.watch.level) || right.t - left.t;
+      if (mode === "level")
+        return (
+          levelSortRank(right.watch.level) - levelSortRank(left.watch.level) ||
+          right.t - left.t
+        );
       if (mode === "time") return left.t - right.t;
       if (mode === "-time") return right.t - left.t;
-      if (mode === "value") return String(left.watch.value ?? "").localeCompare(String(right.watch.value ?? ""), undefined, { numeric: true });
+      if (mode === "value")
+        return String(left.watch.value ?? "").localeCompare(
+          String(right.watch.value ?? ""),
+          undefined,
+          { numeric: true },
+        );
       return 0;
     });
     this.#itemCount = items.length;
@@ -75,7 +99,9 @@ export class WatchListView {
 
   private searchMatches(watch: Readonly<WatchEntry>): boolean {
     if (!this.#searchTerm) return true;
-    return `${watch.label ?? ""} ${watch.value ?? ""}`.toLocaleLowerCase().includes(this.#searchTerm);
+    return `${watch.label ?? ""} ${watch.value ?? ""}`
+      .toLocaleLowerCase()
+      .includes(this.#searchTerm);
   }
 
   highlight(scroll = false): void {
@@ -90,7 +116,9 @@ export class WatchListView {
       }
     }
     const selectedKey = selected ? this.keyFor(selected) : null;
-    for (const row of this.dom.watchList.querySelectorAll<HTMLElement>(".watchItem")) {
+    for (const row of this.dom.watchList.querySelectorAll<HTMLElement>(
+      ".watchItem",
+    )) {
       row.classList.toggle("selected", row.dataset.watchKey === selectedKey);
     }
   }
@@ -105,7 +133,8 @@ export class WatchListView {
       passedIndex = index;
       latestTime = marker.t;
     }
-    this.#previewKey = passedIndex >= 0 ? this.keyFor(items[passedIndex]!) : null;
+    this.#previewKey =
+      passedIndex >= 0 ? this.keyFor(items[passedIndex]!) : null;
     if (passedIndex >= 0) this.#list.scrollToIndex(passedIndex, 12, "center");
     this.#list.refresh();
   }
@@ -121,17 +150,23 @@ export class WatchListView {
     const watch = marker.watch;
     const style = levelStyle(watch.level);
     const visible = watch.visible !== false;
-    const booleanValue = String(watch.value ?? "").trim().toLowerCase();
-    const booleanClass = booleanValue === "true"
-      ? " isBooleanTrue"
-      : booleanValue === "false" ? " isBooleanFalse" : "";
+    const booleanValue = String(watch.value ?? "")
+      .trim()
+      .toLowerCase();
+    const booleanClass =
+      booleanValue === "true"
+        ? " isBooleanTrue"
+        : booleanValue === "false"
+          ? " isBooleanFalse"
+          : "";
     const element = document.createElement("div");
     element.className = "watchItem";
     element.dataset.t = String(marker.t);
     element.dataset.watchKey = itemKey;
     const icon = (svg: string) => `<span class="watchActionIcon">${svg}</span>`;
     const graphButton = isGraphableWatchValue(watch.value)
-      ? `<button class="iconBtn watchGraphBtn${this.watchGraph.isOpenFor(marker) ? " isOn" : ""}" type="button">${icon(watchGraphIconSvg)}</button>` : "";
+      ? `<button class="iconBtn watchGraphBtn${this.watchGraph.isOpenFor(marker) ? " isOn" : ""}" type="button">${icon(watchGraphIconSvg)}</button>`
+      : "";
     const pinButton = `<button class="iconBtn watchPinBtn${this.floatingInfo.isWatchPinned(watch.id ?? null) ? " isOn" : ""}" type="button">${icon(pinWatchIconSvg)}</button>`;
     const visibilityButton = `<button class="iconBtn watchVisibilityBtn${visible ? "" : " isOff"}" type="button" title="${visible ? "Hide" : "Show"} watch" aria-label="${visible ? "Hide" : "Show"} watch">${icon(visible ? visibleWatchIconSvg : invisibleWatchIconSvg)}</button>`;
     element.innerHTML = `<div class="watchItemContent"><div class="watchItemHeader">
@@ -141,10 +176,12 @@ export class WatchListView {
     this.syncItem(element, marker);
     this.constrainTextSelection(element);
     element.addEventListener("pointerenter", () => {
-      if (!this.viewing.playback.isPlaying) this.viewing.navigation.setTimelineHover(marker.t);
+      if (!this.viewing.playback.isPlaying)
+        this.viewing.navigation.setTimelineHover(marker.t);
     });
     element.addEventListener("pointerleave", () => {
-      if (this.viewing.navigation.hoverTimelineTime === marker.t) this.viewing.navigation.setTimelineHover(null);
+      if (this.viewing.navigation.hoverTimelineTime === marker.t)
+        this.viewing.navigation.setTimelineHover(null);
     });
     const selectWatch = () => {
       if (this.viewing.navigation.selectedWatch === marker) {
@@ -153,37 +190,66 @@ export class WatchListView {
       }
       this.viewing.playback.pause();
       this.viewing.navigation.setTimelineHover(null);
-      const closest = this.viewing.projection.nearestIndex(marker.t, Number.POSITIVE_INFINITY);
+      const closest = this.viewing.projection.nearestIndex(
+        marker.t,
+        Number.POSITIVE_INFINITY,
+      );
       const index = marker.idx ?? closest?.index ?? -1;
-      const pose = this.viewing.projection.interpolatePose(marker.t) ?? marker.pose ?? this.viewing.projection.poseAt(index);
+      const pose =
+        this.viewing.projection.interpolatePose(marker.t) ??
+        marker.pose ??
+        this.viewing.projection.poseAt(index);
       if (index >= 0 && pose) this.viewing.navigation.lockTrack(pose, index);
       this.viewing.navigation.selectWatch(marker);
       setStatus(`Watch @${formatNumber(marker.t / 1000, 2)}s selected.`);
     };
-    element.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || (event.target instanceof Element && event.target.closest("button, .eventSelectableText"))) return;
-      event.preventDefault();
-      selectWatch();
-    }, { passive: false });
+    element.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (
+          event.button !== 0 ||
+          (event.target instanceof Element &&
+            event.target.closest("button, .eventSelectableText"))
+        )
+          return;
+        event.preventDefault();
+        selectWatch();
+      },
+      { passive: false },
+    );
     element.addEventListener("click", (event) => {
-      const text = event.target instanceof Element ? event.target.closest<HTMLElement>(".eventSelectableText") : null;
-      if (!text || text.dataset.selectionCancelled === "true" || window.getSelection()?.toString()) return;
+      const text =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>(".eventSelectableText")
+          : null;
+      if (
+        !text ||
+        text.dataset.selectionCancelled === "true" ||
+        window.getSelection()?.toString()
+      )
+        return;
       selectWatch();
     });
-    for (const button of element.querySelectorAll<HTMLButtonElement>(".watchVisibilityBtn")) {
+    for (const button of element.querySelectorAll<HTMLButtonElement>(
+      ".watchVisibilityBtn",
+    )) {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         this.viewing.setWatchVisibility(watch, watch.visible === false);
       });
     }
-    for (const button of element.querySelectorAll<HTMLButtonElement>(".watchPinBtn")) {
+    for (const button of element.querySelectorAll<HTMLButtonElement>(
+      ".watchPinBtn",
+    )) {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         this.floatingInfo.toggleWatch(watch.id ?? null);
         this.render();
       });
     }
-    for (const button of element.querySelectorAll<HTMLButtonElement>(".watchGraphBtn")) {
+    for (const button of element.querySelectorAll<HTMLButtonElement>(
+      ".watchGraphBtn",
+    )) {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         this.watchGraph.open(marker);
@@ -197,24 +263,37 @@ export class WatchListView {
     const watch = marker.watch;
     const itemKey = this.keyFor(marker);
     const visible = watch.visible !== false;
-    element.classList.toggle("selected", this.viewing.navigation.selectedWatch === marker);
+    element.classList.toggle(
+      "selected",
+      this.viewing.navigation.selectedWatch === marker,
+    );
     element.classList.toggle("previewSelected", this.#previewKey === itemKey);
     element.dataset.t = String(marker.t);
     element.dataset.watchKey = itemKey;
 
-    const visibilityButton = element.querySelector<HTMLButtonElement>(".watchVisibilityBtn");
+    const visibilityButton = element.querySelector<HTMLButtonElement>(
+      ".watchVisibilityBtn",
+    );
     if (visibilityButton) {
       visibilityButton.classList.toggle("isOff", !visible);
       const action = visible ? "Hide" : "Show";
       visibilityButton.title = `${action} watch`;
       visibilityButton.setAttribute("aria-label", `${action} watch`);
-      const icon = visibilityButton.querySelector<HTMLElement>(".watchActionIcon");
+      const icon =
+        visibilityButton.querySelector<HTMLElement>(".watchActionIcon");
       const iconSvg = visible ? visibleWatchIconSvg : invisibleWatchIconSvg;
       if (icon && icon.innerHTML !== iconSvg) icon.innerHTML = iconSvg;
     }
 
-    element.querySelector(".watchPinBtn")?.classList.toggle("isOn", this.floatingInfo.isWatchPinned(watch.id ?? null));
-    element.querySelector(".watchGraphBtn")?.classList.toggle("isOn", this.watchGraph.isOpenFor(marker));
+    element
+      .querySelector(".watchPinBtn")
+      ?.classList.toggle(
+        "isOn",
+        this.floatingInfo.isWatchPinned(watch.id ?? null),
+      );
+    element
+      .querySelector(".watchGraphBtn")
+      ?.classList.toggle("isOn", this.watchGraph.isOpenFor(marker));
   }
 
   private keyFor(marker: Readonly<WatchMarker>): string {
@@ -229,23 +308,32 @@ export class WatchListView {
   }
 
   private constrainTextSelection(item: HTMLElement): void {
-    for (const text of item.querySelectorAll<HTMLElement>(".eventSelectableText")) {
-      text.addEventListener("pointerdown", (event) => {
-        if (event.button !== 0) return;
-        text.dataset.selectionCancelled = "";
-        const constrain = (move: PointerEvent) => {
-          const target = document.elementFromPoint(move.clientX, move.clientY);
-          if (target && text.contains(target)) return;
-          text.dataset.selectionCancelled = "true";
-          window.getSelection()?.removeAllRanges();
-        };
-        const release = () => {
-          window.removeEventListener("pointermove", constrain);
-          window.setTimeout(() => delete text.dataset.selectionCancelled, 0);
-        };
-        window.addEventListener("pointermove", constrain, { passive: true });
-        window.addEventListener("pointerup", release, { once: true });
-      }, { passive: true });
+    for (const text of item.querySelectorAll<HTMLElement>(
+      ".eventSelectableText",
+    )) {
+      text.addEventListener(
+        "pointerdown",
+        (event) => {
+          if (event.button !== 0) return;
+          text.dataset.selectionCancelled = "";
+          const constrain = (move: PointerEvent) => {
+            const target = document.elementFromPoint(
+              move.clientX,
+              move.clientY,
+            );
+            if (target && text.contains(target)) return;
+            text.dataset.selectionCancelled = "true";
+            window.getSelection()?.removeAllRanges();
+          };
+          const release = () => {
+            window.removeEventListener("pointermove", constrain);
+            window.setTimeout(() => delete text.dataset.selectionCancelled, 0);
+          };
+          window.addEventListener("pointermove", constrain, { passive: true });
+          window.addEventListener("pointerup", release, { once: true });
+        },
+        { passive: true },
+      );
     }
   }
 }

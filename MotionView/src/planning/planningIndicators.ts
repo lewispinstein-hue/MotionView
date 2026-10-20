@@ -4,7 +4,12 @@ import swingIconUrl from "../assets/svg/planning/waypointSwing.svg?url";
 import forwardIconUrl from "../assets/svg/planning/waypointForward.svg?url";
 import boomerangIconUrl from "../assets/svg/planning/waypointBoomerang.svg?url";
 
-export const WAYPOINT_INDICATOR_ICONS = ["rotate", "swing", "forward", "boomerang"] as const satisfies readonly PlanWaypointIndicatorIcon[];
+export const WAYPOINT_INDICATOR_ICONS = [
+  "rotate",
+  "swing",
+  "forward",
+  "boomerang",
+] as const satisfies readonly PlanWaypointIndicatorIcon[];
 
 const ICON_HREFS: Record<PlanWaypointIndicatorIcon, string> = {
   rotate: `${rotateIconUrl}#icon-waypointRotate`,
@@ -20,19 +25,29 @@ const ICON_TOOLTIPS: Record<PlanWaypointIndicatorIcon, string> = {
   boomerang: "moveToPose • Boomerang Motion",
 };
 
-export function getWaypointIndicatorTooltip(icon: PlanWaypointIndicatorIcon): string {
+export function getWaypointIndicatorTooltip(
+  icon: PlanWaypointIndicatorIcon,
+): string {
   return ICON_TOOLTIPS[icon];
 }
 
-export function isWaypointIndicatorIcon(value: unknown): value is PlanWaypointIndicatorIcon {
-  return typeof value === "string" && WAYPOINT_INDICATOR_ICONS.includes(value as PlanWaypointIndicatorIcon);
+export function isWaypointIndicatorIcon(
+  value: unknown,
+): value is PlanWaypointIndicatorIcon {
+  return (
+    typeof value === "string" &&
+    WAYPOINT_INDICATOR_ICONS.includes(value as PlanWaypointIndicatorIcon)
+  );
 }
 
-export function normalizeWaypointIndicatorIcons(value: unknown): PlanWaypointIndicatorIcon[] {
+export function normalizeWaypointIndicatorIcons(
+  value: unknown,
+): PlanWaypointIndicatorIcon[] {
   if (!Array.isArray(value)) return [];
   const icons: PlanWaypointIndicatorIcon[] = [];
   for (const candidate of value) {
-    if (!isWaypointIndicatorIcon(candidate) || icons.includes(candidate)) continue;
+    if (!isWaypointIndicatorIcon(candidate) || icons.includes(candidate))
+      continue;
     icons.push(candidate);
     if (icons.length === 2) break;
   }
@@ -40,12 +55,21 @@ export function normalizeWaypointIndicatorIcons(value: unknown): PlanWaypointInd
 }
 
 /** Returns a stable visual order without changing the stored selection order. */
-export function orderWaypointIndicatorIcons(value: readonly PlanWaypointIndicatorIcon[]): PlanWaypointIndicatorIcon[] {
+export function orderWaypointIndicatorIcons(
+  value: readonly PlanWaypointIndicatorIcon[],
+): PlanWaypointIndicatorIcon[] {
   const icons = normalizeWaypointIndicatorIcons(value);
-  return icons.sort((left, right) => WAYPOINT_INDICATOR_ICONS.indexOf(left) - WAYPOINT_INDICATOR_ICONS.indexOf(right));
+  return icons.sort(
+    (left, right) =>
+      WAYPOINT_INDICATOR_ICONS.indexOf(left) -
+      WAYPOINT_INDICATOR_ICONS.indexOf(right),
+  );
 }
 
-export function createWaypointIndicatorIcon(icon: PlanWaypointIndicatorIcon, className = ""): SVGSVGElement {
+export function createWaypointIndicatorIcon(
+  icon: PlanWaypointIndicatorIcon,
+  className = "",
+): SVGSVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.classList.add("waypointIndicatorIcon");
   if (className) svg.classList.add(className);

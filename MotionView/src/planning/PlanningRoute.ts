@@ -5,8 +5,13 @@ import type { PlanningWaypoint, PlanningWaypointView } from "./planningTypes";
 
 function cloneWaypoint(waypoint: Readonly<PlanningWaypoint>): PlanningWaypoint {
   const cloned: PlanningWaypoint = { ...waypoint };
-  const indicatorIcons = normalizeWaypointIndicatorIcons(waypoint.indicatorIcons);
-  if (indicatorIcons.length || Object.prototype.hasOwnProperty.call(waypoint, "indicatorIcons")) {
+  const indicatorIcons = normalizeWaypointIndicatorIcons(
+    waypoint.indicatorIcons,
+  );
+  if (
+    indicatorIcons.length ||
+    Object.prototype.hasOwnProperty.call(waypoint, "indicatorIcons")
+  ) {
     cloned.indicatorIcons = indicatorIcons;
   }
   if (Object.prototype.hasOwnProperty.call(waypoint, "overrideCode")) {
@@ -17,13 +22,27 @@ function cloneWaypoint(waypoint: Readonly<PlanningWaypoint>): PlanningWaypoint {
 
 export class PlanningRoute {
   constructor(private readonly session: PlanningSession) {}
-  get waypoints(): readonly PlanningWaypointView[] { return this.session.waypoints; }
-  get length(): number { return this.session.waypoints.length; }
-  get revision(): number { return this.session.routeRevision; }
-  get hasData(): boolean { return this.session.waypoints.length > 0; }
+  get waypoints(): readonly PlanningWaypointView[] {
+    return this.session.waypoints;
+  }
+  get length(): number {
+    return this.session.waypoints.length;
+  }
+  get revision(): number {
+    return this.session.routeRevision;
+  }
+  get hasData(): boolean {
+    return this.session.waypoints.length > 0;
+  }
 
-  add(waypoint: PlanningWaypoint, index = this.session.waypoints.length): number {
-    const insertionIndex = Math.max(0, Math.min(this.session.waypoints.length, Math.trunc(index)));
+  add(
+    waypoint: PlanningWaypoint,
+    index = this.session.waypoints.length,
+  ): number {
+    const insertionIndex = Math.max(
+      0,
+      Math.min(this.session.waypoints.length, Math.trunc(index)),
+    );
     this.session.mutate("route", () => {
       // Nodes in the split segment remain after its original starting waypoint.
       // Later buckets advance so they stay after their existing waypoint.
@@ -48,7 +67,11 @@ export class PlanningRoute {
     this.session.mutate("route", () => Object.assign(waypoint, values));
   }
 
-  updateContent(index: number, code: string, indicatorIcons: readonly PlanWaypointIndicatorIcon[]): void {
+  updateContent(
+    index: number,
+    code: string,
+    indicatorIcons: readonly PlanWaypointIndicatorIcon[],
+  ): void {
     const waypoint = this.session.waypoints[index];
     if (!waypoint) return;
     this.session.mutate("route", () => {
@@ -60,13 +83,23 @@ export class PlanningRoute {
     });
   }
 
-  updateField(index: number, field: "x" | "y" | "theta" | "speed", value: number): void {
+  updateField(
+    index: number,
+    field: "x" | "y" | "theta" | "speed",
+    value: number,
+  ): void {
     const waypoint = this.session.waypoints[index];
     if (!waypoint) return;
-    this.session.mutate("route", () => { waypoint[field] = value; });
+    this.session.mutate("route", () => {
+      waypoint[field] = value;
+    });
   }
 
-  updateMany(updates: Iterable<readonly [index: number, values: Partial<PlanningWaypoint>]>): void {
+  updateMany(
+    updates: Iterable<
+      readonly [index: number, values: Partial<PlanningWaypoint>]
+    >,
+  ): void {
     this.session.mutate("route", () => {
       for (const [index, values] of updates) {
         const waypoint = this.session.waypoints[index];
@@ -75,13 +108,21 @@ export class PlanningRoute {
     });
   }
 
-  move(indices: Iterable<number>, dx: number, dy: number, clamp?: (point: Readonly<PlanningWaypoint>) => PlanningWaypoint): void {
+  move(
+    indices: Iterable<number>,
+    dx: number,
+    dy: number,
+    clamp?: (point: Readonly<PlanningWaypoint>) => PlanningWaypoint,
+  ): void {
     this.session.mutate("route", () => {
       for (const index of indices) {
         const waypoint = this.session.waypoints[index];
         if (!waypoint) continue;
-        const next = clamp?.({ ...waypoint, x: waypoint.x + dx, y: waypoint.y + dy })
-          ?? { ...waypoint, x: waypoint.x + dx, y: waypoint.y + dy };
+        const next = clamp?.({
+          ...waypoint,
+          x: waypoint.x + dx,
+          y: waypoint.y + dy,
+        }) ?? { ...waypoint, x: waypoint.x + dx, y: waypoint.y + dy };
         waypoint.x = next.x;
         waypoint.y = next.y;
       }
@@ -90,16 +131,29 @@ export class PlanningRoute {
 
   remove(indices: Iterable<number>): void {
     const deleted = [...new Set(indices)]
-      .filter((index) => Number.isInteger(index) && index >= 0 && index < this.session.waypoints.length)
+      .filter(
+        (index) =>
+          Number.isInteger(index) &&
+          index >= 0 &&
+          index < this.session.waypoints.length,
+      )
       .sort((a, b) => a - b);
     if (!deleted.length) return;
     this.session.mutate("route", () => {
       const bucketCounts = new Map<number, number>();
-      const orderedNodes = [...this.session.nodes]
-        .sort((a, b) => a.beforeWaypoint - b.beforeWaypoint || a.index - b.index || a.id.localeCompare(b.id));
+      const orderedNodes = [...this.session.nodes].sort(
+        (a, b) =>
+          a.beforeWaypoint - b.beforeWaypoint ||
+          a.index - b.index ||
+          a.id.localeCompare(b.id),
+      );
       let deletedCursor = 0;
       for (const node of orderedNodes) {
-        while (deletedCursor < deleted.length && deleted[deletedCursor]! < node.beforeWaypoint) deletedCursor += 1;
+        while (
+          deletedCursor < deleted.length &&
+          deleted[deletedCursor]! < node.beforeWaypoint
+        )
+          deletedCursor += 1;
         node.beforeWaypoint -= deletedCursor;
         node.index = bucketCounts.get(node.beforeWaypoint) ?? 0;
         bucketCounts.set(node.beforeWaypoint, node.index + 1);

@@ -1,4 +1,9 @@
-import type { PlanMethod, PlanNode, PlanObject, PlanWaypoint } from "../state/models";
+import type {
+  PlanMethod,
+  PlanNode,
+  PlanObject,
+  PlanWaypoint,
+} from "../state/models";
 
 export interface PlanningMethod extends PlanMethod {
   code: string;

@@ -26,7 +26,9 @@ export function getDefaultPlanObjectColor(index = 0) {
 
 export function normalizePlanObjectColor(value: unknown, index = 0): string {
   const color = typeof value === "string" ? value.trim() : "";
-  return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : getDefaultPlanObjectColor(index);
+  return /^#[0-9a-f]{6}$/i.test(color)
+    ? color.toLowerCase()
+    : getDefaultPlanObjectColor(index);
 }
 
 export function getDefaultPlanObjectName(index = 0) {
@@ -48,12 +50,19 @@ export function normalizePlanObjects(value: unknown): PlanningObject[] {
     const obj = rawObj as Record<string, any> | null | undefined;
     const rawMethods = Array.isArray(obj?.methods) ? obj.methods : [];
     return {
-      id: (typeof obj?.id === "string" && obj.id.trim()) ? obj.id.trim() : createPlanObjectId(),
+      id:
+        typeof obj?.id === "string" && obj.id.trim()
+          ? obj.id.trim()
+          : createPlanObjectId(),
       name: typeof obj?.name === "string" ? obj.name : "",
       color: normalizePlanObjectColor(obj?.color, index),
-      latestMethod: typeof obj?.latestMethod === "string" ? obj.latestMethod : "",
+      latestMethod:
+        typeof obj?.latestMethod === "string" ? obj.latestMethod : "",
       methods: rawMethods.map((method: any, methodIndex: number) => ({
-        id: (typeof method?.id === "string" && method.id.trim()) ? method.id.trim() : `plan-method-${index + 1}-${methodIndex + 1}`,
+        id:
+          typeof method?.id === "string" && method.id.trim()
+            ? method.id.trim()
+            : `plan-method-${index + 1}-${methodIndex + 1}`,
         name: typeof method?.name === "string" ? method.name : "",
         code: typeof method?.code === "string" ? method.code : "",
       })),
@@ -66,13 +75,17 @@ export function normalizePlanNodes(value: unknown): PlanningNode[] {
   return value.map((rawNode: unknown) => {
     const node = rawNode as Record<string, any> | null | undefined;
     const normalized: PlanningNode = {
-      id: (typeof node?.id === "string" && node.id.trim()) ? node.id.trim() : createPlanNodeId(),
+      id:
+        typeof node?.id === "string" && node.id.trim()
+          ? node.id.trim()
+          : createPlanNodeId(),
       objectId: typeof node?.objectId === "string" ? node.objectId : "",
       methodId: typeof node?.methodId === "string" ? node.methodId : "",
       beforeWaypoint: Math.max(0, Number(node?.beforeWaypoint) || 0),
       index: Math.max(0, Number(node?.index) || 0),
     };
-    if (Object.prototype.hasOwnProperty.call(node || {}, "code")) normalized.code = typeof node?.code === "string" ? node.code : "";
+    if (Object.prototype.hasOwnProperty.call(node || {}, "code"))
+      normalized.code = typeof node?.code === "string" ? node.code : "";
     return normalized;
   });
 }

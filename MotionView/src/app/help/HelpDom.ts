@@ -1,4 +1,7 @@
-function requiredElement<T extends HTMLElement>(document: Document, id: string): T {
+function requiredElement<T extends HTMLElement>(
+  document: Document,
+  id: string,
+): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`MotionView Help UI requires #${id}.`);
   return element as T;
@@ -49,5 +52,7 @@ export class HelpDom {
     this.feedbackAreaTags = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-feedback-area]"));
   }
 
-  static from(documentRoot: Document = document): HelpDom { return new HelpDom(documentRoot); }
+  static from(documentRoot: Document = document): HelpDom {
+    return new HelpDom(documentRoot);
+  }
 }

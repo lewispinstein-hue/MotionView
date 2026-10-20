@@ -5,16 +5,35 @@ import type { PlanningFeature } from "../PlanningFeature";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningDialogs } from "../PlanningDialogs";
 import type { PlanningWaypointEditor } from "../PlanningWaypointEditor";
-import { getPlanMethodTooltipName, getPlanNodeEffectiveMethod } from "../planningObjects";
+import {
+  getPlanMethodTooltipName,
+  getPlanNodeEffectiveMethod,
+} from "../planningObjects";
 import { planningTelemetry } from "../../telemetry/createTelemetry";
 import { formatDistanceFromInches } from "../../shared/units";
 
-interface SelectionRect { x0: number; y0: number; x1: number; y1: number }
-interface DragPoint { index: number; x: number; y: number }
-interface PathSegmentHit { index: number; x: number; y: number }
-interface PendingSegmentInsert extends PathSegmentHit { startX: number; startY: number }
+interface SelectionRect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+interface DragPoint {
+  index: number;
+  x: number;
+  y: number;
+}
+interface PathSegmentHit {
+  index: number;
+  x: number;
+  y: number;
+}
+interface PendingSegmentInsert extends PathSegmentHit {
+  startX: number;
+  startY: number;
+}
 interface NodeMarker {
-  readonly node: (PlanningFeature["timeline"]["nodes"])[number];
+  readonly node: PlanningFeature["timeline"]["nodes"][number];
   readonly x: number;
   readonly y: number;
   readonly tx: number;
@@ -29,7 +48,8 @@ const NODE_LONG = 12;
 const NODE_THICK = 3.75;
 const NODE_TICK = 10;
 const NODE_BORDER = 1.5;
-const NODE_TEMPLATE_DESCRIPTION = "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}. Values come from the preceding waypoint; nodes before the first waypoint use the first waypoint.";
+const NODE_TEMPLATE_DESCRIPTION =
+  "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}. Values come from the preceding waypoint; nodes before the first waypoint use the first waypoint.";
 
 function normalizeDegrees(value: number): number {
   return ((value % 360) + 360) % 360;
@@ -47,7 +67,13 @@ export class PlanningFieldView {
   #thetaIndex = -1;
   #thetaStart = 0;
   #thetaOriginal: readonly Readonly<{ index: number; theta: number }>[] = [];
-  #pendingAdd: Readonly<{ x: number; y: number; screenX: number; screenY: number; clearSelection: boolean }> | null = null;
+  #pendingAdd: Readonly<{
+    x: number;
+    y: number;
+    screenX: number;
+    screenY: number;
+    clearSelection: boolean;
+  }> | null = null;
   #hoverNodeId: string | null = null;
   #tooltipTimer: number | null = null;
 
@@ -60,12 +86,21 @@ export class PlanningFieldView {
   ) {}
 
   bind(): void {
-    this.dom.canvas.addEventListener("pointerdown", (event) => this.pointerDown(event));
-    this.dom.canvas.addEventListener("pointermove", (event) => this.pointerMove(event));
-    this.dom.canvas.addEventListener("pointerup", (event) => this.pointerEnd(event));
-    this.dom.canvas.addEventListener("pointercancel", (event) => this.pointerEnd(event));
+    this.dom.canvas.addEventListener("pointerdown", (event) =>
+      this.pointerDown(event),
+    );
+    this.dom.canvas.addEventListener("pointermove", (event) =>
+      this.pointerMove(event),
+    );
+    this.dom.canvas.addEventListener("pointerup", (event) =>
+      this.pointerEnd(event),
+    );
+    this.dom.canvas.addEventListener("pointercancel", (event) =>
+      this.pointerEnd(event),
+    );
     this.dom.canvas.addEventListener("pointerleave", () => {
-      if (getMode() === "planning") this.dom.cursorPill.textContent = "Cursor: —";
+      if (getMode() === "planning")
+        this.dom.cursorPill.textContent = "Cursor: —";
       if (this.#pointerId == null) {
         this.#hoverNodeId = null;
         this.hideNodeTooltip();
@@ -87,7 +122,10 @@ export class PlanningFieldView {
         return;
       }
       const node = this.hitNode(point.x, point.y);
-      if (node) { event.preventDefault(); void this.editNode(node.id); }
+      if (node) {
+        event.preventDefault();
+        void this.editNode(node.id);
+      }
     });
   }
 
@@ -114,29 +152,49 @@ export class PlanningFieldView {
       const radius = this.waypointRadius(getMode() !== "planning");
       context.beginPath();
       context.arc(screen.x, screen.y, radius, 0, Math.PI * 2);
-      context.fillStyle = index === this.planning.selection.primaryWaypointIndex
-        ? "rgba(180,220,255,1)"
-        : selected ? "rgba(150,200,255,0.95)" : "rgba(120,180,255,0.9)";
+      context.fillStyle =
+        index === this.planning.selection.primaryWaypointIndex
+          ? "rgba(180,220,255,1)"
+          : selected
+            ? "rgba(150,200,255,0.95)"
+            : "rgba(120,180,255,0.9)";
       context.fill();
       context.strokeStyle = "rgba(15,25,35,0.8)";
       context.stroke();
-      const angle = this.screenHeading(index) * Math.PI / 180;
+      const angle = (this.screenHeading(index) * Math.PI) / 180;
       context.beginPath();
       context.moveTo(screen.x, screen.y);
-      context.lineTo(screen.x + Math.sin(angle) * radius, screen.y - Math.cos(angle) * radius);
+      context.lineTo(
+        screen.x + Math.sin(angle) * radius,
+        screen.y - Math.cos(angle) * radius,
+      );
       context.strokeStyle = "rgba(0,0,0,0.9)";
       context.stroke();
-      if (selected && getMode() === "planning") this.drawThetaHandle(index, radius, angle);
+      if (selected && getMode() === "planning")
+        this.drawThetaHandle(index, radius, angle);
     });
 
     for (const marker of this.nodeMarkers()) {
       const object = this.planning.objects.get(marker.node.objectId);
       if (!object) continue;
       const screen = this.field.worldToScreen(marker.x, marker.y);
-      const tangentStart = this.field.worldToScreen(marker.x - marker.tx, marker.y - marker.ty);
-      const tangentEnd = this.field.worldToScreen(marker.x + marker.tx, marker.y + marker.ty);
-      const normalAngle = Math.atan2(tangentEnd.y - tangentStart.y, tangentEnd.x - tangentStart.x) + Math.PI / 2;
-      const selected = this.planning.selection.isNodeHighlighted(marker.node) || this.#hoverNodeId === marker.node.id;
+      const tangentStart = this.field.worldToScreen(
+        marker.x - marker.tx,
+        marker.y - marker.ty,
+      );
+      const tangentEnd = this.field.worldToScreen(
+        marker.x + marker.tx,
+        marker.y + marker.ty,
+      );
+      const normalAngle =
+        Math.atan2(
+          tangentEnd.y - tangentStart.y,
+          tangentEnd.x - tangentStart.x,
+        ) +
+        Math.PI / 2;
+      const selected =
+        this.planning.selection.isNodeHighlighted(marker.node) ||
+        this.#hoverNodeId === marker.node.id;
       const size = this.nodeScreenSize(getMode() === "planning");
       context.save();
       context.translate(screen.x, screen.y);
@@ -149,7 +207,9 @@ export class PlanningFieldView {
       context.moveTo(-size.tick / 2, 0);
       context.lineTo(size.tick / 2, 0);
       context.stroke();
-      context.fillStyle = selected ? "rgba(255,255,255,.98)" : "rgba(15,25,35,.7)";
+      context.fillStyle = selected
+        ? "rgba(255,255,255,.98)"
+        : "rgba(15,25,35,.7)";
       context.beginPath();
       context.roundRect(
         -(size.width + size.border * 2) / 2,
@@ -161,7 +221,13 @@ export class PlanningFieldView {
       context.fill();
       context.fillStyle = object.color;
       context.beginPath();
-      context.roundRect(-size.width / 2, -size.height / 2, size.width, size.height, size.height / 2);
+      context.roundRect(
+        -size.width / 2,
+        -size.height / 2,
+        size.width,
+        size.height,
+        size.height / 2,
+      );
       context.fill();
       context.restore();
     }
@@ -201,18 +267,29 @@ export class PlanningFieldView {
     // a canvas drag started while a field is focused would run with no
     // transaction at all: blur() commits the field's transaction synchronously
     // so the drag can open its own right after.
-    if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur();
+    if (document.activeElement instanceof HTMLInputElement)
+      document.activeElement.blur();
     const point = this.canvasPoint(event);
     this.#pointerId = event.pointerId;
     this.dom.canvas.setPointerCapture(event.pointerId);
     if (event.button === 2) {
       const waypoint = this.hitWaypoint(point.x, point.y);
-      const segment = waypoint < 0 ? this.hitPathSegment(point.x, point.y) : null;
+      const segment =
+        waypoint < 0 ? this.hitPathSegment(point.x, point.y) : null;
       if (segment) {
-        this.#pendingSegmentInsert = { ...segment, startX: point.x, startY: point.y };
+        this.#pendingSegmentInsert = {
+          ...segment,
+          startX: point.x,
+          startY: point.y,
+        };
         return;
       }
-      this.#selectionRect = { x0: point.x, y0: point.y, x1: point.x, y1: point.y };
+      this.#selectionRect = {
+        x0: point.x,
+        y0: point.y,
+        x1: point.x,
+        y1: point.y,
+      };
       requestDrawAll();
       return;
     }
@@ -222,7 +299,9 @@ export class PlanningFieldView {
       this.planning.history.begin("route");
       this.#thetaIndex = thetaIndex;
       this.#thetaStart = this.displayTheta(thetaIndex);
-      this.#thetaOriginal = [...this.planning.selection.waypointIndices].map((index) => ({ index, theta: this.displayTheta(index) }));
+      this.#thetaOriginal = [...this.planning.selection.waypointIndices].map(
+        (index) => ({ index, theta: this.displayTheta(index) }),
+      );
       this.updateTheta(point.x, point.y);
       return;
     }
@@ -241,7 +320,8 @@ export class PlanningFieldView {
         this.#pointerId = null;
         return;
       }
-      if (!this.planning.selection.isWaypointSelected(hit)) this.planning.selection.selectWaypoint(hit);
+      if (!this.planning.selection.isWaypointSelected(hit))
+        this.planning.selection.selectWaypoint(hit);
       const world = this.field.screenToWorld(point.x, point.y);
       this.#dragStart = world;
       this.#dragStartScreen = point;
@@ -264,12 +344,22 @@ export class PlanningFieldView {
     }
     const world = this.field.screenToWorld(point.x, point.y);
     const bounds = this.field.getBounds();
-    if (world.x < bounds.minX || world.x > bounds.maxX || world.y < bounds.minY || world.y > bounds.maxY) {
+    if (
+      world.x < bounds.minX ||
+      world.x > bounds.maxX ||
+      world.y < bounds.minY ||
+      world.y > bounds.maxY
+    ) {
       this.#pendingAdd = null;
       this.field.beginPan(event.pointerId, point.x, point.y);
       return;
     }
-    this.#pendingAdd = { ...world, screenX: point.x, screenY: point.y, clearSelection: this.planning.selection.waypointIndices.size > 1 };
+    this.#pendingAdd = {
+      ...world,
+      screenX: point.x,
+      screenY: point.y,
+      clearSelection: this.planning.selection.waypointIndices.size > 1,
+    };
     this.field.beginPan(event.pointerId, point.x, point.y);
   }
 
@@ -296,7 +386,12 @@ export class PlanningFieldView {
       return;
     }
     if (this.#pendingSegmentInsert) {
-      if (Math.hypot(point.x - this.#pendingSegmentInsert.startX, point.y - this.#pendingSegmentInsert.startY) > 3) {
+      if (
+        Math.hypot(
+          point.x - this.#pendingSegmentInsert.startX,
+          point.y - this.#pendingSegmentInsert.startY,
+        ) > 3
+      ) {
         this.#selectionRect = {
           x0: this.#pendingSegmentInsert.startX,
           y0: this.#pendingSegmentInsert.startY,
@@ -313,19 +408,39 @@ export class PlanningFieldView {
       return;
     }
     if (this.#dragStart) {
-      if (this.#dragStartScreen && Math.hypot(point.x - this.#dragStartScreen.x, point.y - this.#dragStartScreen.y) > 3) {
+      if (
+        this.#dragStartScreen &&
+        Math.hypot(
+          point.x - this.#dragStartScreen.x,
+          point.y - this.#dragStartScreen.y,
+        ) > 3
+      ) {
         this.#dragMoved = true;
       }
       const dx = world.x - this.#dragStart.x;
       const dy = world.y - this.#dragStart.y;
-      this.planning.route.updateMany(this.#dragPoints.map((entry) => {
-        const current = this.planning.route.waypoints[entry.index];
-        return [entry.index, this.planning.projection.constrain({ ...current, x: entry.x + dx, y: entry.y + dy })];
-      }));
+      this.planning.route.updateMany(
+        this.#dragPoints.map((entry) => {
+          const current = this.planning.route.waypoints[entry.index];
+          return [
+            entry.index,
+            this.planning.projection.constrain({
+              ...current,
+              x: entry.x + dx,
+              y: entry.y + dy,
+            }),
+          ];
+        }),
+      );
       requestDrawAll();
       return;
     }
-    if (this.#pendingAdd && Math.abs(point.x - this.#pendingAdd.screenX) + Math.abs(point.y - this.#pendingAdd.screenY) > 3) {
+    if (
+      this.#pendingAdd &&
+      Math.abs(point.x - this.#pendingAdd.screenX) +
+        Math.abs(point.y - this.#pendingAdd.screenY) >
+        3
+    ) {
       this.#pendingAdd = null;
     }
     this.field.movePan(point.x, point.y);
@@ -334,34 +449,43 @@ export class PlanningFieldView {
   private pointerEnd(event: PointerEvent): void {
     if (getMode() !== "planning" || this.#pointerId !== event.pointerId) return;
     if (this.#pendingSegmentInsert) {
-      if (event.type !== "pointercancel") this.insertWaypointOnSegment(this.#pendingSegmentInsert);
+      if (event.type !== "pointercancel")
+        this.insertWaypointOnSegment(this.#pendingSegmentInsert);
       this.#pendingSegmentInsert = null;
     } else if (this.#selectionRect) {
       const rect = this.#selectionRect;
       const selected: number[] = [];
       this.planning.route.waypoints.forEach((point, index) => {
         const screen = this.field.worldToScreen(point.x, point.y);
-        if (screen.x >= Math.min(rect.x0, rect.x1) && screen.x <= Math.max(rect.x0, rect.x1)
-          && screen.y >= Math.min(rect.y0, rect.y1) && screen.y <= Math.max(rect.y0, rect.y1)) selected.push(index);
+        if (
+          screen.x >= Math.min(rect.x0, rect.x1) &&
+          screen.x <= Math.max(rect.x0, rect.x1) &&
+          screen.y >= Math.min(rect.y0, rect.y1) &&
+          screen.y <= Math.max(rect.y0, rect.y1)
+        )
+          selected.push(index);
       });
       this.planning.selection.setWaypoints(selected);
       this.#selectionRect = null;
     } else if (this.#thetaIndex >= 0 || this.#dragStart) {
       if (event.type === "pointercancel") this.planning.history.cancel();
       else this.planning.history.commit();
-      if (this.#dragMoved) this.#suppressWaypointEditorUntil = performance.now() + 350;
+      if (this.#dragMoved)
+        this.#suppressWaypointEditorUntil = performance.now() + 350;
     } else {
       const panned = this.field.endPan(event.pointerId);
       if (!panned && event.type !== "pointercancel" && this.#pendingAdd) {
         if (this.#pendingAdd.clearSelection) this.planning.selection.clear();
         else {
           const previous = this.planning.route.waypoints.at(-1);
-          const index = this.planning.route.add(this.planning.projection.constrain({
-            x: this.#pendingAdd.x,
-            y: this.#pendingAdd.y,
-            theta: 0,
-            speed: Number(previous?.speed) || 127,
-          }));
+          const index = this.planning.route.add(
+            this.planning.projection.constrain({
+              x: this.#pendingAdd.x,
+              y: this.#pendingAdd.y,
+              theta: 0,
+              speed: Number(previous?.speed) || 127,
+            }),
+          );
           this.planning.selection.selectWaypoint(index);
         }
       }
@@ -404,12 +528,13 @@ export class PlanningFieldView {
       const point = this.planning.route.waypoints[index];
       if (!point) continue;
       const screen = this.field.worldToScreen(point.x, point.y);
-      const angle = this.screenHeading(index) * Math.PI / 180;
+      const angle = (this.screenHeading(index) * Math.PI) / 180;
       const handle = this.thetaHandleGeometry(this.waypointRadius(false));
       const distance = handle.distance;
       const handleX = screen.x + Math.sin(angle) * distance;
       const handleY = screen.y - Math.cos(angle) * distance;
-      if ((handleX - x) ** 2 + (handleY - y) ** 2 <= handle.radius ** 2) return index;
+      if ((handleX - x) ** 2 + (handleY - y) ** 2 <= handle.radius ** 2)
+        return index;
     }
     return -1;
   }
@@ -429,7 +554,13 @@ export class PlanningFieldView {
       const dy = endScreen.y - startScreen.y;
       const lengthSquared = dx * dx + dy * dy;
       if (lengthSquared <= 0) continue;
-      const progress = Math.max(0, Math.min(1, ((x - startScreen.x) * dx + (y - startScreen.y) * dy) / lengthSquared));
+      const progress = Math.max(
+        0,
+        Math.min(
+          1,
+          ((x - startScreen.x) * dx + (y - startScreen.y) * dy) / lengthSquared,
+        ),
+      );
       const closestX = startScreen.x + dx * progress;
       const closestY = startScreen.y + dy * progress;
       const distance = (x - closestX) ** 2 + (y - closestY) ** 2;
@@ -444,7 +575,11 @@ export class PlanningFieldView {
     const source = this.planning.route.waypoints[segment.index];
     if (!source) return;
     const point = this.field.screenToWorld(segment.x, segment.y);
-    const waypoint = this.planning.projection.constrain({ ...source, x: point.x, y: point.y });
+    const waypoint = this.planning.projection.constrain({
+      ...source,
+      x: point.x,
+      y: point.y,
+    });
     const index = this.planning.route.add(waypoint, segment.index + 1);
     this.planning.selection.selectWaypoint(index);
   }
@@ -453,16 +588,28 @@ export class PlanningFieldView {
     const point = this.planning.route.waypoints[this.#thetaIndex];
     if (!point) return;
     const screen = this.field.worldToScreen(point.x, point.y);
-    const angle = normalizeDegrees(Math.atan2(x - screen.x, -(y - screen.y)) * 180 / Math.PI - this.field.getFieldRotationDeg());
+    const angle = normalizeDegrees(
+      (Math.atan2(x - screen.x, -(y - screen.y)) * 180) / Math.PI -
+        this.field.getFieldRotationDeg(),
+    );
     const delta = ((angle - this.#thetaStart + 540) % 360) - 180;
-    this.planning.route.updateMany(this.#thetaOriginal.map((entry) => [entry.index, {
-      theta: this.planning.projection.constrainTheta(normalizeDegrees(entry.theta + delta)),
-    }]));
+    this.planning.route.updateMany(
+      this.#thetaOriginal.map((entry) => [
+        entry.index,
+        {
+          theta: this.planning.projection.constrainTheta(
+            normalizeDegrees(entry.theta + delta),
+          ),
+        },
+      ]),
+    );
     requestDrawAll();
   }
 
   private displayTheta(index: number): number {
-    return normalizeDegrees(Number(this.planning.route.waypoints[index]?.theta) || 0);
+    return normalizeDegrees(
+      Number(this.planning.route.waypoints[index]?.theta) || 0,
+    );
   }
 
   private screenHeading(index: number): number {
@@ -475,7 +622,11 @@ export class PlanningFieldView {
   }
 
   private releaseCapture(pointerId: number): void {
-    try { this.dom.canvas.releasePointerCapture(pointerId); } catch { /* capture may already be released */ }
+    try {
+      this.dom.canvas.releasePointerCapture(pointerId);
+    } catch {
+      /* capture may already be released */
+    }
   }
 
   private hitNode(x: number, y: number) {
@@ -484,28 +635,48 @@ export class PlanningFieldView {
     const size = this.nodeScreenSize(true);
     for (const marker of this.nodeMarkers()) {
       const screen = this.field.worldToScreen(marker.x, marker.y);
-      const tangentStart = this.field.worldToScreen(marker.x - marker.tx, marker.y - marker.ty);
-      const tangentEnd = this.field.worldToScreen(marker.x + marker.tx, marker.y + marker.ty);
-      const angle = Math.atan2(tangentEnd.y - tangentStart.y, tangentEnd.x - tangentStart.x) + Math.PI / 2;
+      const tangentStart = this.field.worldToScreen(
+        marker.x - marker.tx,
+        marker.y - marker.ty,
+      );
+      const tangentEnd = this.field.worldToScreen(
+        marker.x + marker.tx,
+        marker.y + marker.ty,
+      );
+      const angle =
+        Math.atan2(
+          tangentEnd.y - tangentStart.y,
+          tangentEnd.x - tangentStart.x,
+        ) +
+        Math.PI / 2;
       const dx = x - screen.x;
       const dy = y - screen.y;
       const localX = dx * Math.cos(angle) + dy * Math.sin(angle);
       const localY = -dx * Math.sin(angle) + dy * Math.cos(angle);
       const width = Math.max(size.width + size.border * 2, size.tick);
       const height = size.height + size.border * 2;
-      if (Math.abs(localX) > width / 2 || Math.abs(localY) > height / 2) continue;
+      if (Math.abs(localX) > width / 2 || Math.abs(localY) > height / 2)
+        continue;
       const next = dx * dx + dy * dy;
-      if (next < distance) { best = marker; distance = next; }
+      if (next < distance) {
+        best = marker;
+        distance = next;
+      }
     }
     return best?.node ?? null;
   }
 
   private waypointRadius(overlay: boolean): number {
     const radius = overlay ? OVERLAY_WAYPOINT_RADIUS : WAYPOINT_RADIUS;
-    return this.field.sizes.screen({ width: radius * 2, height: radius * 2 }).width / 2;
+    return (
+      this.field.sizes.screen({ width: radius * 2, height: radius * 2 }).width /
+      2
+    );
   }
 
-  private thetaHandleGeometry(waypointRadius: number): Readonly<{ radius: number; distance: number }> {
+  private thetaHandleGeometry(
+    waypointRadius: number,
+  ): Readonly<{ radius: number; distance: number }> {
     const diameter = this.field.sizes.screen({
       width: THETA_HANDLE_RADIUS * 2,
       height: THETA_HANDLE_RADIUS * 2,
@@ -526,9 +697,21 @@ export class PlanningFieldView {
     tick: number;
     border: number;
   }> {
-    const node = this.field.sizes.screen({ width: NODE_LONG, height: NODE_THICK });
-    const tick = this.field.sizes.screen({ width: NODE_TICK, height: NODE_BORDER });
-    if (planningMode) return { width: node.width, height: node.height, tick: tick.width, border: tick.height };
+    const node = this.field.sizes.screen({
+      width: NODE_LONG,
+      height: NODE_THICK,
+    });
+    const tick = this.field.sizes.screen({
+      width: NODE_TICK,
+      height: NODE_BORDER,
+    });
+    if (planningMode)
+      return {
+        width: node.width,
+        height: node.height,
+        tick: tick.width,
+        border: tick.height,
+      };
     const cap = this.field.sizes.world({ width: 2.12, height: 2.12 });
     return {
       width: Math.min(cap.width, node.width),
@@ -548,11 +731,17 @@ export class PlanningFieldView {
     }));
   }
 
-  private showNodeTooltip(nodeId: string, clientX: number, clientY: number): void {
+  private showNodeTooltip(
+    nodeId: string,
+    clientX: number,
+    clientY: number,
+  ): void {
     this.hideNodeTooltip();
     const node = this.planning.timeline.get(nodeId);
     const object = node ? this.planning.objects.get(node.objectId) : null;
-    const method = node ? getPlanNodeEffectiveMethod(this.planning.objects.items, node) : null;
+    const method = node
+      ? getPlanNodeEffectiveMethod(this.planning.objects.items, node)
+      : null;
     if (!node || !object || !method) return;
     this.#tooltipTimer = window.setTimeout(() => {
       this.dom.nodeTooltip.textContent = `${object.name || "Object"} • ${getPlanMethodTooltipName(method.name)}`;
@@ -579,11 +768,24 @@ export class PlanningFieldView {
 
   private async editNode(nodeId: string): Promise<void> {
     const node = this.planning.timeline.get(nodeId);
-    const method = node ? getPlanNodeEffectiveMethod(this.planning.objects.items, node) : null;
+    const method = node
+      ? getPlanNodeEffectiveMethod(this.planning.objects.items, node)
+      : null;
     if (!node || !method) return;
-    const result = await this.dialogs.edit({ title: "Edit Placed Node", groupTitle: "Node Code", description: NODE_TEMPLATE_DESCRIPTION, code: method.code });
+    const result = await this.dialogs.edit({
+      title: "Edit Placed Node",
+      groupTitle: "Node Code",
+      description: NODE_TEMPLATE_DESCRIPTION,
+      code: method.code,
+    });
     if (!result) return;
     const changed = this.planning.timeline.setCodeOverride(nodeId, result.code);
-    if (changed.changed) void planningTelemetry.timelineNodeUpdated(this.planning.telemetryProperties({ node_override_created: !changed.hadOverride && changed.hasOverride, node_override_cleared: changed.hadOverride && !changed.hasOverride }));
+    if (changed.changed)
+      void planningTelemetry.timelineNodeUpdated(
+        this.planning.telemetryProperties({
+          node_override_created: !changed.hadOverride && changed.hasOverride,
+          node_override_cleared: changed.hadOverride && !changed.hasOverride,
+        }),
+      );
   }
 }

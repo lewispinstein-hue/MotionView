@@ -24,7 +24,13 @@ export interface PlanningProjectionConfiguration {
 }
 
 const DEFAULT_CONFIGURATION: PlanningProjectionConfiguration = {
-  minX: -72, maxX: 72, minY: -72, maxY: 72, limitBounds: false, positionSnap: 0, thetaSnap: 0,
+  minX: -72,
+  maxX: 72,
+  minY: -72,
+  maxY: 72,
+  limitBounds: false,
+  positionSnap: 0,
+  thetaSnap: 0,
 };
 
 export class PlanningProjection {
@@ -35,9 +41,18 @@ export class PlanningProjection {
   #nodePlacementsDirty = true;
   #nodePlacementRouteRevision = -1;
 
-  constructor(private readonly session: PlanningSession, private readonly events: PlanningEvents) {
+  constructor(
+    private readonly session: PlanningSession,
+    private readonly events: PlanningEvents,
+  ) {
     events.documentChanged.subscribe(({ kind }) => {
-      if (kind === "route" || kind === "node" || kind === "imported" || kind === "cleared" || kind === "history") {
+      if (
+        kind === "route" ||
+        kind === "node" ||
+        kind === "imported" ||
+        kind === "cleared" ||
+        kind === "history"
+      ) {
         this.#nodePlacementsDirty = true;
       }
     });
@@ -45,7 +60,9 @@ export class PlanningProjection {
       if (kind === "route" || kind === "node") this.#nodePlacementsDirty = true;
     });
   }
-  get configuration(): Readonly<PlanningProjectionConfiguration> { return this.#configuration; }
+  get configuration(): Readonly<PlanningProjectionConfiguration> {
+    return this.#configuration;
+  }
 
   configure(values: Partial<PlanningProjectionConfiguration>): void {
     this.#configuration = { ...this.#configuration, ...values };
@@ -59,18 +76,26 @@ export class PlanningProjection {
       for (let index = 1; index < this.session.waypoints.length; index += 1) {
         const previous = this.session.waypoints[index - 1]!;
         const current = this.session.waypoints[index]!;
-        this.#distances.push(this.#distances[index - 1]! + Math.hypot(current.x - previous.x, current.y - previous.y));
+        this.#distances.push(
+          this.#distances[index - 1]! +
+            Math.hypot(current.x - previous.x, current.y - previous.y),
+        );
       }
       this.#distanceRevision = this.session.routeRevision;
     }
     return this.#distances;
   }
 
-  get totalLength(): number { return this.distances.at(-1) ?? 0; }
+  get totalLength(): number {
+    return this.distances.at(-1) ?? 0;
+  }
 
   /** Returns cached route-distance placements shared by Planning presentation. */
   get nodePlacements(): readonly PlanningNodePlacement[] {
-    if (!this.#nodePlacementsDirty && this.#nodePlacementRouteRevision === this.session.routeRevision) {
+    if (
+      !this.#nodePlacementsDirty &&
+      this.#nodePlacementRouteRevision === this.session.routeRevision
+    ) {
       return this.#nodePlacements;
     }
     this.#nodePlacements.length = 0;
@@ -102,12 +127,13 @@ export class PlanningProjection {
       const usableLength = Math.max(0, length - clearance);
       nodes.sort((a, b) => a.index - b.index || a.id.localeCompare(b.id));
       nodes.forEach((node, order) => {
-        const along = clearance + (order / Math.max(1, nodes.length)) * usableLength;
+        const along =
+          clearance + (order / Math.max(1, nodes.length)) * usableLength;
         this.#nodePlacements.push({
           node,
           distance: this.distances[startIndex]! + along,
-          x: start.x + dx * along / length,
-          y: start.y + dy * along / length,
+          x: start.x + (dx * along) / length,
+          y: start.y + (dy * along) / length,
           tangentX: dx / length,
           tangentY: dy / length,
         });
@@ -119,7 +145,8 @@ export class PlanningProjection {
 
   segmentAt(distance: number): number {
     const distances = this.distances;
-    for (let index = 1; index < distances.length; index += 1) if (distance <= distances[index]!) return index - 1;
+    for (let index = 1; index < distances.length; index += 1)
+      if (distance <= distances[index]!) return index - 1;
     return Math.max(0, distances.length - 2);
   }
 
@@ -127,39 +154,55 @@ export class PlanningProjection {
     const index = this.segmentAt(distance);
     const start = this.session.waypoints[index];
     const speed = Number(start?.speed);
-    return Math.abs(Number.isFinite(speed) ? Math.max(1, Math.min(127, speed)) : 127);
+    return Math.abs(
+      Number.isFinite(speed) ? Math.max(1, Math.min(127, speed)) : 127,
+    );
   }
 
   sample(distance: number): PlanningWaypoint | null {
     if (!this.session.waypoints.length) return null;
-    if (this.session.waypoints.length === 1) return { ...this.session.waypoints[0]! };
+    if (this.session.waypoints.length === 1)
+      return { ...this.session.waypoints[0]! };
     const index = this.segmentAt(distance);
     const start = this.session.waypoints[index]!;
     const end = this.session.waypoints[index + 1]!;
     const distances = this.distances;
-    const amount = Math.max(0, Math.min(1, (distance - distances[index]!) / ((distances[index + 1]! - distances[index]!) || 1)));
-    const heading = Math.atan2(end.y - start.y, end.x - start.x) * 180 / Math.PI;
+    const amount = Math.max(
+      0,
+      Math.min(
+        1,
+        (distance - distances[index]!) /
+          (distances[index + 1]! - distances[index]! || 1),
+      ),
+    );
+    const heading =
+      (Math.atan2(end.y - start.y, end.x - start.x) * 180) / Math.PI;
     const thetaStart = Number.isFinite(start.theta) ? start.theta! : heading;
     const thetaEnd = Number.isFinite(end.theta) ? end.theta! : heading;
     const thetaDelta = ((thetaEnd - thetaStart + 540) % 360) - 180;
     return {
       x: start.x + (end.x - start.x) * amount,
       y: start.y + (end.y - start.y) * amount,
-      theta: ((thetaStart + thetaDelta * amount) % 360 + 360) % 360,
+      theta: (((thetaStart + thetaDelta * amount) % 360) + 360) % 360,
       speed: this.speedAt(distance),
     };
   }
 
   constrain(point: Readonly<PlanningWaypoint>): PlanningWaypoint {
     const config = this.#configuration;
-    const snap = (value: number, step: number) => step > 0 ? Math.round(value / step) * step : value;
+    const snap = (value: number, step: number) =>
+      step > 0 ? Math.round(value / step) * step : value;
     const x = snap(point.x, config.positionSnap);
     const y = snap(point.y, config.positionSnap);
     const theta = snap(point.theta ?? 0, config.thetaSnap);
     return {
       ...point,
-      x: config.limitBounds ? Math.max(config.minX, Math.min(config.maxX, x)) : x,
-      y: config.limitBounds ? Math.max(config.minY, Math.min(config.maxY, y)) : y,
+      x: config.limitBounds
+        ? Math.max(config.minX, Math.min(config.maxX, x))
+        : x,
+      y: config.limitBounds
+        ? Math.max(config.minY, Math.min(config.maxY, y))
+        : y,
       theta: ((theta % 360) + 360) % 360,
     };
   }

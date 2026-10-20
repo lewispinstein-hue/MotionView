@@ -1,4 +1,4 @@
-import type { TelemetryClient } from "./telemetryClient";
+import type { TelemetryClient } from "./TelemetryClient";
 import type { TelemetryProperties } from "./telemetryTypes";
 
 export class ExportTelemetry {

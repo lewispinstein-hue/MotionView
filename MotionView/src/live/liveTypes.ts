@@ -1,10 +1,25 @@
 import type { ViewingAppendResult } from "../viewing/viewingTypes";
 
-export type LiveConnectionState = "disconnected" | "connecting" | "connected" | "disconnecting";
+export type LiveConnectionState =
+  | "disconnected"
+  | "connecting"
+  | "connected"
+  | "disconnecting";
 export type LiveStreamState = "idle" | "starting" | "streaming" | "stopping";
-export type LiveProjectStatusKind = "missing" | "checking" | "valid" | "invalid" | "unavailable";
+export type LiveProjectStatusKind =
+  | "missing"
+  | "checking"
+  | "valid"
+  | "invalid"
+  | "unavailable";
 export type LiveNoticeKind = "info" | "success" | "error";
-export type LiveRunEndReason = "replaced_by_start" | "manual_stop" | "force_stop" | "terminal_disconnected" | "connection_closed" | "app_closed";
+export type LiveRunEndReason =
+  | "replaced_by_start"
+  | "manual_stop"
+  | "force_stop"
+  | "terminal_disconnected"
+  | "connection_closed"
+  | "app_closed";
 
 /** Metadata announced by MVLib's START frame for one robot-program run. */
 export interface LiveRunStart {

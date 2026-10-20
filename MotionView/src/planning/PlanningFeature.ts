@@ -7,7 +7,11 @@ import { PlanningRoute } from "./PlanningRoute";
 import { PlanningSelection } from "./PlanningSelection";
 import { PlanningTimeline } from "./planningTimelineDomain";
 import { PlanningSession } from "./planningSession";
-import type { PlanningExportView, PlanningNodeView, PlanningTelemetrySnapshot } from "./planningTypes";
+import type {
+  PlanningExportView,
+  PlanningNodeView,
+  PlanningTelemetrySnapshot,
+} from "./planningTypes";
 
 const DEFAULT_EXPORT_TEMPLATE = "moveToPoint(${x}, ${y}, ${theta});";
 
@@ -22,15 +26,26 @@ export class PlanningFeature {
   readonly playback: PlanningPlayback;
   readonly #session: PlanningSession;
 
-  constructor(defaultExportTemplate = DEFAULT_EXPORT_TEMPLATE, maxUndoSteps = 50) {
-    this.#session = new PlanningSession(this.events, defaultExportTemplate, maxUndoSteps);
+  constructor(
+    defaultExportTemplate = DEFAULT_EXPORT_TEMPLATE,
+    maxUndoSteps = 50,
+  ) {
+    this.#session = new PlanningSession(
+      this.events,
+      defaultExportTemplate,
+      maxUndoSteps,
+    );
     this.route = new PlanningRoute(this.#session);
     this.objects = new PlanningObjects(this.#session);
     this.timeline = new PlanningTimeline(this.#session);
     this.selection = new PlanningSelection(this.#session, this.events);
     this.history = new PlanningHistory(this.#session);
     this.projection = new PlanningProjection(this.#session, this.events);
-    this.playback = new PlanningPlayback(this.#session, this.projection, this.events);
+    this.playback = new PlanningPlayback(
+      this.#session,
+      this.projection,
+      this.events,
+    );
     this.events.projectionChanged.subscribe((change) => {
       if (change.kind !== "route") return;
       if (this.route.length < 2) this.playback.pause();
@@ -38,18 +53,35 @@ export class PlanningFeature {
     });
   }
 
-  get exportTemplate(): string { return this.#session.exportTemplate; }
-  get overlayVisible(): boolean { return this.#session.overlayVisible; }
-  get hasData(): boolean { return this.route.length > 0 || this.objects.length > 0 || this.timeline.length > 0; }
+  get exportTemplate(): string {
+    return this.#session.exportTemplate;
+  }
+  get overlayVisible(): boolean {
+    return this.#session.overlayVisible;
+  }
+  get hasData(): boolean {
+    return (
+      this.route.length > 0 ||
+      this.objects.length > 0 ||
+      this.timeline.length > 0
+    );
+  }
 
   setExportTemplate(template: string): void {
     this.#session.mutate("template", () => {
-      this.#session.exportTemplate = String(template || "").trim() || this.#session.defaultExportTemplate;
+      this.#session.exportTemplate =
+        String(template || "").trim() || this.#session.defaultExportTemplate;
     });
   }
 
   setOverlayVisible(visible: boolean): void {
-    this.#session.mutate("overlay", () => { this.#session.overlayVisible = !!visible; }, false);
+    this.#session.mutate(
+      "overlay",
+      () => {
+        this.#session.overlayVisible = !!visible;
+      },
+      false,
+    );
   }
 
   toggleOverlay(): boolean {
@@ -80,19 +112,30 @@ export class PlanningFeature {
   latestExecutedNode(objectId?: string): PlanningNodeView | null {
     let latestInitial: PlanningNodeView | null = null;
     for (const node of this.timeline.nodes) {
-      if (node.beforeWaypoint !== 0 || (objectId && node.objectId !== objectId)) continue;
-      if (!latestInitial || this.isLaterNode(node, latestInitial)) latestInitial = node;
+      if (node.beforeWaypoint !== 0 || (objectId && node.objectId !== objectId))
+        continue;
+      if (!latestInitial || this.isLaterNode(node, latestInitial))
+        latestInitial = node;
     }
 
-    let latestPlacement: (typeof this.projection.nodePlacements)[number] | null = null;
+    let latestPlacement:
+      | (typeof this.projection.nodePlacements)[number]
+      | null = null;
     for (const placement of this.projection.nodePlacements) {
-      if (placement.distance > this.playback.distance || (objectId && placement.node.objectId !== objectId)) continue;
-      if (!latestPlacement || this.isLaterPlacement(placement, latestPlacement)) latestPlacement = placement;
+      if (
+        placement.distance > this.playback.distance ||
+        (objectId && placement.node.objectId !== objectId)
+      )
+        continue;
+      if (!latestPlacement || this.isLaterPlacement(placement, latestPlacement))
+        latestPlacement = placement;
     }
     return latestPlacement?.node ?? latestInitial;
   }
 
-  telemetryProperties(extra: Record<string, unknown> = {}): PlanningTelemetrySnapshot {
+  telemetryProperties(
+    extra: Record<string, unknown> = {},
+  ): PlanningTelemetrySnapshot {
     return {
       plan_waypoints: this.route.length,
       plan_objects: this.objects.length,
@@ -106,14 +149,19 @@ export class PlanningFeature {
     candidate: (typeof this.projection.nodePlacements)[number],
     current: (typeof this.projection.nodePlacements)[number],
   ): boolean {
-    if (candidate.distance !== current.distance) return candidate.distance > current.distance;
+    if (candidate.distance !== current.distance)
+      return candidate.distance > current.distance;
     return this.isLaterNode(candidate.node, current.node);
   }
 
-  private isLaterNode(candidate: PlanningNodeView, current: PlanningNodeView): boolean {
-    if (candidate.beforeWaypoint !== current.beforeWaypoint) return candidate.beforeWaypoint > current.beforeWaypoint;
-    if (candidate.index !== current.index) return candidate.index > current.index;
+  private isLaterNode(
+    candidate: PlanningNodeView,
+    current: PlanningNodeView,
+  ): boolean {
+    if (candidate.beforeWaypoint !== current.beforeWaypoint)
+      return candidate.beforeWaypoint > current.beforeWaypoint;
+    if (candidate.index !== current.index)
+      return candidate.index > current.index;
     return candidate.id.localeCompare(current.id) > 0;
   }
-
 }

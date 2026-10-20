@@ -9,7 +9,9 @@ export function initializeMotionViewApp(): MotionViewApp {
 
 export function getMotionViewApp(): MotionViewApp {
   if (!motionViewApp) {
-    throw new Error("MotionViewApp has not been initialized. Call initializeMotionViewApp() first.");
+    throw new Error(
+      "MotionViewApp has not been initialized. Call initializeMotionViewApp() first.",
+    );
   }
   return motionViewApp;
 }

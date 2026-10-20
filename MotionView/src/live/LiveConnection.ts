@@ -20,15 +20,25 @@ export class LiveConnection {
     private readonly parser: LiveLineParser,
   ) {}
 
-  get state(): LiveConnectionState { return this.session.connectionState; }
-  get connected(): boolean { return this.state === "connected"; }
+  get state(): LiveConnectionState {
+    return this.session.connectionState;
+  }
+  get connected(): boolean {
+    return this.state === "connected";
+  }
 
   connect(): Promise<boolean> {
     return this.serialize(async () => {
       if (this.connected) return true;
-      if (this.project.path && !this.project.valid && !(await this.project.validate())) return false;
+      if (
+        this.project.path &&
+        !this.project.valid &&
+        !(await this.project.validate())
+      )
+        return false;
       if (!this.project.valid) {
-        const missingProjectDirectory = !this.project.path && await this.bridge.isReady();
+        const missingProjectDirectory =
+          !this.project.path && (await this.bridge.isReady());
         const message = missingProjectDirectory
           ? "Set your PROS Project directory to start streaming"
           : "Cannot connect: set a valid PROS directory in Settings first.";
@@ -39,11 +49,15 @@ export class LiveConnection {
       await this.bridge.resolveOrigin();
       const websocketUrl = this.bridge.websocketUrl;
       if (!websocketUrl) {
-        this.appendConsole("[UI] Child process Bridge.py was not given a port. Live streaming cannot start.");
+        this.appendConsole(
+          "[UI] Child process Bridge.py was not given a port. Live streaming cannot start.",
+        );
         return false;
       }
       if (!(await this.bridge.waitUntilReady(6_000, 200))) {
-        this.appendConsole("[UI] Backend is still starting. Please try again in a moment.");
+        this.appendConsole(
+          "[UI] Backend is still starting. Please try again in a moment.",
+        );
         return false;
       }
 
@@ -64,7 +78,11 @@ export class LiveConnection {
       const socket = this.session.socket;
       this.session.socket = null;
       if (socket) {
-        try { socket.close(); } catch { /* best effort */ }
+        try {
+          socket.close();
+        } catch {
+          /* best effort */
+        }
       }
       await this.stream.connectionClosed();
       this.setState("disconnected");
@@ -80,7 +98,11 @@ export class LiveConnection {
       const timeout = setTimeout(() => {
         if (settled) return;
         settled = true;
-        try { socket.close(); } catch { /* best effort */ }
+        try {
+          socket.close();
+        } catch {
+          /* best effort */
+        }
         if (this.session.socket === socket) this.session.socket = null;
         resolve(false);
       }, 6_000);
@@ -96,15 +118,19 @@ export class LiveConnection {
       });
       socket.addEventListener("message", (event) => {
         if (this.session.socket !== socket) return;
-        if (typeof event.data !== "string" || !this.stream.acceptingData) return;
+        if (typeof event.data !== "string" || !this.stream.acceptingData)
+          return;
         if (event.data === "[INTERNAL] terminal closed") {
           void this.stream.remoteExit();
           return;
         }
-        if (event.data.startsWith("[UI] terminal exited")) void this.stream.remoteExit();
+        if (event.data.startsWith("[UI] terminal exited"))
+          void this.stream.remoteExit();
         const tagged = this.parser.classify(event.data);
         if (tagged) this.session.pending.push(tagged);
-        const parsedWaypoint = tagged.startsWith("[WPOINT],") ? this.parser.parseWaypointLine(tagged) : null;
+        const parsedWaypoint = tagged.startsWith("[WPOINT],")
+          ? this.parser.parseWaypointLine(tagged)
+          : null;
         const malformedWaypoint = parsedWaypoint?.malformed === true;
         const color = tagged && !malformedWaypoint ? "\x1b[32m" : "\x1b[31m";
         const displayLine = parsedWaypoint?.waypointEvent
@@ -119,7 +145,10 @@ export class LiveConnection {
       socket.addEventListener("close", () => {
         if (this.session.socket !== socket) {
           clearTimeout(timeout);
-          if (!settled) { settled = true; resolve(false); }
+          if (!settled) {
+            settled = true;
+            resolve(false);
+          }
           return;
         }
         clearTimeout(timeout);

@@ -1,4 +1,4 @@
-import type { TelemetryClient } from "./telemetryClient";
+import type { TelemetryClient } from "./TelemetryClient";
 import type { TelemetryProperties } from "./telemetryTypes";
 
 export class LiveTelemetry {
@@ -16,9 +16,13 @@ export class LiveTelemetry {
   async streamingStopped() {
     const seconds = this.consumeCurrentStreamingSeconds();
     if (seconds <= 0) return false;
-    return this.telemetry.capture("streaming_duration", {
-      streaming_seconds: seconds,
-    }, { debounceMs: 1500 });
+    return this.telemetry.capture(
+      "streaming_duration",
+      {
+        streaming_seconds: seconds,
+      },
+      { debounceMs: 1500 },
+    );
   }
 
   resetCurrentStreamingSession() {

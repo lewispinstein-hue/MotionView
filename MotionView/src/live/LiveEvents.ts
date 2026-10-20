@@ -18,4 +18,3 @@ export class LiveEvents {
   readonly batchAccepted = new TypedEvent<LiveBatchAcceptedEvent>();
   readonly notice = new TypedEvent<LiveNoticeEvent>();
 }
-

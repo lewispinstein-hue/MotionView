@@ -9,17 +9,24 @@ export class ViewingSettingsBinding {
   constructor(
     private readonly settings: SettingsFeature,
     private readonly viewing: ViewingFeature,
-    private readonly dom: SettingsDom
+    private readonly dom: SettingsDom,
   ) {}
 
   bind(): void {
     if (this.#bound) return;
     this.#bound = true;
-    this.settings.changed.subscribe(({ settings, keys }) => this.apply(settings, keys));
-    const bind = (input: HTMLInputElement | HTMLSelectElement | null, key: keyof MotionViewSettings) => 
-      input?.addEventListener("input", () => this.settings.update({
-        [key]: input.value
-      }));
+    this.settings.changed.subscribe(({ settings, keys }) =>
+      this.apply(settings, keys),
+    );
+    const bind = (
+      input: HTMLInputElement | HTMLSelectElement | null,
+      key: keyof MotionViewSettings,
+    ) =>
+      input?.addEventListener("input", () =>
+        this.settings.update({
+          [key]: input.value,
+        }),
+      );
 
     bind(this.dom.units, "units");
     bind(this.dom.sidebarUnits, "units");
@@ -30,10 +37,17 @@ export class ViewingSettingsBinding {
     bind(this.dom.maximumSpeed, "maxSpeed");
   }
   applyAll(): void {
-    this.apply(this.settings.current, Object.keys(this.settings.current) as (keyof MotionViewSettings)[]);
+    this.apply(
+      this.settings.current,
+      Object.keys(this.settings.current) as (keyof MotionViewSettings)[],
+    );
   }
-  private apply(values: Readonly<MotionViewSettings>, keys: readonly (keyof MotionViewSettings)[]): void {
-    const changed = (...wanted: (keyof MotionViewSettings)[]) => wanted.some((key) => keys.includes(key));
+  private apply(
+    values: Readonly<MotionViewSettings>,
+    keys: readonly (keyof MotionViewSettings)[],
+  ): void {
+    const changed = (...wanted: (keyof MotionViewSettings)[]) =>
+      wanted.some((key) => keys.includes(key));
     if (changed("units")) {
       const units = String(values.units ?? "in");
       this.dom.units.value = units;
@@ -49,12 +63,16 @@ export class ViewingSettingsBinding {
         unitsToInches: factor,
         offsetXInches: Number(values.offX ?? 0) * factor,
         offsetYInches: Number(values.offY ?? 0) * factor,
-        offsetThetaDegrees: Number(values.offTheta ?? 0) || 0 });
+        offsetThetaDegrees: Number(values.offTheta ?? 0) || 0,
+      });
     }
     if (changed("minSpeed", "maxSpeed")) {
       this.dom.minimumSpeed.value = String(values.minSpeed ?? 0);
       this.dom.maximumSpeed.value = String(values.maxSpeed ?? 127);
-      this.viewing.setSpeedRange(Number(values.minSpeed ?? 0), Number(values.maxSpeed ?? 127));
+      this.viewing.setSpeedRange(
+        Number(values.minSpeed ?? 0),
+        Number(values.maxSpeed ?? 127),
+      );
     }
   }
 }

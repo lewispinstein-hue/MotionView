@@ -16,9 +16,15 @@ export class PlanningPlayback {
     private readonly events: PlanningEvents,
   ) {}
 
-  get isPlaying(): boolean { return this.#playing; }
-  get distance(): number { return this.session.playbackDistance; }
-  get rate(): number { return this.#rate; }
+  get isPlaying(): boolean {
+    return this.#playing;
+  }
+  get distance(): number {
+    return this.session.playbackDistance;
+  }
+  get rate(): number {
+    return this.#rate;
+  }
 
   setRate(rate: number): void {
     this.#rate = Number.isFinite(rate) && rate > 0 ? rate : 1;
@@ -30,7 +36,10 @@ export class PlanningPlayback {
     if (this.distance >= this.projection.totalLength) this.setDistance(0);
     this.#playing = true;
     this.#lastWallTime = null;
-    this.events.playbackChanged.emit({ kind: "started", distance: this.distance });
+    this.events.playbackChanged.emit({
+      kind: "started",
+      distance: this.distance,
+    });
     this.#frame = requestAnimationFrame(this.tick);
   }
 
@@ -40,14 +49,28 @@ export class PlanningPlayback {
     this.#lastWallTime = null;
     if (!this.#playing) return;
     this.#playing = false;
-    this.events.playbackChanged.emit({ kind: "paused", distance: this.distance });
+    this.events.playbackChanged.emit({
+      kind: "paused",
+      distance: this.distance,
+    });
   }
 
-  toggle(): void { this.#playing ? this.pause() : this.play(); }
+  toggle(): void {
+    this.#playing ? this.pause() : this.play();
+  }
 
   setDistance(distance: number): void {
-    this.session.playbackDistance = Math.max(0, Math.min(Number.isFinite(distance) ? distance : 0, this.projection.totalLength));
-    this.events.playbackChanged.emit({ kind: "distance", distance: this.distance });
+    this.session.playbackDistance = Math.max(
+      0,
+      Math.min(
+        Number.isFinite(distance) ? distance : 0,
+        this.projection.totalLength,
+      ),
+    );
+    this.events.playbackChanged.emit({
+      kind: "distance",
+      distance: this.distance,
+    });
   }
 
   private readonly tick = (now: number): void => {
@@ -55,8 +78,12 @@ export class PlanningPlayback {
     if (this.#lastWallTime == null) this.#lastWallTime = now;
     const elapsedSeconds = (now - this.#lastWallTime) / 1000;
     this.#lastWallTime = now;
-    const next = this.distance
-      + elapsedSeconds * this.projection.speedAt(this.distance) * this.#rate * PLANNING_SPEED_SCALE;
+    const next =
+      this.distance +
+      elapsedSeconds *
+        this.projection.speedAt(this.distance) *
+        this.#rate *
+        PLANNING_SPEED_SCALE;
     this.setDistance(next);
     if (this.distance >= this.projection.totalLength) this.pause();
     else this.#frame = requestAnimationFrame(this.tick);

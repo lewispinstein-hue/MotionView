@@ -1,5 +1,10 @@
 import { TypedEvent } from "../app/typedEvent";
-import type { ViewingDataChangedEvent, ViewingNavigationChangedEvent, ViewingPlaybackChangedEvent, ViewingProjectionChangedEvent } from "./viewingTypes";
+import type {
+  ViewingDataChangedEvent,
+  ViewingNavigationChangedEvent,
+  ViewingPlaybackChangedEvent,
+  ViewingProjectionChangedEvent,
+} from "./viewingTypes";
 
 export class ViewingEvents {
   readonly dataChanged = new TypedEvent<ViewingDataChangedEvent>();

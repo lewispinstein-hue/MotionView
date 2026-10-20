@@ -59,14 +59,28 @@ export class HelpView {
     this.renderShortcuts();
   }
 
-  get isOpen(): boolean { return !this.dom.helpModal.hasAttribute("hidden"); }
-  get isKeybindsOpen(): boolean { return !this.dom.keybindsModal.hasAttribute("hidden"); }
-  get isFeedbackOpen(): boolean { return !this.dom.feedbackModal.hasAttribute("hidden"); }
+  get isOpen(): boolean {
+    return !this.dom.helpModal.hasAttribute("hidden");
+  }
+  get isKeybindsOpen(): boolean {
+    return !this.dom.keybindsModal.hasAttribute("hidden");
+  }
+  get isFeedbackOpen(): boolean {
+    return !this.dom.feedbackModal.hasAttribute("hidden");
+  }
 
-  open(): void { this.show(this.dom.helpModal); }
-  close(): void { this.hide(this.dom.helpModal); }
-  openKeybinds(): void { this.show(this.dom.keybindsModal); }
-  closeKeybinds(): void { this.hide(this.dom.keybindsModal); }
+  open(): void {
+    this.show(this.dom.helpModal);
+  }
+  close(): void {
+    this.hide(this.dom.helpModal);
+  }
+  openKeybinds(): void {
+    this.show(this.dom.keybindsModal);
+  }
+  closeKeybinds(): void {
+    this.hide(this.dom.keybindsModal);
+  }
   openFeedback(): void {
     this.close();
     this.dom.feedbackDeliveryStatus.hidden = true;
@@ -128,7 +142,11 @@ export class HelpView {
     this.updateTagSelection(this.dom.feedbackAreaTags, this.#area, "feedbackArea");
   }
 
-  private updateTagSelection(tags: readonly HTMLButtonElement[], selected: string | null, dataKey: "feedbackProduct" | "feedbackType" | "feedbackArea"): void {
+  private updateTagSelection(
+    tags: readonly HTMLButtonElement[],
+    selected: string | null,
+    dataKey: "feedbackProduct" | "feedbackType" | "feedbackArea"
+  ): void {
     for (const tag of tags) {
       const isSelected = tag.dataset[dataKey] === selected;
       tag.classList.toggle("selected", isSelected);
@@ -136,12 +154,21 @@ export class HelpView {
     }
   }
 
-  private updateFeedbackForm({ preserveValidation = false }: { readonly preserveValidation?: boolean } = {}): void {
+  private updateFeedbackForm({
+    preserveValidation = false
+  }: { readonly preserveValidation?: boolean } = {}): void {
     const length = this.dom.feedbackDescription.value.length;
     this.dom.feedbackDescriptionCount.textContent = `${length.toLocaleString()} / 2,000`;
-    const valid = !!this.dom.feedbackDescription.value.trim() && !!this.#product && !!this.#feedbackType;
+    const valid = 
+      !!this.dom.feedbackDescription.value.trim() && 
+      !!this.#product &&
+      !!this.#feedbackType;
     const rateLimited = feedbackTelemetry.remainingRateLimitMs() > 0;
-    this.dom.feedbackSend.disabled = this.#submitting || !valid || rateLimited;
+    this.dom.feedbackSend.disabled = 
+      this.#submitting ||
+      !valid ||
+      rateLimited;
+
     if (preserveValidation) return;
     if (!this.dom.feedbackDeliveryStatus.hidden) {
       this.dom.feedbackValidation.textContent = "";

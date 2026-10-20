@@ -1,6 +1,11 @@
 import type { LogEntry, Pose } from "../state/models";
 import type { ViewingEvents } from "./viewingEvents";
-import type { ViewingDataReader, WatchMarker, WaypointEventView, WaypointView } from "./viewingTypes";
+import type {
+  ViewingDataReader,
+  WatchMarker,
+  WaypointEventView,
+  WaypointView,
+} from "./viewingTypes";
 
 /** Owns Viewing selection and navigation state without knowing about DOM rendering. */
 export class ViewingNavigation {
@@ -30,34 +35,80 @@ export class ViewingNavigation {
   ) {
     events.dataChanged.subscribe((change) => {
       if (change.kind === "replaced" || change.kind === "cleared") this.reset();
-      else if (change.kind === "appended" && change.result.posesAdded > 0 && this.#autoFollow) {
+      else if (
+        change.kind === "appended" &&
+        change.result.posesAdded > 0 &&
+        this.#autoFollow
+      ) {
         this.#selectedIndex = Math.max(0, data.poses.length - 1);
         this.emit("selection");
       }
     });
   }
 
-  get selectedIndex(): number { return this.#selectedIndex; }
-  get selectedPoseIndex(): number | null { return this.#selectedPoseIndex; }
-  get selectedWatch(): Readonly<WatchMarker> | null { return this.#selectedWatch; }
-  get selectedLog(): Readonly<LogEntry> | null { return this.#selectedLog; }
-  get selectedLogTime(): number | null { return this.#selectedLog?.t ?? null; }
-  get selectedWaypointId(): number | string | null { return this.#selectedWaypointId; }
-  get hoveredWaypointId(): number | string | null { return this.#hoveredWaypointId; }
-  get overlayWaypointId(): number | string | null { return this.#hoveredWaypointId ?? this.#selectedWaypointId; }
-  get selectedWaypointEventTime(): number | null { return this.#selectedWaypointEventTime; }
-  get selectedWaypointEvent(): Readonly<WaypointEventView> | null { return this.#selectedWaypointEvent; }
-  get hoverTimelineTime(): number | null { return this.#hoverTimelineTime; }
-  get timelineHoverSource(): "timeline" | "sidebar" | null { return this.#timelineHoverSource; }
-  get sidebarSyncCommitId(): number { return this.#sidebarSyncCommitId; }
-  get trackHoverPose(): Readonly<Pose> | null { return this.#trackHoverPose; }
-  get trackHoverTime(): number | null { return this.#trackHoverTime; }
-  get trackLockPose(): Readonly<Pose> | null { return this.#trackLockPose; }
-  get trackLockIndex(): number | null { return this.#trackLockIndex; }
-  get trackLockActive(): boolean { return this.#trackLockPose != null; }
-  get liveConnected(): boolean { return this.#connected; }
-  get livestreaming(): boolean { return this.#streaming; }
-  get autoFollow(): boolean { return this.#autoFollow; }
+  get selectedIndex(): number {
+    return this.#selectedIndex;
+  }
+  get selectedPoseIndex(): number | null {
+    return this.#selectedPoseIndex;
+  }
+  get selectedWatch(): Readonly<WatchMarker> | null {
+    return this.#selectedWatch;
+  }
+  get selectedLog(): Readonly<LogEntry> | null {
+    return this.#selectedLog;
+  }
+  get selectedLogTime(): number | null {
+    return this.#selectedLog?.t ?? null;
+  }
+  get selectedWaypointId(): number | string | null {
+    return this.#selectedWaypointId;
+  }
+  get hoveredWaypointId(): number | string | null {
+    return this.#hoveredWaypointId;
+  }
+  get overlayWaypointId(): number | string | null {
+    return this.#hoveredWaypointId ?? this.#selectedWaypointId;
+  }
+  get selectedWaypointEventTime(): number | null {
+    return this.#selectedWaypointEventTime;
+  }
+  get selectedWaypointEvent(): Readonly<WaypointEventView> | null {
+    return this.#selectedWaypointEvent;
+  }
+  get hoverTimelineTime(): number | null {
+    return this.#hoverTimelineTime;
+  }
+  get timelineHoverSource(): "timeline" | "sidebar" | null {
+    return this.#timelineHoverSource;
+  }
+  get sidebarSyncCommitId(): number {
+    return this.#sidebarSyncCommitId;
+  }
+  get trackHoverPose(): Readonly<Pose> | null {
+    return this.#trackHoverPose;
+  }
+  get trackHoverTime(): number | null {
+    return this.#trackHoverTime;
+  }
+  get trackLockPose(): Readonly<Pose> | null {
+    return this.#trackLockPose;
+  }
+  get trackLockIndex(): number | null {
+    return this.#trackLockIndex;
+  }
+  get trackLockActive(): boolean {
+    return this.#trackLockPose != null;
+  }
+  get liveConnected(): boolean {
+    return this.#connected;
+  }
+  get livestreaming(): boolean {
+    return this.#streaming;
+  }
+  get autoFollow(): boolean {
+    return this.#autoFollow;
+  }
 
   setLiveState(connected: boolean, streaming: boolean): void {
     if (connected === this.#connected && streaming === this.#streaming) return;
@@ -71,14 +122,25 @@ export class ViewingNavigation {
     if (next === this.#autoFollow) return;
     if (!next) this.#lastManualIndex = this.#selectedIndex;
     this.#autoFollow = next;
-    if (next && this.data.poses.length) this.#selectedIndex = this.data.poses.length - 1;
+    if (next && this.data.poses.length)
+      this.#selectedIndex = this.data.poses.length - 1;
     this.emit("live-state");
   }
 
-  selectPose(index: number, options: Readonly<{ preserveDetails?: boolean; markSelected?: boolean }> = {}): void {
-    this.#selectedIndex = Math.max(0, Math.min(this.data.poses.length - 1, Math.trunc(index)));
+  selectPose(
+    index: number,
+    options: Readonly<{
+      preserveDetails?: boolean;
+      markSelected?: boolean;
+    }> = {},
+  ): void {
+    this.#selectedIndex = Math.max(
+      0,
+      Math.min(this.data.poses.length - 1, Math.trunc(index)),
+    );
     this.#lastManualIndex = this.#selectedIndex;
-    if (options.markSelected !== false) this.#selectedPoseIndex = this.#selectedIndex;
+    if (options.markSelected !== false)
+      this.#selectedPoseIndex = this.#selectedIndex;
     if (!options.preserveDetails) {
       this.clearDetails(false);
       this.clearWaypointSelection(false);
@@ -106,10 +168,14 @@ export class ViewingNavigation {
     this.emit("selection");
   }
 
-  selectWaypoint(waypoint: WaypointView, event: WaypointEventView | null = null): void {
+  selectWaypoint(
+    waypoint: WaypointView,
+    event: WaypointEventView | null = null,
+  ): void {
     this.#selectedPoseIndex = null;
     this.#selectedWaypointId = waypoint.id;
-    this.#selectedWaypointEventTime = event?.t ?? waypoint.latestActiveEvent?.t ?? waypoint.createdTime ?? null;
+    this.#selectedWaypointEventTime =
+      event?.t ?? waypoint.latestActiveEvent?.t ?? waypoint.createdTime ?? null;
     this.#selectedWaypointEvent = event;
     this.#selectedWatch = null;
     this.#selectedLog = null;
@@ -123,8 +189,15 @@ export class ViewingNavigation {
     this.emit("hover");
   }
 
-  setTimelineHover(time: number | null, source: "timeline" | "sidebar" = "sidebar"): void {
-    if (time === this.#hoverTimelineTime && (time == null || source === this.#timelineHoverSource)) return;
+  setTimelineHover(
+    time: number | null,
+    source: "timeline" | "sidebar" = "sidebar",
+  ): void {
+    if (
+      time === this.#hoverTimelineTime &&
+      (time == null || source === this.#timelineHoverSource)
+    )
+      return;
     this.#hoverTimelineTime = time;
     this.#timelineHoverSource = time == null ? null : source;
     this.emit("hover");
@@ -144,7 +217,10 @@ export class ViewingNavigation {
   }
 
   lockTrack(pose: Readonly<Pose>, index: number): void {
-    this.#selectedIndex = Math.max(0, Math.min(this.data.poses.length - 1, Math.trunc(index)));
+    this.#selectedIndex = Math.max(
+      0,
+      Math.min(this.data.poses.length - 1, Math.trunc(index)),
+    );
     this.#lastManualIndex = this.#selectedIndex;
     this.#selectedPoseIndex = this.#selectedIndex;
     this.clearDetails(false);
@@ -168,13 +244,14 @@ export class ViewingNavigation {
 
   /** Clears the visible list or marker selection without moving the playback cursor. */
   clearSelection(emit = true): void {
-    const changed = this.#selectedPoseIndex != null
-      || this.#selectedWatch != null
-      || this.#selectedLog != null
-      || this.#selectedWaypointId != null
-      || this.#selectedWaypointEventTime != null
-      || this.#selectedWaypointEvent != null
-      || this.#hoveredWaypointId != null;
+    const changed =
+      this.#selectedPoseIndex != null ||
+      this.#selectedWatch != null ||
+      this.#selectedLog != null ||
+      this.#selectedWaypointId != null ||
+      this.#selectedWaypointEventTime != null ||
+      this.#selectedWaypointEvent != null ||
+      this.#hoveredWaypointId != null;
     this.#selectedPoseIndex = null;
     this.#selectedWatch = null;
     this.#selectedLog = null;
@@ -209,7 +286,9 @@ export class ViewingNavigation {
     this.emit("selection");
   }
 
-  private emit(kind: "selection" | "hover" | "track-lock" | "live-state"): void {
+  private emit(
+    kind: "selection" | "hover" | "track-lock" | "live-state",
+  ): void {
     this.events.navigationChanged.emit({ kind });
   }
 }

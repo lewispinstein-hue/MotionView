@@ -25,7 +25,12 @@ export class ViewingFeature implements ViewingDataSink {
     this.data = this.#session;
     this.navigation = new ViewingNavigation(this.data, this.events);
     this.projection = new ViewingProjection(this.data, this.events);
-    this.playback = new ViewingPlayback(this.data, this.navigation, this.projection, this.events);
+    this.playback = new ViewingPlayback(
+      this.data,
+      this.navigation,
+      this.projection,
+      this.events,
+    );
   }
 
   load(data: unknown): void {

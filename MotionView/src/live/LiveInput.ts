@@ -14,7 +14,12 @@ export class LiveInput {
   }
 
   handleKeydown(event: KeyboardEvent): boolean {
-    if (getMode() !== "viewing" || event.defaultPrevented || isTypingTarget(event.target)) return false;
+    if (
+      getMode() !== "viewing" ||
+      event.defaultPrevented ||
+      isTypingTarget(event.target)
+    )
+      return false;
     if (matchesShortcut(event, LIVE_SHORTCUTS.refresh)) {
       event.preventDefault();
       this.live.stream.refreshNow();

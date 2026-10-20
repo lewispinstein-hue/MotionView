@@ -17,12 +17,16 @@ export interface VirtualListStore<T> {
   scrollToIndex(index: number, elements: number): VirtualListRange<T>;
 }
 
-export function createVirtualListStore<T>(initialItems: ArrayLike<T> = []): VirtualListStore<T> {
+export function createVirtualListStore<T>(
+  initialItems: ArrayLike<T> = [],
+): VirtualListStore<T> {
   let items: T[] = [];
   let itemCount = 0;
 
   function isArrayLike(value: unknown): value is ArrayLike<T> {
-    return !!value && typeof (value as { length?: unknown }).length === "number";
+    return (
+      !!value && typeof (value as { length?: unknown }).length === "number"
+    );
   }
 
   function knownItemCount(value: Iterable<T> | ArrayLike<T>): number | null {
@@ -132,9 +136,16 @@ export interface VirtualList<T> {
   add(item: T): void;
   addMany(items: Iterable<T> | ArrayLike<T>): void;
   clear(options?: { resetScroll?: boolean }): void;
-  setItems(nextItems: ArrayLike<T>, options?: { resetScroll?: boolean; preserveScroll?: boolean }): void;
+  setItems(
+    nextItems: ArrayLike<T>,
+    options?: { resetScroll?: boolean; preserveScroll?: boolean },
+  ): void;
   refresh(): void;
-  scrollToIndex(index: number, pad?: number, alignment?: "nearest" | "center"): void;
+  scrollToIndex(
+    index: number,
+    pad?: number,
+    alignment?: "nearest" | "center",
+  ): void;
   getRange(index: number, elements: number): VirtualListRange<T>;
   getItems(): ArrayLike<T>;
 }
@@ -168,7 +179,11 @@ export function createVirtualList<T>(
   const measuredHeights = new Map<string, number>();
   const activePointerIds = new Set<number>();
   let renderDeferredForPointer = false;
-  let pendingItems: { items: T[]; resetScroll: boolean; preserveScroll: boolean } | null = null;
+  let pendingItems: {
+    items: T[];
+    resetScroll: boolean;
+    preserveScroll: boolean;
+  } | null = null;
 
   function isVisible() {
     return listContainer.getClientRects().length > 0;
@@ -208,7 +223,7 @@ export function createVirtualList<T>(
     let hi = tops.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if ((tops[mid] + heights[mid]) < target) lo = mid + 1;
+      if (tops[mid] + heights[mid] < target) lo = mid + 1;
       else hi = mid;
     }
     return lo;
@@ -242,17 +257,21 @@ export function createVirtualList<T>(
     }
 
     const scrollTop = localScrollTop();
-    const viewportHeight = viewport.clientHeight || (estimateRowHeight * 8);
+    const viewportHeight = viewport.clientHeight || estimateRowHeight * 8;
     const startPx = Math.max(0, scrollTop - overscanPx);
     const endPx = scrollTop + viewportHeight + overscanPx;
 
     const startIndex = Math.max(0, lowerBoundTop(startPx));
-    const endIndex = Math.min(store.length, Math.max(startIndex + 1, upperBoundTop(endPx)));
+    const endIndex = Math.min(
+      store.length,
+      Math.max(startIndex + 1, upperBoundTop(endPx)),
+    );
 
     const renderedRows: Array<{ key: string; row: HTMLElement }> = [];
     const existingRows = new Map<string, HTMLElement>();
     for (const row of content.children) {
-      if (!(row instanceof HTMLElement) || !row.dataset.virtualListKey) continue;
+      if (!(row instanceof HTMLElement) || !row.dataset.virtualListKey)
+        continue;
       existingRows.set(row.dataset.virtualListKey, row);
     }
     let layoutDirty = false;
@@ -286,12 +305,13 @@ export function createVirtualList<T>(
     for (let i = 0; i < renderedRows.length; i += 1) {
       const { key, row } = renderedRows[i];
       syncRowLayout(row);
-      const measureEl = row.querySelector<HTMLElement>(".watchItemContent") || row;
+      const measureEl =
+        row.querySelector<HTMLElement>(".watchItemContent") || row;
       const margins = getComputedStyle(measureEl);
       const rowHeight = Math.ceil(
-        (measureEl.offsetHeight || row.offsetHeight || estimateRowHeight)
-        + Number.parseFloat(margins.marginTop || "0")
-        + Number.parseFloat(margins.marginBottom || "0"),
+        (measureEl.offsetHeight || row.offsetHeight || estimateRowHeight) +
+          Number.parseFloat(margins.marginTop || "0") +
+          Number.parseFloat(margins.marginBottom || "0"),
       );
       if (rowHeight > 0 && measuredHeights.get(key) !== rowHeight) {
         measuredHeights.set(key, rowHeight);
@@ -317,8 +337,12 @@ export function createVirtualList<T>(
     if (!isVisible()) return null;
     const scrollTop = localScrollTop();
     const nearTop = viewport.scrollTop <= 12;
-    const nearBottom = viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 12;
-    const index = Math.max(0, Math.min(store.length - 1, lowerBoundTop(scrollTop)));
+    const nearBottom =
+      viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 12;
+    const index = Math.max(
+      0,
+      Math.min(store.length - 1, lowerBoundTop(scrollTop)),
+    );
     const item = store.get(index);
     if (item == null) {
       return {
@@ -338,47 +362,69 @@ export function createVirtualList<T>(
     };
   }
 
-  function restoreScrollAnchor(anchor: ReturnType<typeof captureScrollAnchor> | null) {
+  function restoreScrollAnchor(
+    anchor: ReturnType<typeof captureScrollAnchor> | null,
+  ) {
     if (!anchor) return;
     if (anchor.nearTop) {
       viewport.scrollTop = 0;
       return;
     }
     if (anchor.nearBottom) {
-      viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+      viewport.scrollTop = Math.max(
+        0,
+        viewport.scrollHeight - viewport.clientHeight,
+      );
       return;
     }
     if (anchor.key != null) {
       for (let i = 0; i < store.length; i += 1) {
         const item = store.get(i) as T;
         if (getKey(item, i) !== anchor.key) continue;
-        viewport.scrollTop = Math.max(0, listOffsetTop() + (tops[i] ?? 0) + anchor.offset);
+        viewport.scrollTop = Math.max(
+          0,
+          listOffsetTop() + (tops[i] ?? 0) + anchor.offset,
+        );
         return;
       }
     }
     viewport.scrollTop = anchor.scrollTop;
   }
 
-  function scrollToIndex(index: number, pad = 12, alignment: "nearest" | "center" = "nearest") {
+  function scrollToIndex(
+    index: number,
+    pad = 12,
+    alignment: "nearest" | "center" = "nearest",
+  ) {
     if (!Number.isInteger(index) || index < 0 || index >= store.length) return;
     const top = tops[index] ?? 0;
     const height = heights[index] ?? estimateRowHeight;
     const absoluteTop = listOffsetTop() + top;
     if (alignment === "center") {
-      viewport.scrollTop = Math.max(0, absoluteTop - Math.max(0, (viewport.clientHeight - height) / 2));
+      viewport.scrollTop = Math.max(
+        0,
+        absoluteTop - Math.max(0, (viewport.clientHeight - height) / 2),
+      );
       requestRender();
       return;
     }
     const visibleTop = viewport.scrollTop + pad;
     const visibleBottom = viewport.scrollTop + viewport.clientHeight - pad;
-    if (absoluteTop < visibleTop) viewport.scrollTop = Math.max(0, absoluteTop - pad);
-    else if ((absoluteTop + height) > visibleBottom) {
-      viewport.scrollTop = Math.max(0, absoluteTop + height - viewport.clientHeight + pad);
+    if (absoluteTop < visibleTop)
+      viewport.scrollTop = Math.max(0, absoluteTop - pad);
+    else if (absoluteTop + height > visibleBottom) {
+      viewport.scrollTop = Math.max(
+        0,
+        absoluteTop + height - viewport.clientHeight + pad,
+      );
     }
     requestRender();
   }
 
-  function setItems(nextItems: ArrayLike<T>, { resetScroll = false, preserveScroll = true } = {}) {
+  function setItems(
+    nextItems: ArrayLike<T>,
+    { resetScroll = false, preserveScroll = true } = {},
+  ) {
     if (activePointerIds.size > 0) {
       // Applying the new layout can move the sidebar before the browser sends
       // click. Keep the old rows and scroll position for this interaction;
@@ -397,9 +443,17 @@ export function createVirtualList<T>(
     setItemsNow(nextItems, { resetScroll, preserveScroll });
   }
 
-  function setItemsNow(nextItems: ArrayLike<T>, { resetScroll, preserveScroll }: { resetScroll: boolean; preserveScroll: boolean }) {
-    const anchor = preserveScroll && !resetScroll ? captureScrollAnchor() : null;
-    if (nextItems && typeof nextItems.length === "number") store.setItems(nextItems);
+  function setItemsNow(
+    nextItems: ArrayLike<T>,
+    {
+      resetScroll,
+      preserveScroll,
+    }: { resetScroll: boolean; preserveScroll: boolean },
+  ) {
+    const anchor =
+      preserveScroll && !resetScroll ? captureScrollAnchor() : null;
+    if (nextItems && typeof nextItems.length === "number")
+      store.setItems(nextItems);
     else store.clear();
     const nextKeys = new Set<string>();
     for (let index = 0; index < store.length; index += 1) {
@@ -432,16 +486,31 @@ export function createVirtualList<T>(
   }
 
   viewport.addEventListener("scroll", requestRender, { passive: true });
-  content.addEventListener("pointerdown", (event) => {
-    activePointerIds.add(event.pointerId);
-  }, { capture: true, passive: true });
+  content.addEventListener(
+    "pointerdown",
+    (event) => {
+      activePointerIds.add(event.pointerId);
+    },
+    { capture: true, passive: true },
+  );
   const finishPointerInteraction = (event: PointerEvent) => {
-    if (!activePointerIds.delete(event.pointerId) || activePointerIds.size > 0 || !renderDeferredForPointer) return;
+    if (
+      !activePointerIds.delete(event.pointerId) ||
+      activePointerIds.size > 0 ||
+      !renderDeferredForPointer
+    )
+      return;
     renderDeferredForPointer = false;
     requestRender();
   };
-  window.addEventListener("pointerup", finishPointerInteraction, { capture: true, passive: true });
-  window.addEventListener("pointercancel", finishPointerInteraction, { capture: true, passive: true });
+  window.addEventListener("pointerup", finishPointerInteraction, {
+    capture: true,
+    passive: true,
+  });
+  window.addEventListener("pointercancel", finishPointerInteraction, {
+    capture: true,
+    passive: true,
+  });
   window.addEventListener("blur", () => {
     if (!activePointerIds.size) return;
     activePointerIds.clear();
@@ -482,7 +551,8 @@ export function createVirtualList<T>(
     setItems,
     refresh: requestRender,
     scrollToIndex,
-    getRange: (index: number, elements: number) => store.scrollToIndex(index, elements),
+    getRange: (index: number, elements: number) =>
+      store.scrollToIndex(index, elements),
     getItems: () => store.getItems(),
   };
 }

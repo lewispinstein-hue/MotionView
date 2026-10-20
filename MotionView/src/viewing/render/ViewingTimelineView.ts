@@ -19,7 +19,10 @@ export class ViewingTimelineView implements ViewingRenderLayer {
     private readonly watchTooltip: WatchTooltipView,
   ) {
     const context = dom.canvas.getContext("2d");
-    if (!context) throw new Error("MotionView could not initialize the Viewing timeline canvas.");
+    if (!context)
+      throw new Error(
+        "MotionView could not initialize the Viewing timeline canvas.",
+      );
     this.#context = context;
   }
 
@@ -37,7 +40,12 @@ export class ViewingTimelineView implements ViewingRenderLayer {
       this.dom.canvas.style.cursor = "default";
     });
     this.dom.canvas.addEventListener("mousedown", (event) => {
-      if (!this.viewing.data.hasData || this.viewing.playback.isPlaying || this.viewing.navigation.livestreaming) return;
+      if (
+        !this.viewing.data.hasData ||
+        this.viewing.playback.isPlaying ||
+        this.viewing.navigation.livestreaming
+      )
+        return;
       if (event.shiftKey) this.viewing.navigation.commitSidebarSync();
       const rect = this.dom.canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
@@ -47,8 +55,10 @@ export class ViewingTimelineView implements ViewingRenderLayer {
       if (marker) {
         this.viewing.playback.pause();
         this.viewing.navigation.setTimelineHover(null);
-        const index = marker.idx ?? this.viewing.projection.findFloorIndex(marker.t);
-        const pose = this.viewing.projection.interpolatePose(marker.t) ?? marker.pose;
+        const index =
+          marker.idx ?? this.viewing.projection.findFloorIndex(marker.t);
+        const pose =
+          this.viewing.projection.interpolatePose(marker.t) ?? marker.pose;
         if (index >= 0 && pose) this.viewing.navigation.lockTrack(pose, index);
         this.viewing.navigation.selectWatch(marker);
         this.watchTooltip.show(
@@ -95,7 +105,7 @@ export class ViewingTimelineView implements ViewingRenderLayer {
     context.strokeStyle = "rgba(255,255,255,.08)";
     context.lineWidth = 1;
     for (let index = 0; index <= 10; index += 1) {
-      const x = width * index / 10;
+      const x = (width * index) / 10;
       context.beginPath();
       context.moveTo(x, 0);
       context.lineTo(x, height);
@@ -145,7 +155,8 @@ export class ViewingTimelineView implements ViewingRenderLayer {
     }
     const currentTime = this.viewing.playback.isPlaying
       ? this.viewing.playback.timeMs
-      : this.viewing.navigation.trackLockPose?.t ?? poses[this.viewing.navigation.selectedIndex]?.t;
+      : (this.viewing.navigation.trackLockPose?.t ??
+        poses[this.viewing.navigation.selectedIndex]?.t);
     if (currentTime != null) {
       const x = this.timeToX(currentTime);
       context.strokeStyle = "rgba(255,255,255,.9)";
@@ -155,9 +166,14 @@ export class ViewingTimelineView implements ViewingRenderLayer {
       context.lineTo(x, height);
       context.stroke();
     }
-    const hoverTime = this.viewing.navigation.hoverTimelineTime
-      ?? this.viewing.navigation.trackHoverTime;
-    if (!this.viewing.playback.isPlaying && hoverTime != null && hoverTime !== currentTime) {
+    const hoverTime =
+      this.viewing.navigation.hoverTimelineTime ??
+      this.viewing.navigation.trackHoverTime;
+    if (
+      !this.viewing.playback.isPlaying &&
+      hoverTime != null &&
+      hoverTime !== currentTime
+    ) {
       const x = this.timeToX(hoverTime);
       context.strokeStyle = "rgba(210,218,228,.42)";
       context.lineWidth = 1;
@@ -171,13 +187,18 @@ export class ViewingTimelineView implements ViewingRenderLayer {
   timeToX(time: number): number {
     const range = this.viewing.projection.timeRange();
     const width = this.dom.canvas.getBoundingClientRect().width;
-    return range ? ((time - range.start) / (range.end - range.start)) * width : 0;
+    return range
+      ? ((time - range.start) / (range.end - range.start)) * width
+      : 0;
   }
 
   xToTime(x: number): number {
     const range = this.viewing.projection.timeRange();
     const width = this.dom.canvas.getBoundingClientRect().width || 1;
-    return range ? range.start + Math.max(0, Math.min(1, x / width)) * (range.end - range.start) : 0;
+    return range
+      ? range.start +
+          Math.max(0, Math.min(1, x / width)) * (range.end - range.start)
+      : 0;
   }
 
   private pickWatch(x: number, y: number): Readonly<WatchMarker> | null {

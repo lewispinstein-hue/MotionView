@@ -33,10 +33,18 @@ export class LiveStream {
     events.preferencesChanged.subscribe(() => this.restartRefreshTimer());
   }
 
-  get streaming(): boolean { return this.session.streamState === "streaming"; }
-  get acceptingData(): boolean { return this.streaming || this.session.streamState === "starting"; }
-  get state(): LiveStreamState { return this.session.streamState; }
-  get pendingLineCount(): number { return this.session.pending.pendingCount(); }
+  get streaming(): boolean {
+    return this.session.streamState === "streaming";
+  }
+  get acceptingData(): boolean {
+    return this.streaming || this.session.streamState === "starting";
+  }
+  get state(): LiveStreamState {
+    return this.session.streamState;
+  }
+  get pendingLineCount(): number {
+    return this.session.pending.pendingCount();
+  }
 
   start(): Promise<boolean> {
     return this.serialize(async () => {
@@ -46,22 +54,35 @@ export class LiveStream {
       this.session.clearPending();
       this.session.resetParser();
       liveTelemetry.resetCurrentStreamingSession();
-      const response = await this.bridge.post<LiveApiResponse>("/api/start", undefined, { timeoutMs: 5_000 });
+      const response = await this.bridge.post<LiveApiResponse>(
+        "/api/start",
+        undefined,
+        { timeoutMs: 5_000 },
+      );
       if (!response.ok || response.json?.ok === false) {
-        this.appendConsole(`[api] start failed (${response.json?.status || response.status})`);
-        this.appendConsole("Backend may not be working. Try restarting the application.");
+        this.appendConsole(
+          `[api] start failed (${response.json?.status || response.status})`,
+        );
+        this.appendConsole(
+          "Backend may not be working. Try restarting the application.",
+        );
         this.session.clearPending();
         this.setState("idle");
         return false;
       }
       if (this.session.connectionState !== "connected") {
-        await this.bridge.post<LiveApiResponse>("/api/stop", undefined, { timeoutMs: 5_000 });
+        await this.bridge.post<LiveApiResponse>("/api/stop", undefined, {
+          timeoutMs: 5_000,
+        });
         this.setState("idle");
         return false;
       }
       this.setState("streaming");
       liveTelemetry.streamingStarted();
-      this.events.notice.emit({ kind: "success", message: "Streaming started" });
+      this.events.notice.emit({
+        kind: "success",
+        message: "Streaming started",
+      });
       this.appendConsole("[UI] Streaming started");
       return true;
     });
@@ -69,19 +90,33 @@ export class LiveStream {
 
   stop(options: Readonly<{ force?: boolean }> = {}): Promise<boolean> {
     return this.serialize(async () => {
-      if (!options.force && !this.streaming && this.session.streamState !== "starting") {
+      if (
+        !options.force &&
+        !this.streaming &&
+        this.session.streamState !== "starting"
+      ) {
         this.session.clearPending();
         return true;
       }
       const wasStreaming = this.streaming;
       this.setState("stopping");
       const force = !!options.force;
-      let response = await this.bridge.post<LiveApiResponse>(force ? "/api/kill" : "/api/stop", undefined, { timeoutMs: 5_000 });
+      let response = await this.bridge.post<LiveApiResponse>(
+        force ? "/api/kill" : "/api/stop",
+        undefined,
+        { timeoutMs: 5_000 },
+      );
       if (force && (!response.ok || response.json?.ok === false)) {
-        response = await this.bridge.post<LiveApiResponse>("/api/stop", undefined, { timeoutMs: 5_000 });
+        response = await this.bridge.post<LiveApiResponse>(
+          "/api/stop",
+          undefined,
+          { timeoutMs: 5_000 },
+        );
       }
       if (!response.ok || response.json?.ok === false) {
-        this.appendConsole(`[api] stop/kill failed (${response.json?.status || response.status})`);
+        this.appendConsole(
+          `[api] stop/kill failed (${response.json?.status || response.status})`,
+        );
         this.setState(wasStreaming ? "streaming" : "idle");
         return false;
       }
@@ -98,7 +133,8 @@ export class LiveStream {
   }
 
   refreshNow(): ViewingAppendResult {
-    if (this.session.connectionState !== "connected") return EMPTY_APPEND_RESULT;
+    if (this.session.connectionState !== "connected")
+      return EMPTY_APPEND_RESULT;
     if (this.session.streamState === "starting") return EMPTY_APPEND_RESULT;
     if (!this.streaming) {
       this.session.clearPending();
@@ -108,7 +144,11 @@ export class LiveStream {
     if (!pending) return EMPTY_APPEND_RESULT;
     let parsed: ParsedLiveBatchResult | null = null;
     try {
-      parsed = this.parser.parse(pending, this.viewing.data, this.session.lastPoseTimestamp);
+      parsed = this.parser.parse(
+        pending,
+        this.viewing.data,
+        this.session.lastPoseTimestamp,
+      );
       if (parsed.runStart) this.metrics.beginRun(parsed.runStart);
       const result = parsed.startsNewRun
         ? this.viewing.loadParsedBatch(parsed.batch)
@@ -118,7 +158,10 @@ export class LiveStream {
       this.#lastBatchFailure = null;
       this.metrics.accept(result, parsed.batch);
       if (result.hasNewData) {
-        this.events.batchAccepted.emit({ result, pendingLineCount: this.pendingLineCount });
+        this.events.batchAccepted.emit({
+          result,
+          pendingLineCount: this.pendingLineCount,
+        });
       }
       return result;
     } catch (error) {
@@ -128,10 +171,15 @@ export class LiveStream {
       // behind it until the fixed-size buffer eventually overflowed.
       this.session.pending.markConsumed(pending.endIndex);
       if (parsed) this.session.lastPoseTimestamp = parsed.lastPoseTimestamp;
-      const detail = error instanceof Error && error.message ? error.message : "unknown error";
+      const detail =
+        error instanceof Error && error.message
+          ? error.message
+          : "unknown error";
       if (detail !== this.#lastBatchFailure) {
         this.#lastBatchFailure = detail;
-        this.appendConsole(`[UI] Skipped a live-data batch (${detail}). Streaming will continue.`);
+        this.appendConsole(
+          `[UI] Skipped a live-data batch (${detail}). Streaming will continue.`,
+        );
       }
       console.error("MotionView could not process a live-data batch:", error);
       return EMPTY_APPEND_RESULT;
@@ -142,8 +190,12 @@ export class LiveStream {
     const lines = String(text ?? "").split(/\r?\n/);
     const pending = { lines, startIndex: 0, endIndex: lines.length };
     const { batch } = this.parser.parse(pending, this.viewing.data, null);
-    return (batch.poses?.length ?? 0) > 0 || (batch.watches?.length ?? 0) > 0
-      || (batch.logs?.length ?? 0) > 0 || (batch.waypointEvents?.length ?? 0) > 0;
+    return (
+      (batch.poses?.length ?? 0) > 0 ||
+      (batch.watches?.length ?? 0) > 0 ||
+      (batch.logs?.length ?? 0) > 0 ||
+      (batch.waypointEvents?.length ?? 0) > 0
+    );
   }
 
   loadCapture(text: string): ViewingAppendResult {
@@ -178,7 +230,8 @@ export class LiveStream {
     this.metrics.endRun("connection_closed");
     this.session.clearPending();
     this.session.resetParser();
-    if (this.streaming || this.session.streamState === "stopping") await liveTelemetry.streamingStopped();
+    if (this.streaming || this.session.streamState === "stopping")
+      await liveTelemetry.streamingStopped();
     else liveTelemetry.resetCurrentStreamingSession();
     this.setState("idle");
   }
@@ -199,7 +252,11 @@ export class LiveStream {
 
   private restartRefreshTimer(): void {
     this.stopRefreshTimer();
-    if (this.session.connectionState !== "connected" || this.session.refreshIntervalMs <= 0) return;
+    if (
+      this.session.connectionState !== "connected" ||
+      this.session.refreshIntervalMs <= 0
+    )
+      return;
     this.session.refreshTimer = setInterval(() => {
       if (this.session.refreshInFlight) return;
       this.session.refreshInFlight = true;

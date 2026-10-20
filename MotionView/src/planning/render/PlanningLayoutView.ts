@@ -16,7 +16,10 @@ export interface PersistedPlanningLayout {
   readonly timelineHeight?: unknown;
 }
 
-function requiredElement<T extends HTMLElement>(document: Document, id: string): T {
+function requiredElement<T extends HTMLElement>(
+  document: Document,
+  id: string,
+): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`MotionView Planning layout requires #${id}.`);
   return element as T;
@@ -85,7 +88,10 @@ export class PlanningLayoutView {
 
   activate(): void {
     if (getMode() !== "planning") return;
-    this.#timelineBar.classList.toggle("isCollapsed", this.timelineHeight <= COLLAPSE_TIMELINE_PX);
+    this.#timelineBar.classList.toggle(
+      "isCollapsed",
+      this.timelineHeight <= COLLAPSE_TIMELINE_PX,
+    );
     this.resize();
   }
 
@@ -99,17 +105,24 @@ export class PlanningLayoutView {
 
     const waypointListHeight = this.parseNumber(layout.waypointListHeight);
     if (waypointListHeight !== null) {
-      const maximum = Math.max(COLLAPSE_LIST_PX, this.#sidebar.getBoundingClientRect().height - 180);
+      const maximum = Math.max(
+        COLLAPSE_LIST_PX,
+        this.#sidebar.getBoundingClientRect().height - 180,
+      );
       const height = Math.max(0, Math.min(maximum, waypointListHeight));
       this.#root.style.setProperty("--planListH", `${height}px`);
-      this.#sidebar.classList.toggle("planListCollapsed", height <= COLLAPSE_LIST_PX);
+      this.#sidebar.classList.toggle(
+        "planListCollapsed",
+        height <= COLLAPSE_LIST_PX,
+      );
     }
 
     const timelineHeight = this.parseNumber(layout.timelineHeight);
     if (timelineHeight !== null) {
-      const migratedHeight = Math.abs(timelineHeight - LEGACY_TIMELINE_HEIGHT_PX) < 2
-        ? TIMELINE_HEIGHT_PX
-        : timelineHeight;
+      const migratedHeight =
+        Math.abs(timelineHeight - LEGACY_TIMELINE_HEIGHT_PX) < 2
+          ? TIMELINE_HEIGHT_PX
+          : timelineHeight;
       this.setTimelineCollapsed(migratedHeight <= COLLAPSE_TIMELINE_PX);
     }
 
@@ -122,8 +135,14 @@ export class PlanningLayoutView {
   }
 
   toggleRightSidebar(): void {
-    if (this.sidebarWidth <= COLLAPSE_SIDEBAR_PX) this.setSidebarWidth(Math.max(COLLAPSE_SIDEBAR_PX + 1, this.#lastSidebarWidth));
-    else { this.#lastSidebarWidth = this.sidebarWidth; this.setSidebarWidth(0); }
+    if (this.sidebarWidth <= COLLAPSE_SIDEBAR_PX)
+      this.setSidebarWidth(
+        Math.max(COLLAPSE_SIDEBAR_PX + 1, this.#lastSidebarWidth),
+      );
+    else {
+      this.#lastSidebarWidth = this.sidebarWidth;
+      this.setSidebarWidth(0);
+    }
     this.field.resetFieldPosition();
     this.resize();
     this.changed.emit({});
@@ -135,30 +154,57 @@ export class PlanningLayoutView {
     this.changed.emit({});
   }
 
-  private get sidebarWidth(): number { return this.cssNumber("--rightSidebarWPlanning", 360); }
-  private get timelineHeight(): number { return this.cssNumber("--planningTimelineH", TIMELINE_HEIGHT_PX); }
-  private get listHeight(): number { return this.cssNumber("--planListH", 240); }
+  private get sidebarWidth(): number {
+    return this.cssNumber("--rightSidebarWPlanning", 360);
+  }
+  private get timelineHeight(): number {
+    return this.cssNumber("--planningTimelineH", TIMELINE_HEIGHT_PX);
+  }
+  private get listHeight(): number {
+    return this.cssNumber("--planListH", 240);
+  }
 
   private move(event: MouseEvent): void {
     if (this.#sidebarDrag) {
-      const width = Math.max(0, Math.min(MAX_SIDEBAR_PX, window.innerWidth - 240, this.#sidebarDrag.width - (event.clientX - this.#sidebarDrag.x)));
+      const width = Math.max(
+        0,
+        Math.min(
+          MAX_SIDEBAR_PX,
+          window.innerWidth - 240,
+          this.#sidebarDrag.width - (event.clientX - this.#sidebarDrag.x),
+        ),
+      );
       this.setSidebarWidth(width <= COLLAPSE_SIDEBAR_PX ? 0 : width);
       if (width > COLLAPSE_SIDEBAR_PX) this.#lastSidebarWidth = width;
       this.resize();
     }
     if (this.#timelineDrag) {
-      const collapse = event.clientY >= window.innerHeight - COLLAPSE_TIMELINE_PX
-        || event.clientY - this.#timelineDrag.y >= Math.max(this.#timelineDrag.height, TIMELINE_HEIGHT_PX) * 0.5;
+      const collapse =
+        event.clientY >= window.innerHeight - COLLAPSE_TIMELINE_PX ||
+        event.clientY - this.#timelineDrag.y >=
+          Math.max(this.#timelineDrag.height, TIMELINE_HEIGHT_PX) * 0.5;
       this.setTimelineCollapsed(collapse);
       this.resize();
     }
     if (this.#listDrag) {
-      const maxHeight = Math.max(COLLAPSE_LIST_PX, this.#sidebar.getBoundingClientRect().height - 180);
-      let height = Math.max(0, Math.min(maxHeight, this.#listDrag.height + event.clientY - this.#listDrag.y));
+      const maxHeight = Math.max(
+        COLLAPSE_LIST_PX,
+        this.#sidebar.getBoundingClientRect().height - 180,
+      );
+      let height = Math.max(
+        0,
+        Math.min(
+          maxHeight,
+          this.#listDrag.height + event.clientY - this.#listDrag.y,
+        ),
+      );
       if (height <= COLLAPSE_LIST_PX) height = 0;
       else if (height < 120) height = 120;
       this.#root.style.setProperty("--planListH", `${height}px`);
-      this.#sidebar.classList.toggle("planListCollapsed", height <= COLLAPSE_LIST_PX);
+      this.#sidebar.classList.toggle(
+        "planListCollapsed",
+        height <= COLLAPSE_LIST_PX,
+      );
     }
   }
 
@@ -178,12 +224,17 @@ export class PlanningLayoutView {
   }
 
   private setTimelineCollapsed(collapsed: boolean): void {
-    this.#root.style.setProperty("--planningTimelineH", `${collapsed ? 0 : TIMELINE_HEIGHT_PX}px`);
+    this.#root.style.setProperty(
+      "--planningTimelineH",
+      `${collapsed ? 0 : TIMELINE_HEIGHT_PX}px`,
+    );
     this.#timelineBar.classList.toggle("isCollapsed", collapsed);
   }
 
   private cssNumber(property: string, fallback: number): number {
-    const value = Number.parseFloat(getComputedStyle(this.#root).getPropertyValue(property));
+    const value = Number.parseFloat(
+      getComputedStyle(this.#root).getPropertyValue(property),
+    );
     return Number.isFinite(value) ? value : fallback;
   }
 

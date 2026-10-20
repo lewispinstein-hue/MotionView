@@ -1,4 +1,9 @@
-import type { LogEntry, Pose, WatchEntry, WaypointEvent } from "../state/models";
+import type {
+  LogEntry,
+  Pose,
+  WatchEntry,
+  WaypointEvent,
+} from "../state/models";
 import {
   normalizeSystemLogMessage,
   normalizeViewingLogLevel,
@@ -6,8 +11,16 @@ import {
   parseViewingNumber,
   parseWaypointParams,
 } from "../viewing/routeNormalization";
-import type { ParsedLiveViewingBatch, ViewingDataReader } from "../viewing/viewingTypes";
-import { emptyLiveCounts, stripToTag, type LiveCounts, type LivePendingBatch } from "./liveCore";
+import type {
+  ParsedLiveViewingBatch,
+  ViewingDataReader,
+} from "../viewing/viewingTypes";
+import {
+  emptyLiveCounts,
+  stripToTag,
+  type LiveCounts,
+  type LivePendingBatch,
+} from "./liveCore";
 import type { LiveRunStart } from "./liveTypes";
 
 export interface ParsedLiveBatchResult {
@@ -63,10 +76,14 @@ function parseCsvLine(line: string): string[] | null {
 }
 
 function formatCsvLine(fields: ReadonlyArray<string | number>): string {
-  return fields.map((field) => {
-    const value = String(field);
-    return /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
-  }).join(",");
+  return fields
+    .map((field) => {
+      const value = String(field);
+      return /[",\r\n]/.test(value)
+        ? `"${value.replaceAll('"', '""')}"`
+        : value;
+    })
+    .join(",");
 }
 
 const ODOM_PROVIDER_NAMES: Readonly<Record<number, string>> = {
@@ -80,22 +97,41 @@ const ODOM_PROVIDER_NAMES: Readonly<Record<number, string>> = {
 
 function parseRunStart(line: string): LiveRunStart | null {
   const parts = parseCsvLine(line);
-  const robotStartTimestampMs = parts && parts.length >= 2 ? parseViewingNumber(parts[1]) : null;
-  if (robotStartTimestampMs == null || !Number.isSafeInteger(robotStartTimestampMs) || robotStartTimestampMs < 0) return null;
+  const robotStartTimestampMs =
+    parts && parts.length >= 2 ? parseViewingNumber(parts[1]) : null;
+  if (
+    robotStartTimestampMs == null ||
+    !Number.isSafeInteger(robotStartTimestampMs) ||
+    robotStartTimestampMs < 0
+  )
+    return null;
 
-  const rawProvider = parts && parts.length >= 4 ? parseViewingNumber(parts[2]) : null;
-  const odomProviderId = rawProvider != null && Number.isInteger(rawProvider) && rawProvider >= 0 && rawProvider <= 0xff
-    ? rawProvider
-    : null;
-  const rawVersion = parts && parts.length >= 4 ? parseViewingNumber(parts[3]) : null;
-  const mvlibVersionEncoded = rawVersion != null && Number.isSafeInteger(rawVersion) && rawVersion >= 0 && rawVersion <= 0xffff_ffff
-    ? rawVersion
-    : null;
+  const rawProvider =
+    parts && parts.length >= 4 ? parseViewingNumber(parts[2]) : null;
+  const odomProviderId =
+    rawProvider != null &&
+    Number.isInteger(rawProvider) &&
+    rawProvider >= 0 &&
+    rawProvider <= 0xff
+      ? rawProvider
+      : null;
+  const rawVersion =
+    parts && parts.length >= 4 ? parseViewingNumber(parts[3]) : null;
+  const mvlibVersionEncoded =
+    rawVersion != null &&
+    Number.isSafeInteger(rawVersion) &&
+    rawVersion >= 0 &&
+    rawVersion <= 0xffff_ffff
+      ? rawVersion
+      : null;
 
   return {
     robotStartTimestampMs,
     odomProviderId,
-    odomProvider: odomProviderId == null ? "unknown" : (ODOM_PROVIDER_NAMES[odomProviderId] ?? "unknown"),
+    odomProvider:
+      odomProviderId == null
+        ? "unknown"
+        : (ODOM_PROVIDER_NAMES[odomProviderId] ?? "unknown"),
     mvlibVersionEncoded,
   };
 }
@@ -148,7 +184,13 @@ export class LiveLineParser {
         const theta = parseViewingNumber(parts[4]);
         const leftVelocity = parseViewingNumber(parts[5]);
         const rightVelocity = parseViewingNumber(parts[6]);
-        if (t == null || x == null || y == null || (lastPoseTimestamp != null && t <= lastPoseTimestamp)) continue;
+        if (
+          t == null ||
+          x == null ||
+          y == null ||
+          (lastPoseTimestamp != null && t <= lastPoseTimestamp)
+        )
+          continue;
         // Keep the pose usable for the field, navigation, and scrubbing even
         // when a drivetrain reports NaN/Infinity. Null speed values render as
         // a gap rather than being substituted with a believable numeric speed.
@@ -160,7 +202,9 @@ export class LiveLineParser {
           theta: theta ?? 0,
           l_vel: hasSpeed ? leftVelocity : null,
           r_vel: hasSpeed ? rightVelocity : null,
-          speed_raw: hasSpeed ? (Math.abs(leftVelocity) + Math.abs(rightVelocity)) / 2 : null,
+          speed_raw: hasSpeed
+            ? (Math.abs(leftVelocity) + Math.abs(rightVelocity)) / 2
+            : null,
           speed_norm: hasSpeed ? 0 : null,
         });
         lastPoseTimestamp = t;
@@ -185,7 +229,13 @@ export class LiveLineParser {
           label = parts[3] ?? "";
           value = parts.slice(4).join(",");
         }
-        watches.push({ t, id, level: parts[2] ?? "INFO", label: label.replaceAll(":", ""), value });
+        watches.push({
+          t,
+          id,
+          level: parts[2] ?? "INFO",
+          label: label.replaceAll(":", ""),
+          value,
+        });
         counts.watchesAdded += 1;
         continue;
       }
@@ -212,8 +262,10 @@ export class LiveLineParser {
         const parsed = this.parseWaypointLine(line);
         const event = parsed.waypointEvent;
         if (!parsed.ok || !event) continue;
-        const knownBeforeBatch = !startsNewRun && viewing.waypointById.has(event.id);
-        const alreadyKnown = knownBeforeBatch || createdWaypointIds.has(event.id);
+        const knownBeforeBatch =
+          !startsNewRun && viewing.waypointById.has(event.id);
+        const alreadyKnown =
+          knownBeforeBatch || createdWaypointIds.has(event.id);
         if (event.type === "CREATED") {
           // A resent CREATED (roster resync) for a waypoint we already have would
           // otherwise reset its event history and active state; ignore it.
@@ -247,27 +299,46 @@ export class LiveLineParser {
     const type = normalizeWaypointType(rawType);
     const id = Number(rawId);
     const name = String(rawName || "").trim();
-    if (t == null || !type || !Number.isInteger(id) || !name) return { ok: false, malformed: true };
+    if (t == null || !type || !Number.isInteger(id) || !name)
+      return { ok: false, malformed: true };
     if (type === "CREATED") {
       const params = parseWaypointParams(type, rawParams);
       return params
-        ? { ok: true, malformed: false, waypointEvent: { t, type, id, name, params } }
+        ? {
+            ok: true,
+            malformed: false,
+            waypointEvent: { t, type, id, name, params },
+          }
         : { ok: false, malformed: true };
     }
     if (type === "REACHED") {
       const params = parseWaypointParams(type, rawParams);
       return params
-        ? { ok: true, malformed: false, waypointEvent: { t, type, id, name, params } }
+        ? {
+            ok: true,
+            malformed: false,
+            waypointEvent: { t, type, id, name, params },
+          }
         : { ok: false, malformed: true };
     }
     const params = parseWaypointParams(type, rawParams);
     return params
-      ? { ok: true, malformed: false, waypointEvent: { t, type, id, name, params } }
+      ? {
+          ok: true,
+          malformed: false,
+          waypointEvent: { t, type, id, name, params },
+        }
       : { ok: false, malformed: true };
   }
 
   formatWaypointLine(event: WaypointEvent): string {
-    const fields: Array<string | number> = ["[WPOINT]", event.t, event.type, event.id, event.name];
+    const fields: Array<string | number> = [
+      "[WPOINT]",
+      event.t,
+      event.type,
+      event.id,
+      event.name,
+    ];
     if (event.type === "CREATED") {
       fields.push(
         event.params.tarX,

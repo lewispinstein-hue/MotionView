@@ -1,6 +1,10 @@
 import { TypedEvent } from "../app/typedEvent";
 import { setStatus } from "../app/status";
-import { exportPlanningCode, isTauriRuntime, resolveExportDirectory } from "../tauri/commands";
+import {
+  exportPlanningCode,
+  isTauriRuntime,
+  resolveExportDirectory,
+} from "../tauri/commands";
 import { planningTelemetry } from "../telemetry/createTelemetry";
 import type { PlanningDialogs } from "./PlanningDialogs";
 import type { PlanningDom } from "./PlanningDom";
@@ -9,7 +13,12 @@ import type { SettingsFeature } from "../app/settings";
 import { generatePlanningCode } from "./planningCode";
 import { bindModalBackdropDismissal } from "../app/dialogs/modalDismissal";
 
-export type PlanningCodeExportTarget = "downloads" | "desktop" | "documents" | "project" | "custom";
+export type PlanningCodeExportTarget =
+  | "downloads"
+  | "desktop"
+  | "documents"
+  | "project"
+  | "custom";
 
 export interface PlanningCodeExportSettings {
   readonly header: string;
@@ -38,7 +47,10 @@ export class PlanningCodeExportDialog {
     this.dom.exportCode.addEventListener("click", () => void this.open());
     this.dom.codeExportClose.addEventListener("click", () => this.close());
     this.dom.codeExportCancel.addEventListener("click", () => this.close());
-    this.dom.codeExportConfirm.addEventListener("click", () => void this.export());
+    this.dom.codeExportConfirm.addEventListener(
+      "click",
+      () => void this.export(),
+    );
     bindModalBackdropDismissal(this.dom.codeExportModal, () => this.close());
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && this.isOpen) {
@@ -47,10 +59,18 @@ export class PlanningCodeExportDialog {
         this.close();
       }
     });
-    this.dom.codeExportTarget.addEventListener("change", () => void this.selectTarget());
-    for (const input of [this.dom.codeExportHeader, this.dom.codeExportFooter, this.dom.codeExportPath]) {
+    this.dom.codeExportTarget.addEventListener(
+      "change",
+      () => void this.selectTarget(),
+    );
+    for (const input of [
+      this.dom.codeExportHeader,
+      this.dom.codeExportFooter,
+      this.dom.codeExportPath,
+    ]) {
       input.addEventListener("input", () => {
-        if (input === this.dom.codeExportPath) this.dom.codeExportTarget.value = "custom";
+        if (input === this.dom.codeExportPath)
+          this.dom.codeExportTarget.value = "custom";
         this.clearResult();
         this.updateValidation();
         this.emitChanged();
@@ -67,11 +87,15 @@ export class PlanningCodeExportDialog {
     };
   }
 
-  applySettings(settings: Partial<PlanningCodeExportSettings> | null | undefined): void {
+  applySettings(
+    settings: Partial<PlanningCodeExportSettings> | null | undefined,
+  ): void {
     if (!settings) return;
     this.dom.codeExportHeader.value = String(settings.header ?? "");
     this.dom.codeExportFooter.value = String(settings.footer ?? "");
-    this.dom.codeExportTarget.value = this.isTarget(settings.target) ? settings.target : "downloads";
+    this.dom.codeExportTarget.value = this.isTarget(settings.target)
+      ? settings.target
+      : "downloads";
     this.dom.codeExportPath.value = String(settings.path ?? "");
     this.updateProjectAvailability();
     this.updateValidation();
@@ -82,7 +106,9 @@ export class PlanningCodeExportDialog {
     this.updateProjectAvailability();
   }
 
-  get isOpen(): boolean { return !this.dom.codeExportModal.hasAttribute("hidden"); }
+  get isOpen(): boolean {
+    return !this.dom.codeExportModal.hasAttribute("hidden");
+  }
 
   close(): void {
     this.dom.codeExportModal.setAttribute("hidden", "");
@@ -91,7 +117,8 @@ export class PlanningCodeExportDialog {
 
   private async open(): Promise<void> {
     this.updateProjectAvailability();
-    if (!this.dom.codeExportPath.value.trim() && this.target !== "custom") await this.fillTargetPath();
+    if (!this.dom.codeExportPath.value.trim() && this.target !== "custom")
+      await this.fillTargetPath();
     this.clearResult();
     this.updateValidation();
     this.dom.codeExportModal.removeAttribute("hidden");
@@ -108,22 +135,30 @@ export class PlanningCodeExportDialog {
 
   private async fillTargetPath(): Promise<void> {
     if (!isTauriRuntime()) {
-      this.dom.codeExportValidation.textContent = "Code file export is available in the desktop app.";
+      this.dom.codeExportValidation.textContent =
+        "Code file export is available in the desktop app.";
       return;
     }
     if (this.target === "project" && !this.#projectPath) {
-      this.dom.codeExportValidation.textContent = "Select a valid PROS project before using this target.";
+      this.dom.codeExportValidation.textContent =
+        "Select a valid PROS project before using this target.";
       return;
     }
     try {
-      const projectSourcePath = this.target === "project"
-        ? this.joinPath(this.#projectPath, "src")
-        : undefined;
-      const directory = await resolveExportDirectory(this.target, projectSourcePath);
-      const separator = directory.includes("\\") && !directory.includes("/") ? "\\" : "/";
+      const projectSourcePath =
+        this.target === "project"
+          ? this.joinPath(this.#projectPath, "src")
+          : undefined;
+      const directory = await resolveExportDirectory(
+        this.target,
+        projectSourcePath,
+      );
+      const separator =
+        directory.includes("\\") && !directory.includes("/") ? "\\" : "/";
       this.dom.codeExportPath.value = `${directory.replace(/[\\/]+$/, "")}${separator}${DEFAULT_FILENAME}`;
     } catch (error) {
-      this.dom.codeExportValidation.textContent = error instanceof Error ? error.message : String(error);
+      this.dom.codeExportValidation.textContent =
+        error instanceof Error ? error.message : String(error);
     }
   }
 
@@ -134,16 +169,24 @@ export class PlanningCodeExportDialog {
       this.updateValidation();
       return;
     }
-    const sections = [this.dom.codeExportHeader.value, code, this.dom.codeExportFooter.value]
-      .filter((section) => section.length > 0);
+    const sections = [
+      this.dom.codeExportHeader.value,
+      code,
+      this.dom.codeExportFooter.value,
+    ].filter((section) => section.length > 0);
     const contents = sections.join("\n");
     this.dom.codeExportConfirm.disabled = true;
     try {
-      let overwrite = this.appSettings.current.skipPlanningCodeExportOverwriteConfirmation === true;
+      let overwrite =
+        this.appSettings.current.skipPlanningCodeExportOverwriteConfirmation ===
+        true;
       try {
         await exportPlanningCode(path, contents, overwrite);
       } catch (error) {
-        if ((error instanceof Error ? error.message : String(error)) !== "exists") throw error;
+        if (
+          (error instanceof Error ? error.message : String(error)) !== "exists"
+        )
+          throw error;
         const filename = path.split(/[\\/]/).pop() || path;
         const result = await this.dialogs.confirmWithResult({
           title: "Replace File",
@@ -156,7 +199,9 @@ export class PlanningCodeExportDialog {
           return;
         }
         if (result.dontShowAgain) {
-          this.appSettings.update({ skipPlanningCodeExportOverwriteConfirmation: true });
+          this.appSettings.update({
+            skipPlanningCodeExportOverwriteConfirmation: true,
+          });
           await this.appSettings.saveNow();
         }
         overwrite = true;
@@ -168,9 +213,11 @@ export class PlanningCodeExportDialog {
       this.dom.codeExportValidation.textContent = "";
       setStatus("Planning code exported.");
       this.emitChanged();
-      void planningTelemetry.templateExported(this.planning.telemetryProperties({
-        export_surface: "file",
-      }));
+      void planningTelemetry.templateExported(
+        this.planning.telemetryProperties({
+          export_surface: "file",
+        }),
+      );
     } catch (error) {
       this.dom.codeExportSuccess.textContent = `Failed to export file: ${error instanceof Error ? error.message : String(error)}`;
       this.dom.codeExportSuccess.classList.add("isError");
@@ -185,19 +232,26 @@ export class PlanningCodeExportDialog {
     const code = generatePlanningCode(this.planning);
     const path = this.dom.codeExportPath.value.trim();
     let message = "";
-    if (!isTauriRuntime()) message = "Code file export is available in the desktop app.";
-    else if (!code) message = "Add at least two waypoints and a template before exporting code.";
+    if (!isTauriRuntime())
+      message = "Code file export is available in the desktop app.";
+    else if (!code)
+      message =
+        "Add at least two waypoints and a template before exporting code.";
     else if (!path) message = "Enter an export path including a filename.";
     this.dom.codeExportValidation.textContent = message;
     this.dom.codeExportConfirm.disabled = message.length > 0;
   }
 
   private updateProjectAvailability(): void {
-    const option = this.dom.codeExportTarget.querySelector<HTMLOptionElement>('option[value="project"]');
+    const option = this.dom.codeExportTarget.querySelector<HTMLOptionElement>(
+      'option[value="project"]',
+    );
     if (option) option.disabled = !this.#projectPath;
   }
 
-  private emitChanged(): void { this.changed.emit(this.settings); }
+  private emitChanged(): void {
+    this.changed.emit(this.settings);
+  }
 
   private clearResult(): void {
     this.dom.codeExportSuccess.hidden = true;
@@ -206,16 +260,24 @@ export class PlanningCodeExportDialog {
   }
 
   private joinPath(parent: string, child: string): string {
-    const separator = parent.includes("\\") && !parent.includes("/") ? "\\" : "/";
+    const separator =
+      parent.includes("\\") && !parent.includes("/") ? "\\" : "/";
     return `${parent.replace(/[\\/]+$/, "")}${separator}${child}`;
   }
 
   private get target(): PlanningCodeExportTarget {
-    return this.isTarget(this.dom.codeExportTarget.value) ? this.dom.codeExportTarget.value : "downloads";
+    return this.isTarget(this.dom.codeExportTarget.value)
+      ? this.dom.codeExportTarget.value
+      : "downloads";
   }
 
   private isTarget(value: unknown): value is PlanningCodeExportTarget {
-    return value === "downloads" || value === "desktop" || value === "documents"
-      || value === "project" || value === "custom";
+    return (
+      value === "downloads" ||
+      value === "desktop" ||
+      value === "documents" ||
+      value === "project" ||
+      value === "custom"
+    );
   }
 }

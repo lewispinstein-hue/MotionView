@@ -1,7 +1,14 @@
-import type { PlanningEvents, PlanningDocumentChangeKind } from "./planningEvents";
+import type {
+  PlanningEvents,
+  PlanningDocumentChangeKind,
+} from "./planningEvents";
 import { normalizePlanNodes, normalizePlanObjects } from "./planningState";
 import { normalizeWaypointIndicatorIcons } from "./planningIndicators";
-import type { PlanningNode, PlanningObject, PlanningWaypoint } from "./planningTypes";
+import type {
+  PlanningNode,
+  PlanningObject,
+  PlanningWaypoint,
+} from "./planningTypes";
 
 interface PlanningHistorySnapshot {
   waypoints: PlanningWaypoint[];
@@ -28,13 +35,21 @@ function cloneWaypoint(point: Readonly<PlanningWaypoint>): PlanningWaypoint {
     speed: point.speed ?? 127,
   };
   const indicatorIcons = normalizeWaypointIndicatorIcons(point.indicatorIcons);
-  if (indicatorIcons.length || Object.prototype.hasOwnProperty.call(point, "indicatorIcons")) cloned.indicatorIcons = indicatorIcons;
-  if (Object.prototype.hasOwnProperty.call(point, "overrideCode")) cloned.overrideCode = String(point.overrideCode ?? "");
+  if (
+    indicatorIcons.length ||
+    Object.prototype.hasOwnProperty.call(point, "indicatorIcons")
+  )
+    cloned.indicatorIcons = indicatorIcons;
+  if (Object.prototype.hasOwnProperty.call(point, "overrideCode"))
+    cloned.overrideCode = String(point.overrideCode ?? "");
   return cloned;
 }
 
 function cloneObject(object: Readonly<PlanningObject>): PlanningObject {
-  return { ...object, methods: object.methods.map((method) => ({ ...method })) };
+  return {
+    ...object,
+    methods: object.methods.map((method) => ({ ...method })),
+  };
 }
 
 function cloneNode(node: Readonly<PlanningNode>): PlanningNode {
@@ -46,9 +61,14 @@ function finiteNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(number) ? number : fallback;
 }
 
-function usesLegacyWaypointExport(data: Readonly<Record<string, unknown>>): boolean {
+function usesLegacyWaypointExport(
+  data: Readonly<Record<string, unknown>>,
+): boolean {
   if (data["planned-segment-export"] === true) return false;
-  const meta = data.meta && typeof data.meta === "object" ? data.meta as Record<string, unknown> : null;
+  const meta =
+    data.meta && typeof data.meta === "object"
+      ? (data.meta as Record<string, unknown>)
+      : null;
   const schemaVersion = Number(meta?.SchemaVersion);
   return !Number.isFinite(schemaVersion) || schemaVersion < 4;
 }
@@ -61,10 +81,13 @@ function migrateLegacyWaypointExport(waypoints: PlanningWaypoint[]): void {
     const source = waypoints[index]!;
     const destination = legacyWaypoints[index + 1]!;
     source.speed = destination.speed;
-    if (Object.prototype.hasOwnProperty.call(destination, "overrideCode")) source.overrideCode = destination.overrideCode ?? "";
+    if (Object.prototype.hasOwnProperty.call(destination, "overrideCode"))
+      source.overrideCode = destination.overrideCode ?? "";
     else delete source.overrideCode;
     if (Object.prototype.hasOwnProperty.call(destination, "indicatorIcons")) {
-      source.indicatorIcons = normalizeWaypointIndicatorIcons(destination.indicatorIcons);
+      source.indicatorIcons = normalizeWaypointIndicatorIcons(
+        destination.indicatorIcons,
+      );
     } else delete source.indicatorIcons;
   }
   const finalWaypoint = waypoints.at(-1)!;
@@ -86,7 +109,11 @@ export class PlanningSession {
   routeRevision = 0;
   readonly undoStack: PlanningHistorySnapshot[] = [];
   readonly redoStack: PlanningHistorySnapshot[] = [];
-  #transaction: { snapshot: PlanningHistorySnapshot; kind: PlanningDocumentChangeKind; changed: boolean } | null = null;
+  #transaction: {
+    snapshot: PlanningHistorySnapshot;
+    kind: PlanningDocumentChangeKind;
+    changed: boolean;
+  } | null = null;
 
   constructor(
     readonly events: PlanningEvents,
@@ -96,7 +123,11 @@ export class PlanningSession {
     this.exportTemplate = defaultExportTemplate;
   }
 
-  mutate(kind: PlanningDocumentChangeKind, mutation: () => void, recordHistory = true): void {
+  mutate(
+    kind: PlanningDocumentChangeKind,
+    mutation: () => void,
+    recordHistory = true,
+  ): void {
     const before = recordHistory && !this.#transaction ? this.snapshot() : null;
     mutation();
     this.maintainDocumentInvariants();
@@ -108,14 +139,20 @@ export class PlanningSession {
       return;
     }
     if (before) this.pushUndoSnapshot(before);
-    if (kind === "route" || kind === "imported" || kind === "cleared" || kind === "history") {
+    if (
+      kind === "route" ||
+      kind === "imported" ||
+      kind === "cleared" ||
+      kind === "history"
+    ) {
       this.events.projectionChanged.emit({ kind: "route" });
     }
     this.events.documentChanged.emit({ kind });
   }
 
   beginTransaction(kind: PlanningDocumentChangeKind): void {
-    if (!this.#transaction) this.#transaction = { snapshot: this.snapshot(), kind, changed: false };
+    if (!this.#transaction)
+      this.#transaction = { snapshot: this.snapshot(), kind, changed: false };
   }
 
   commitTransaction(): void {
@@ -162,32 +199,43 @@ export class PlanningSession {
   }
 
   load(value: unknown): void {
-    const data = value && typeof value === "object" ? value as Record<string, unknown> : {};
+    const data =
+      value && typeof value === "object"
+        ? (value as Record<string, unknown>)
+        : {};
     const waypoints = Array.isArray(data["planned-path"])
       ? data["planned-path"].map((raw) => {
-        const point = raw as Record<string, unknown>;
-        const waypoint: PlanningWaypoint = {
-          x: finiteNumber(point?.x),
-          y: finiteNumber(point?.y),
-          theta: finiteNumber(point?.theta),
-          speed: Number.isFinite(Number(point?.speed))
-            ? Math.max(1, Math.min(127, Number(point?.speed)))
-            : 127,
-        };
-        const indicatorIcons = normalizeWaypointIndicatorIcons(point?.indicatorIcons);
-        if (indicatorIcons.length) waypoint.indicatorIcons = indicatorIcons;
-        if (Object.prototype.hasOwnProperty.call(point || {}, "overrideCode") && typeof point?.overrideCode === "string") {
-          waypoint.overrideCode = point.overrideCode;
-        }
-        return waypoint;
-      }) : [];
+          const point = raw as Record<string, unknown>;
+          const waypoint: PlanningWaypoint = {
+            x: finiteNumber(point?.x),
+            y: finiteNumber(point?.y),
+            theta: finiteNumber(point?.theta),
+            speed: Number.isFinite(Number(point?.speed))
+              ? Math.max(1, Math.min(127, Number(point?.speed)))
+              : 127,
+          };
+          const indicatorIcons = normalizeWaypointIndicatorIcons(
+            point?.indicatorIcons,
+          );
+          if (indicatorIcons.length) waypoint.indicatorIcons = indicatorIcons;
+          if (
+            Object.prototype.hasOwnProperty.call(point || {}, "overrideCode") &&
+            typeof point?.overrideCode === "string"
+          ) {
+            waypoint.overrideCode = point.overrideCode;
+          }
+          return waypoint;
+        })
+      : [];
     if (usesLegacyWaypointExport(data)) migrateLegacyWaypointExport(waypoints);
     this.replace(this.waypoints, waypoints);
     this.replace(this.objects, normalizePlanObjects(data["planned-objects"]));
     this.replace(this.nodes, normalizePlanNodes(data["planned-nodes"]));
     if (data["planned-export-template"] !== undefined) {
       const template = String(data["planned-export-template"] || "");
-      this.exportTemplate = template.trim() ? template : this.defaultExportTemplate;
+      this.exportTemplate = template.trim()
+        ? template
+        : this.defaultExportTemplate;
     }
     this.maintainDocumentInvariants();
     this.routeRevision += 1;
@@ -232,7 +280,9 @@ export class PlanningSession {
     for (const index of snapshot.selected) this.selectedWaypoints.add(index);
     this.selectedWaypoint = snapshot.selectedIndex;
     this.selectedNodeId = snapshot.selectedNodeId;
-    this.selectedMethod = snapshot.selectedMethod ? { ...snapshot.selectedMethod } : null;
+    this.selectedMethod = snapshot.selectedMethod
+      ? { ...snapshot.selectedMethod }
+      : null;
     this.playbackDistance = snapshot.playDist;
     this.exportTemplate = snapshot.exportTemplate || this.defaultExportTemplate;
     this.maintainDocumentInvariants();
@@ -247,17 +297,19 @@ export class PlanningSession {
   }
 
   private matchesCurrent(snapshot: PlanningHistorySnapshot): boolean {
-    return snapshot.selectedIndex === this.selectedWaypoint
-      && snapshot.selectedNodeId === this.selectedNodeId
-      && snapshot.selectedMethod?.objectId === this.selectedMethod?.objectId
-      && snapshot.selectedMethod?.methodId === this.selectedMethod?.methodId
-      && snapshot.playDist === this.playbackDistance
-      && snapshot.exportTemplate === this.exportTemplate
-      && snapshot.selected.length === this.selectedWaypoints.size
-      && snapshot.selected.every((index) => this.selectedWaypoints.has(index))
-      && JSON.stringify(snapshot.waypoints) === JSON.stringify(this.waypoints)
-      && JSON.stringify(snapshot.objects) === JSON.stringify(this.objects)
-      && JSON.stringify(snapshot.nodes) === JSON.stringify(this.nodes);
+    return (
+      snapshot.selectedIndex === this.selectedWaypoint &&
+      snapshot.selectedNodeId === this.selectedNodeId &&
+      snapshot.selectedMethod?.objectId === this.selectedMethod?.objectId &&
+      snapshot.selectedMethod?.methodId === this.selectedMethod?.methodId &&
+      snapshot.playDist === this.playbackDistance &&
+      snapshot.exportTemplate === this.exportTemplate &&
+      snapshot.selected.length === this.selectedWaypoints.size &&
+      snapshot.selected.every((index) => this.selectedWaypoints.has(index)) &&
+      JSON.stringify(snapshot.waypoints) === JSON.stringify(this.waypoints) &&
+      JSON.stringify(snapshot.objects) === JSON.stringify(this.objects) &&
+      JSON.stringify(snapshot.nodes) === JSON.stringify(this.nodes)
+    );
   }
 
   private resetTransientDomainState(): void {
@@ -278,29 +330,52 @@ export class PlanningSession {
     for (let index = this.nodes.length - 1; index >= 0; index -= 1) {
       const node = this.nodes[index];
       const object = node ? objects.get(node.objectId) : null;
-      if (!node || !hasRouteSegments || !object?.methods.some((method) => method.id === node.methodId)) {
+      if (
+        !node ||
+        !hasRouteSegments ||
+        !object?.methods.some((method) => method.id === node.methodId)
+      ) {
         this.nodes.splice(index, 1);
         continue;
       }
-      node.beforeWaypoint = Math.max(0, Math.min(maxBucket, Math.round(Number(node.beforeWaypoint) || 0)));
+      node.beforeWaypoint = Math.max(
+        0,
+        Math.min(maxBucket, Math.round(Number(node.beforeWaypoint) || 0)),
+      );
       node.index = Math.max(0, Math.round(Number(node.index) || 0));
     }
-    this.nodes.sort((a, b) => a.beforeWaypoint - b.beforeWaypoint || a.index - b.index || a.id.localeCompare(b.id));
+    this.nodes.sort(
+      (a, b) =>
+        a.beforeWaypoint - b.beforeWaypoint ||
+        a.index - b.index ||
+        a.id.localeCompare(b.id),
+    );
     const bucketCounts = new Map<number, number>();
     for (const node of this.nodes) {
       const index = bucketCounts.get(node.beforeWaypoint) ?? 0;
       node.index = index;
       bucketCounts.set(node.beforeWaypoint, index + 1);
     }
-    if (this.selectedNodeId && !this.nodes.some((node) => node.id === this.selectedNodeId)) this.selectedNodeId = null;
-    if (this.selectedMethod && !objects.get(this.selectedMethod.objectId)?.methods.some((method) => method.id === this.selectedMethod?.methodId)) {
+    if (
+      this.selectedNodeId &&
+      !this.nodes.some((node) => node.id === this.selectedNodeId)
+    )
+      this.selectedNodeId = null;
+    if (
+      this.selectedMethod &&
+      !objects
+        .get(this.selectedMethod.objectId)
+        ?.methods.some((method) => method.id === this.selectedMethod?.methodId)
+    ) {
       this.selectedMethod = null;
     }
     for (const index of [...this.selectedWaypoints]) {
-      if (index < 0 || index >= this.waypoints.length) this.selectedWaypoints.delete(index);
+      if (index < 0 || index >= this.waypoints.length)
+        this.selectedWaypoints.delete(index);
     }
     if (!this.selectedWaypoints.has(this.selectedWaypoint)) {
-      this.selectedWaypoint = this.selectedWaypoints.values().next().value ?? -1;
+      this.selectedWaypoint =
+        this.selectedWaypoints.values().next().value ?? -1;
     }
   }
 

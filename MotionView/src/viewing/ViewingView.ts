@@ -29,8 +29,17 @@ export class ViewingView {
   ) {
     this.#watchGraph = new WatchGraphView(viewing, dom.graph);
     this.#floatingInfo = new FloatingInfoView(viewing, dom.floating);
-    this.#sidebar = new ViewingSidebarView(viewing, dom.lists, this.#floatingInfo, this.#watchGraph);
-    this.#readout = new PoseReadoutView(viewing, dom.readout, this.#floatingInfo);
+    this.#sidebar = new ViewingSidebarView(
+      viewing,
+      dom.lists,
+      this.#floatingInfo,
+      this.#watchGraph,
+    );
+    this.#readout = new PoseReadoutView(
+      viewing,
+      dom.readout,
+      this.#floatingInfo,
+    );
     this.#watchTooltip = new WatchTooltipView(dom.tooltip);
     this.fieldLayer = new ViewingFieldView(
       viewing,
@@ -57,7 +66,9 @@ export class ViewingView {
     this.#watchTooltip.bind();
     this.fieldLayer.bind();
     this.timelineLayer.bind();
-    this.viewing.events.dataChanged.subscribe((change) => this.handleDataChanged(change));
+    this.viewing.events.dataChanged.subscribe((change) =>
+      this.handleDataChanged(change),
+    );
     this.viewing.events.navigationChanged.subscribe(({ kind }) => {
       // A hover preview only affects the field, timeline, and readout. Refreshing
       // the virtualized lists here would replace the row currently being hovered.

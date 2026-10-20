@@ -24,18 +24,27 @@ export class ViewingPlayback {
     });
     events.navigationChanged.subscribe(({ kind }) => {
       if (this.#playing || kind === "hover" || kind === "live-state") return;
-      const time = this.navigation.trackLockPose?.t
-        ?? this.projection.poseAt(this.navigation.selectedIndex)?.t
-        ?? null;
+      const time =
+        this.navigation.trackLockPose?.t ??
+        this.projection.poseAt(this.navigation.selectedIndex)?.t ??
+        null;
       this.#timeMs = time;
       this.#pose = this.projection.interpolatePose(time);
     });
   }
 
-  get isPlaying(): boolean { return this.#playing; }
-  get rate(): number { return this.#rate; }
-  get timeMs(): number | null { return this.#timeMs; }
-  get pose(): Readonly<Pose> | null { return this.#pose; }
+  get isPlaying(): boolean {
+    return this.#playing;
+  }
+  get rate(): number {
+    return this.#rate;
+  }
+  get timeMs(): number | null {
+    return this.#timeMs;
+  }
+  get pose(): Readonly<Pose> | null {
+    return this.#pose;
+  }
 
   setRate(rate: number): void {
     const next = Number.isFinite(rate) && rate > 0 ? rate : 1;
@@ -48,7 +57,9 @@ export class ViewingPlayback {
     this.#timeMs = timeMs;
     this.#pose = this.projection.interpolatePose(timeMs);
     if (timeMs != null) {
-      this.navigation.selectPose(this.projection.findFloorIndex(timeMs), { preserveDetails: true });
+      this.navigation.selectPose(this.projection.findFloorIndex(timeMs), {
+        preserveDetails: true,
+      });
     }
     this.events.playbackChanged.emit({ kind: "frame" });
   }
@@ -57,7 +68,10 @@ export class ViewingPlayback {
     const range = this.projection.timeRange();
     if (!range || this.#playing) return;
     this.#playing = true;
-    this.#timeMs = this.#timeMs == null || this.#timeMs >= range.end ? range.start : this.#timeMs;
+    this.#timeMs =
+      this.#timeMs == null || this.#timeMs >= range.end
+        ? range.start
+        : this.#timeMs;
     this.#lastWallTime = null;
     this.events.playbackChanged.emit({ kind: "started" });
     this.#frame = requestAnimationFrame(this.tick);
@@ -70,7 +84,10 @@ export class ViewingPlayback {
     if (!this.#playing) return;
     this.#playing = false;
     if (this.#pose && this.#timeMs != null) {
-      this.navigation.lockTrack(this.#pose, this.projection.findFloorIndex(this.#timeMs));
+      this.navigation.lockTrack(
+        this.#pose,
+        this.projection.findFloorIndex(this.#timeMs),
+      );
     }
     this.events.playbackChanged.emit({ kind: "paused" });
   }
@@ -81,25 +98,32 @@ export class ViewingPlayback {
   }
 
   currentDisplayPose(): Readonly<Pose> | null {
-    if (this.#playing) return this.#pose ?? this.projection.interpolatePose(this.#timeMs);
-    if (this.navigation.hoverTimelineTime != null) return this.projection.interpolatePose(this.navigation.hoverTimelineTime);
+    if (this.#playing)
+      return this.#pose ?? this.projection.interpolatePose(this.#timeMs);
+    if (this.navigation.hoverTimelineTime != null)
+      return this.projection.interpolatePose(this.navigation.hoverTimelineTime);
     if (this.navigation.trackHoverPose) return this.navigation.trackHoverPose;
     if (this.navigation.trackLockPose) return this.navigation.trackLockPose;
     return this.projection.poseAt(this.navigation.selectedIndex);
   }
 
   currentDisplayIndex(): number {
-    if (this.#playing && this.#timeMs != null) return this.projection.findFloorIndex(this.#timeMs);
-    if (this.navigation.hoverTimelineTime != null) return this.projection.findFloorIndex(this.navigation.hoverTimelineTime);
-    if (this.navigation.trackHoverTime != null) return this.projection.findFloorIndex(this.navigation.trackHoverTime);
-    if (this.navigation.trackLockIndex != null) return this.navigation.trackLockIndex;
+    if (this.#playing && this.#timeMs != null)
+      return this.projection.findFloorIndex(this.#timeMs);
+    if (this.navigation.hoverTimelineTime != null)
+      return this.projection.findFloorIndex(this.navigation.hoverTimelineTime);
+    if (this.navigation.trackHoverTime != null)
+      return this.projection.findFloorIndex(this.navigation.trackHoverTime);
+    if (this.navigation.trackLockIndex != null)
+      return this.navigation.trackLockIndex;
     return this.navigation.selectedIndex;
   }
 
   currentDisplayDeltaMs(): number | null {
     const displayTime = this.currentDisplayPose()?.t;
-    const anchorTime = this.navigation.trackLockPose?.t
-      ?? this.projection.poseAt(this.navigation.selectedIndex)?.t;
+    const anchorTime =
+      this.navigation.trackLockPose?.t ??
+      this.projection.poseAt(this.navigation.selectedIndex)?.t;
     if (displayTime == null || anchorTime == null) return null;
     return Math.abs(displayTime - anchorTime);
   }
@@ -116,7 +140,10 @@ export class ViewingPlayback {
     this.#lastWallTime = wallTime;
     this.#timeMs = Math.min(range.end, (this.#timeMs ?? range.start) + elapsed);
     this.#pose = this.projection.interpolatePose(this.#timeMs);
-    this.navigation.selectPose(this.projection.findFloorIndex(this.#timeMs), { preserveDetails: true, markSelected: false });
+    this.navigation.selectPose(this.projection.findFloorIndex(this.#timeMs), {
+      preserveDetails: true,
+      markSelected: false,
+    });
     this.events.playbackChanged.emit({ kind: "frame" });
     if (this.#timeMs >= range.end) this.pause();
     else this.#frame = requestAnimationFrame(this.tick);

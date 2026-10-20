@@ -3,7 +3,11 @@ import type { ChartDataset } from "chart.js";
 import type { ViewingGraphDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
 import type { WatchMarker } from "../viewingTypes";
-import { formatNumber, isGraphableWatchValue, watchGraphKey } from "../viewingPresentation";
+import {
+  formatNumber,
+  isGraphableWatchValue,
+  watchGraphKey,
+} from "../viewingPresentation";
 
 const PRIMARY_COLOR = "#6ea8ff";
 const COMPARISON_COLOR = "#ff810c";
@@ -33,7 +37,12 @@ export class WatchGraphView {
   #primaryMarkers: readonly Readonly<WatchMarker>[] = [];
   #comparisonMarkers: readonly Readonly<WatchMarker>[] = [];
   #dragOffset: Readonly<{ x: number; y: number }> | null = null;
-  #resizeStart: Readonly<{ x: number; y: number; width: number; height: number }> | null = null;
+  #resizeStart: Readonly<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }> | null = null;
   readonly #stateListeners = new Set<() => void>();
 
   constructor(
@@ -45,54 +54,82 @@ export class WatchGraphView {
     this.dom.close.addEventListener("click", () => this.hide());
     this.dom.compareSelect.addEventListener("change", () => this.render());
     this.dom.header.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || (event.target instanceof Element && event.target.closest("button,select"))) return;
+      if (
+        event.button !== 0 ||
+        (event.target instanceof Element &&
+          event.target.closest("button,select"))
+      )
+        return;
       const rect = this.dom.panel.getBoundingClientRect();
-      this.#dragOffset = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      this.#dragOffset = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      };
       this.dom.header.setPointerCapture?.(event.pointerId);
     });
     this.dom.resizer.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
       event.preventDefault();
       const rect = this.dom.panel.getBoundingClientRect();
-      this.#resizeStart = { x: event.clientX, y: event.clientY, width: rect.width, height: rect.height };
+      this.#resizeStart = {
+        x: event.clientX,
+        y: event.clientY,
+        width: rect.width,
+        height: rect.height,
+      };
       this.dom.resizer.setPointerCapture?.(event.pointerId);
     });
-    window.addEventListener("pointermove", (event) => this.handlePointerMove(event));
+    window.addEventListener("pointermove", (event) =>
+      this.handlePointerMove(event),
+    );
     window.addEventListener("pointerup", () => {
       this.#dragOffset = null;
       this.#resizeStart = null;
     });
-    this.dom.canvas.addEventListener("wheel", (event) => {
-      if (!this.#chart) return;
-      event.preventDefault();
-      const scale = this.#chart.scales.x;
-      const range = Number(scale.max) - Number(scale.min);
-      const bounds = this.#xBounds;
-      if (!bounds || !Number.isFinite(range) || range <= 0) return;
-      const dataRange = bounds.maximum - bounds.minimum;
-      if (dataRange <= 0) return;
-      const factor = Math.exp(event.deltaY * 0.0012);
-      const currentMinimum = Number(scale.min);
-      const cursorValue = Number(scale.getValueForPixel(event.offsetX));
-      const anchor = Number.isFinite(cursorValue)
-        ? Math.max(Number(scale.min), Math.min(Number(scale.max), cursorValue))
-        : (Number(scale.max) + currentMinimum) / 2;
-      const anchorRatio = Math.max(0, Math.min(1, (anchor - currentMinimum) / range));
-      const nextRange = Math.min(dataRange, Math.max(Math.min(0.1, dataRange), range * factor));
-      let minimum = anchor - nextRange * anchorRatio;
-      let maximum = minimum + nextRange;
-      if (minimum < bounds.minimum) {
-        minimum = bounds.minimum;
-        maximum = minimum + nextRange;
-      }
-      if (maximum > bounds.maximum) {
-        maximum = bounds.maximum;
-        minimum = maximum - nextRange;
-      }
-      this.#chart.options.scales!.x!.min = minimum;
-      this.#chart.options.scales!.x!.max = maximum;
-      this.#chart.update("none");
-    }, { passive: false });
+    this.dom.canvas.addEventListener(
+      "wheel",
+      (event) => {
+        if (!this.#chart) return;
+        event.preventDefault();
+        const scale = this.#chart.scales.x;
+        const range = Number(scale.max) - Number(scale.min);
+        const bounds = this.#xBounds;
+        if (!bounds || !Number.isFinite(range) || range <= 0) return;
+        const dataRange = bounds.maximum - bounds.minimum;
+        if (dataRange <= 0) return;
+        const factor = Math.exp(event.deltaY * 0.0012);
+        const currentMinimum = Number(scale.min);
+        const cursorValue = Number(scale.getValueForPixel(event.offsetX));
+        const anchor = Number.isFinite(cursorValue)
+          ? Math.max(
+              Number(scale.min),
+              Math.min(Number(scale.max), cursorValue),
+            )
+          : (Number(scale.max) + currentMinimum) / 2;
+        const anchorRatio = Math.max(
+          0,
+          Math.min(1, (anchor - currentMinimum) / range),
+        );
+        const nextRange = Math.min(
+          dataRange,
+          Math.max(Math.min(0.1, dataRange), range * factor),
+        );
+        let minimum = anchor - nextRange * anchorRatio;
+        let maximum = minimum + nextRange;
+        if (minimum < bounds.minimum) {
+          minimum = bounds.minimum;
+          maximum = minimum + nextRange;
+        }
+        if (maximum > bounds.maximum) {
+          maximum = bounds.maximum;
+          minimum = maximum - nextRange;
+        }
+        this.#chart.options.scales!.x!.min = minimum;
+        this.#chart.options.scales!.x!.max = maximum;
+        this.#chart.update("none");
+      },
+      { passive: false },
+    );
     this.dom.canvas.addEventListener("mousemove", (event) => {
       if (!this.#chart || this.viewing.playback.isPlaying) return;
       const marker = this.nearestMarkerAtPixel(event.offsetX);
@@ -104,11 +141,18 @@ export class WatchGraphView {
       this.viewing.navigation.setTimelineHover(null);
     });
     this.dom.canvas.addEventListener("mousedown", (event) => {
-      if (!this.#chart || this.viewing.playback.isPlaying || this.viewing.navigation.livestreaming) return;
+      if (
+        !this.#chart ||
+        this.viewing.playback.isPlaying ||
+        this.viewing.navigation.livestreaming
+      )
+        return;
       const marker = this.nearestMarkerAtPixel(event.offsetX);
       if (!marker) return;
-      const pose = this.viewing.projection.interpolatePose(marker.t) ?? marker.pose;
-      const index = marker.idx ?? this.viewing.projection.findFloorIndex(marker.t);
+      const pose =
+        this.viewing.projection.interpolatePose(marker.t) ?? marker.pose;
+      const index =
+        marker.idx ?? this.viewing.projection.findFloorIndex(marker.t);
       if (!pose || index < 0) return;
       this.viewing.navigation.setTimelineHover(null);
       this.viewing.navigation.lockTrack(pose, index);
@@ -137,7 +181,10 @@ export class WatchGraphView {
   }
 
   isOpenFor(marker: Readonly<WatchMarker>): boolean {
-    return this.#key === watchGraphKey(marker.watch) && !this.dom.panel.classList.contains("hidden");
+    return (
+      this.#key === watchGraphKey(marker.watch) &&
+      !this.dom.panel.classList.contains("hidden")
+    );
   }
 
   toggle(): void {
@@ -180,7 +227,9 @@ export class WatchGraphView {
 
   updatePlayhead(): void {
     if (!this.#key || this.dom.panel.classList.contains("hidden")) return;
-    this.renderLatestValues(this.viewing.playback.currentDisplayPose()?.t ?? null);
+    this.renderLatestValues(
+      this.viewing.playback.currentDisplayPose()?.t ?? null,
+    );
   }
 
   render(): void {
@@ -198,71 +247,117 @@ export class WatchGraphView {
       this.#watchId = representative.id;
     }
     this.dom.title.textContent = this.#label;
-    this.dom.subtitle.textContent = this.#watchId == null ? "ID: —" : `ID: ${this.#watchId}`;
+    this.dom.subtitle.textContent =
+      this.#watchId == null ? "ID: —" : `ID: ${this.#watchId}`;
     this.renderCompareOptions();
     this.renderStats(primary, comparison);
-    const datasets: ChartDataset<"line", Array<{ x: number; y: number }>>[] = [];
+    const datasets: ChartDataset<"line", Array<{ x: number; y: number }>>[] =
+      [];
     const primaryData = this.points(primary);
     const primaryBoolean = this.isBooleanSeries(primary);
-    if (primaryData.length) datasets.push(this.dataset(representative?.label || "Watch", primaryData, PRIMARY_COLOR, primaryBoolean));
+    if (primaryData.length)
+      datasets.push(
+        this.dataset(
+          representative?.label || "Watch",
+          primaryData,
+          PRIMARY_COLOR,
+          primaryBoolean,
+        ),
+      );
     const compareData = this.points(comparison);
     const comparisonBoolean = this.isBooleanSeries(comparison);
-    if (compareData.length) datasets.push(this.dataset(comparison.at(-1)?.watch.label || "Compare", compareData, COMPARISON_COLOR, comparisonBoolean));
+    if (compareData.length)
+      datasets.push(
+        this.dataset(
+          comparison.at(-1)?.watch.label || "Compare",
+          compareData,
+          COMPARISON_COLOR,
+          comparisonBoolean,
+        ),
+      );
     const allPoints = [...primaryData, ...compareData];
     const times = allPoints.map((point) => point.x);
     const minimumTime = times.length ? Math.min(...times) : 0;
     const maximumTime = times.length ? Math.max(...times) : 0;
-    this.#xBounds = times.length ? { minimum: minimumTime, maximum: maximumTime } : null;
-    const viewport = this.nextViewport(previousViewport, previousBounds, this.#xBounds);
-    const allBoolean = datasets.length > 0 && (!primaryData.length || primaryBoolean) && (!compareData.length || comparisonBoolean);
+    this.#xBounds = times.length
+      ? { minimum: minimumTime, maximum: maximumTime }
+      : null;
+    const viewport = this.nextViewport(
+      previousViewport,
+      previousBounds,
+      this.#xBounds,
+    );
+    const allBoolean =
+      datasets.length > 0 &&
+      (!primaryData.length || primaryBoolean) &&
+      (!compareData.length || comparisonBoolean);
     this.dom.empty.classList.toggle("hidden", datasets.length > 0);
     this.#chart?.destroy();
-    this.#chart = datasets.length ? new Chart(this.dom.canvas, {
-      type: "line",
-      data: { datasets },
-      options: {
-        animation: false,
-        parsing: false,
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { intersect: false, mode: "nearest" },
-        plugins: {
-          legend: { display: false },
-        },
-        scales: {
-          x: {
-            type: "linear",
-            min: minimumTime === maximumTime ? undefined : viewport?.minimum ?? minimumTime,
-            max: minimumTime === maximumTime ? undefined : viewport?.maximum ?? maximumTime,
-            grid: { color: "rgba(255,255,255,.08)" },
-            border: { color: "rgba(255,255,255,.18)" },
-            ticks: { color: "rgba(255,255,255,.62)", callback: (value) => `${formatNumber(Number(value), 2)}s` },
-          },
-          y: {
-            type: "linear",
-            min: allBoolean ? 0 : undefined,
-            max: allBoolean ? 1 : undefined,
-            grid: { color: "rgba(255,255,255,.08)" },
-            border: { color: "rgba(255,255,255,.18)" },
-            ticks: {
-              color: "rgba(255,255,255,.62)",
-              stepSize: allBoolean ? 1 : undefined,
-              callback: allBoolean
-                ? (value) => Number(value) === 0 || Number(value) === 1 ? String(value) : ""
-                : (value) => formatNumber(Number(value), 2),
+    this.#chart = datasets.length
+      ? new Chart(this.dom.canvas, {
+          type: "line",
+          data: { datasets },
+          options: {
+            animation: false,
+            parsing: false,
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { intersect: false, mode: "nearest" },
+            plugins: {
+              legend: { display: false },
+            },
+            scales: {
+              x: {
+                type: "linear",
+                min:
+                  minimumTime === maximumTime
+                    ? undefined
+                    : (viewport?.minimum ?? minimumTime),
+                max:
+                  minimumTime === maximumTime
+                    ? undefined
+                    : (viewport?.maximum ?? maximumTime),
+                grid: { color: "rgba(255,255,255,.08)" },
+                border: { color: "rgba(255,255,255,.18)" },
+                ticks: {
+                  color: "rgba(255,255,255,.62)",
+                  callback: (value) => `${formatNumber(Number(value), 2)}s`,
+                },
+              },
+              y: {
+                type: "linear",
+                min: allBoolean ? 0 : undefined,
+                max: allBoolean ? 1 : undefined,
+                grid: { color: "rgba(255,255,255,.08)" },
+                border: { color: "rgba(255,255,255,.18)" },
+                ticks: {
+                  color: "rgba(255,255,255,.62)",
+                  stepSize: allBoolean ? 1 : undefined,
+                  callback: allBoolean
+                    ? (value) =>
+                        Number(value) === 0 || Number(value) === 1
+                          ? String(value)
+                          : ""
+                    : (value) => formatNumber(Number(value), 2),
+                },
+              },
             },
           },
-        },
-      },
-    }) : null;
+        })
+      : null;
   }
 
-  private captureViewport(): Readonly<{ minimum: number; maximum: number }> | null {
+  private captureViewport(): Readonly<{
+    minimum: number;
+    maximum: number;
+  }> | null {
     const scale = this.#chart?.scales.x;
     if (!scale) return null;
     const minimum = Number(scale.min);
     const maximum = Number(scale.max);
-    return Number.isFinite(minimum) && Number.isFinite(maximum) && maximum > minimum
+    return Number.isFinite(minimum) &&
+      Number.isFinite(maximum) &&
+      maximum > minimum
       ? { minimum, maximum }
       : null;
   }
@@ -278,7 +373,8 @@ export class WatchGraphView {
     const epsilon = Math.max(0.0001, dataRange * 0.001);
     if (viewRange >= dataRange - epsilon) return nextBounds;
 
-    const followsLatest = Math.abs(viewport.maximum - previousBounds.maximum) <= epsilon;
+    const followsLatest =
+      Math.abs(viewport.maximum - previousBounds.maximum) <= epsilon;
     let maximum = followsLatest ? nextBounds.maximum : viewport.maximum;
     let minimum = followsLatest ? maximum - viewRange : viewport.minimum;
     if (minimum < nextBounds.minimum) {
@@ -296,10 +392,14 @@ export class WatchGraphView {
   }
 
   private markersForKey(key: string): Readonly<WatchMarker>[] {
-    return this.viewing.projection.watchMarkers.filter((marker) => watchGraphKey(marker.watch) === key);
+    return this.viewing.projection.watchMarkers.filter(
+      (marker) => watchGraphKey(marker.watch) === key,
+    );
   }
 
-  private points(markers: readonly Readonly<WatchMarker>[]): Array<{ x: number; y: number }> {
+  private points(
+    markers: readonly Readonly<WatchMarker>[],
+  ): Array<{ x: number; y: number }> {
     const points: Array<{ x: number; y: number }> = [];
     for (const marker of markers) {
       const value = numericValue(marker.watch.value);
@@ -309,7 +409,10 @@ export class WatchGraphView {
   }
 
   private isBooleanSeries(markers: readonly Readonly<WatchMarker>[]): boolean {
-    return markers.length > 0 && markers.every((marker) => booleanValue(marker.watch.value) != null);
+    return (
+      markers.length > 0 &&
+      markers.every((marker) => booleanValue(marker.watch.value) != null)
+    );
   }
 
   private dataset(
@@ -342,7 +445,8 @@ export class WatchGraphView {
     const keys = new Map<string, string>();
     for (const watch of this.viewing.data.watches) {
       const key = watchGraphKey(watch);
-      if (key !== this.#key && isGraphableWatchValue(watch.value)) keys.set(key, watch.label || key);
+      if (key !== this.#key && isGraphableWatchValue(watch.value))
+        keys.set(key, watch.label || key);
     }
     for (const [key, label] of keys) {
       const option = document.createElement("option");
@@ -353,22 +457,62 @@ export class WatchGraphView {
     this.dom.compareSelect.value = keys.has(current) ? current : "";
   }
 
-  private renderStats(primary: readonly Readonly<WatchMarker>[], comparison: readonly Readonly<WatchMarker>[]): void {
-    const write = (markers: readonly Readonly<WatchMarker>[], count: HTMLElement, average: HTMLElement, minimum: HTMLElement, maximum: HTMLElement) => {
-      const values = markers.map((marker) => numericValue(marker.watch.value)).filter((value): value is number => value != null);
+  private renderStats(
+    primary: readonly Readonly<WatchMarker>[],
+    comparison: readonly Readonly<WatchMarker>[],
+  ): void {
+    const write = (
+      markers: readonly Readonly<WatchMarker>[],
+      count: HTMLElement,
+      average: HTMLElement,
+      minimum: HTMLElement,
+      maximum: HTMLElement,
+    ) => {
+      const values = markers
+        .map((marker) => numericValue(marker.watch.value))
+        .filter((value): value is number => value != null);
       count.textContent = values.length ? String(values.length) : "—";
-      average.textContent = values.length ? formatNumber(values.reduce((sum, value) => sum + value, 0) / values.length, 3) : "—";
-      minimum.textContent = values.length ? formatNumber(Math.min(...values), 3) : "—";
-      maximum.textContent = values.length ? formatNumber(Math.max(...values), 3) : "—";
+      average.textContent = values.length
+        ? formatNumber(
+            values.reduce((sum, value) => sum + value, 0) / values.length,
+            3,
+          )
+        : "—";
+      minimum.textContent = values.length
+        ? formatNumber(Math.min(...values), 3)
+        : "—";
+      maximum.textContent = values.length
+        ? formatNumber(Math.max(...values), 3)
+        : "—";
     };
-    write(primary, this.dom.count, this.dom.average, this.dom.minimum, this.dom.maximum);
-    write(comparison, this.dom.compareCount, this.dom.compareAverage, this.dom.compareMinimum, this.dom.compareMaximum);
-    this.renderLatestValues(this.viewing.playback.currentDisplayPose()?.t ?? null);
+    write(
+      primary,
+      this.dom.count,
+      this.dom.average,
+      this.dom.minimum,
+      this.dom.maximum,
+    );
+    write(
+      comparison,
+      this.dom.compareCount,
+      this.dom.compareAverage,
+      this.dom.compareMinimum,
+      this.dom.compareMaximum,
+    );
+    this.renderLatestValues(
+      this.viewing.playback.currentDisplayPose()?.t ?? null,
+    );
   }
 
   private renderLatestValues(time: number | null): void {
-    const write = (markers: readonly Readonly<WatchMarker>[], element: HTMLElement) => {
-      const marker = time == null ? markers.at(-1) : this.latestMarkerAtOrBefore(markers, time);
+    const write = (
+      markers: readonly Readonly<WatchMarker>[],
+      element: HTMLElement,
+    ) => {
+      const marker =
+        time == null
+          ? markers.at(-1)
+          : this.latestMarkerAtOrBefore(markers, time);
       const value = numericValue(marker?.watch.value);
       element.textContent = value == null ? "—" : formatNumber(value, 3);
     };
@@ -376,7 +520,10 @@ export class WatchGraphView {
     write(this.#comparisonMarkers, this.dom.compareLatest);
   }
 
-  private latestMarkerAtOrBefore(markers: readonly Readonly<WatchMarker>[], time: number): Readonly<WatchMarker> | null {
+  private latestMarkerAtOrBefore(
+    markers: readonly Readonly<WatchMarker>[],
+    time: number,
+  ): Readonly<WatchMarker> | null {
     let low = 0;
     let high = markers.length - 1;
     while (low <= high) {
@@ -384,16 +531,19 @@ export class WatchGraphView {
       if ((markers[middle]?.t ?? Infinity) <= time) low = middle + 1;
       else high = middle - 1;
     }
-    return high >= 0 ? markers[high] ?? null : null;
+    return high >= 0 ? (markers[high] ?? null) : null;
   }
 
   private nearestMarkerAtPixel(pixel: number): Readonly<WatchMarker> | null {
     const chart = this.#chart;
-    if (!chart || pixel < chart.chartArea.left || pixel > chart.chartArea.right) return null;
+    if (!chart || pixel < chart.chartArea.left || pixel > chart.chartArea.right)
+      return null;
     const seconds = Number(chart.scales.x.getValueForPixel(pixel));
     if (!Number.isFinite(seconds)) return null;
     const time = seconds * 1000;
-    const nearest = (markers: readonly Readonly<WatchMarker>[]): Readonly<WatchMarker> | null => {
+    const nearest = (
+      markers: readonly Readonly<WatchMarker>[],
+    ): Readonly<WatchMarker> | null => {
       if (!markers.length) return null;
       let low = 0;
       let high = markers.length;
@@ -406,19 +556,29 @@ export class WatchGraphView {
       const after = markers[Math.min(markers.length - 1, low)] ?? null;
       if (!before) return after;
       if (!after) return before;
-      return Math.abs(before.t - time) <= Math.abs(after.t - time) ? before : after;
+      return Math.abs(before.t - time) <= Math.abs(after.t - time)
+        ? before
+        : after;
     };
     const primary = nearest(this.#primaryMarkers);
     const comparison = nearest(this.#comparisonMarkers);
     if (!primary) return comparison;
     if (!comparison) return primary;
-    return Math.abs(primary.t - time) <= Math.abs(comparison.t - time) ? primary : comparison;
+    return Math.abs(primary.t - time) <= Math.abs(comparison.t - time)
+      ? primary
+      : comparison;
   }
 
   private handlePointerMove(event: PointerEvent): void {
     if (this.#dragOffset) {
-      const maxLeft = Math.max(12, window.innerWidth - this.dom.panel.offsetWidth - 12);
-      const maxTop = Math.max(12, window.innerHeight - this.dom.panel.offsetHeight - 12);
+      const maxLeft = Math.max(
+        12,
+        window.innerWidth - this.dom.panel.offsetWidth - 12,
+      );
+      const maxTop = Math.max(
+        12,
+        window.innerHeight - this.dom.panel.offsetHeight - 12,
+      );
       this.dom.panel.style.left = `${Math.max(12, Math.min(maxLeft, event.clientX - this.#dragOffset.x))}px`;
       this.dom.panel.style.top = `${Math.max(12, Math.min(maxTop, event.clientY - this.#dragOffset.y))}px`;
     } else if (this.#resizeStart) {

@@ -2,21 +2,34 @@ import removeIconSvg from "../../assets/svg/planning/removePlanningObject.svg?ra
 import colorIconSvg from "../../assets/svg/planning/changeObjectColor.svg?raw";
 import { requestDrawAll } from "../../render/renderScheduler";
 import { setStatus } from "../../app/status";
-import { currentUnitsToInches, formatDistanceFromInches } from "../../shared/units";
+import {
+  currentUnitsToInches,
+  formatDistanceFromInches,
+} from "../../shared/units";
 import { planningTelemetry } from "../../telemetry/createTelemetry";
 import type { PlanWaypointIndicatorIcon } from "../../state/models";
 import type { PlanningDialogs } from "../PlanningDialogs";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningFeature } from "../PlanningFeature";
 import { getPlanNodeEffectiveMethod } from "../planningObjects";
-import { createWaypointIndicatorIcon, orderWaypointIndicatorIcons } from "../planningIndicators";
+import {
+  createWaypointIndicatorIcon,
+  orderWaypointIndicatorIcons,
+} from "../planningIndicators";
 import { generatePlanningCode } from "../planningCode";
-import { getContrastTextColor, getDefaultPlanObjectColor, getDefaultPlanObjectName } from "../planningState";
+import {
+  getContrastTextColor,
+  getDefaultPlanObjectColor,
+  getDefaultPlanObjectName,
+} from "../planningState";
 import type { PlanningDragCoordinator } from "./PlanningDragCoordinator";
 import type { PlanningWaypointEditor } from "../PlanningWaypointEditor";
 
 function icon(svg: string): string {
-  return svg.replace("<svg ", '<svg width="30" height="30" aria-hidden="true" focusable="false" ');
+  return svg.replace(
+    "<svg ",
+    '<svg width="30" height="30" aria-hidden="true" focusable="false" ',
+  );
 }
 function format(value: unknown, decimals = 2): string {
   const number = Number(value);
@@ -25,7 +38,8 @@ function format(value: unknown, decimals = 2): string {
   return decimals > 0 ? fixed.replace(/\.?0+$/, "") : fixed;
 }
 
-const METHOD_TEMPLATE_DESCRIPTION = "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}. They expand when this method is emitted by a placed timeline node.";
+const METHOD_TEMPLATE_DESCRIPTION =
+  "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}. They expand when this method is emitted by a placed timeline node.";
 
 export class PlanningSidebarView {
   #editingObjectId: string | null = null;
@@ -46,7 +60,10 @@ export class PlanningSidebarView {
     if (this.#bound) return;
     this.#bound = true;
     this.dom.addObject.addEventListener("click", () => void this.addObject());
-    this.dom.editTemplate.addEventListener("click", () => void this.editTemplate());
+    this.dom.editTemplate.addEventListener(
+      "click",
+      () => void this.editTemplate(),
+    );
     this.dom.editWaypoint.addEventListener("click", () => {
       const index = this.planning.selection.primaryWaypointIndex;
       if (index >= 0) void this.waypointEditor.edit(index);
@@ -56,11 +73,20 @@ export class PlanningSidebarView {
     this.bindSelectionField(this.dom.selectedY, "y");
     this.bindSelectionField(this.dom.selectedTheta, "theta");
     this.bindSelectionField(this.dom.selectedSpeed, "speed");
-    document.addEventListener("mousedown", (event) => {
-      if (!this.#openColorObjectId || !(event.target instanceof Element) || event.target.closest(".planObjectColorWrap")) return;
-      this.#openColorObjectId = null;
-      this.renderObjects();
-    }, true);
+    document.addEventListener(
+      "mousedown",
+      (event) => {
+        if (
+          !this.#openColorObjectId ||
+          !(event.target instanceof Element) ||
+          event.target.closest(".planObjectColorWrap")
+        )
+          return;
+        this.#openColorObjectId = null;
+        this.renderObjects();
+      },
+      true,
+    );
   }
 
   render(): void {
@@ -83,8 +109,13 @@ export class PlanningSidebarView {
       const details = document.createElement("div");
       details.textContent = `X: ${formatDistanceFromInches(point.x, 2)}  Y: ${formatDistanceFromInches(point.y, 2)}  θ: ${format(point.theta, 1)}°  S: ${format(point.speed, 0)}`;
       const indicators = document.createElement("div");
-      indicators.className = "waypointIndicatorStrip waypointIndicatorStripSmall";
-      this.appendWaypointIndicators(indicators, point.indicatorIcons ?? [], "waypointIndicatorIconSmall");
+      indicators.className =
+        "waypointIndicatorStrip waypointIndicatorStripSmall";
+      this.appendWaypointIndicators(
+        indicators,
+        point.indicatorIcons ?? [],
+        "waypointIndicatorIconSmall",
+      );
       row.append(number, details, indicators);
       row.addEventListener("click", (event) => {
         if (event.shiftKey) this.planning.selection.toggleWaypoint(index);
@@ -101,15 +132,26 @@ export class PlanningSidebarView {
 
   renderSelection(): void {
     const point = this.planning.selection.selectedWaypoint;
-    const inputs = [this.dom.selectedX, this.dom.selectedY, this.dom.selectedTheta, this.dom.selectedSpeed];
+    const inputs = [
+      this.dom.selectedX,
+      this.dom.selectedY,
+      this.dom.selectedTheta,
+      this.dom.selectedSpeed,
+    ];
     if (!point) {
       this.dom.selectedIndicators.replaceChildren();
       this.dom.editWaypoint.disabled = true;
-      for (const input of inputs) { input.value = ""; input.disabled = true; }
+      for (const input of inputs) {
+        input.value = "";
+        input.disabled = true;
+      }
       return;
     }
     this.dom.selectedIndicators.replaceChildren();
-    this.appendWaypointIndicators(this.dom.selectedIndicators, point.indicatorIcons ?? []);
+    this.appendWaypointIndicators(
+      this.dom.selectedIndicators,
+      point.indicatorIcons ?? [],
+    );
     this.dom.editWaypoint.disabled = false;
     for (const input of inputs) input.disabled = false;
     if (inputs.includes(document.activeElement as HTMLInputElement)) return;
@@ -124,7 +166,8 @@ export class PlanningSidebarView {
     icons: readonly PlanWaypointIndicatorIcon[],
     className = "",
   ): void {
-    for (const indicator of orderWaypointIndicatorIcons(icons)) target.appendChild(createWaypointIndicatorIcon(indicator, className));
+    for (const indicator of orderWaypointIndicatorIcons(icons))
+      target.appendChild(createWaypointIndicatorIcon(indicator, className));
   }
 
   renderObjects(): void {
@@ -143,18 +186,31 @@ export class PlanningSidebarView {
         const input = document.createElement("input");
         input.className = "planObjectNameEditor";
         input.value = object.name;
-        input.addEventListener("blur", () => this.commitObjectName(object.id, input.value));
+        input.addEventListener("blur", () =>
+          this.commitObjectName(object.id, input.value),
+        );
         input.addEventListener("keydown", (event) => {
-          if (event.key === "Enter") this.commitObjectName(object.id, input.value);
-          else if (event.key === "Escape") { this.#editingObjectId = null; this.renderObjects(); }
+          if (event.key === "Enter")
+            this.commitObjectName(object.id, input.value);
+          else if (event.key === "Escape") {
+            this.#editingObjectId = null;
+            this.renderObjects();
+          }
         });
         meta.appendChild(input);
-        requestAnimationFrame(() => { input.focus(); if (this.#selectObjectName) input.select(); });
+        requestAnimationFrame(() => {
+          input.focus();
+          if (this.#selectObjectName) input.select();
+        });
       } else {
         const name = document.createElement("div");
         name.className = "planObjectName";
         name.textContent = object.name || getDefaultPlanObjectName(objectIndex);
-        name.addEventListener("dblclick", () => { this.#editingObjectId = object.id; this.#selectObjectName = true; this.renderObjects(); });
+        name.addEventListener("dblclick", () => {
+          this.#editingObjectId = object.id;
+          this.#selectObjectName = true;
+          this.renderObjects();
+        });
         meta.appendChild(name);
       }
       const subtle = document.createElement("div");
@@ -175,27 +231,55 @@ export class PlanningSidebarView {
       card.appendChild(header);
       const methods = document.createElement("div");
       methods.className = "planMethodList";
-      if (!object.methods.length) methods.innerHTML = `<div class="planMethodEmpty">No methods yet.</div>`;
+      if (!object.methods.length)
+        methods.innerHTML = `<div class="planMethodEmpty">No methods yet.</div>`;
       object.methods.forEach((method, methodIndex) => {
         const methodCard = document.createElement("div");
-        methodCard.className = `planMethodCard${selectedNode?.objectId === object.id && selectedNode.methodId === method.id || this.planning.selection.isMethodSelected(object.id, method.id) ? " isHighlighted" : ""}`;
+        methodCard.className = `planMethodCard${(selectedNode?.objectId === object.id && selectedNode.methodId === method.id) || this.planning.selection.isMethodSelected(object.id, method.id) ? " isHighlighted" : ""}`;
         methodCard.dataset.objectId = object.id;
         methodCard.dataset.methodId = method.id;
         methodCard.innerHTML = `<div class="planMethodGrip" aria-hidden="true">⋮⋮</div><div class="planMethodIndex">${methodIndex + 1}</div><div class="planMethodContent"><div class="planMethodName"></div><div class="planMethodCode"></div></div><button class="iconBtn planMethodRemoveBtn" type="button" title="Remove Method">${icon(removeIconSvg)}</button>`;
-        methodCard.querySelector<HTMLElement>(".planMethodName")!.textContent = method.name;
-        methodCard.querySelector<HTMLElement>(".planMethodCode")!.textContent = method.code;
+        methodCard.querySelector<HTMLElement>(".planMethodName")!.textContent =
+          method.name;
+        methodCard.querySelector<HTMLElement>(".planMethodCode")!.textContent =
+          method.code;
         methodCard.addEventListener("pointerdown", (event) => {
-          if (event.button !== 0 || (event.target instanceof Element && event.target.closest(".planMethodRemoveBtn"))) return;
-          this.drag.begin({ source: "sidebar", objectId: object.id, methodId: method.id, sourceElement: methodCard, startX: event.clientX, startY: event.clientY });
+          if (
+            event.button !== 0 ||
+            (event.target instanceof Element &&
+              event.target.closest(".planMethodRemoveBtn"))
+          )
+            return;
+          this.drag.begin({
+            source: "sidebar",
+            objectId: object.id,
+            methodId: method.id,
+            sourceElement: methodCard,
+            startX: event.clientX,
+            startY: event.clientY,
+          });
         });
         methodCard.addEventListener("dblclick", (event) => {
-          if (!(event.target instanceof Element) || !event.target.closest(".planMethodRemoveBtn")) void this.editMethod(object.id, method.id);
+          if (
+            !(event.target instanceof Element) ||
+            !event.target.closest(".planMethodRemoveBtn")
+          )
+            void this.editMethod(object.id, method.id);
         });
         methodCard.addEventListener("click", (event) => {
-          if (!(event.target instanceof Element) || event.target.closest(".planMethodRemoveBtn")) return;
+          if (
+            !(event.target instanceof Element) ||
+            event.target.closest(".planMethodRemoveBtn")
+          )
+            return;
           this.planning.selection.selectMethod(object.id, method.id);
         });
-        methodCard.querySelector(".planMethodRemoveBtn")?.addEventListener("click", () => void this.removeMethod(object.id, method.id));
+        methodCard
+          .querySelector(".planMethodRemoveBtn")
+          ?.addEventListener(
+            "click",
+            () => void this.removeMethod(object.id, method.id),
+          );
         methods.appendChild(methodCard);
       });
       card.appendChild(methods);
@@ -217,7 +301,8 @@ export class PlanningSidebarView {
       colorButton.style.color = object.color;
       colorButton.innerHTML = icon(colorIconSvg);
       colorButton.addEventListener("click", () => {
-        this.#openColorObjectId = this.#openColorObjectId === object.id ? null : object.id;
+        this.#openColorObjectId =
+          this.#openColorObjectId === object.id ? null : object.id;
         this.renderObjects();
       });
       const colorPopover = document.createElement("div");
@@ -238,40 +323,69 @@ export class PlanningSidebarView {
       removeObject.className = "iconBtn secondaryBtn planObjectRemoveActionBtn";
       removeObject.type = "button";
       removeObject.innerHTML = icon(removeIconSvg);
-      removeObject.addEventListener("click", () => void this.removeObject(object.id));
+      removeObject.addEventListener(
+        "click",
+        () => void this.removeObject(object.id),
+      );
       actions.append(addMethod, actionTools, removeObject);
       card.appendChild(actions);
-      card.style.setProperty("--plan-object-color", object.color || getDefaultPlanObjectColor(objectIndex));
+      card.style.setProperty(
+        "--plan-object-color",
+        object.color || getDefaultPlanObjectColor(objectIndex),
+      );
       card.style.color = getContrastTextColor(object.color);
       this.dom.objectList.appendChild(card);
     });
   }
 
   updatePlayback(): void {
-    for (const card of this.dom.objectList.querySelectorAll<HTMLElement>(".planObjectCard[data-object-id]")) {
+    for (const card of this.dom.objectList.querySelectorAll<HTMLElement>(
+      ".planObjectCard[data-object-id]",
+    )) {
       const value = card.querySelector<HTMLElement>(".planObjectLatestValue");
-      if (value) value.textContent = this.latestMethodName(card.dataset.objectId ?? "");
+      if (value)
+        value.textContent = this.latestMethodName(card.dataset.objectId ?? "");
     }
   }
 
-  private bindSelectionField(input: HTMLInputElement, field: "x" | "y" | "theta" | "speed"): void {
+  private bindSelectionField(
+    input: HTMLInputElement,
+    field: "x" | "y" | "theta" | "speed",
+  ): void {
     // Tracks whether the transaction currently open was the one this field's
     // own focus began, so blur only ever commits/cancels its own transaction
     // rather than one a canvas drag opened after taking over focus.
     let ownsTransaction = false;
-    input.addEventListener("focus", () => { this.planning.history.begin("route"); ownsTransaction = true; });
+    input.addEventListener("focus", () => {
+      this.planning.history.begin("route");
+      ownsTransaction = true;
+    });
     input.addEventListener("input", () => {
       const index = this.planning.selection.primaryWaypointIndex;
       const point = this.planning.selection.selectedWaypoint;
       if (!point || index < 0) return;
       const raw = Number(input.value);
       if (!Number.isFinite(raw)) return;
-      const value = field === "x" || field === "y" ? currentUnitsToInches(raw) : raw;
+      const value =
+        field === "x" || field === "y" ? currentUnitsToInches(raw) : raw;
       if (field === "x" || field === "y") {
-        const constrained = this.planning.projection.constrain({ ...point, [field]: value });
+        const constrained = this.planning.projection.constrain({
+          ...point,
+          [field]: value,
+        });
         this.planning.route.updateField(index, field, constrained[field]);
-      } else if (field === "theta") this.planning.route.updateField(index, field, this.planning.projection.constrainTheta(value));
-      else this.planning.route.updateField(index, field, Math.max(-127, Math.min(127, value)));
+      } else if (field === "theta")
+        this.planning.route.updateField(
+          index,
+          field,
+          this.planning.projection.constrainTheta(value),
+        );
+      else
+        this.planning.route.updateField(
+          index,
+          field,
+          Math.max(-127, Math.min(127, value)),
+        );
       requestDrawAll();
     });
     input.addEventListener("blur", () => {
@@ -280,8 +394,10 @@ export class PlanningSidebarView {
       this.planning.history.commit();
     });
     input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") { event.preventDefault(); input.blur(); }
-      else if (event.key === "Escape") {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        input.blur();
+      } else if (event.key === "Escape") {
         event.preventDefault();
         ownsTransaction = false;
         this.planning.history.cancel();
@@ -311,16 +427,36 @@ export class PlanningSidebarView {
   private async removeObject(id: string): Promise<void> {
     const object = this.planning.objects.get(id);
     if (!object) return;
-    if (object.methods.length && !await this.dialogs.confirm({ message: `Are you sure you want to remove Object ${object.name}?` })) return;
-    const nodes = this.planning.timeline.nodes.filter((node) => node.objectId === id).length;
+    if (
+      object.methods.length &&
+      !(await this.dialogs.confirm({
+        message: `Are you sure you want to remove Object ${object.name}?`,
+      }))
+    )
+      return;
+    const nodes = this.planning.timeline.nodes.filter(
+      (node) => node.objectId === id,
+    ).length;
     this.planning.objects.remove(id);
-    void planningTelemetry.objectRemoved(this.planning.telemetryProperties({ removed_methods: object.methods.length, removed_nodes: nodes }));
+    void planningTelemetry.objectRemoved(
+      this.planning.telemetryProperties({
+        removed_methods: object.methods.length,
+        removed_nodes: nodes,
+      }),
+    );
   }
 
   private async addMethod(objectId: string): Promise<void> {
     const object = this.planning.objects.get(objectId);
     if (!object) return;
-    const result = await this.dialogs.edit({ title: "Add Method", subtitle: `Create a new method for ${object.name}.`, groupTitle: "Method", description: METHOD_TEMPLATE_DESCRIPTION, name: "", code: "" });
+    const result = await this.dialogs.edit({
+      title: "Add Method",
+      subtitle: `Create a new method for ${object.name}.`,
+      groupTitle: "Method",
+      description: METHOD_TEMPLATE_DESCRIPTION,
+      name: "",
+      code: "",
+    });
     if (!result) return;
     this.planning.objects.addMethod(objectId, result);
     void planningTelemetry.methodCreated(this.planning.telemetryProperties());
@@ -331,50 +467,97 @@ export class PlanningSidebarView {
     if (!method) return;
     const previousName = method.name;
     const previousCode = method.code;
-    const result = await this.dialogs.edit({ title: "Edit Method", groupTitle: "Method", description: METHOD_TEMPLATE_DESCRIPTION, name: method.name, code: method.code });
-    if (!result || (result.name === previousName && result.code === previousCode)) return;
+    const result = await this.dialogs.edit({
+      title: "Edit Method",
+      groupTitle: "Method",
+      description: METHOD_TEMPLATE_DESCRIPTION,
+      name: method.name,
+      code: method.code,
+    });
+    if (
+      !result ||
+      (result.name === previousName && result.code === previousCode)
+    )
+      return;
     this.planning.objects.updateMethod(objectId, methodId, result);
-    void planningTelemetry.methodUpdated(this.planning.telemetryProperties({ method_name_changed: result.name !== previousName, method_code_changed: result.code !== previousCode }));
+    void planningTelemetry.methodUpdated(
+      this.planning.telemetryProperties({
+        method_name_changed: result.name !== previousName,
+        method_code_changed: result.code !== previousCode,
+      }),
+    );
   }
 
-  private async removeMethod(objectId: string, methodId: string): Promise<void> {
+  private async removeMethod(
+    objectId: string,
+    methodId: string,
+  ): Promise<void> {
     const method = this.planning.objects.method(objectId, methodId);
     if (!method) return;
-    const nodes = this.planning.timeline.nodes.filter((node) => node.objectId === objectId && node.methodId === methodId).length;
-    if (nodes && !await this.dialogs.confirm({ message: `Remove ${method.name} and ${nodes} placed node${nodes === 1 ? "" : "s"}?` })) return;
+    const nodes = this.planning.timeline.nodes.filter(
+      (node) => node.objectId === objectId && node.methodId === methodId,
+    ).length;
+    if (
+      nodes &&
+      !(await this.dialogs.confirm({
+        message: `Remove ${method.name} and ${nodes} placed node${nodes === 1 ? "" : "s"}?`,
+      }))
+    )
+      return;
     this.planning.objects.removeMethod(objectId, methodId);
-    void planningTelemetry.methodRemoved(this.planning.telemetryProperties({ removed_nodes: nodes }));
+    void planningTelemetry.methodRemoved(
+      this.planning.telemetryProperties({ removed_nodes: nodes }),
+    );
   }
 
   private async editTemplate(): Promise<void> {
     const previous = this.planning.exportTemplate;
-    const result = await this.dialogs.edit({ title: "Edit Template", groupTitle: "Planning Export Template", description: "One block is generated from each waypoint to the next; the final waypoint emits none. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}.", code: previous, placeholder: "moveToPoint(${x}, ${y}, ${theta});" });
+    const result = await this.dialogs.edit({
+      title: "Edit Template",
+      groupTitle: "Planning Export Template",
+      description:
+        "One block is generated from each waypoint to the next; the final waypoint emits none. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}.",
+      code: previous,
+      placeholder: "moveToPoint(${x}, ${y}, ${theta});",
+    });
     if (!result) return;
     this.planning.setExportTemplate(result.code);
-    if (previous !== this.planning.exportTemplate) void planningTelemetry.templateUpdated(this.planning.telemetryProperties());
+    if (previous !== this.planning.exportTemplate)
+      void planningTelemetry.templateUpdated(
+        this.planning.telemetryProperties(),
+      );
   }
 
   private async copyCode(): Promise<void> {
     const data = this.planning.exportData();
     const code = generatePlanningCode(this.planning);
     if (!code) {
-      setStatus("Add at least two waypoints and a template before copying code.");
+      setStatus(
+        "Add at least two waypoints and a template before copying code.",
+      );
       return;
     }
     try {
       await navigator.clipboard.writeText(code);
       this.flashCopySuccess();
-      setStatus(`Copied generated code for ${data.waypoints.length} waypoint${data.waypoints.length === 1 ? "" : "s"}.`);
-      void planningTelemetry.templateExported(this.planning.telemetryProperties({
-        export_surface: "clipboard",
-      }));
+      setStatus(
+        `Copied generated code for ${data.waypoints.length} waypoint${data.waypoints.length === 1 ? "" : "s"}.`,
+      );
+      void planningTelemetry.templateExported(
+        this.planning.telemetryProperties({
+          export_surface: "clipboard",
+        }),
+      );
     } catch (error) {
-      setStatus(`Failed to copy code: ${error instanceof Error ? error.message : String(error)}`);
+      setStatus(
+        `Failed to copy code: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
   private flashCopySuccess(): void {
-    if (this.#copySuccessTimer !== null) window.clearTimeout(this.#copySuccessTimer);
+    if (this.#copySuccessTimer !== null)
+      window.clearTimeout(this.#copySuccessTimer);
     this.dom.copyCode.classList.remove("isCopySuccess");
     void this.dom.copyCode.offsetWidth;
     this.dom.copyCode.classList.add("isCopySuccess");
@@ -385,12 +568,20 @@ export class PlanningSidebarView {
   }
 
   private commitObjectName(id: string, name: string): void {
-    this.planning.objects.rename(id, name.trim() || getDefaultPlanObjectName(this.planning.objects.items.findIndex((object) => object.id === id)));
+    this.planning.objects.rename(
+      id,
+      name.trim() ||
+        getDefaultPlanObjectName(
+          this.planning.objects.items.findIndex((object) => object.id === id),
+        ),
+    );
     this.#editingObjectId = null;
   }
 
   private latestMethodName(objectId: string): string {
     const node = this.planning.latestExecutedNode(objectId);
-    return getPlanNodeEffectiveMethod(this.planning.objects.items, node)?.name || "—";
+    return (
+      getPlanNodeEffectiveMethod(this.planning.objects.items, node)?.name || "—"
+    );
   }
 }

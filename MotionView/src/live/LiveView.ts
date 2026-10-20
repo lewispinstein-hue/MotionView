@@ -23,33 +23,54 @@ export class LiveView {
     this.live.events.streamChanged.subscribe(() => this.renderControls());
     this.live.events.projectChanged.subscribe((event) => {
       const input = this.dom.projectInput;
-      if (input && input.value !== event.path && document.activeElement !== input && input.value.trim() !== event.path) {
+      if (
+        input &&
+        input.value !== event.path &&
+        document.activeElement !== input &&
+        input.value.trim() !== event.path
+      ) {
         input.value = event.path;
       }
       this.renderProject();
       this.renderControls();
     });
-    this.live.events.preferencesChanged.subscribe(() => this.renderPreferences());
+    this.live.events.preferencesChanged.subscribe(() =>
+      this.renderPreferences(),
+    );
     this.live.events.consoleChanged.subscribe((event) => {
       if (event.kind === "reset") this.#console.reset();
       else this.#console.appendLine(event.line);
     });
     this.live.events.notice.subscribe((event) => {
       setStatus(event.message);
-      if (event.kind === "error") this.#console.appendLine(`[UI] ${event.message}`);
+      if (event.kind === "error")
+        this.#console.appendLine(`[UI] ${event.message}`);
     });
 
-    this.dom.startStopButton?.addEventListener("click", (event) => void this.toggleStream(event));
-    this.dom.refreshButton?.addEventListener("click", () => this.live.stream.refreshNow());
+    this.dom.startStopButton?.addEventListener(
+      "click",
+      (event) => void this.toggleStream(event),
+    );
+    this.dom.refreshButton?.addEventListener("click", () =>
+      this.live.stream.refreshNow(),
+    );
     this.dom.refreshInterval?.addEventListener("change", () => {
-      this.live.preferences.setRefreshInterval(Number(this.dom.refreshInterval?.value ?? 0));
+      this.live.preferences.setRefreshInterval(
+        Number(this.dom.refreshInterval?.value ?? 0),
+      );
     });
     this.dom.projectInput?.addEventListener("input", () => {
       if (this.#projectInputTimer) clearTimeout(this.#projectInputTimer);
       this.live.project.restore(this.dom.projectInput?.value ?? "");
-      this.#projectInputTimer = setTimeout(() => void this.live.project.validate(), 500);
+      this.#projectInputTimer = setTimeout(
+        () => void this.live.project.validate(),
+        500,
+      );
     });
-    this.dom.autoDetectButton?.addEventListener("click", () => void this.discoverProjects());
+    this.dom.autoDetectButton?.addEventListener(
+      "click",
+      () => void this.discoverProjects(),
+    );
     this.render();
   }
 
@@ -70,36 +91,54 @@ export class LiveView {
   }
 
   private renderControls(): void {
-    const connectionBusy = this.live.connection.state === "connecting" || this.live.connection.state === "disconnecting";
-    const streamBusy = this.live.stream.state === "starting" || this.live.stream.state === "stopping";
+    const connectionBusy =
+      this.live.connection.state === "connecting" ||
+      this.live.connection.state === "disconnecting";
+    const streamBusy =
+      this.live.stream.state === "starting" ||
+      this.live.stream.state === "stopping";
     const busy = connectionBusy || streamBusy;
-    const streaming = this.live.stream.streaming || this.live.stream.state === "stopping";
+    const streaming =
+      this.live.stream.streaming || this.live.stream.state === "stopping";
     if (this.dom.startStopButton) {
-      this.dom.startStopButton.disabled = busy || (!this.live.project.valid && !this.live.connection.connected);
+      this.dom.startStopButton.disabled =
+        busy || (!this.live.project.valid && !this.live.connection.connected);
       this.dom.startStopButton.textContent = streaming ? "Stop" : "Start";
       this.dom.startStopButton.classList.toggle("isOn", streaming);
       this.dom.startStopButton.title = streaming
         ? "Stop streaming. Cmd/Ctrl+Click to force kill."
         : "Start streaming.";
     }
-    if (this.dom.refreshButton) this.dom.refreshButton.disabled = !streaming || busy;
+    if (this.dom.refreshButton)
+      this.dom.refreshButton.disabled = !streaming || busy;
     if (this.dom.fileButton) this.dom.fileButton.disabled = streaming;
     if (this.dom.playButton && streaming) this.dom.playButton.disabled = true;
   }
 
   private renderProject(): void {
-    this.setMessage(this.dom.projectStatus, this.live.project.status.message, this.statusKind());
+    this.setMessage(
+      this.dom.projectStatus,
+      this.live.project.status.message,
+      this.statusKind(),
+    );
   }
 
   private renderPreferences(): void {
-    if (this.dom.refreshInterval) this.dom.refreshInterval.value = String(this.live.preferences.refreshIntervalMs);
+    if (this.dom.refreshInterval)
+      this.dom.refreshInterval.value = String(
+        this.live.preferences.refreshIntervalMs,
+      );
   }
 
   private async discoverProjects(): Promise<void> {
     this.setMessage(this.dom.autoStatus, "Scanning...");
     const candidates = await this.live.project.discover();
     this.renderCandidates(candidates);
-    this.setMessage(this.dom.autoStatus, `Found ${candidates.length} project(s).`, candidates.length ? "success" : "info");
+    this.setMessage(
+      this.dom.autoStatus,
+      `Found ${candidates.length} project(s).`,
+      candidates.length ? "success" : "info",
+    );
   }
 
   private renderCandidates(candidates: readonly string[]): void {
@@ -139,9 +178,18 @@ export class LiveView {
     return "error";
   }
 
-  private setMessage(element: HTMLElement | null, message: string, kind: LiveNoticeKind = "info"): void {
+  private setMessage(
+    element: HTMLElement | null,
+    message: string,
+    kind: LiveNoticeKind = "info",
+  ): void {
     if (!element) return;
     element.textContent = message;
-    element.style.color = kind === "error" ? "#ff9b9b" : kind === "success" ? "#9fddb0" : "var(--muted)";
+    element.style.color =
+      kind === "error"
+        ? "#ff9b9b"
+        : kind === "success"
+          ? "#9fddb0"
+          : "var(--muted)";
   }
 }

@@ -1,4 +1,4 @@
-import type { TelemetryClient } from "./telemetryClient";
+import type { TelemetryClient } from "./TelemetryClient";
 import type { TelemetryProperties } from "./telemetryTypes";
 
 export class AppTelemetry {
@@ -9,7 +9,9 @@ export class AppTelemetry {
   }
 
   modeChanged(properties: TelemetryProperties = {}) {
-    return this.telemetry.capture("mode_changed", properties, { debounceMs: 700 });
+    return this.telemetry.capture("mode_changed", properties, {
+      debounceMs: 700,
+    });
   }
 
   exiting(properties: TelemetryProperties = {}) {

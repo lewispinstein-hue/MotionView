@@ -36,7 +36,9 @@ export class BridgeService {
   get websocketUrl(): string | null {
     const origin = this.websocketOrigin;
     const token = this.refreshInjectedToken();
-    return origin && token ? `${origin}/ws?token=${encodeURIComponent(token)}` : null;
+    return origin && token
+      ? `${origin}/ws?token=${encodeURIComponent(token)}`
+      : null;
   }
 
   get available(): boolean {
@@ -71,10 +73,15 @@ export class BridgeService {
     this.#lastReadyCheckAt = now;
 
     this.#readyProbe = (async () => {
-      const response = await this.request<Record<string, unknown>>("GET", "/api/status", undefined, {
-        timeoutMs: 1_000,
-        waitForReady: false,
-      });
+      const response = await this.request<Record<string, unknown>>(
+        "GET",
+        "/api/status",
+        undefined,
+        {
+          timeoutMs: 1_000,
+          waitForReady: false,
+        },
+      );
       this.#ready = response.ok && response.json != null;
       if (this.#ready) this.#readyAt = Date.now();
       return this.#ready;
@@ -93,17 +100,28 @@ export class BridgeService {
     return false;
   }
 
-  get<T>(path: string, options?: BridgeRequestOptions): Promise<BridgeResponse<T>> {
+  get<T>(
+    path: string,
+    options?: BridgeRequestOptions,
+  ): Promise<BridgeResponse<T>> {
     return this.request<T>("GET", path, undefined, options);
   }
 
-  post<T>(path: string, body?: unknown, options?: BridgeRequestOptions): Promise<BridgeResponse<T>> {
+  post<T>(
+    path: string,
+    body?: unknown,
+    options?: BridgeRequestOptions,
+  ): Promise<BridgeResponse<T>> {
     return this.request<T>("POST", path, body, options);
   }
 
   async log(level: string, message: string, tag?: string): Promise<void> {
     if (!this.#ready) return;
-    await this.post("/api/log", { level, message, tag }, { timeoutMs: 800, waitForReady: false });
+    await this.post(
+      "/api/log",
+      { level, message, tag },
+      { timeoutMs: 800, waitForReady: false },
+    );
   }
 
   private refreshInjectedOrigin(): string | null {
@@ -132,13 +150,19 @@ export class BridgeService {
     const origin = await this.resolveOrigin();
     const token = this.refreshInjectedToken();
     if (!origin || !token) return { ok: false, status: 0, json: null };
-    if (options.waitForReady !== false && !(await this.waitUntilReady(4_000, 200))) {
+    if (
+      options.waitForReady !== false &&
+      !(await this.waitUntilReady(4_000, 200))
+    ) {
       return { ok: false, status: 0, json: null };
     }
 
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 5_000);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      options.timeoutMs ?? 5_000,
+    );
     try {
       const response = await fetch(`${origin}${normalizedPath}`, {
         method,
@@ -151,7 +175,7 @@ export class BridgeService {
       });
       let json: T | null = null;
       try {
-        json = await response.json() as T;
+        json = (await response.json()) as T;
       } catch {
         // Some bridge failure responses do not contain JSON.
       }

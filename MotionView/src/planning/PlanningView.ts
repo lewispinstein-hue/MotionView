@@ -1,4 +1,8 @@
-import type { FieldPose, FieldRenderer, PlanningFieldLayer } from "../render/field";
+import type {
+  FieldPose,
+  FieldRenderer,
+  PlanningFieldLayer,
+} from "../render/field";
 import type { PlanningRenderLayer } from "../render/renderScheduler";
 import { requestDrawAll } from "../render/renderScheduler";
 import { formatDistanceFromInches, getCurrentUnits } from "../shared/units";
@@ -27,12 +31,26 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
   ) {
     const drag = new PlanningDragCoordinator();
     const waypointEditor = new PlanningWaypointEditor(planning, dialogs);
-    this.#fieldView = new PlanningFieldView(planning, field, dom, dialogs, waypointEditor);
-    this.#sidebar = new PlanningSidebarView(planning, dom, dialogs, drag, waypointEditor);
+    this.#fieldView = new PlanningFieldView(
+      planning,
+      field,
+      dom,
+      dialogs,
+      waypointEditor,
+    );
+    this.#sidebar = new PlanningSidebarView(
+      planning,
+      dom,
+      dialogs,
+      drag,
+      waypointEditor,
+    );
     this.#timeline = new PlanningTimelineView(planning, dom, dialogs, drag);
   }
 
-  get overlayVisible(): boolean { return this.planning.overlayVisible; }
+  get overlayVisible(): boolean {
+    return this.planning.overlayVisible;
+  }
 
   bind(): void {
     if (this.#bound) return;
@@ -65,9 +83,15 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
     requestDrawAll();
   }
 
-  resizeTimeline(): void { this.#timeline.resize(); }
-  drawTimeline(): void { this.#timeline.draw(); }
-  drawOverlay(force = false): void { this.#fieldView.draw(force); }
+  resizeTimeline(): void {
+    this.#timeline.resize();
+  }
+  drawTimeline(): void {
+    this.#timeline.draw();
+  }
+  drawOverlay(force = false): void {
+    this.#fieldView.draw(force);
+  }
 
   currentPose(): FieldPose | null {
     return this.planning.projection.sample(this.planning.playback.distance);
@@ -76,7 +100,10 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
   private updateLatestPill(): void {
     const node = this.#timeline.latestNodeAtProgress();
     const object = node ? this.planning.objects.get(node.objectId) : null;
-    const method = node ? getPlanNodeEffectiveMethod(this.planning.objects.items, node) : null;
-    this.dom.latestPill.textContent = object && method ? `${object.name} • ${method.name}` : "—";
+    const method = node
+      ? getPlanNodeEffectiveMethod(this.planning.objects.items, node)
+      : null;
+    this.dom.latestPill.textContent =
+      object && method ? `${object.name} • ${method.name}` : "—";
   }
 }

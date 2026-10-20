@@ -44,15 +44,19 @@ export class TelemetryQueue {
   }
 
   clearAutomatic() {
-    this.write(this.read().filter((event) => event.explicitUserAction === true));
+    this.write(
+      this.read().filter((event) => event.explicitUserAction === true),
+    );
   }
 }
 
 function isQueuedTelemetryEvent(value: unknown): value is QueuedTelemetryEvent {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<QueuedTelemetryEvent>;
-  return typeof candidate.event === "string"
-    && typeof candidate.createdAt === "string"
-    && !!candidate.properties
-    && typeof candidate.properties === "object";
+  return (
+    typeof candidate.event === "string" &&
+    typeof candidate.createdAt === "string" &&
+    !!candidate.properties &&
+    typeof candidate.properties === "object"
+  );
 }

@@ -11,12 +11,15 @@ export interface FieldTransformAccess {
 
 let access: FieldTransformAccess | null = null;
 
-export function configureFieldTransform(nextAccess: FieldTransformAccess): void {
+export function configureFieldTransform(
+  nextAccess: FieldTransformAccess,
+): void {
   access = nextAccess;
 }
 
 function getAccess(): FieldTransformAccess {
-  if (!access) throw new Error("Field transform access has not been configured.");
+  if (!access)
+    throw new Error("Field transform access has not been configured.");
   return access;
 }
 

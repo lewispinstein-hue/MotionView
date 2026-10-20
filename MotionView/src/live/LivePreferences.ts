@@ -7,7 +7,9 @@ export class LivePreferences {
     private readonly events: LiveEvents,
   ) {}
 
-  get refreshIntervalMs(): number { return this.session.refreshIntervalMs; }
+  get refreshIntervalMs(): number {
+    return this.session.refreshIntervalMs;
+  }
 
   setRefreshInterval(milliseconds: number): void {
     const parsed = Number(milliseconds);

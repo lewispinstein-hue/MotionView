@@ -2,10 +2,16 @@ import { invoke } from "@tauri-apps/api/core";
 import { resolveResource } from "@tauri-apps/api/path";
 
 export function isTauriRuntime(): boolean {
-  return typeof window === "object" && !!(window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  return (
+    typeof window === "object" &&
+    !!(window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+  );
 }
 
-export function invokeCommand<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+export function invokeCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   return invoke<T>(command, args);
 }
 
@@ -41,19 +47,34 @@ export interface FileExportResult {
   readonly path: string;
 }
 
-export function resolveExportDirectory(location: string, projectPath?: string): Promise<string> {
+export function resolveExportDirectory(
+  location: string,
+  projectPath?: string,
+): Promise<string> {
   return invokeCommand<string>("resolve_export_directory", {
     location,
     projectPath: projectPath || null,
   });
 }
 
-export function exportPlanningCode(path: string, contents: string, overwrite = false): Promise<FileExportResult> {
-  return invokeCommand<FileExportResult>("export_planning_code", { path, contents, overwrite });
+export function exportPlanningCode(
+  path: string,
+  contents: string,
+  overwrite = false,
+): Promise<FileExportResult> {
+  return invokeCommand<FileExportResult>("export_planning_code", {
+    path,
+    contents,
+    overwrite,
+  });
 }
 
-export function readSavedPaths(): Promise<string | null> { return invokeCommand<string | null>("read_saved_paths"); }
-export function writeSavedPaths(contents: string): Promise<void> { return invokeCommand<void>("write_saved_paths", { contents }); }
+export function readSavedPaths(): Promise<string | null> {
+  return invokeCommand<string | null>("read_saved_paths");
+}
+export function writeSavedPaths(contents: string): Promise<void> {
+  return invokeCommand<void>("write_saved_paths", { contents });
+}
 
 export interface MotionViewJsonExportRequest {
   readonly filenameBase: string;
@@ -61,11 +82,23 @@ export interface MotionViewJsonExportRequest {
   readonly customPath: string | null;
   readonly jsonContents: string;
 }
-export function exportMotionViewJson(request: Readonly<MotionViewJsonExportRequest>): Promise<FileExportResult> {
+export function exportMotionViewJson(
+  request: Readonly<MotionViewJsonExportRequest>,
+): Promise<FileExportResult> {
   return invokeCommand<FileExportResult>("export_motionview_json", request);
 }
 
-export interface UpgradeState { readonly previousVersion: string | null; readonly currentVersion: string; readonly wasPreviousVersionOlder: boolean }
-export function readUpgradeState(): Promise<UpgradeState> { return invokeCommand<UpgradeState>("was_previous_version_old"); }
-export function getWindowFullscreenState(): Promise<boolean> { return invokeCommand<boolean>("get_window_fullscreen_state"); }
-export function setWindowFullscreen(enable: boolean): Promise<boolean> { return invokeCommand<boolean>("set_windows_fullscreen", { enable }); }
+export interface UpgradeState {
+  readonly previousVersion: string | null;
+  readonly currentVersion: string;
+  readonly wasPreviousVersionOlder: boolean;
+}
+export function readUpgradeState(): Promise<UpgradeState> {
+  return invokeCommand<UpgradeState>("was_previous_version_old");
+}
+export function getWindowFullscreenState(): Promise<boolean> {
+  return invokeCommand<boolean>("get_window_fullscreen_state");
+}
+export function setWindowFullscreen(enable: boolean): Promise<boolean> {
+  return invokeCommand<boolean>("set_windows_fullscreen", { enable });
+}

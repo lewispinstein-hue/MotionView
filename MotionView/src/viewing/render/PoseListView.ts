@@ -26,11 +26,14 @@ export class PoseListView {
       renderItem: (item) => this.createItem(item.index),
       syncItem: (row, item) => this.syncItem(row, item.index),
     });
-    if (!list) throw new Error("MotionView could not initialize the pose virtual list.");
+    if (!list)
+      throw new Error("MotionView could not initialize the pose virtual list.");
     this.#list = list;
   }
 
-  get itemCount(): number { return this.#itemCount; }
+  get itemCount(): number {
+    return this.#itemCount;
+  }
 
   bind(): void {
     this.dom.poseSort.addEventListener("change", () => this.render());
@@ -54,7 +57,9 @@ export class PoseListView {
         this.#list.refresh();
         return;
       }
-      const index = Array.from(this.#list.getItems()).findIndex((item) => item.index === selected);
+      const index = Array.from(this.#list.getItems()).findIndex(
+        (item) => item.index === selected,
+      );
       if (index >= 0) this.#list.scrollToIndex(index, 12);
     }
     this.#list.refresh();
@@ -67,7 +72,12 @@ export class PoseListView {
     for (let index = 0; index < items.length; index += 1) {
       const item = items[index];
       const timestamp = item?.pose.t;
-      if (typeof timestamp !== "number" || timestamp > time || timestamp <= latestTime) continue;
+      if (
+        typeof timestamp !== "number" ||
+        timestamp > time ||
+        timestamp <= latestTime
+      )
+        continue;
       passedIndex = index;
       latestTime = timestamp;
     }
@@ -84,7 +94,9 @@ export class PoseListView {
 
   private createItem(index: number): HTMLElement {
     const rawPose = this.viewing.data.poses[index];
-    const pose = this.viewing.projection.displayPose(this.viewing.projection.poseAt(index));
+    const pose = this.viewing.projection.displayPose(
+      this.viewing.projection.poseAt(index),
+    );
     const time = typeof rawPose?.t === "number" ? Math.round(rawPose.t) : null;
     const coordinate = (value: unknown) => {
       const number = Number(value);
@@ -102,24 +114,33 @@ export class PoseListView {
     </div><div class="bigValue poseValue"><span class="eventSelectableText">${escapeHtml(summary)}</span></div></div>`;
     if (time != null) {
       element.addEventListener("pointerenter", () => {
-        if (!this.viewing.playback.isPlaying) this.viewing.navigation.setTimelineHover(time);
+        if (!this.viewing.playback.isPlaying)
+          this.viewing.navigation.setTimelineHover(time);
       });
       element.addEventListener("pointerleave", () => {
-        if (this.viewing.navigation.hoverTimelineTime === time) this.viewing.navigation.setTimelineHover(null);
+        if (this.viewing.navigation.hoverTimelineTime === time)
+          this.viewing.navigation.setTimelineHover(null);
       });
     }
-    element.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0) return;
-      event.preventDefault();
-      this.viewing.playback.pause();
-      this.viewing.navigation.setTimelineHover(null);
-      this.viewing.navigation.selectPose(index);
-    }, { passive: false });
+    element.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        this.viewing.playback.pause();
+        this.viewing.navigation.setTimelineHover(null);
+        this.viewing.navigation.selectPose(index);
+      },
+      { passive: false },
+    );
     return element;
   }
 
   private syncItem(element: HTMLElement, index: number): void {
-    element.classList.toggle("selected", index === this.viewing.navigation.selectedPoseIndex);
+    element.classList.toggle(
+      "selected",
+      index === this.viewing.navigation.selectedPoseIndex,
+    );
     element.classList.toggle("previewSelected", index === this.#previewIndex);
     element.dataset.idx = String(index);
   }

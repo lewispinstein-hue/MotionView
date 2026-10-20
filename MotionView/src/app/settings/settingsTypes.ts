@@ -98,6 +98,8 @@ export const DEFAULT_SETTINGS: Readonly<MotionViewSettings> = {
   appState: {},
 };
 
-export function isMotionViewSettings(value: unknown): value is MotionViewSettings {
+export function isMotionViewSettings(
+  value: unknown,
+): value is MotionViewSettings {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }

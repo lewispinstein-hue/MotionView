@@ -5,9 +5,19 @@ import type { PlanningDialogs } from "../PlanningDialogs";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningFeature } from "../PlanningFeature";
 import type { PlanningNodeView } from "../planningTypes";
-import { getPlanMethodNumber, getPlanNodeEffectiveMethod, hasPlanNodeMethodOverride } from "../planningObjects";
-import { getContrastTextColor, getDefaultPlanObjectColor } from "../planningState";
-import type { PlanningMethodDrag, PlanningDragCoordinator } from "./PlanningDragCoordinator";
+import {
+  getPlanMethodNumber,
+  getPlanNodeEffectiveMethod,
+  hasPlanNodeMethodOverride,
+} from "../planningObjects";
+import {
+  getContrastTextColor,
+  getDefaultPlanObjectColor,
+} from "../planningState";
+import type {
+  PlanningMethodDrag,
+  PlanningDragCoordinator,
+} from "./PlanningDragCoordinator";
 
 const PAD = 6;
 const NODE_WIDTH = 18;
@@ -28,7 +38,8 @@ const NODE_SHIFT_MS = 320;
 const NODE_ENTER_MS = 240;
 const NODE_EXIT_MS = 220;
 const NODE_MOVE_EPSILON = 0.5;
-const NODE_TEMPLATE_DESCRIPTION = "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}. Values come from the preceding waypoint; nodes before the first waypoint use the first waypoint.";
+const NODE_TEMPLATE_DESCRIPTION =
+  "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}. Values come from the preceding waypoint; nodes before the first waypoint use the first waypoint.";
 
 interface TimelineBucketLayout {
   readonly beforeWaypoint: number;
@@ -59,7 +70,13 @@ interface TimelineNodeSnapshot {
 
 type TimelineNodeAnimation =
   | Readonly<{ kind: "enter"; start: number; duration: number }>
-  | Readonly<{ kind: "shift"; fromLeft: number; toLeft: number; start: number; duration: number }>;
+  | Readonly<{
+      kind: "shift";
+      fromLeft: number;
+      toLeft: number;
+      start: number;
+      duration: number;
+    }>;
 
 interface TimelineExitAnimation extends TimelineNodeSnapshot {
   readonly start: number;
@@ -80,11 +97,23 @@ export function constrainTimelineTooltipPosition(
   viewportWidth = window.innerWidth,
   viewportHeight = window.innerHeight,
 ): Readonly<{ left: number; top: number }> {
-  const maxLeft = Math.max(TOOLTIP_EDGE_INSET, viewportWidth - tooltipWidth - TOOLTIP_EDGE_INSET);
-  const maxTop = Math.max(TOOLTIP_EDGE_INSET, viewportHeight - tooltipHeight - TOOLTIP_EDGE_INSET);
+  const maxLeft = Math.max(
+    TOOLTIP_EDGE_INSET,
+    viewportWidth - tooltipWidth - TOOLTIP_EDGE_INSET,
+  );
+  const maxTop = Math.max(
+    TOOLTIP_EDGE_INSET,
+    viewportHeight - tooltipHeight - TOOLTIP_EDGE_INSET,
+  );
   return {
-    left: Math.max(TOOLTIP_EDGE_INSET, Math.min(pointerX + TOOLTIP_OFFSET, maxLeft)),
-    top: Math.max(TOOLTIP_EDGE_INSET, Math.min(pointerY + TOOLTIP_OFFSET, maxTop)),
+    left: Math.max(
+      TOOLTIP_EDGE_INSET,
+      Math.min(pointerX + TOOLTIP_OFFSET, maxLeft),
+    ),
+    top: Math.max(
+      TOOLTIP_EDGE_INSET,
+      Math.min(pointerY + TOOLTIP_OFFSET, maxTop),
+    ),
   };
 }
 
@@ -96,15 +125,24 @@ export function latestTimelineNodeAtProgress(
   let latest: TimelineNodeProgressPosition | null = null;
   for (const position of positions) {
     if (position.x > progressX) continue;
-    if (!latest || position.x > latest.x || (position.x === latest.x && isLaterTimelineNode(position.node, latest.node))) {
+    if (
+      !latest ||
+      position.x > latest.x ||
+      (position.x === latest.x &&
+        isLaterTimelineNode(position.node, latest.node))
+    ) {
       latest = position;
     }
   }
   return latest?.node ?? null;
 }
 
-function isLaterTimelineNode(candidate: PlanningNodeView, current: PlanningNodeView): boolean {
-  if (candidate.beforeWaypoint !== current.beforeWaypoint) return candidate.beforeWaypoint > current.beforeWaypoint;
+function isLaterTimelineNode(
+  candidate: PlanningNodeView,
+  current: PlanningNodeView,
+): boolean {
+  if (candidate.beforeWaypoint !== current.beforeWaypoint)
+    return candidate.beforeWaypoint > current.beforeWaypoint;
   if (candidate.index !== current.index) return candidate.index > current.index;
   return candidate.id.localeCompare(current.id) > 0;
 }
@@ -112,7 +150,8 @@ function isLaterTimelineNode(candidate: PlanningNodeView, current: PlanningNodeV
 export class PlanningTimelineView {
   readonly #context: CanvasRenderingContext2D;
   #activeDrag: ActiveDrag | null = null;
-  #drop: Readonly<{ beforeWaypoint: number; index: number; x: number }> | null = null;
+  #drop: Readonly<{ beforeWaypoint: number; index: number; x: number }> | null =
+    null;
   #scrubbing = false;
   #tooltipTimer: number | null = null;
   #layout: TimelineLayout | null = null;
@@ -130,7 +169,10 @@ export class PlanningTimelineView {
     drag: PlanningDragCoordinator,
   ) {
     const context = dom.timelineCanvas.getContext("2d");
-    if (!context) throw new Error("MotionView could not initialize the Planning timeline canvas.");
+    if (!context)
+      throw new Error(
+        "MotionView could not initialize the Planning timeline canvas.",
+      );
     this.#context = context;
     drag.started.subscribe((event) => this.beginDrag(event));
   }
@@ -144,14 +186,26 @@ export class PlanningTimelineView {
       this.dom.timelineCanvas.setPointerCapture(event.pointerId);
       this.scrub(event.clientX);
     });
-    this.dom.timelineCanvas.addEventListener("pointermove", (event) => { if (this.#scrubbing) this.scrub(event.clientX); });
+    this.dom.timelineCanvas.addEventListener("pointermove", (event) => {
+      if (this.#scrubbing) this.scrub(event.clientX);
+    });
     this.dom.timelineCanvas.addEventListener("pointerup", (event) => {
       this.#scrubbing = false;
-      try { this.dom.timelineCanvas.releasePointerCapture(event.pointerId); } catch { /* already released */ }
+      try {
+        this.dom.timelineCanvas.releasePointerCapture(event.pointerId);
+      } catch {
+        /* already released */
+      }
     });
-    this.dom.timelineCanvas.addEventListener("pointercancel", () => { this.#scrubbing = false; });
+    this.dom.timelineCanvas.addEventListener("pointercancel", () => {
+      this.#scrubbing = false;
+    });
     this.dom.eventTimeline.addEventListener("click", (event) => {
-      if (event.target === this.dom.eventTimeline || event.target === this.dom.eventTimelineInner) this.planning.selection.selectNode(null);
+      if (
+        event.target === this.dom.eventTimeline ||
+        event.target === this.dom.eventTimelineInner
+      )
+        this.planning.selection.selectNode(null);
     });
     window.addEventListener("pointermove", (event) => this.moveDrag(event));
     window.addEventListener("pointerup", () => this.finishDrag());
@@ -160,7 +214,12 @@ export class PlanningTimelineView {
   }
 
   render(): void {
-    const nodes = [...this.planning.timeline.nodes].sort((a, b) => a.beforeWaypoint - b.beforeWaypoint || a.index - b.index || a.id.localeCompare(b.id));
+    const nodes = [...this.planning.timeline.nodes].sort(
+      (a, b) =>
+        a.beforeWaypoint - b.beforeWaypoint ||
+        a.index - b.index ||
+        a.id.localeCompare(b.id),
+    );
     const layout = this.buildLayout(nodes);
     const previousSnapshots = this.#nodeSnapshots;
     const nextSnapshots = new Map<string, TimelineNodeSnapshot>();
@@ -181,7 +240,10 @@ export class PlanningTimelineView {
     });
     for (const node of nodes) {
       const object = this.planning.objects.get(node.objectId);
-      const method = getPlanNodeEffectiveMethod(this.planning.objects.items, node);
+      const method = getPlanNodeEffectiveMethod(
+        this.planning.objects.items,
+        node,
+      );
       if (!object || !method) continue;
       const element = document.createElement("button");
       element.type = "button";
@@ -193,7 +255,13 @@ export class PlanningTimelineView {
       element.style.left = `${left}px`;
       element.style.background = object.color || getDefaultPlanObjectColor(0);
       element.style.color = getContrastTextColor(object.color);
-      element.textContent = String(getPlanMethodNumber(this.planning.objects.items, node.objectId, node.methodId) ?? "");
+      element.textContent = String(
+        getPlanMethodNumber(
+          this.planning.objects.items,
+          node.objectId,
+          node.methodId,
+        ) ?? "",
+      );
       nextSnapshots.set(node.id, {
         left,
         background: element.style.background,
@@ -201,20 +269,50 @@ export class PlanningTimelineView {
         color: element.style.color,
         text: element.textContent || "",
       });
-      element.addEventListener("click", (event) => { event.stopPropagation(); this.planning.selection.selectNode(node.id); });
-      element.addEventListener("dblclick", (event) => { event.stopPropagation(); void this.editNode(node.id); });
+      element.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.planning.selection.selectNode(node.id);
+      });
+      element.addEventListener("dblclick", (event) => {
+        event.stopPropagation();
+        void this.editNode(node.id);
+      });
       element.addEventListener("pointerdown", (event) => {
         if (event.button !== 0) return;
-        this.beginDrag({ source: "timeline", objectId: node.objectId, methodId: node.methodId, nodeId: node.id, sourceElement: element, startX: event.clientX, startY: event.clientY });
+        this.beginDrag({
+          source: "timeline",
+          objectId: node.objectId,
+          methodId: node.methodId,
+          nodeId: node.id,
+          sourceElement: element,
+          startX: event.clientX,
+          startY: event.clientY,
+        });
       });
-      element.addEventListener("pointerenter", (event) => this.showTooltip(`${object.name || "Object"} • ${method.name}`, event.clientX, event.clientY, method.hasOverride));
-      element.addEventListener("pointermove", (event) => this.positionTooltip(event.clientX, event.clientY));
+      element.addEventListener("pointerenter", (event) =>
+        this.showTooltip(
+          `${object.name || "Object"} • ${method.name}`,
+          event.clientX,
+          event.clientY,
+          method.hasOverride,
+        ),
+      );
+      element.addEventListener("pointermove", (event) =>
+        this.positionTooltip(event.clientX, event.clientY),
+      );
       element.addEventListener("pointerleave", () => this.hideTooltip());
       this.dom.timelineNodeLayer.appendChild(element);
-      if (animateChanges) this.prepareNodeAnimation(node.id, previousSnapshots.get(node.id), left, now);
+      if (animateChanges)
+        this.prepareNodeAnimation(
+          node.id,
+          previousSnapshots.get(node.id),
+          left,
+          now,
+        );
       this.playNodeAnimation(node.id, element, now);
     }
-    if (animateChanges) this.prepareRemovedNodeAnimations(previousSnapshots, nextSnapshots, now);
+    if (animateChanges)
+      this.prepareRemovedNodeAnimations(previousSnapshots, nextSnapshots, now);
     this.renderRemovedNodeAnimations(now);
     this.#nodeSnapshots = nextSnapshots;
     this.#hasRenderedNodes = true;
@@ -229,11 +327,15 @@ export class PlanningTimelineView {
       return;
     }
     const rect = this.dom.timelineCanvas.getBoundingClientRect();
-    const layout = this.#layout ?? this.buildLayout([...this.planning.timeline.nodes]);
+    const layout =
+      this.#layout ?? this.buildLayout([...this.planning.timeline.nodes]);
     const ratio = window.devicePixelRatio || 1;
     const pixelWidth = Math.max(1, Math.floor(rect.width * ratio));
     const pixelHeight = Math.max(1, Math.floor(rect.height * ratio));
-    if (this.dom.timelineCanvas.width !== pixelWidth || this.dom.timelineCanvas.height !== pixelHeight) {
+    if (
+      this.dom.timelineCanvas.width !== pixelWidth ||
+      this.dom.timelineCanvas.height !== pixelHeight
+    ) {
       this.dom.timelineCanvas.width = pixelWidth;
       this.dom.timelineCanvas.height = pixelHeight;
       this.#context.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -261,11 +363,14 @@ export class PlanningTimelineView {
     this.#context.fill();
   }
 
-  resize(): void { this.render(); }
+  resize(): void {
+    this.render();
+  }
 
   /** Uses the displayed timeline geometry, rather than field-route distance. */
   latestNodeAtProgress(): PlanningNodeView | null {
-    const layout = this.#layout ?? this.buildLayout([...this.planning.timeline.nodes]);
+    const layout =
+      this.#layout ?? this.buildLayout([...this.planning.timeline.nodes]);
     return latestTimelineNodeAtProgress(
       this.nodeProgressPositions(layout),
       this.xForDistance(this.planning.playback.distance, layout),
@@ -274,7 +379,12 @@ export class PlanningTimelineView {
 
   private scrub(clientX: number): void {
     const rect = this.dom.timelineCanvas.getBoundingClientRect();
-    this.planning.playback.setDistance(this.distanceForX(clientX - rect.left, this.#layout ?? this.buildLayout([...this.planning.timeline.nodes])));
+    this.planning.playback.setDistance(
+      this.distanceForX(
+        clientX - rect.left,
+        this.#layout ?? this.buildLayout([...this.planning.timeline.nodes]),
+      ),
+    );
   }
 
   private beginDrag(event: Readonly<PlanningMethodDrag>): void {
@@ -288,7 +398,11 @@ export class PlanningTimelineView {
   private moveDrag(event: PointerEvent): void {
     const drag = this.#activeDrag;
     if (!drag) return;
-    if (!drag.started && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
+    if (
+      !drag.started &&
+      Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4
+    )
+      return;
     drag.started = true;
     drag.sourceElement.classList.add("isDragging");
     document.body.style.cursor = "grabbing";
@@ -297,9 +411,16 @@ export class PlanningTimelineView {
     drag.ghost.style.top = `${event.clientY + 12}px`;
     drag.ghost.style.zIndex = "1000";
     const rect = this.dom.timelineViewport.getBoundingClientRect();
-    if (event.clientX < rect.left + 40) this.dom.timelineViewport.scrollLeft -= 10;
-    else if (event.clientX > rect.right - 40) this.dom.timelineViewport.scrollLeft += 10;
-    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+    if (event.clientX < rect.left + 40)
+      this.dom.timelineViewport.scrollLeft -= 10;
+    else if (event.clientX > rect.right - 40)
+      this.dom.timelineViewport.scrollLeft += 10;
+    if (
+      event.clientX < rect.left ||
+      event.clientX > rect.right ||
+      event.clientY < rect.top ||
+      event.clientY > rect.bottom
+    ) {
       this.#drop = null;
     } else {
       this.#drop = this.dropTarget(event.clientX);
@@ -311,13 +432,31 @@ export class PlanningTimelineView {
     const drag = this.#activeDrag;
     const drop = this.#drop;
     if (drag?.started && drop) {
-      const node = drag.source === "sidebar"
-        ? this.planning.timeline.insert(drag.objectId, drag.methodId, drop.beforeWaypoint, drop.index)
-        : drag.nodeId ? this.planning.timeline.move(drag.nodeId, drop.beforeWaypoint, drop.index) : null;
+      const node =
+        drag.source === "sidebar"
+          ? this.planning.timeline.insert(
+              drag.objectId,
+              drag.methodId,
+              drop.beforeWaypoint,
+              drop.index,
+            )
+          : drag.nodeId
+            ? this.planning.timeline.move(
+                drag.nodeId,
+                drop.beforeWaypoint,
+                drop.index,
+              )
+            : null;
       if (node) {
         this.planning.selection.selectNode(node.id);
-        const telemetry = drag.source === "sidebar" ? planningTelemetry.timelineNodeCreated : planningTelemetry.timelineNodeMoved;
-        void telemetry.call(planningTelemetry, this.planning.telemetryProperties());
+        const telemetry =
+          drag.source === "sidebar"
+            ? planningTelemetry.timelineNodeCreated
+            : planningTelemetry.timelineNodeMoved;
+        void telemetry.call(
+          planningTelemetry,
+          this.planning.telemetryProperties(),
+        );
       }
     }
     this.cancelDrag();
@@ -343,7 +482,10 @@ export class PlanningTimelineView {
     grip.textContent = "⋮⋮";
     const index = document.createElement("div");
     index.className = "planMethodIndex";
-    index.textContent = String(getPlanMethodNumber(this.planning.objects.items, objectId, methodId) ?? "");
+    index.textContent = String(
+      getPlanMethodNumber(this.planning.objects.items, objectId, methodId) ??
+        "",
+    );
     const content = document.createElement("div");
     content.className = "planMethodContent";
     const name = document.createElement("div");
@@ -354,7 +496,8 @@ export class PlanningTimelineView {
     code.textContent = method?.code ?? "";
     content.append(name, code);
     ghost.append(grip, index, content);
-    if (object?.color) ghost.style.setProperty("--plan-drag-color", object.color);
+    if (object?.color)
+      ghost.style.setProperty("--plan-drag-color", object.color);
     return ghost;
   }
 
@@ -367,18 +510,37 @@ export class PlanningTimelineView {
     return !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   }
 
-  private prepareNodeAnimation(id: string, previous: TimelineNodeSnapshot | undefined, left: number, now: number): void {
+  private prepareNodeAnimation(
+    id: string,
+    previous: TimelineNodeSnapshot | undefined,
+    left: number,
+    now: number,
+  ): void {
     if (this.#nodeAnimations.has(id)) return;
     if (!previous) {
-      this.#nodeAnimations.set(id, { kind: "enter", start: now, duration: NODE_ENTER_MS });
+      this.#nodeAnimations.set(id, {
+        kind: "enter",
+        start: now,
+        duration: NODE_ENTER_MS,
+      });
       return;
     }
     const deltaX = previous.left - left;
     if (Math.abs(deltaX) <= NODE_MOVE_EPSILON) return;
-    this.#nodeAnimations.set(id, { kind: "shift", fromLeft: previous.left, toLeft: left, start: now, duration: NODE_SHIFT_MS });
+    this.#nodeAnimations.set(id, {
+      kind: "shift",
+      fromLeft: previous.left,
+      toLeft: left,
+      start: now,
+      duration: NODE_SHIFT_MS,
+    });
   }
 
-  private playNodeAnimation(id: string, element: HTMLElement, now: number): void {
+  private playNodeAnimation(
+    id: string,
+    element: HTMLElement,
+    now: number,
+  ): void {
     const animation = this.#nodeAnimations.get(id);
     if (!animation) return;
     const elapsed = Math.max(0, now - animation.start);
@@ -392,7 +554,11 @@ export class PlanningTimelineView {
           { opacity: 0, transform: "translateY(-7px) scale(0.82)" },
           { opacity: 1, transform: "translateY(0) scale(1)" },
         ],
-        { duration: animation.duration, delay: -elapsed, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+        {
+          duration: animation.duration,
+          delay: -elapsed,
+          easing: "cubic-bezier(0.2, 0, 0, 1)",
+        },
       );
       return;
     }
@@ -402,16 +568,28 @@ export class PlanningTimelineView {
         { transform: `translateX(${deltaX}px)` },
         { transform: "translateX(0)" },
       ],
-      { duration: animation.duration, delay: -elapsed, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+      {
+        duration: animation.duration,
+        delay: -elapsed,
+        easing: "cubic-bezier(0.2, 0, 0, 1)",
+      },
     );
   }
 
-  private prepareRemovedNodeAnimations(previous: ReadonlyMap<string, TimelineNodeSnapshot>, next: ReadonlyMap<string, TimelineNodeSnapshot>, now: number): void {
+  private prepareRemovedNodeAnimations(
+    previous: ReadonlyMap<string, TimelineNodeSnapshot>,
+    next: ReadonlyMap<string, TimelineNodeSnapshot>,
+    now: number,
+  ): void {
     previous.forEach((snapshot, id) => {
       if (next.has(id)) return;
       if (this.#exitAnimations.has(id)) return;
       this.#nodeAnimations.delete(id);
-      this.#exitAnimations.set(id, { ...snapshot, start: now, duration: NODE_EXIT_MS });
+      this.#exitAnimations.set(id, {
+        ...snapshot,
+        start: now,
+        duration: NODE_EXIT_MS,
+      });
     });
   }
 
@@ -429,30 +607,42 @@ export class PlanningTimelineView {
       element.style.color = snapshot.color;
       element.textContent = snapshot.text;
       this.dom.timelineNodeLayer.appendChild(element);
-      element.animate(
-        [
-          { opacity: 1, transform: "translateY(0) scale(1)" },
-          { opacity: 0, transform: "translateY(5px) scale(0.82)" },
-        ],
-        { duration: snapshot.duration, delay: -elapsed, easing: "cubic-bezier(0.4, 0, 1, 1)" },
-      ).finished
-        .catch(() => undefined)
+      element
+        .animate(
+          [
+            { opacity: 1, transform: "translateY(0) scale(1)" },
+            { opacity: 0, transform: "translateY(5px) scale(0.82)" },
+          ],
+          {
+            duration: snapshot.duration,
+            delay: -elapsed,
+            easing: "cubic-bezier(0.4, 0, 1, 1)",
+          },
+        )
+        .finished.catch(() => undefined)
         .finally(() => element.remove());
     });
   }
 
   private pruneNodeAnimations(now: number): void {
     this.#nodeAnimations.forEach((animation, id) => {
-      if (now - animation.start >= animation.duration) this.#nodeAnimations.delete(id);
+      if (now - animation.start >= animation.duration)
+        this.#nodeAnimations.delete(id);
     });
     this.#exitAnimations.forEach((animation, id) => {
-      if (now - animation.start >= animation.duration) this.#exitAnimations.delete(id);
+      if (now - animation.start >= animation.duration)
+        this.#exitAnimations.delete(id);
     });
   }
 
   private buildLayout(nodes: readonly PlanningNodeView[]): TimelineLayout {
     const waypointCount = this.planning.route.length;
-    const viewportWidth = Math.max(1, this.dom.timelineViewport.clientWidth || this.dom.timelineViewport.getBoundingClientRect().width || 1);
+    const viewportWidth = Math.max(
+      1,
+      this.dom.timelineViewport.clientWidth ||
+        this.dom.timelineViewport.getBoundingClientRect().width ||
+        1,
+    );
     const routeWidth = Math.min(
       MAX_PLAN_LENGTH_WIDTH,
       this.planning.projection.totalLength * PLAN_PIXELS_PER_INCH,
@@ -460,32 +650,49 @@ export class PlanningTimelineView {
     const baseContentWidth = Math.max(
       viewportWidth,
       PAD * 2 + EDGE_INSET * 2 + routeWidth,
-      PAD * 2 + EDGE_INSET * 2 + Math.max(0, waypointCount - 1) * WAYPOINT_MIN_GAP,
+      PAD * 2 +
+        EDGE_INSET * 2 +
+        Math.max(0, waypointCount - 1) * WAYPOINT_MIN_GAP,
       PAD * 2 + 120,
     );
-    const buckets = Array.from({ length: waypointCount }, (_, beforeWaypoint) => ({
-      beforeWaypoint,
-      nodes: nodes.filter((node) => node.beforeWaypoint === beforeWaypoint).sort((a, b) => a.index - b.index || a.id.localeCompare(b.id)),
-    }));
+    const buckets = Array.from(
+      { length: waypointCount },
+      (_, beforeWaypoint) => ({
+        beforeWaypoint,
+        nodes: nodes
+          .filter((node) => node.beforeWaypoint === beforeWaypoint)
+          .sort((a, b) => a.index - b.index || a.id.localeCompare(b.id)),
+      }),
+    );
     const total = this.planning.projection.totalLength;
     const baseWaypointX = Array.from({ length: waypointCount }, (_, index) => {
       if (waypointCount === 1) return PAD + EDGE_INSET;
-      const ratio = total > 0
-        ? (this.planning.projection.distances[index] ?? 0) / total
-        : index / Math.max(1, waypointCount - 1);
-      return PAD + EDGE_INSET + (baseContentWidth - PAD * 2 - EDGE_INSET * 2) * ratio;
+      const ratio =
+        total > 0
+          ? (this.planning.projection.distances[index] ?? 0) / total
+          : index / Math.max(1, waypointCount - 1);
+      return (
+        PAD + EDGE_INSET + (baseContentWidth - PAD * 2 - EDGE_INSET * 2) * ratio
+      );
     });
     const baseWidths = waypointCount
       ? [
           Math.max(0, (baseWaypointX[0] ?? PAD) - PAD),
-          ...baseWaypointX.slice(1).map((x, index) => Math.max(0, x - (baseWaypointX[index] ?? x))),
+          ...baseWaypointX
+            .slice(1)
+            .map((x, index) => Math.max(0, x - (baseWaypointX[index] ?? x))),
         ]
       : [];
     const widths = baseWidths.map((width, beforeWaypoint) => {
       const count = buckets[beforeWaypoint]?.nodes.length ?? 0;
       if (!count || !waypointCount) return width;
-      const needed = NODE_START_OFFSET + NODE_WIDTH + (count - 1) * NODE_SLOT
-        + (beforeWaypoint > 0 && beforeWaypoint < waypointCount ? NODE_END_OFFSET : 0);
+      const needed =
+        NODE_START_OFFSET +
+        NODE_WIDTH +
+        (count - 1) * NODE_SLOT +
+        (beforeWaypoint > 0 && beforeWaypoint < waypointCount
+          ? NODE_END_OFFSET
+          : 0);
       return Math.max(width, needed);
     });
     const waypointX: number[] = [];
@@ -495,52 +702,83 @@ export class PlanningTimelineView {
       waypointX.push(cursor);
     }
     const contentWidth = Math.max(viewportWidth, cursor + PAD);
-    const layouts = buckets.map((bucket, beforeWaypoint): TimelineBucketLayout => {
-      const start = beforeWaypoint === 0 ? PAD : waypointX[beforeWaypoint - 1] ?? PAD;
-      const width = widths[beforeWaypoint] ?? 0;
-      return {
-        beforeWaypoint,
-        start,
-        end: start + width,
-        nodeStart: start + (beforeWaypoint === 0 ? 10 : NODE_START_OFFSET),
-        nodes: bucket.nodes,
-      };
-    });
+    const layouts = buckets.map(
+      (bucket, beforeWaypoint): TimelineBucketLayout => {
+        const start =
+          beforeWaypoint === 0 ? PAD : (waypointX[beforeWaypoint - 1] ?? PAD);
+        const width = widths[beforeWaypoint] ?? 0;
+        return {
+          beforeWaypoint,
+          start,
+          end: start + width,
+          nodeStart: start + (beforeWaypoint === 0 ? 10 : NODE_START_OFFSET),
+          nodes: bucket.nodes,
+        };
+      },
+    );
     return { contentWidth, waypointX, buckets: layouts };
   }
 
-  private nodeProgressPositions(layout: TimelineLayout): TimelineNodeProgressPosition[] {
-    return layout.buckets.flatMap((bucket) => bucket.nodes.map((node) => ({
-      node,
-      x: bucket.nodeStart + node.index * NODE_SLOT + NODE_WIDTH / 2,
-    })));
+  private nodeProgressPositions(
+    layout: TimelineLayout,
+  ): TimelineNodeProgressPosition[] {
+    return layout.buckets.flatMap((bucket) =>
+      bucket.nodes.map((node) => ({
+        node,
+        x: bucket.nodeStart + node.index * NODE_SLOT + NODE_WIDTH / 2,
+      })),
+    );
   }
 
-  private dropTarget(clientX: number): Readonly<{ beforeWaypoint: number; index: number; x: number }> | null {
-    const layout = this.#layout ?? this.buildLayout([...this.planning.timeline.nodes]);
+  private dropTarget(
+    clientX: number,
+  ): Readonly<{ beforeWaypoint: number; index: number; x: number }> | null {
+    const layout =
+      this.#layout ?? this.buildLayout([...this.planning.timeline.nodes]);
     if (this.planning.route.length < 2) return null;
     const innerRect = this.dom.eventTimelineInner.getBoundingClientRect();
-    const x = Math.max(PAD, Math.min(layout.contentWidth - PAD, clientX - innerRect.left));
+    const x = Math.max(
+      PAD,
+      Math.min(layout.contentWidth - PAD, clientX - innerRect.left),
+    );
     let bucket: TimelineBucketLayout | null = layout.buckets[0] ?? null;
-    if (layout.waypointX.length && x > (layout.waypointX.at(-1) ?? 0)) return null;
+    if (layout.waypointX.length && x > (layout.waypointX.at(-1) ?? 0))
+      return null;
     else if (layout.waypointX.length && x >= layout.waypointX[0]!) {
-      bucket = layout.buckets.slice(1).find((candidate) => x <= candidate.end) ?? layout.buckets.at(-1) ?? bucket;
+      bucket =
+        layout.buckets.slice(1).find((candidate) => x <= candidate.end) ??
+        layout.buckets.at(-1) ??
+        bucket;
     }
     if (!bucket) return null;
     const dragId = this.#activeDrag?.nodeId;
     const remainingNodes = bucket.nodes.filter((node) => node.id !== dragId);
     const index = remainingNodes.length
-      ? remainingNodes.filter((node) => x > bucket.nodeStart + node.index * NODE_SLOT).length
+      ? remainingNodes.filter(
+          (node) => x > bucket.nodeStart + node.index * NODE_SLOT,
+        ).length
       : 0;
-    const lineX = Math.max(PAD + 2, Math.min(layout.contentWidth - PAD - 2, this.dropLineX(bucket, remainingNodes, index)));
+    const lineX = Math.max(
+      PAD + 2,
+      Math.min(
+        layout.contentWidth - PAD - 2,
+        this.dropLineX(bucket, remainingNodes, index),
+      ),
+    );
     return { beforeWaypoint: bucket.beforeWaypoint, index, x: lineX };
   }
 
-  private dropLineX(bucket: TimelineBucketLayout, nodes: readonly PlanningNodeView[], index: number): number {
+  private dropLineX(
+    bucket: TimelineBucketLayout,
+    nodes: readonly PlanningNodeView[],
+    index: number,
+  ): number {
     if (!nodes.length) return bucket.nodeStart - INSERT_HALF;
-    if (index <= 0) return bucket.nodeStart + nodes[0]!.index * NODE_SLOT - INSERT_HALF;
+    if (index <= 0)
+      return bucket.nodeStart + nodes[0]!.index * NODE_SLOT - INSERT_HALF;
     const previous = nodes[Math.min(index - 1, nodes.length - 1)]!;
-    if (index >= nodes.length) return bucket.nodeStart + previous.index * NODE_SLOT + INSERT_HALF;
+    if (index >= nodes.length)
+      return bucket.nodeStart + previous.index * NODE_SLOT + INSERT_HALF;
     const next = nodes[index]!;
     return bucket.nodeStart + ((previous.index + next.index) * NODE_SLOT) / 2;
   }
@@ -557,7 +795,11 @@ export class PlanningTimelineView {
       if (clamped > end) continue;
       const start = distances[index - 1] ?? 0;
       const ratio = end > start ? (clamped - start) / (end - start) : 1;
-      return (layout.waypointX[index - 1] ?? 0) + ((layout.waypointX[index] ?? 0) - (layout.waypointX[index - 1] ?? 0)) * ratio;
+      return (
+        (layout.waypointX[index - 1] ?? 0) +
+        ((layout.waypointX[index] ?? 0) - (layout.waypointX[index - 1] ?? 0)) *
+          ratio
+      );
     }
     return layout.waypointX.at(-1)!;
   }
@@ -580,15 +822,33 @@ export class PlanningTimelineView {
 
   private async editNode(nodeId: string): Promise<void> {
     const node = this.planning.timeline.get(nodeId);
-    const method = node ? getPlanNodeEffectiveMethod(this.planning.objects.items, node) : null;
+    const method = node
+      ? getPlanNodeEffectiveMethod(this.planning.objects.items, node)
+      : null;
     if (!node || !method) return;
-    const result = await this.dialogs.edit({ title: "Edit Placed Node", groupTitle: "Node Code", description: NODE_TEMPLATE_DESCRIPTION, code: method.code });
+    const result = await this.dialogs.edit({
+      title: "Edit Placed Node",
+      groupTitle: "Node Code",
+      description: NODE_TEMPLATE_DESCRIPTION,
+      code: method.code,
+    });
     if (!result) return;
     const changed = this.planning.timeline.setCodeOverride(nodeId, result.code);
-    if (changed.changed) void planningTelemetry.timelineNodeUpdated(this.planning.telemetryProperties({ node_override_created: !changed.hadOverride && changed.hasOverride, node_override_cleared: changed.hadOverride && !changed.hasOverride }));
+    if (changed.changed)
+      void planningTelemetry.timelineNodeUpdated(
+        this.planning.telemetryProperties({
+          node_override_created: !changed.hadOverride && changed.hasOverride,
+          node_override_cleared: changed.hadOverride && !changed.hasOverride,
+        }),
+      );
   }
 
-  private showTooltip(text: string, x: number, y: number, edited: boolean): void {
+  private showTooltip(
+    text: string,
+    x: number,
+    y: number,
+    edited: boolean,
+  ): void {
     this.hideTooltip();
     this.#tooltipTimer = window.setTimeout(() => {
       this.dom.nodeTooltip.textContent = text;

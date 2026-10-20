@@ -1,5 +1,9 @@
 import { getMode } from "../app/modeController";
-import { isTypingTarget, matchesShortcut, VIEWING_SHORTCUTS } from "../app/input";
+import {
+  isTypingTarget,
+  matchesShortcut,
+  VIEWING_SHORTCUTS,
+} from "../app/input";
 import { setStatus } from "../app/status";
 import type { ViewingFeature } from "./ViewingFeature";
 import type { ViewingView } from "./ViewingView";
@@ -22,7 +26,12 @@ export class ViewingInput {
   }
 
   handleKeydown(event: KeyboardEvent): boolean {
-    if (getMode() !== "viewing" || event.defaultPrevented || isTypingTarget(event.target)) return false;
+    if (
+      getMode() !== "viewing" ||
+      event.defaultPrevented ||
+      isTypingTarget(event.target)
+    )
+      return false;
     if (matchesShortcut(event, VIEWING_SHORTCUTS.floatingInfo)) {
       event.preventDefault();
       this.view.toggleFloatingInfo();
@@ -38,7 +47,10 @@ export class ViewingInput {
       this.view.openFloatingWatch();
       return true;
     }
-    if (matchesShortcut(event, VIEWING_SHORTCUTS.clearDetails) && this.viewing.navigation.selectedWaypointId != null) {
+    if (
+      matchesShortcut(event, VIEWING_SHORTCUTS.clearDetails) &&
+      this.viewing.navigation.selectedWaypointId != null
+    ) {
       event.preventDefault();
       this.view.clearWaypointSelection();
       return true;
@@ -46,10 +58,15 @@ export class ViewingInput {
     if (!this.viewing.data.hasData) return false;
     const { navigation, playback } = this.viewing;
 
-    if (matchesShortcut(event, VIEWING_SHORTCUTS.playback) && navigation.liveConnected) {
+    if (
+      matchesShortcut(event, VIEWING_SHORTCUTS.playback) &&
+      navigation.liveConnected
+    ) {
       event.preventDefault();
       navigation.setAutoFollow(!navigation.autoFollow);
-      setStatus(`Live View: Auto-follow head: ${navigation.autoFollow ? "ON" : "OFF"} (Space)`);
+      setStatus(
+        `Live View: Auto-follow head: ${navigation.autoFollow ? "ON" : "OFF"} (Space)`,
+      );
       return true;
     }
 

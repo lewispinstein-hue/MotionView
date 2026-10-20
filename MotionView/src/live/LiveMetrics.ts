@@ -1,7 +1,10 @@
 import { liveTelemetry } from "../telemetry/createTelemetry";
 import { createTelemetryId } from "../telemetry/telemetryIds";
 import type { TelemetryProperties } from "../telemetry/telemetryTypes";
-import type { ParsedLiveViewingBatch, ViewingAppendResult } from "../viewing/viewingTypes";
+import type {
+  ParsedLiveViewingBatch,
+  ViewingAppendResult,
+} from "../viewing/viewingTypes";
 import type { LiveRunEndReason, LiveRunStart } from "./liveTypes";
 
 interface LiveTelemetrySink {
@@ -84,10 +87,15 @@ export class LiveMetrics {
       latestTimestampMs: null,
     };
     this.#activeRun = run;
-    this.queueTelemetry(() => this.#telemetry.liveRunStarted(this.runProperties(run)));
+    this.queueTelemetry(() =>
+      this.#telemetry.liveRunStarted(this.runProperties(run)),
+    );
   }
 
-  accept(result: Readonly<ViewingAppendResult>, batch?: Readonly<ParsedLiveViewingBatch>): void {
+  accept(
+    result: Readonly<ViewingAppendResult>,
+    batch?: Readonly<ParsedLiveViewingBatch>,
+  ): void {
     const run = this.#activeRun;
     if (!run || !batch) return;
     run.poses += result.posesAdded;
@@ -95,7 +103,10 @@ export class LiveMetrics {
     run.logs += result.logsAdded;
     run.waypoints += result.waypointsAdded;
     run.batches += 1;
-    run.latestTimestampMs = maxTimestamp(run.latestTimestampMs, latestTimestamp(batch));
+    run.latestTimestampMs = maxTimestamp(
+      run.latestTimestampMs,
+      latestTimestamp(batch),
+    );
 
     for (const log of batch.logs ?? []) {
       if (log.isSystem !== true || log.level !== "FATAL") continue;
@@ -114,9 +125,16 @@ export class LiveMetrics {
     if (!run) return;
     this.#activeRun = null;
 
-    const observedDurationMs = Math.max(0, Math.round(this.#now() - run.observedStartedAt));
-    const lastTimestampMs = run.latestTimestampMs ?? run.start.robotStartTimestampMs;
-    const telemetryDurationMs = Math.max(0, lastTimestampMs - run.start.robotStartTimestampMs);
+    const observedDurationMs = Math.max(
+      0,
+      Math.round(this.#now() - run.observedStartedAt),
+    );
+    const lastTimestampMs =
+      run.latestTimestampMs ?? run.start.robotStartTimestampMs;
+    const telemetryDurationMs = Math.max(
+      0,
+      lastTimestampMs - run.start.robotStartTimestampMs,
+    );
     this.#sessionSummary.runs += 1;
     this.#sessionSummary.poses += run.poses;
     this.#sessionSummary.watches += run.watches;
@@ -126,26 +144,28 @@ export class LiveMetrics {
     this.#sessionSummary.fatalSystemLogs += run.fatalSystemLogs;
     this.#sessionSummary.observedDurationMs += observedDurationMs;
     this.#sessionSummary.telemetryDurationMs += telemetryDurationMs;
-    this.queueTelemetry(() => this.#telemetry.liveRunEnded({
-      ...this.runProperties(run),
-      end_reason: reason,
-      observed_duration_ms: observedDurationMs,
-      telemetry_duration_ms: telemetryDurationMs,
-      last_telemetry_timestamp_ms: lastTimestampMs,
-      poses_received: run.poses,
-      watches_received: run.watches,
-      logs_received: run.logs,
-      waypoints_received: run.waypoints,
-      // Length aliases make the final snapshot easy to query alongside the
-      // corresponding Viewing collections while preserving the original
-      // received-count property names.
-      poses_len: run.poses,
-      watches_len: run.watches,
-      logs_len: run.logs,
-      waypoints_len: run.waypoints,
-      accepted_batches: run.batches,
-      fatal_system_logs: run.fatalSystemLogs,
-    }));
+    this.queueTelemetry(() =>
+      this.#telemetry.liveRunEnded({
+        ...this.runProperties(run),
+        end_reason: reason,
+        observed_duration_ms: observedDurationMs,
+        telemetry_duration_ms: telemetryDurationMs,
+        last_telemetry_timestamp_ms: lastTimestampMs,
+        poses_received: run.poses,
+        watches_received: run.watches,
+        logs_received: run.logs,
+        waypoints_received: run.waypoints,
+        // Length aliases make the final snapshot easy to query alongside the
+        // corresponding Viewing collections while preserving the original
+        // received-count property names.
+        poses_len: run.poses,
+        watches_len: run.watches,
+        logs_len: run.logs,
+        waypoints_len: run.waypoints,
+        accepted_batches: run.batches,
+        fatal_system_logs: run.fatalSystemLogs,
+      }),
+    );
   }
 
   async finalizeTelemetry(): Promise<void> {
@@ -156,7 +176,9 @@ export class LiveMetrics {
     // detailed per-run events. Existing dashboard fields are retained while
     // the additional totals describe every robot-program run in this app use.
     this.queueTelemetry(() => this.#telemetry.totalStreamingDuration());
-    this.queueTelemetry(() => this.#telemetry.livestreamMetrics(this.sessionProperties()));
+    this.queueTelemetry(() =>
+      this.#telemetry.livestreamMetrics(this.sessionProperties()),
+    );
     await this.#telemetryChain;
   }
 
@@ -204,16 +226,24 @@ export class LiveMetrics {
   }
 }
 
-function latestTimestamp(batch: Readonly<ParsedLiveViewingBatch>): number | null {
+function latestTimestamp(
+  batch: Readonly<ParsedLiveViewingBatch>,
+): number | null {
   let latest: number | null = null;
-  for (const pose of batch.poses ?? []) latest = maxTimestamp(latest, pose.t ?? null);
-  for (const watch of batch.watches ?? []) latest = maxTimestamp(latest, watch.t);
+  for (const pose of batch.poses ?? [])
+    latest = maxTimestamp(latest, pose.t ?? null);
+  for (const watch of batch.watches ?? [])
+    latest = maxTimestamp(latest, watch.t);
   for (const log of batch.logs ?? []) latest = maxTimestamp(latest, log.t);
-  for (const waypoint of batch.waypointEvents ?? []) latest = maxTimestamp(latest, waypoint.t);
+  for (const waypoint of batch.waypointEvents ?? [])
+    latest = maxTimestamp(latest, waypoint.t);
   return latest;
 }
 
-function maxTimestamp(current: number | null, candidate: number | null): number | null {
+function maxTimestamp(
+  current: number | null,
+  candidate: number | null,
+): number | null {
   if (candidate == null || !Number.isFinite(candidate)) return current;
   return current == null ? candidate : Math.max(current, candidate);
 }

@@ -13,39 +13,75 @@ export class PlanningSettingsBinding {
     private readonly planning: PlanningFeature,
     private readonly field: FieldRenderer,
     private readonly codeExport: PlanningCodeExportDialog,
-    private readonly dom: SettingsDom
+    private readonly dom: SettingsDom,
   ) {}
 
   bind(): void {
     if (this.#bound) return;
     this.#bound = true;
-    this.settings.changed.subscribe(({ settings, keys }) => this.apply(settings, keys));
-    const bind = (input: HTMLInputElement | HTMLSelectElement, key: keyof MotionViewSettings, event = "input") =>
-      input.addEventListener(event, () => this.settings.update({
-        [key]: input instanceof HTMLInputElement && input.type === "checkbox" ? input.checked : input.value
-      }));
-    
+    this.settings.changed.subscribe(({ settings, keys }) =>
+      this.apply(settings, keys),
+    );
+    const bind = (
+      input: HTMLInputElement | HTMLSelectElement,
+      key: keyof MotionViewSettings,
+      event = "input",
+    ) =>
+      input.addEventListener(event, () =>
+        this.settings.update({
+          [key]:
+            input instanceof HTMLInputElement && input.type === "checkbox"
+              ? input.checked
+              : input.value,
+        }),
+      );
+
     bind(this.dom.planMoveStep, "planMoveStep");
     bind(this.dom.planSnapStep, "planSnapStep", "change");
     bind(this.dom.planThetaSnapStep, "planThetaSnapStep", "change");
     bind(this.dom.planLimitBounds, "planLimitBounds", "change");
-    this.codeExport.changed.subscribe((planningCodeExport) => this.settings.update({ planningCodeExport }));
+    this.codeExport.changed.subscribe((planningCodeExport) =>
+      this.settings.update({ planningCodeExport }),
+    );
     this.planning.events.documentChanged.subscribe(({ kind }) => {
       if (kind === "template") {
-        this.settings.update({ planExportTemplate: this.planning.exportTemplate }, "system");
-      }});
-    this.field.events.fieldImageLoaded.subscribe(() => this.configureProjection());
+        this.settings.update(
+          { planExportTemplate: this.planning.exportTemplate },
+          "system",
+        );
+      }
+    });
+    this.field.events.fieldImageLoaded.subscribe(() =>
+      this.configureProjection(),
+    );
   }
   applyAll(): void {
-    this.apply(this.settings.current, Object.keys(this.settings.current) as (keyof MotionViewSettings)[]);
+    this.apply(
+      this.settings.current,
+      Object.keys(this.settings.current) as (keyof MotionViewSettings)[],
+    );
   }
   moveStepInches(): number {
-    return currentUnitsToInches(Number(this.settings.current.planMoveStep ?? 0.5));
+    return currentUnitsToInches(
+      Number(this.settings.current.planMoveStep ?? 0.5),
+    );
   }
 
-  private apply(values: Readonly<MotionViewSettings>, keys: readonly (keyof MotionViewSettings)[]): void {
-    const changed = (...wanted: (keyof MotionViewSettings)[]) => wanted.some((key) => keys.includes(key));
-    if (changed("planMoveStep", "planSnapStep", "planThetaSnapStep", "planLimitBounds", "units")) {
+  private apply(
+    values: Readonly<MotionViewSettings>,
+    keys: readonly (keyof MotionViewSettings)[],
+  ): void {
+    const changed = (...wanted: (keyof MotionViewSettings)[]) =>
+      wanted.some((key) => keys.includes(key));
+    if (
+      changed(
+        "planMoveStep",
+        "planSnapStep",
+        "planThetaSnapStep",
+        "planLimitBounds",
+        "units",
+      )
+    ) {
       this.dom.planMoveStep.value = String(values.planMoveStep ?? 0.5);
       this.dom.planSnapStep.value = String(values.planSnapStep ?? 0);
       this.dom.planThetaSnapStep.value = String(values.planThetaSnapStep ?? 0);
@@ -56,7 +92,10 @@ export class PlanningSettingsBinding {
       }
       this.configureProjection();
     }
-    if (changed("planExportTemplate") && values.planExportTemplate !== undefined) {
+    if (
+      changed("planExportTemplate") &&
+      values.planExportTemplate !== undefined
+    ) {
       this.planning.setExportTemplate(values.planExportTemplate);
     }
     if (changed("planningCodeExport")) {
@@ -73,6 +112,7 @@ export class PlanningSettingsBinding {
       maxY: bounds.maxY,
       limitBounds: values.planLimitBounds !== false,
       positionSnap: currentUnitsToInches(Number(values.planSnapStep ?? 0)),
-      thetaSnap: Number(values.planThetaSnapStep ?? 0) || 0 });
+      thetaSnap: Number(values.planThetaSnapStep ?? 0) || 0,
+    });
   }
 }

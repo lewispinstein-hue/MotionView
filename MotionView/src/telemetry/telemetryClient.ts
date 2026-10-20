@@ -1,9 +1,15 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../tauri/commands";
-import { TelemetryQueue } from "./telemetryQueue";
+import { TelemetryQueue } from "./TelemetryQueue";
 import { createTelemetryId } from "./telemetryIds";
-import type { QueuedTelemetryEvent, SystemInfo, TelemetryCaptureOptions, TelemetryEventName, TelemetryProperties } from "./telemetryTypes";
+import type {
+  QueuedTelemetryEvent,
+  SystemInfo,
+  TelemetryCaptureOptions,
+  TelemetryEventName,
+  TelemetryProperties,
+} from "./telemetryTypes";
 
 interface PosthogRequest {
   event?: string;
@@ -17,7 +23,10 @@ export const EXIT_TELEMETRY_FLUSH_DEADLINE_MS = 2_500;
 export const VIEWER_SESSION_ID_PROPERTY = "viewer_session_id";
 
 /** Stamps identity at capture time so retries remain grouped with their origin. */
-export function withViewerSessionId(properties: TelemetryProperties, viewerSessionId: string): TelemetryProperties {
+export function withViewerSessionId(
+  properties: TelemetryProperties,
+  viewerSessionId: string,
+): TelemetryProperties {
   return { ...properties, [VIEWER_SESSION_ID_PROPERTY]: viewerSessionId };
 }
 
@@ -80,8 +89,13 @@ export class TelemetryClient {
     return this.appVersion;
   }
 
-  async capture(event: TelemetryEventName, properties: TelemetryProperties = {}, opts: TelemetryCaptureOptions = {}) {
-    const explicitlySubmitted = opts.explicitUserAction === true && isTauriRuntime();
+  async capture(
+    event: TelemetryEventName,
+    properties: TelemetryProperties = {},
+    opts: TelemetryCaptureOptions = {},
+  ) {
+    const explicitlySubmitted =
+      opts.explicitUserAction === true && isTauriRuntime();
     if (!this.enabled() && !explicitlySubmitted) return false;
 
     await this.init();
@@ -120,9 +134,11 @@ export class TelemetryClient {
     if (!this.enabled() || this.analyticsInitialized) return;
     if (this.analyticsInitialization) return this.analyticsInitialization;
 
-    this.analyticsInitialization = this.initializeAnalyticsOnce().finally(() => {
-      this.analyticsInitialization = null;
-    });
+    this.analyticsInitialization = this.initializeAnalyticsOnce().finally(
+      () => {
+        this.analyticsInitialization = null;
+      },
+    );
     return this.analyticsInitialization;
   }
 
@@ -177,7 +193,9 @@ export class TelemetryClient {
     }
 
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = new Promise<void>((resolve) => { timer = setTimeout(resolve, options.deadlineMs); });
+    const deadline = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, options.deadlineMs);
+    });
     try {
       // Whatever hasn't sent by the deadline is left for flushEvents to keep
       // working through in the background; queue.write() only persists once
@@ -192,7 +210,9 @@ export class TelemetryClient {
   private async flushEvents(events: QueuedTelemetryEvent[], attempts: number) {
     const remaining: QueuedTelemetryEvent[] = [];
     for (const event of events) {
-      const canSend = this.enabled() || (event.explicitUserAction === true && isTauriRuntime());
+      const canSend =
+        this.enabled() ||
+        (event.explicitUserAction === true && isTauriRuntime());
       if (!canSend) {
         remaining.push(event);
         continue;
@@ -206,10 +226,16 @@ export class TelemetryClient {
     this.queue.write(remaining);
   }
 
-  private async sendQueuedEvent(event: QueuedTelemetryEvent, wasQueued = false) {
+  private async sendQueuedEvent(
+    event: QueuedTelemetryEvent,
+    wasQueued = false,
+  ) {
     const sentAt = new Date();
     const createdAtMs = Date.parse(event.createdAt);
-    const queuedMs = wasQueued && Number.isFinite(createdAtMs) ? Math.max(0, sentAt.getTime() - createdAtMs) : 0;
+    const queuedMs =
+      wasQueued && Number.isFinite(createdAtMs)
+        ? Math.max(0, sentAt.getTime() - createdAtMs)
+        : 0;
     const properties = {
       ...this.globalProperties(),
       // Pre-session events from older releases receive the current session;
@@ -250,7 +276,11 @@ export class TelemetryClient {
     }
   }
 
-  private async withRetry<T>(fn: () => Promise<T>, attempts = 3, baseDelayMs = 300) {
+  private async withRetry<T>(
+    fn: () => Promise<T>,
+    attempts = 3,
+    baseDelayMs = 300,
+  ) {
     let lastErr: unknown = null;
     for (let i = 0; i < attempts; i += 1) {
       try {
@@ -258,7 +288,9 @@ export class TelemetryClient {
       } catch (err) {
         lastErr = err;
         if (i === attempts - 1) break;
-        await new Promise((resolve) => setTimeout(resolve, baseDelayMs * (2 ** i)));
+        await new Promise((resolve) =>
+          setTimeout(resolve, baseDelayMs * 2 ** i),
+        );
       }
     }
     throw lastErr;

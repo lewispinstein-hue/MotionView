@@ -1,4 +1,10 @@
-import type { PlanningNode, PlanningNodeView, PlanningObjectView, PlanningWaypoint, PlanningWaypointView } from "./planningTypes";
+import type {
+  PlanningNode,
+  PlanningNodeView,
+  PlanningObjectView,
+  PlanningWaypoint,
+  PlanningWaypointView,
+} from "./planningTypes";
 import { getPlanNodeEffectiveMethod } from "./planningObjects";
 
 export interface BuildPlanExportCodeOptions {
@@ -21,7 +27,7 @@ function isWaypointForwards(
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   if (dx === 0 && dy === 0) return true;
-  const pathTheta = Math.atan2(dx, dy) * 180 / Math.PI;
+  const pathTheta = (Math.atan2(dx, dy) * 180) / Math.PI;
   const delta = ((pathTheta - startTheta + 540) % 360) - 180;
   return Math.abs(delta) <= 90;
 }
@@ -38,7 +44,10 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     forwards: "true",
   };
 
-  const replacementsForNodeWaypoint = (point: Readonly<PlanningWaypoint>, index: number) => {
+  const replacementsForNodeWaypoint = (
+    point: Readonly<PlanningWaypoint>,
+    index: number,
+  ) => {
     const prev = options.waypoints[index - 1];
     const distance = prev ? Math.hypot(point.x - prev.x, point.y - prev.y) : 0;
     const theta = options.planThetaDegAt(index);
@@ -48,8 +57,13 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
       theta: options.formatTemplateNumber(theta),
       distance: options.formatTemplateNumber(distance),
       iteration: String(index),
-      speed: options.formatTemplateNumber(options.readPlanSpeed(point.speed, 127), 0),
-      forwards: String(isWaypointForwards(point, options.waypoints[index + 1], theta)),
+      speed: options.formatTemplateNumber(
+        options.readPlanSpeed(point.speed, 127),
+        0,
+      ),
+      forwards: String(
+        isWaypointForwards(point, options.waypoints[index + 1], theta),
+      ),
     };
   };
 
@@ -63,15 +77,28 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
       x: options.formatTemplateNumber(end.x),
       y: options.formatTemplateNumber(end.y),
       theta: options.formatTemplateNumber(theta),
-      distance: options.formatTemplateNumber(Math.hypot(end.x - start.x, end.y - start.y)),
+      distance: options.formatTemplateNumber(
+        Math.hypot(end.x - start.x, end.y - start.y),
+      ),
       iteration: String(index),
-      speed: options.formatTemplateNumber(options.readPlanSpeed(start.speed, 127), 0),
-      forwards: String(isWaypointForwards(start, end, options.planThetaDegAt(index))),
+      speed: options.formatTemplateNumber(
+        options.readPlanSpeed(start.speed, 127),
+        0,
+      ),
+      forwards: String(
+        isWaypointForwards(start, end, options.planThetaDegAt(index)),
+      ),
     };
   };
 
-  const renderTemplate = (template: string, replacements: Readonly<Record<string, string>>) => {
-    return String(template || "").replace(/\$\{(x|y|theta|distance|iteration|speed|forwards)\}/g, (_, token) => replacements[token] ?? "");
+  const renderTemplate = (
+    template: string,
+    replacements: Readonly<Record<string, string>>,
+  ) => {
+    return String(template || "").replace(
+      /\$\{(x|y|theta|distance|iteration|speed|forwards)\}/g,
+      (_, token) => replacements[token] ?? "",
+    );
   };
 
   const renderSegmentTemplate = (
@@ -84,7 +111,10 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
   const renderNodeTemplate = (template: string, beforeWaypoint: number) => {
     const index = Math.max(0, Math.trunc(beforeWaypoint) - 1);
     const point = options.waypoints[index];
-    return renderTemplate(template, point ? replacementsForNodeWaypoint(point, index) : defaultReplacements);
+    return renderTemplate(
+      template,
+      point ? replacementsForNodeWaypoint(point, index) : defaultReplacements,
+    );
   };
 
   const nodesByBucket = new Map<number, Readonly<PlanningNode>[]>();
@@ -100,7 +130,9 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     for (const node of bucketNodes) {
       const method = getPlanNodeEffectiveMethod(options.objects, node);
       if (!method) continue;
-      blocks.push(renderNodeTemplate(String(method.code || ""), beforeWaypoint));
+      blocks.push(
+        renderNodeTemplate(String(method.code || ""), beforeWaypoint),
+      );
     }
   };
 

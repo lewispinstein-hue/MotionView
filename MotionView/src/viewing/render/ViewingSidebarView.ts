@@ -27,8 +27,18 @@ export class ViewingSidebarView {
   #shiftHeld = false;
   #shiftSync: ShiftSyncSession | null = null;
   #handledSidebarSyncCommitId = 0;
-  readonly #scrollPositions: Record<SidebarSection, number> = { watches: 0, logs: 0, waypoints: 0, poses: 0 };
-  readonly #scrollRestoreGenerations: Record<SidebarSection, number> = { watches: 0, logs: 0, waypoints: 0, poses: 0 };
+  readonly #scrollPositions: Record<SidebarSection, number> = {
+    watches: 0,
+    logs: 0,
+    waypoints: 0,
+    poses: 0,
+  };
+  readonly #scrollRestoreGenerations: Record<SidebarSection, number> = {
+    watches: 0,
+    logs: 0,
+    waypoints: 0,
+    poses: 0,
+  };
 
   constructor(
     private readonly viewing: ViewingFeature,
@@ -49,12 +59,24 @@ export class ViewingSidebarView {
     this.poses.bind();
     this.floatingInfo.onPinnedWatchChanged(() => this.watches.render());
     this.watchGraph.onStateChanged(() => this.watches.render());
-    const sortControls = [this.dom.watchSort, this.dom.logSort, this.dom.waypointSort, this.dom.poseSort];
+    const sortControls = [
+      this.dom.watchSort,
+      this.dom.logSort,
+      this.dom.waypointSort,
+      this.dom.poseSort,
+    ];
     for (const control of sortControls) {
-      if (Array.from(control.options).some((option) => option.value === this.#sharedSort)) control.value = this.#sharedSort;
+      if (
+        Array.from(control.options).some(
+          (option) => option.value === this.#sharedSort,
+        )
+      )
+        control.value = this.#sharedSort;
     }
     for (const control of sortControls) {
-      control.addEventListener("change", () => this.syncSharedSort(control, sortControls));
+      control.addEventListener("change", () =>
+        this.syncSharedSort(control, sortControls),
+      );
     }
     this.dom.levelFilter.addEventListener("change", () => {
       this.watches.render();
@@ -67,17 +89,29 @@ export class ViewingSidebarView {
       control.addEventListener("change", () => this.refreshCounts());
     }
     for (const tab of this.dom.sectionTabs) {
-      tab.addEventListener("click", () => this.setActiveSection(tab.dataset.viewingSection as SidebarSection));
+      tab.addEventListener("click", () =>
+        this.setActiveSection(tab.dataset.viewingSection as SidebarSection),
+      );
     }
     this.dom.scrollContainer.addEventListener("pointerdown", (event) => {
       if (event.button !== 0 || !(event.target instanceof Element)) return;
-      if (event.target.closest(".viewingSidebarToolbar, .watchItem, button, input, select, label, a")) return;
+      if (
+        event.target.closest(
+          ".viewingSidebarToolbar, .watchItem, button, input, select, label, a",
+        )
+      )
+        return;
       this.viewing.navigation.clearSelection();
     });
     this.bindSectionWheelScroll();
-    this.dom.scrollContainer.addEventListener("scroll", () => {
-      this.#scrollPositions[this.#activeSection] = this.dom.scrollContainer.scrollTop;
-    }, { passive: true });
+    this.dom.scrollContainer.addEventListener(
+      "scroll",
+      () => {
+        this.#scrollPositions[this.#activeSection] =
+          this.dom.scrollContainer.scrollTop;
+      },
+      { passive: true },
+    );
     window.addEventListener("keydown", (event) => {
       if (event.key !== "Shift") return;
       this.#shiftHeld = true;
@@ -92,7 +126,9 @@ export class ViewingSidebarView {
       this.#shiftHeld = false;
       this.finishShiftSync();
     });
-    this.viewing.events.navigationChanged.subscribe(({ kind }) => this.handleNavigationChanged(kind));
+    this.viewing.events.navigationChanged.subscribe(({ kind }) =>
+      this.handleNavigationChanged(kind),
+    );
     this.dom.search.addEventListener("input", () => {
       this.#searchTerm = this.dom.search.value;
       this.watches.setSearch(this.#searchTerm);
@@ -129,22 +165,39 @@ export class ViewingSidebarView {
 
   private bindSectionWheelScroll(): void {
     const scroller = this.dom.sectionScroller;
-    scroller.addEventListener("wheel", (event) => {
-      if (event.ctrlKey || scroller.scrollWidth <= scroller.clientWidth) return;
-      const distance = event.deltaX || event.deltaY;
-      if (!distance) return;
-      const multiplier = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16
-        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? scroller.clientWidth
-          : 1;
-      scroller.scrollLeft += distance * multiplier;
-      event.preventDefault();
-    }, { passive: false });
+    scroller.addEventListener(
+      "wheel",
+      (event) => {
+        if (event.ctrlKey || scroller.scrollWidth <= scroller.clientWidth)
+          return;
+        const distance = event.deltaX || event.deltaY;
+        if (!distance) return;
+        const multiplier =
+          event.deltaMode === WheelEvent.DOM_DELTA_LINE
+            ? 16
+            : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+              ? scroller.clientWidth
+              : 1;
+        scroller.scrollLeft += distance * multiplier;
+        event.preventDefault();
+      },
+      { passive: false },
+    );
   }
 
-  private syncSharedSort(source: HTMLSelectElement, controls: readonly HTMLSelectElement[]): void {
+  private syncSharedSort(
+    source: HTMLSelectElement,
+    controls: readonly HTMLSelectElement[],
+  ): void {
     this.#sharedSort = source.value;
     for (const control of controls) {
-      if (control === source || !Array.from(control.options).some((option) => option.value === source.value)) continue;
+      if (
+        control === source ||
+        !Array.from(control.options).some(
+          (option) => option.value === source.value,
+        )
+      )
+        continue;
       control.value = source.value;
     }
     this.watches.render();
@@ -154,24 +207,34 @@ export class ViewingSidebarView {
   }
 
   private setActiveSection(section: SidebarSection): void {
-    if (!(["watches", "logs", "waypoints", "poses"] as const).includes(section)) return;
-    if (section !== this.#activeSection) this.viewing.navigation.clearSelection();
-    this.#scrollPositions[this.#activeSection] = this.dom.scrollContainer.scrollTop;
+    if (!(["watches", "logs", "waypoints", "poses"] as const).includes(section))
+      return;
+    if (section !== this.#activeSection)
+      this.viewing.navigation.clearSelection();
+    this.#scrollPositions[this.#activeSection] =
+      this.dom.scrollContainer.scrollTop;
     this.#activeSection = section;
     for (const tab of this.dom.sectionTabs) {
       const active = tab.dataset.viewingSection === section;
       tab.classList.toggle("isActive", active);
       tab.setAttribute("aria-selected", String(active));
     }
-    for (const [name, panel] of Object.entries(this.dom.panels) as Array<[SidebarSection, HTMLElement]>) {
+    for (const [name, panel] of Object.entries(this.dom.panels) as Array<
+      [SidebarSection, HTMLElement]
+    >) {
       panel.hidden = name !== section;
     }
     this.dom.searchWrap.hidden = false;
     this.dom.search.value = this.#searchTerm;
     const searchDisabled = section === "poses";
     this.dom.search.disabled = searchDisabled;
-    this.dom.search.placeholder = searchDisabled ? "Searching poses is unavailable" : "Search events…";
-    this.dom.search.setAttribute("aria-label", searchDisabled ? "Searching poses is unavailable" : "Search events");
+    this.dom.search.placeholder = searchDisabled
+      ? "Searching poses is unavailable"
+      : "Search events…";
+    this.dom.search.setAttribute(
+      "aria-label",
+      searchDisabled ? "Searching poses is unavailable" : "Search events",
+    );
     this.dom.levelFilter.disabled = section === "poses";
     this.dom.levelFilter.hidden = false;
     this.dom.watchSort.hidden = section !== "watches";
@@ -179,7 +242,11 @@ export class ViewingSidebarView {
     this.dom.waypointSort.hidden = section !== "waypoints";
     this.dom.poseSort.hidden = section !== "poses";
     const activeSort = this.sortFor(section);
-    if (Array.from(activeSort.options).some((option) => option.value === this.#sharedSort)) {
+    if (
+      Array.from(activeSort.options).some(
+        (option) => option.value === this.#sharedSort,
+      )
+    ) {
       activeSort.value = this.#sharedSort;
     }
     this.renderSection(section);
@@ -206,12 +273,17 @@ export class ViewingSidebarView {
     const target = this.#scrollPositions[section];
     let attempts = 5;
     const restore = () => {
-      if (section !== this.#activeSection || generation !== this.#scrollRestoreGenerations[section]) return;
+      if (
+        section !== this.#activeSection ||
+        generation !== this.#scrollRestoreGenerations[section]
+      )
+        return;
       this.dom.scrollContainer.scrollTop = target;
       if (--attempts > 0) requestAnimationFrame(restore);
       else {
         if (this.#shiftHeld && this.#shiftSync) this.syncActiveSection();
-        else this.#scrollPositions[section] = this.dom.scrollContainer.scrollTop;
+        else
+          this.#scrollPositions[section] = this.dom.scrollContainer.scrollTop;
       }
     };
     requestAnimationFrame(restore);
@@ -222,13 +294,20 @@ export class ViewingSidebarView {
     this.dom.logTabCount.textContent = String(this.logs.itemCount);
     this.dom.waypointTabCount.textContent = String(this.waypoints.itemCount);
     this.dom.poseTabCount.textContent = String(this.poses.itemCount);
-    const count = this.#activeSection === "watches" ? this.watches.itemCount
-      : this.#activeSection === "logs" ? this.logs.itemCount
-        : this.#activeSection === "waypoints" ? this.waypoints.itemCount : this.poses.itemCount;
+    const count =
+      this.#activeSection === "watches"
+        ? this.watches.itemCount
+        : this.#activeSection === "logs"
+          ? this.logs.itemCount
+          : this.#activeSection === "waypoints"
+            ? this.waypoints.itemCount
+            : this.poses.itemCount;
     this.dom.searchCount.textContent = String(count);
   }
 
-  private handleNavigationChanged(kind: "selection" | "hover" | "track-lock" | "live-state"): void {
+  private handleNavigationChanged(
+    kind: "selection" | "hover" | "track-lock" | "live-state",
+  ): void {
     const commitId = this.viewing.navigation.sidebarSyncCommitId;
     if (commitId !== this.#handledSidebarSyncCommitId) {
       this.#handledSidebarSyncCommitId = commitId;
@@ -264,7 +343,9 @@ export class ViewingSidebarView {
   private cancelShiftSync(): void {
     const session = this.#shiftSync;
     if (!session) return;
-    for (const [section, position] of Object.entries(session.initialScrollPositions) as Array<[SidebarSection, number]>) {
+    for (const [section, position] of Object.entries(
+      session.initialScrollPositions,
+    ) as Array<[SidebarSection, number]>) {
       this.#scrollPositions[section] = position;
     }
     this.clearPreviewSelections();
@@ -277,11 +358,13 @@ export class ViewingSidebarView {
     const time = this.syncTime();
     if (!session || time == null) return;
     if (session.initialScrollPositions[this.#activeSection] == null) {
-      session.initialScrollPositions[this.#activeSection] = this.dom.scrollContainer.scrollTop;
+      session.initialScrollPositions[this.#activeSection] =
+        this.dom.scrollContainer.scrollTop;
     }
     if (this.#activeSection === "watches") this.watches.setPreviewTime(time);
     else if (this.#activeSection === "logs") this.logs.setPreviewTime(time);
-    else if (this.#activeSection === "waypoints") this.waypoints.setPreviewTime(time);
+    else if (this.#activeSection === "waypoints")
+      this.waypoints.setPreviewTime(time);
     else this.poses.setPreviewTime(time);
   }
 
@@ -294,7 +377,11 @@ export class ViewingSidebarView {
 
   private inputHoverTime(): number | null {
     const navigation = this.viewing.navigation;
-    if (navigation.timelineHoverSource === "timeline" && navigation.hoverTimelineTime != null) return navigation.hoverTimelineTime;
+    if (
+      navigation.timelineHoverSource === "timeline" &&
+      navigation.hoverTimelineTime != null
+    )
+      return navigation.hoverTimelineTime;
     return navigation.trackHoverTime;
   }
 
@@ -302,8 +389,10 @@ export class ViewingSidebarView {
     const hoverTime = this.inputHoverTime();
     if (hoverTime != null) return hoverTime;
     if (this.viewing.playback.isPlaying) return this.viewing.playback.timeMs;
-    return this.viewing.navigation.trackLockPose?.t
-      ?? this.viewing.data.poses[this.viewing.navigation.selectedIndex]?.t
-      ?? null;
+    return (
+      this.viewing.navigation.trackLockPose?.t ??
+      this.viewing.data.poses[this.viewing.navigation.selectedIndex]?.t ??
+      null
+    );
   }
 }

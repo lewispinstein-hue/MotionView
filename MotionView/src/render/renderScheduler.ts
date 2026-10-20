@@ -15,7 +15,9 @@ let viewingLayer: ViewingRenderLayer | null = null;
 let planningLayer: PlanningRenderLayer | null = null;
 let drawQueued = false;
 
-export function configureRenderScheduler(nextCallbacks: RenderSchedulerCallbacks): void {
+export function configureRenderScheduler(
+  nextCallbacks: RenderSchedulerCallbacks,
+): void {
   callbacks = nextCallbacks;
 }
 

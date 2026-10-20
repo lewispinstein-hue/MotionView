@@ -29,7 +29,14 @@ export class LiveFeature {
     this.preferences = new LivePreferences(this.#session, this.events);
     this.metrics = new LiveMetrics();
     this.project = new LiveProject(bridge, this.events);
-    this.stream = new LiveStream(this.#session, this.events, bridge, viewing, parser, this.metrics);
+    this.stream = new LiveStream(
+      this.#session,
+      this.events,
+      bridge,
+      viewing,
+      parser,
+      this.metrics,
+    );
     this.connection = new LiveConnection(
       this.#session,
       this.events,
@@ -43,14 +50,17 @@ export class LiveFeature {
     this.events.connectionChanged.subscribe(() => this.syncViewingLiveState());
     this.events.streamChanged.subscribe(() => this.syncViewingLiveState());
     this.events.projectChanged.subscribe((event) => {
-      if (event.valid && this.connection.state === "disconnected") void this.connection.connect();
-      else if (!event.valid && this.connection.connected) void this.connection.disconnect();
+      if (event.valid && this.connection.state === "disconnected")
+        void this.connection.connect();
+      else if (!event.valid && this.connection.connected)
+        void this.connection.disconnect();
     });
   }
 
   initialize(): Promise<void> {
     if (!this.#initializePromise) {
-      this.#initializePromise = this.project.loadBackendPath()
+      this.#initializePromise = this.project
+        .loadBackendPath()
         .then(async () => {
           if (this.project.valid) await this.connection.connect();
         })
@@ -71,7 +81,8 @@ export class LiveFeature {
 
   async start(): Promise<boolean> {
     await this.initialize();
-    if (!this.connection.connected && !(await this.connection.connect())) return false;
+    if (!this.connection.connected && !(await this.connection.connect()))
+      return false;
     return this.stream.start();
   }
 

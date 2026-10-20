@@ -1,114 +1,222 @@
 import type { MotionViewApp } from "../MotionViewApp";
 import type { PlanningDialogs } from "../../planning";
-import { buildWaypointState, normalizeLogs, normalizePoses, normalizeWatches } from "../../viewing";
+import {
+  buildWaypointState,
+  normalizeLogs,
+  normalizePoses,
+  normalizeWatches,
+} from "../../viewing";
 import { viewingTelemetry } from "../../telemetry/createTelemetry";
 import { isTauriRuntime, readUpgradeState } from "../../tauri/commands";
 import { requestDrawAll } from "../../render/renderScheduler";
 import type { TopBarView } from "../topBar";
 import type { RouteImportResult } from "./importTypes";
 
-function numberOrNull(value: unknown): number | null { const number = Number(value); return Number.isFinite(number) ? number : null; }
-function logLevel(value: unknown): "DEBUG" | "INFO" | "WARN" | "ERROR" | "FATAL" { const level = String(value ?? "INFO").toUpperCase(); return level === "DEBUG" || level === "WARN" || level === "ERROR" || level === "FATAL" ? level : "INFO"; }
+function numberOrNull(value: unknown): number | null {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+function logLevel(
+  value: unknown,
+): "DEBUG" | "INFO" | "WARN" | "ERROR" | "FATAL" {
+  const level = String(value ?? "INFO").toUpperCase();
+  return level === "DEBUG" ||
+    level === "WARN" ||
+    level === "ERROR" ||
+    level === "FATAL"
+    ? level
+    : "INFO";
+}
 
 const MAX_IMPORT_BYTES = 32 * 1024 * 1024;
 const MAX_IMPORT_ITEMS = 100_000;
 
 function assertArrayLimit(value: unknown, name: string): void {
   if (Array.isArray(value) && value.length > MAX_IMPORT_ITEMS) {
-    throw new Error(`${name} contains more than ${MAX_IMPORT_ITEMS.toLocaleString()} items`);
+    throw new Error(
+      `${name} contains more than ${MAX_IMPORT_ITEMS.toLocaleString()} items`,
+    );
   }
 }
 
 function assertDocumentLimits(record: Record<string, unknown>): void {
-  for (const name of ["planned-path", "planned-objects", "planned-nodes", "poses", "robot-path", "watches", "watch", "logs", "log", "waypoints"]) {
+  for (const name of [
+    "planned-path",
+    "planned-objects",
+    "planned-nodes",
+    "poses",
+    "robot-path",
+    "watches",
+    "watch",
+    "logs",
+    "log",
+    "waypoints",
+  ]) {
     assertArrayLimit(record[name], name);
   }
 
   let methodCount = 0;
-  for (const object of Array.isArray(record["planned-objects"]) ? record["planned-objects"] : []) {
-    const methods = object && typeof object === "object" ? (object as Record<string, unknown>).methods : undefined;
+  for (const object of Array.isArray(record["planned-objects"])
+    ? record["planned-objects"]
+    : []) {
+    const methods =
+      object && typeof object === "object"
+        ? (object as Record<string, unknown>).methods
+        : undefined;
     if (!Array.isArray(methods)) continue;
     methodCount += methods.length;
     if (methodCount > MAX_IMPORT_ITEMS) {
-      throw new Error(`planned objects contain more than ${MAX_IMPORT_ITEMS.toLocaleString()} methods`);
+      throw new Error(
+        `planned objects contain more than ${MAX_IMPORT_ITEMS.toLocaleString()} methods`,
+      );
     }
   }
 }
 
 export class RouteImportService {
-  constructor(private readonly app: MotionViewApp, private readonly dialogs: PlanningDialogs, private readonly topBar: TopBarView, private readonly demoRouteUrl: string) {}
+  constructor(
+    private readonly app: MotionViewApp,
+    private readonly dialogs: PlanningDialogs,
+    private readonly topBar: TopBarView,
+    private readonly demoRouteUrl: string,
+  ) {}
 
-  async openFile(file: File | null, input?: HTMLInputElement | null): Promise<RouteImportResult | null> {
+  async openFile(
+    file: File | null,
+    input?: HTMLInputElement | null,
+  ): Promise<RouteImportResult | null> {
     if (!file) return null;
     const name = file.name.toLowerCase();
-    if (![".json", ".txt", ".log"].some((extension) => name.endsWith(extension))) {
-      window.alert("Invalid file type. Please select a .txt, .log, or .json file"); this.app.core.status.setStatus("Invalid file type."); input && (input.value = ""); return null;
+    if (
+      ![".json", ".txt", ".log"].some((extension) => name.endsWith(extension))
+    ) {
+      window.alert(
+        "Invalid file type. Please select a .txt, .log, or .json file",
+      );
+      this.app.core.status.setStatus("Invalid file type.");
+      input && (input.value = "");
+      return null;
     }
     if (file.size > MAX_IMPORT_BYTES) {
-      window.alert("File is too large. MotionView imports files up to 32 MB."); this.app.core.status.setStatus("File is too large to import."); input && (input.value = ""); return null;
+      window.alert("File is too large. MotionView imports files up to 32 MB.");
+      this.app.core.status.setStatus("File is too large to import.");
+      input && (input.value = "");
+      return null;
     }
     try {
-      const result = name.endsWith(".json") ? await this.loadJson(await file.text()) : await this.loadCapture(await file.text());
+      const result = name.endsWith(".json")
+        ? await this.loadJson(await file.text())
+        : await this.loadCapture(await file.text());
       input && (input.value = "");
       if (result.loaded) this.app.core.status.setStatus(`Loaded ${file.name}`);
-      await viewingTelemetry.fileLoaded({ file_type: result.type, file_size: file.size });
+      await viewingTelemetry.fileLoaded({
+        file_type: result.type,
+        file_size: file.size,
+      });
       return result;
     } catch (error) {
-      input && (input.value = ""); console.error(error); this.app.core.status.setStatus(`Failed to load: ${error instanceof Error ? error.message : String(error)}`);
-      await viewingTelemetry.failedFileLoad({ file_type: name.endsWith(".json") ? "json" : "text" }); return null;
+      input && (input.value = "");
+      console.error(error);
+      this.app.core.status.setStatus(
+        `Failed to load: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      await viewingTelemetry.failedFileLoad({
+        file_type: name.endsWith(".json") ? "json" : "text",
+      });
+      return null;
     }
   }
 
   async loadJson(text: string): Promise<RouteImportResult> {
-    if (text.length > MAX_IMPORT_BYTES) throw new Error("JSON is too large to import");
-    const document: unknown = JSON.parse(text); return this.loadDocument(document);
+    if (text.length > MAX_IMPORT_BYTES)
+      throw new Error("JSON is too large to import");
+    const document: unknown = JSON.parse(text);
+    return this.loadDocument(document);
   }
 
   async loadDocument(document: unknown): Promise<RouteImportResult> {
-    if (!document || typeof document !== "object") throw new Error("Invalid JSON: missing data object");
+    if (!document || typeof document !== "object")
+      throw new Error("Invalid JSON: missing data object");
     const record = document as Record<string, unknown>;
     assertDocumentLimits(record);
-    const planning = Array.isArray(record["planned-path"]) && record["planned-path"].length > 0;
+    const planning =
+      Array.isArray(record["planned-path"]) &&
+      record["planned-path"].length > 0;
     const viewing = this.hasViewing(record);
-    if (planning && this.app.planning.hasData && !await this.dialogs.confirm({ title: "Replace Planning Route", message: "This import contains planning points and will replace the current planning route. Continue?", confirmLabel: "Replace" })) {
-      this.app.core.status.setStatus("Import cancelled."); return { type: "json-cancelled", loaded: false };
+    if (
+      planning &&
+      this.app.planning.hasData &&
+      !(await this.dialogs.confirm({
+        title: "Replace Planning Route",
+        message:
+          "This import contains planning points and will replace the current planning route. Continue?",
+        confirmLabel: "Replace",
+      }))
+    ) {
+      this.app.core.status.setStatus("Import cancelled.");
+      return { type: "json-cancelled", loaded: false };
     }
     if (planning) this.app.planning.load(document);
     if (viewing) this.app.viewing.load(document);
-    if (!planning && !viewing) throw new Error("Invalid JSON: no viewing or planning route data found");
-    this.finalize(); return { type: "json", loaded: true };
+    if (!planning && !viewing)
+      throw new Error("Invalid JSON: no viewing or planning route data found");
+    this.finalize();
+    return { type: "json", loaded: true };
   }
 
   async loadCapture(text: string): Promise<RouteImportResult> {
-    if (text.length > MAX_IMPORT_BYTES) throw new Error("Capture is too large to import");
-    if (!this.app.live.captureHasData(text)) throw new Error("No poses, watches, logs, or waypoints found in file.");
+    if (text.length > MAX_IMPORT_BYTES)
+      throw new Error("Capture is too large to import");
+    if (!this.app.live.captureHasData(text))
+      throw new Error("No poses, watches, logs, or waypoints found in file.");
     // Capture files only carry viewing telemetry. Preserve the user's planning
     // route; a JSON import with planned-path data is the explicit replacement
     // path and handles its own confirmation above.
     this.app.live.loadCapture(text);
-    this.finalize(); return { type: "text", loaded: true };
+    this.finalize();
+    return { type: "text", loaded: true };
   }
 
   async loadDemoIfUpgraded(): Promise<boolean> {
     if (!isTauriRuntime()) return false;
     try {
       const state = await readUpgradeState();
-      this.app.settings.updateAppState({ lastSeenAppVersion: state.currentVersion });
-      if (state.previousVersion !== null && !(state.wasPreviousVersionOlder && !this.hasData)) return false;
-      const response = await fetch(this.demoRouteUrl, { cache: "no-store" }); if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      this.app.settings.updateAppState({
+        lastSeenAppVersion: state.currentVersion,
+      });
+      if (
+        state.previousVersion !== null &&
+        !(state.wasPreviousVersionOlder && !this.hasData)
+      )
+        return false;
+      const response = await fetch(this.demoRouteUrl, { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await this.loadDocument(await response.json());
-      if (result.loaded) this.app.core.status.setStatus("Loaded getting started demo route.");
+      if (result.loaded)
+        this.app.core.status.setStatus("Loaded getting started demo route.");
       return result.loaded;
-    } catch (error) { console.warn("Failed to load getting started demo route:", error); return false; }
+    } catch (error) {
+      console.warn("Failed to load getting started demo route:", error);
+      return false;
+    }
   }
 
-  get hasData(): boolean { return this.app.viewing.data.hasData || this.app.planning.hasData; }
+  get hasData(): boolean {
+    return this.app.viewing.data.hasData || this.app.planning.hasData;
+  }
 
   private hasViewing(record: Record<string, unknown>): boolean {
-    return normalizePoses(record.poses ?? record["robot-path"] ?? []).length > 0
-      || normalizeWatches(record.watches ?? record.watch ?? [], numberOrNull).length > 0
-      || normalizeLogs(record.logs ?? record.log ?? [], numberOrNull, logLevel).length > 0
-      || buildWaypointState(record.waypoints ?? []).waypoints.length > 0;
+    return (
+      normalizePoses(record.poses ?? record["robot-path"] ?? []).length > 0 ||
+      normalizeWatches(record.watches ?? record.watch ?? [], numberOrNull)
+        .length > 0 ||
+      normalizeLogs(record.logs ?? record.log ?? [], numberOrNull, logLevel)
+        .length > 0 ||
+      buildWaypointState(record.waypoints ?? []).waypoints.length > 0
+    );
   }
-  private finalize(): void { this.topBar.setFieldEnabled(true); requestDrawAll(); }
+  private finalize(): void {
+    this.topBar.setFieldEnabled(true);
+    requestDrawAll();
+  }
 }

@@ -1,10 +1,16 @@
-function requiredElement<T extends HTMLElement>(document: Document, id: string): T {
+function requiredElement<T extends HTMLElement>(
+  document: Document,
+  id: string,
+): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`MotionView top bar requires #${id}.`);
   return element as T;
 }
 
-function requiredSelector<T extends HTMLElement>(document: Document, selector: string): T {
+function requiredSelector<T extends HTMLElement>(
+  document: Document,
+  selector: string,
+): T {
   const element = document.querySelector(selector);
   if (!element) throw new Error(`MotionView top bar requires ${selector}.`);
   return element as T;

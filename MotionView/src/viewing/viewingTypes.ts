@@ -1,9 +1,18 @@
-import type { LogEntry, Pose, WatchEntry, Waypoint, WaypointCreatedEvent, WaypointEvent } from "../state/models";
+import type {
+  LogEntry,
+  Pose,
+  WatchEntry,
+  Waypoint,
+  WaypointCreatedEvent,
+  WaypointEvent,
+} from "../state/models";
 import type { PoseReader } from "../state/poseStore";
 
 export type WatchEntryView = Readonly<WatchEntry>;
 export type LogEntryView = Readonly<LogEntry>;
-type ReadonlyWaypointEvent<T extends WaypointEvent> = Readonly<Omit<T, "params">> & {
+type ReadonlyWaypointEvent<T extends WaypointEvent> = Readonly<
+  Omit<T, "params">
+> & {
   readonly params: Readonly<T["params"]>;
 };
 
@@ -12,10 +21,17 @@ type ToReadonlyWaypointEvent<Event> = Event extends WaypointEvent
   : never;
 
 export type WaypointEventView = ToReadonlyWaypointEvent<WaypointEvent>;
-export type WaypointView = Readonly<Omit<
-  Waypoint,
-  "target" | "events" | "createdEvent" | "terminalEvent" | "latestEvent" | "latestActiveEvent"
->> & {
+export type WaypointView = Readonly<
+  Omit<
+    Waypoint,
+    | "target"
+    | "events"
+    | "createdEvent"
+    | "terminalEvent"
+    | "latestEvent"
+    | "latestActiveEvent"
+  >
+> & {
   readonly target: Readonly<Waypoint["target"]>;
   readonly events: readonly WaypointEventView[];
   readonly createdEvent: ReadonlyWaypointEvent<WaypointCreatedEvent>;
@@ -77,11 +93,25 @@ export interface ViewingAppendResult {
 }
 
 export type ViewingDataChangedEvent =
-  | { readonly kind: "replaced"; readonly result: Readonly<ViewingAppendResult> }
-  | { readonly kind: "appended"; readonly result: Readonly<ViewingAppendResult> }
+  | {
+      readonly kind: "replaced";
+      readonly result: Readonly<ViewingAppendResult>;
+    }
+  | {
+      readonly kind: "appended";
+      readonly result: Readonly<ViewingAppendResult>;
+    }
   | { readonly kind: "cleared" }
-  | { readonly kind: "watch-visibility"; readonly key: string; readonly visible: boolean }
-  | { readonly kind: "speed-range"; readonly minimum: number; readonly maximum: number };
+  | {
+      readonly kind: "watch-visibility";
+      readonly key: string;
+      readonly visible: boolean;
+    }
+  | {
+      readonly kind: "speed-range";
+      readonly minimum: number;
+      readonly maximum: number;
+    };
 
 export type ViewingNavigationChangedEvent =
   | { readonly kind: "selection" }

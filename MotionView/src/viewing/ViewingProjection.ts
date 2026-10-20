@@ -1,6 +1,10 @@
 import type { Pose, Waypoint } from "../state/models";
 import type { ViewingEvents } from "./viewingEvents";
-import type { ViewingDataReader, WatchMarker, WaypointView } from "./viewingTypes";
+import type {
+  ViewingDataReader,
+  WatchMarker,
+  WaypointView,
+} from "./viewingTypes";
 
 export interface ViewingTransform {
   readonly unitsToInches: number;
@@ -31,7 +35,11 @@ function lerpAngleDegrees(start: number, end: number, amount: number): number {
   return normalizeDegrees(start + delta * amount);
 }
 
-function interpolateOptional(first: number | null, second: number | null, amount: number): number | null {
+function interpolateOptional(
+  first: number | null,
+  second: number | null,
+  amount: number,
+): number | null {
   if (first == null || second == null) return null;
   return first + (second - first) * amount;
 }
@@ -75,7 +83,9 @@ export class ViewingProjection {
   timeRange(): Readonly<{ start: number; end: number }> | null {
     const start = this.data.poses[0]?.t;
     const end = this.data.poses[this.data.poses.length - 1]?.t;
-    return typeof start === "number" && typeof end === "number" && end > start ? { start, end } : null;
+    return typeof start === "number" && typeof end === "number" && end > start
+      ? { start, end }
+      : null;
   }
 
   findFloorIndex(timeMs: number): number {
@@ -91,7 +101,10 @@ export class ViewingProjection {
     return Math.max(0, Math.min(poses.length - 1, high));
   }
 
-  nearestIndex(timeMs: number, toleranceMs: number): Readonly<{ index: number; deltaMs: number }> | null {
+  nearestIndex(
+    timeMs: number,
+    toleranceMs: number,
+  ): Readonly<{ index: number; deltaMs: number }> | null {
     const poses = this.data.poses;
     if (!poses.length) return null;
     const floor = this.findFloorIndex(timeMs);
@@ -123,9 +136,12 @@ export class ViewingProjection {
     return {
       x: waypoint.target.x * transform.unitsToInches + transform.offsetXInches,
       y: waypoint.target.y * transform.unitsToInches + transform.offsetYInches,
-      theta: waypoint.target.theta == null
-        ? null
-        : normalizeDegrees(waypoint.target.theta + transform.offsetThetaDegrees),
+      theta:
+        waypoint.target.theta == null
+          ? null
+          : normalizeDegrees(
+              waypoint.target.theta + transform.offsetThetaDegrees,
+            ),
     };
   }
 
@@ -138,7 +154,10 @@ export class ViewingProjection {
     if (!second) return this.transformPose({ ...first, t: first.t });
     const firstTime = first.t ?? timeMs;
     const secondTime = second.t ?? firstTime;
-    const amount = Math.max(0, Math.min(1, (timeMs - firstTime) / ((secondTime - firstTime) || 1)));
+    const amount = Math.max(
+      0,
+      Math.min(1, (timeMs - firstTime) / (secondTime - firstTime || 1)),
+    );
     return this.transformPose({
       t: timeMs,
       x: first.x + (second.x - first.x) * amount,
@@ -147,11 +166,18 @@ export class ViewingProjection {
       l_vel: interpolateOptional(first.l_vel, second.l_vel, amount),
       r_vel: interpolateOptional(first.r_vel, second.r_vel, amount),
       speed_raw: interpolateOptional(first.speed_raw, second.speed_raw, amount),
-      speed_norm: interpolateOptional(first.speed_norm, second.speed_norm, amount),
+      speed_norm: interpolateOptional(
+        first.speed_norm,
+        second.speed_norm,
+        amount,
+      ),
     });
   }
 
-  waypointPoseIndex(waypoint: WaypointView, eventTime: number | null = null): number | null {
+  waypointPoseIndex(
+    waypoint: WaypointView,
+    eventTime: number | null = null,
+  ): number | null {
     const start = waypoint.createdTime;
     if (typeof start !== "number" || !this.data.poses.length) return null;
     const end = waypoint.terminalEvent?.t ?? Infinity;
@@ -182,11 +208,27 @@ export class ViewingProjection {
     };
   }
 
-  private markerForWatch(watch: ViewingDataReader["watches"][number]): WatchMarker {
+  private markerForWatch(
+    watch: ViewingDataReader["watches"][number],
+  ): WatchMarker {
     const near = this.nearestIndex(watch.t, 60);
     return near
-      ? { watch, t: watch.t, ok: true, dt: near.deltaMs, pose: this.poseAt(near.index), idx: near.index }
-      : { watch, t: watch.t, ok: false, dt: null, pose: this.interpolatePose(watch.t), idx: null };
+      ? {
+          watch,
+          t: watch.t,
+          ok: true,
+          dt: near.deltaMs,
+          pose: this.poseAt(near.index),
+          idx: near.index,
+        }
+      : {
+          watch,
+          t: watch.t,
+          ok: false,
+          dt: null,
+          pose: this.interpolatePose(watch.t),
+          idx: null,
+        };
   }
 
   private rebuildWatchMarkers(): void {
@@ -194,14 +236,19 @@ export class ViewingProjection {
     this.events.projectionChanged.emit({ kind: "replaced" });
   }
 
-  private appendWatchMarkers(watches: readonly ViewingDataReader["watches"][number][]): void {
+  private appendWatchMarkers(
+    watches: readonly ViewingDataReader["watches"][number][],
+  ): void {
     if (!watches.length) return;
     const additions = watches.map((watch) => this.markerForWatch(watch));
     additions.sort((left, right) => left.t - right.t);
     const merged: WatchMarker[] = [];
     let existingIndex = 0;
     let additionIndex = 0;
-    while (existingIndex < this.#markers.length || additionIndex < additions.length) {
+    while (
+      existingIndex < this.#markers.length ||
+      additionIndex < additions.length
+    ) {
       const existing = this.#markers[existingIndex];
       const addition = additions[additionIndex];
       if (!addition || (existing && existing.t <= addition.t)) {
@@ -215,12 +262,16 @@ export class ViewingProjection {
     this.#markers.length = 0;
     this.#markers.push(...merged);
     this.rebuildMarkerTimeIndex();
-    this.events.projectionChanged.emit({ kind: "appended", watchesAdded: additions.length });
+    this.events.projectionChanged.emit({
+      kind: "appended",
+      watchesAdded: additions.length,
+    });
   }
 
   private rebuildMarkersFromSource(): void {
     this.#markers.length = 0;
-    for (const watch of this.data.watches) this.#markers.push(this.markerForWatch(watch));
+    for (const watch of this.data.watches)
+      this.#markers.push(this.markerForWatch(watch));
     this.rebuildMarkerTimeIndex();
   }
 

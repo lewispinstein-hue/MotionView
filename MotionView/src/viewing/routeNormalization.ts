@@ -21,13 +21,22 @@ export function parseViewingNumber(value: unknown): number | null {
 }
 
 export function normalizeViewingLogLevel(value: unknown): string {
-  const level = String(value || "INFO").trim().toUpperCase();
-  return level === "DEBUG" || level === "INFO" || level === "WARN" || level === "ERROR" || level === "FATAL"
+  const level = String(value || "INFO")
+    .trim()
+    .toUpperCase();
+  return level === "DEBUG" ||
+    level === "INFO" ||
+    level === "WARN" ||
+    level === "ERROR" ||
+    level === "FATAL"
     ? level
     : "INFO";
 }
 
-export function normalizePoses(value: unknown, toNumber: NumberParser = parseViewingNumber): Pose[] {
+export function normalizePoses(
+  value: unknown,
+  toNumber: NumberParser = parseViewingNumber,
+): Pose[] {
   if (!Array.isArray(value)) return [];
   const poses: Pose[] = [];
   for (const rawPose of value) {
@@ -38,12 +47,18 @@ export function normalizePoses(value: unknown, toNumber: NumberParser = parseVie
       t: typeof pose.t === "number" ? pose.t : toNumber(pose.t),
       x: pose.x,
       y: pose.y,
-      theta: typeof pose.theta === "number" ? pose.theta : (toNumber(pose.theta) ?? 0),
+      theta:
+        typeof pose.theta === "number"
+          ? pose.theta
+          : (toNumber(pose.theta) ?? 0),
       l_vel: toNumber(pose.l_vel),
       r_vel: toNumber(pose.r_vel),
-      speed_raw: "speed_raw" in pose
-        ? toNumber(pose.speed_raw)
-        : ("speed" in pose ? toNumber(pose.speed) : 0),
+      speed_raw:
+        "speed_raw" in pose
+          ? toNumber(pose.speed_raw)
+          : "speed" in pose
+            ? toNumber(pose.speed)
+            : 0,
       speed_norm: 0,
     });
   }
@@ -51,13 +66,16 @@ export function normalizePoses(value: unknown, toNumber: NumberParser = parseVie
   return poses;
 }
 
-export function normalizeWatches(value: unknown, toNumMaybe: NumberParser = parseViewingNumber): WatchEntry[] {
+export function normalizeWatches(
+  value: unknown,
+  toNumMaybe: NumberParser = parseViewingNumber,
+): WatchEntry[] {
   const out: WatchEntry[] = [];
   if (!Array.isArray(value)) return out;
 
   for (const w of value) {
     if (!w || typeof w !== "object") continue;
-    const tRaw = (w.t ?? w.timestamp ?? w.time ?? w.ms);
+    const tRaw = w.t ?? w.timestamp ?? w.time ?? w.ms;
     const t = toNumMaybe(tRaw);
     if (t == null) continue;
     const idRaw = w.id ?? w.watchId;
@@ -91,13 +109,17 @@ export function normalizeLogs(
     const t = toNumMaybe(tRaw);
     if (t == null) continue;
 
-    const parsed = normalizeSystemLogMessage(entry.message ?? entry.value ?? entry.val ?? "");
+    const parsed = normalizeSystemLogMessage(
+      entry.message ?? entry.value ?? entry.val ?? "",
+    );
     const isSystem = entry.isSystem === true || parsed.isSystem;
     if (!parsed.message) continue;
 
     out.push({
       t,
-      level: normalizeLogLevel(entry.level ?? entry.lvl ?? entry.severity ?? "INFO"),
+      level: normalizeLogLevel(
+        entry.level ?? entry.lvl ?? entry.severity ?? "INFO",
+      ),
       label: String(entry.label ?? ""),
       value: parsed.message,
       message: parsed.message,
@@ -122,9 +144,14 @@ export function normalizeSystemLogMessage(rawMessage: unknown) {
   return { message: text, isSystem: false };
 }
 
-export function normalizeWaypointType(typeRaw: unknown): WaypointEventType | null {
-  const type = String(typeRaw || "").trim().toUpperCase();
-  if (type === "CREATED" || type === "REACHED" || type === "TIMEDOUT") return type;
+export function normalizeWaypointType(
+  typeRaw: unknown,
+): WaypointEventType | null {
+  const type = String(typeRaw || "")
+    .trim()
+    .toUpperCase();
+  if (type === "CREATED" || type === "REACHED" || type === "TIMEDOUT")
+    return type;
   return null;
 }
 
@@ -135,9 +162,18 @@ export function parseWaypointNumber(raw: unknown) {
   return Number.isFinite(num) ? num : null;
 }
 
-export function parseWaypointParams(type: "CREATED", paramsText: unknown): WaypointCreatedEvent["params"] | null;
-export function parseWaypointParams(type: "REACHED", paramsText: unknown): WaypointReachedEvent["params"] | null;
-export function parseWaypointParams(type: "TIMEDOUT", paramsText: unknown): WaypointTimedOutEvent["params"] | null;
+export function parseWaypointParams(
+  type: "CREATED",
+  paramsText: unknown,
+): WaypointCreatedEvent["params"] | null;
+export function parseWaypointParams(
+  type: "REACHED",
+  paramsText: unknown,
+): WaypointReachedEvent["params"] | null;
+export function parseWaypointParams(
+  type: "TIMEDOUT",
+  paramsText: unknown,
+): WaypointTimedOutEvent["params"] | null;
 export function parseWaypointParams(
   type: WaypointEventType,
   paramsText: unknown,
@@ -207,9 +243,10 @@ function normalizeWaypointEvent(
   const idValue = Number(event.id);
   const id = Number.isInteger(idValue) ? idValue : fallbackId;
   const name = String(event.name ?? fallbackName).trim();
-  const params = event.params && typeof event.params === "object"
-    ? event.params as Record<string, unknown>
-    : {};
+  const params =
+    event.params && typeof event.params === "object"
+      ? (event.params as Record<string, unknown>)
+      : {};
   if (!type || t == null) return null;
 
   if (type === "CREATED") {
@@ -217,7 +254,8 @@ function normalizeWaypointEvent(
     const tarY = finiteNumber(params.tarY);
     const linearTol = finiteNumber(params.linearTol) ?? 0;
     if (tarX == null || tarY == null) return null;
-    const timeoutMs = params.timeoutMs == null ? null : finiteNumber(params.timeoutMs);
+    const timeoutMs =
+      params.timeoutMs == null ? null : finiteNumber(params.timeoutMs);
     return {
       t,
       type,
@@ -229,14 +267,16 @@ function normalizeWaypointEvent(
         tarT: params.tarT == null ? null : finiteNumber(params.tarT),
         timeoutMs,
         linearTol,
-        thetaTol: params.thetaTol == null ? null : finiteNumber(params.thetaTol),
+        thetaTol:
+          params.thetaTol == null ? null : finiteNumber(params.thetaTol),
         retriggerable: waypointBoolean(params.retriggerable),
       },
     };
   }
 
   if (type === "REACHED") {
-    const remainingTime = params.remainingTime == null ? null : finiteNumber(params.remainingTime);
+    const remainingTime =
+      params.remainingTime == null ? null : finiteNumber(params.remainingTime);
     return {
       t,
       type,
@@ -249,7 +289,10 @@ function normalizeWaypointEvent(
   return { t, type, id, name, params: {} };
 }
 
-export function buildWaypointState(value: unknown): { waypoints: Waypoint[]; waypointsById: Map<number, Waypoint> } {
+export function buildWaypointState(value: unknown): {
+  waypoints: Waypoint[];
+  waypointsById: Map<number, Waypoint>;
+} {
   const waypointsById = new Map<number, Waypoint>();
   const source = Array.isArray(value) ? value : [];
 
@@ -259,17 +302,25 @@ export function buildWaypointState(value: unknown): { waypoints: Waypoint[]; way
     const id = Number(entry.id);
     if (!Number.isInteger(id)) continue;
     const rawCreatedEvent = entry.createdEvent;
-    const createdEventRecord = rawCreatedEvent && typeof rawCreatedEvent === "object"
-      ? rawCreatedEvent as Record<string, unknown>
-      : null;
+    const createdEventRecord =
+      rawCreatedEvent && typeof rawCreatedEvent === "object"
+        ? (rawCreatedEvent as Record<string, unknown>)
+        : null;
     const fallbackName = String(entry.name ?? createdEventRecord?.name ?? "");
     const rawEvents = Array.isArray(entry.events) ? [...entry.events] : [];
     const events = rawEvents
       .map((event) => normalizeWaypointEvent(event, id, fallbackName))
       .filter((event): event is WaypointEvent => event != null)
       .sort((left, right) => left.t - right.t);
-    const storedCreatedEvent = normalizeWaypointEvent(rawCreatedEvent, id, fallbackName);
-    if (storedCreatedEvent?.type === "CREATED" && !events.some((event) => event.type === "CREATED")) {
+    const storedCreatedEvent = normalizeWaypointEvent(
+      rawCreatedEvent,
+      id,
+      fallbackName,
+    );
+    if (
+      storedCreatedEvent?.type === "CREATED" &&
+      !events.some((event) => event.type === "CREATED")
+    ) {
       events.push(storedCreatedEvent);
       events.sort((left, right) => left.t - right.t);
     }
@@ -282,14 +333,19 @@ export function buildWaypointState(value: unknown): { waypoints: Waypoint[]; way
         if (events[index].type === "CREATED") events.splice(index, 1);
       }
     }
-    const createdEvent = events.find((event): event is WaypointCreatedEvent => event.type === "CREATED");
+    const createdEvent = events.find(
+      (event): event is WaypointCreatedEvent => event.type === "CREATED",
+    );
     if (!createdEvent) continue;
 
     const isRetriggerable = !!createdEvent?.params?.retriggerable;
     let terminalEvent: WaypointEvent | null = null;
     for (let i = events.length - 1; i >= 0; i -= 1) {
       const event = events[i];
-      if (event.type === "TIMEDOUT" || (!isRetriggerable && event.type === "REACHED")) {
+      if (
+        event.type === "TIMEDOUT" ||
+        (!isRetriggerable && event.type === "REACHED")
+      ) {
         terminalEvent = event;
         break;
       }
@@ -312,7 +368,11 @@ export function buildWaypointState(value: unknown): { waypoints: Waypoint[]; way
       name: String(entry.name ?? createdEvent.name ?? ""),
       createdTime: createdEvent.t,
       createdEvent,
-      target: { x: createdEvent.params.tarX, y: createdEvent.params.tarY, theta: createdEvent.params.tarT },
+      target: {
+        x: createdEvent.params.tarX,
+        y: createdEvent.params.tarY,
+        theta: createdEvent.params.tarT,
+      },
       retriggerable: isRetriggerable,
       events,
       active: !terminalEvent,
@@ -323,7 +383,9 @@ export function buildWaypointState(value: unknown): { waypoints: Waypoint[]; way
   }
 
   return {
-    waypoints: Array.from(waypointsById.values()).sort((a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0)),
+    waypoints: Array.from(waypointsById.values()).sort(
+      (a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0),
+    ),
     waypointsById,
   };
 }

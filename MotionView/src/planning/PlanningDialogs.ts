@@ -1,6 +1,10 @@
 import type { PlanningDom } from "./PlanningDom";
 import { bindModalBackdropDismissal } from "../app/dialogs/modalDismissal";
-import { getWaypointIndicatorTooltip, isWaypointIndicatorIcon, normalizeWaypointIndicatorIcons } from "./planningIndicators";
+import {
+  getWaypointIndicatorTooltip,
+  isWaypointIndicatorIcon,
+  normalizeWaypointIndicatorIcons,
+} from "./planningIndicators";
 import type { PlanWaypointIndicatorIcon } from "../state/models";
 
 export interface PlanningConfirmOptions {
@@ -40,7 +44,8 @@ export interface PlanningEditorResult {
 /** Owns Planning modal state and resolves each modal interaction exactly once. */
 export class PlanningDialogs {
   #confirmResolver: ((result: PlanningConfirmResult) => void) | null = null;
-  #editorResolver: ((result: PlanningEditorResult | null) => void) | null = null;
+  #editorResolver: ((result: PlanningEditorResult | null) => void) | null =
+    null;
   #editorUsesName = false;
   #editorUsesCode = true;
   #editorUsesIndicators = false;
@@ -52,28 +57,52 @@ export class PlanningDialogs {
   bind(): void {
     if (this.#bound) return;
     this.#bound = true;
-    this.dom.confirmClose.addEventListener("click", () => this.closeConfirm(false));
-    this.dom.confirmCancel.addEventListener("click", () => this.closeConfirm(false));
-    this.dom.confirmButton.addEventListener("click", () => this.closeConfirm(true));
-    bindModalBackdropDismissal(this.dom.confirmModal, () => this.closeConfirm(false));
-    this.dom.templateClose.addEventListener("click", () => this.closeEditor(null));
-    this.dom.templateCancel.addEventListener("click", () => this.closeEditor(null));
-    this.dom.templateConfirm.addEventListener("click", () => this.confirmEditor());
-    this.dom.templateIndicatorPicker.addEventListener("click", (event) => this.toggleIndicator(event));
-    bindModalBackdropDismissal(this.dom.templateModal, () => this.closeEditor(null));
-    document.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape" || !this.isOpen) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      this.cancelOpen();
-    }, true);
+    this.dom.confirmClose.addEventListener("click", () =>
+      this.closeConfirm(false),
+    );
+    this.dom.confirmCancel.addEventListener("click", () =>
+      this.closeConfirm(false),
+    );
+    this.dom.confirmButton.addEventListener("click", () =>
+      this.closeConfirm(true),
+    );
+    bindModalBackdropDismissal(this.dom.confirmModal, () =>
+      this.closeConfirm(false),
+    );
+    this.dom.templateClose.addEventListener("click", () =>
+      this.closeEditor(null),
+    );
+    this.dom.templateCancel.addEventListener("click", () =>
+      this.closeEditor(null),
+    );
+    this.dom.templateConfirm.addEventListener("click", () =>
+      this.confirmEditor(),
+    );
+    this.dom.templateIndicatorPicker.addEventListener("click", (event) =>
+      this.toggleIndicator(event),
+    );
+    bindModalBackdropDismissal(this.dom.templateModal, () =>
+      this.closeEditor(null),
+    );
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key !== "Escape" || !this.isOpen) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        this.cancelOpen();
+      },
+      true,
+    );
   }
 
   confirm(options: PlanningConfirmOptions): Promise<boolean> {
     return this.confirmWithResult(options).then((result) => result.confirmed);
   }
 
-  confirmWithResult(options: PlanningConfirmOptions): Promise<PlanningConfirmResult> {
+  confirmWithResult(
+    options: PlanningConfirmOptions,
+  ): Promise<PlanningConfirmResult> {
     this.closeConfirm(false);
     this.#confirmResolver = null;
     this.dom.confirmTitle.textContent = options.title ?? "Confirm";
@@ -82,9 +111,15 @@ export class PlanningDialogs {
     this.dom.confirmCancel.textContent = options.cancelLabel ?? "Cancel";
     this.dom.confirmCancel.hidden = options.hideCancel === true;
     this.dom.confirmDontShowAgain.checked = false;
-    this.dom.confirmDontShowAgainRow.hidden = options.showDontShowAgain !== true;
-    this.show(this.dom.confirmModal, this.dom.confirmModal.querySelector<HTMLElement>(".modalCard"));
-    return new Promise((resolve) => { this.#confirmResolver = resolve; });
+    this.dom.confirmDontShowAgainRow.hidden =
+      options.showDontShowAgain !== true;
+    this.show(
+      this.dom.confirmModal,
+      this.dom.confirmModal.querySelector<HTMLElement>(".modalCard"),
+    );
+    return new Promise((resolve) => {
+      this.#confirmResolver = resolve;
+    });
   }
 
   edit(options: PlanningEditorOptions): Promise<PlanningEditorResult | null> {
@@ -93,7 +128,9 @@ export class PlanningDialogs {
     this.#editorUsesName = options.name !== undefined;
     this.#editorUsesCode = options.showCode !== false;
     this.#editorUsesIndicators = options.indicatorIcons !== undefined;
-    this.#editorIndicatorIcons = normalizeWaypointIndicatorIcons(options.indicatorIcons);
+    this.#editorIndicatorIcons = normalizeWaypointIndicatorIcons(
+      options.indicatorIcons,
+    );
     this.dom.templateTitle.textContent = options.title;
     this.dom.templateSubtitle.textContent = options.subtitle ?? "";
     this.dom.templateGroupTitle.textContent = options.groupTitle ?? "Editor";
@@ -106,12 +143,18 @@ export class PlanningDialogs {
     this.renderIndicatorSelection();
     this.dom.templateNameField.hidden = !this.#editorUsesName;
     this.dom.templateName.value = options.name ?? "";
-    this.dom.templateNameDescription.textContent = options.nameDescription ?? "Name";
+    this.dom.templateNameDescription.textContent =
+      options.nameDescription ?? "Name";
     this.dom.templateConfirm.textContent = options.confirmLabel ?? "Confirm";
     this.dom.templateValidation.hidden = true;
     this.dom.templateValidation.textContent = "";
-    this.show(this.dom.templateModal, this.#editorUsesName ? this.dom.templateName : this.dom.templateCode);
-    return new Promise((resolve) => { this.#editorResolver = resolve; });
+    this.show(
+      this.dom.templateModal,
+      this.#editorUsesName ? this.dom.templateName : this.dom.templateCode,
+    );
+    return new Promise((resolve) => {
+      this.#editorResolver = resolve;
+    });
   }
 
   get isOpen(): boolean {
@@ -119,8 +162,14 @@ export class PlanningDialogs {
   }
 
   cancelOpen(): boolean {
-    if (this.#editorResolver) { this.closeEditor(null); return true; }
-    if (this.#confirmResolver) { this.closeConfirm(false); return true; }
+    if (this.#editorResolver) {
+      this.closeEditor(null);
+      return true;
+    }
+    if (this.#confirmResolver) {
+      this.closeConfirm(false);
+      return true;
+    }
     return false;
   }
 
@@ -133,14 +182,21 @@ export class PlanningDialogs {
       this.dom.templateName.focus();
       return;
     }
-    this.closeEditor({ name, code: this.dom.templateCode.value, indicatorIcons: [...this.#editorIndicatorIcons] });
+    this.closeEditor({
+      name,
+      code: this.dom.templateCode.value,
+      indicatorIcons: [...this.#editorIndicatorIcons],
+    });
   }
 
   private closeConfirm(result: boolean): void {
     const resolve = this.#confirmResolver;
     this.#confirmResolver = null;
     this.dom.confirmCancel.hidden = false;
-    const dontShowAgain = result && !this.dom.confirmDontShowAgainRow.hidden && this.dom.confirmDontShowAgain.checked;
+    const dontShowAgain =
+      result &&
+      !this.dom.confirmDontShowAgainRow.hidden &&
+      this.dom.confirmDontShowAgain.checked;
     this.dom.confirmDontShowAgain.checked = false;
     this.dom.confirmDontShowAgainRow.hidden = true;
     this.hide(this.dom.confirmModal);
@@ -165,7 +221,10 @@ export class PlanningDialogs {
       focusTarget?.focus();
       if (focusTarget instanceof HTMLInputElement) focusTarget.select();
       else if (focusTarget instanceof HTMLTextAreaElement) {
-        focusTarget.setSelectionRange(focusTarget.value.length, focusTarget.value.length);
+        focusTarget.setSelectionRange(
+          focusTarget.value.length,
+          focusTarget.value.length,
+        );
       }
     });
   }
@@ -178,23 +237,33 @@ export class PlanningDialogs {
   }
 
   private toggleIndicator(event: MouseEvent): void {
-    if (!this.#editorUsesIndicators || !(event.target instanceof Element)) return;
-    const button = event.target.closest<HTMLButtonElement>("[data-waypoint-indicator]");
+    if (!this.#editorUsesIndicators || !(event.target instanceof Element))
+      return;
+    const button = event.target.closest<HTMLButtonElement>(
+      "[data-waypoint-indicator]",
+    );
     const icon = button?.dataset.waypointIndicator;
     if (!button || !isWaypointIndicatorIcon(icon)) return;
     if (this.#editorIndicatorIcons.includes(icon)) {
-      this.#editorIndicatorIcons = this.#editorIndicatorIcons.filter((candidate) => candidate !== icon);
+      this.#editorIndicatorIcons = this.#editorIndicatorIcons.filter(
+        (candidate) => candidate !== icon,
+      );
     } else {
-      if (this.#editorIndicatorIcons.length === 2) this.#editorIndicatorIcons.shift();
+      if (this.#editorIndicatorIcons.length === 2)
+        this.#editorIndicatorIcons.shift();
       this.#editorIndicatorIcons.push(icon);
     }
     this.renderIndicatorSelection();
   }
 
   private renderIndicatorSelection(): void {
-    for (const button of this.dom.templateIndicatorPicker.querySelectorAll<HTMLButtonElement>("[data-waypoint-indicator]")) {
+    for (const button of this.dom.templateIndicatorPicker.querySelectorAll<HTMLButtonElement>(
+      "[data-waypoint-indicator]",
+    )) {
       const icon = button.dataset.waypointIndicator;
-      const selected = isWaypointIndicatorIcon(icon) && this.#editorIndicatorIcons.includes(icon);
+      const selected =
+        isWaypointIndicatorIcon(icon) &&
+        this.#editorIndicatorIcons.includes(icon);
       if (isWaypointIndicatorIcon(icon)) {
         const tooltip = getWaypointIndicatorTooltip(icon);
         button.title = tooltip;

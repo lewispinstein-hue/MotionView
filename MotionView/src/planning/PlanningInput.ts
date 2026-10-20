@@ -1,5 +1,9 @@
 import { getMode } from "../app/modeController";
-import { isTypingTarget, matchesShortcut, PLANNING_SHORTCUTS } from "../app/input";
+import {
+  isTypingTarget,
+  matchesShortcut,
+  PLANNING_SHORTCUTS,
+} from "../app/input";
 import type { FieldRenderer } from "../render/field";
 import { requestDrawAll } from "../render/renderScheduler";
 import { currentUnitsToInches } from "../shared/units";
@@ -50,7 +54,9 @@ export class PlanningInput {
         const node = this.planning.timeline.get(nodeId);
         if (node) {
           this.planning.timeline.remove(nodeId);
-          void planningTelemetry.timelineNodeRemoved(this.planning.telemetryProperties());
+          void planningTelemetry.timelineNodeRemoved(
+            this.planning.telemetryProperties(),
+          );
         }
         return true;
       }
@@ -61,11 +67,17 @@ export class PlanningInput {
       }
     }
     if (!this.planning.selection.waypointIndices.size) return false;
-    const moveInput = document.getElementById("settingsPlanMoveStep") as HTMLInputElement | null;
+    const moveInput = document.getElementById(
+      "settingsPlanMoveStep",
+    ) as HTMLInputElement | null;
     const configuredStep = currentUnitsToInches(Number(moveInput?.value));
-    const step = Number.isFinite(configuredStep) && configuredStep > 0 ? configuredStep : 1;
+    const step =
+      Number.isFinite(configuredStep) && configuredStep > 0
+        ? configuredStep
+        : 1;
     const fast = matchesShortcut(event, PLANNING_SHORTCUTS.nudgeFast);
-    if (!fast && !matchesShortcut(event, PLANNING_SHORTCUTS.nudge)) return false;
+    if (!fast && !matchesShortcut(event, PLANNING_SHORTCUTS.nudge))
+      return false;
     const amount = fast ? step * 5 : step;
     let dx = 0;
     let dy = 0;
@@ -75,7 +87,7 @@ export class PlanningInput {
     else if (event.key === "ArrowUp") dy = amount;
     else return false;
     event.preventDefault();
-    const angle = this.field.getFieldRotationDeg() * Math.PI / 180;
+    const angle = (this.field.getFieldRotationDeg() * Math.PI) / 180;
     const rotatedX = dx * Math.cos(angle) - dy * Math.sin(angle);
     const rotatedY = dx * Math.sin(angle) + dy * Math.cos(angle);
     this.planning.route.move(

@@ -60,7 +60,10 @@ export interface WaypointTimedOutEvent extends WaypointEventBase {
   params: Record<string, never>;
 }
 
-export type WaypointEvent = WaypointCreatedEvent | WaypointReachedEvent | WaypointTimedOutEvent;
+export type WaypointEvent =
+  | WaypointCreatedEvent
+  | WaypointReachedEvent
+  | WaypointTimedOutEvent;
 
 export interface Waypoint {
   id: number;
@@ -89,7 +92,11 @@ export interface PlanWaypoint {
   indicatorIcons?: PlanWaypointIndicatorIcon[];
 }
 
-export type PlanWaypointIndicatorIcon = "rotate" | "swing" | "forward" | "boomerang";
+export type PlanWaypointIndicatorIcon =
+  | "rotate"
+  | "swing"
+  | "forward"
+  | "boomerang";
 
 export interface PlanObject {
   id: string;

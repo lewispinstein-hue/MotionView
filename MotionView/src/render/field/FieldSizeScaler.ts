@@ -35,11 +35,17 @@ function dimensionLimit(
 export class FieldSizeScaler {
   constructor(private readonly field: FieldScaleSource) {}
 
-  screen(dimensions: FieldDimensions2D, limits: FieldSizeLimits = {}): Readonly<FieldDimensions2D> {
+  screen(
+    dimensions: FieldDimensions2D,
+    limits: FieldSizeLimits = {},
+  ): Readonly<FieldDimensions2D> {
     return this.scale(dimensions, this.field.getViewZoom(), limits);
   }
 
-  world(dimensions: FieldDimensions2D, limits: FieldSizeLimits = {}): Readonly<FieldDimensions2D> {
+  world(
+    dimensions: FieldDimensions2D,
+    limits: FieldSizeLimits = {},
+  ): Readonly<FieldDimensions2D> {
     return this.scale(dimensions, this.field.getScale(), limits);
   }
 

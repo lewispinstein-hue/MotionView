@@ -1,28 +1,67 @@
-import { createPlanMethodId, createPlanObjectId, getDefaultPlanObjectColor, getDefaultPlanObjectName, normalizePlanObjectColor } from "./planningState";
+import {
+  createPlanMethodId,
+  createPlanObjectId,
+  getDefaultPlanObjectColor,
+  getDefaultPlanObjectName,
+  normalizePlanObjectColor,
+} from "./planningState";
 import type { PlanningSession } from "./planningSession";
-import type { PlanningMethod, PlanningNode, PlanningNodeView, PlanningObject, PlanningObjectView } from "./planningTypes";
+import type {
+  PlanningMethod,
+  PlanningNode,
+  PlanningNodeView,
+  PlanningObject,
+  PlanningObjectView,
+} from "./planningTypes";
 
 export class PlanningObjects {
   constructor(private readonly session: PlanningSession) {}
-  get items(): readonly PlanningObjectView[] { return this.session.objects; }
-  get length(): number { return this.session.objects.length; }
-  get methodCount(): number { return this.session.objects.reduce((sum, object) => sum + object.methods.length, 0); }
+  get items(): readonly PlanningObjectView[] {
+    return this.session.objects;
+  }
+  get length(): number {
+    return this.session.objects.length;
+  }
+  get methodCount(): number {
+    return this.session.objects.reduce(
+      (sum, object) => sum + object.methods.length,
+      0,
+    );
+  }
 
-  get(id: string): PlanningObjectView | null { return this.session.objects.find((object) => object.id === id) ?? null; }
-  private getMutable(id: string): PlanningObject | null { return this.session.objects.find((object) => object.id === id) ?? null; }
+  get(id: string): PlanningObjectView | null {
+    return this.session.objects.find((object) => object.id === id) ?? null;
+  }
+  private getMutable(id: string): PlanningObject | null {
+    return this.session.objects.find((object) => object.id === id) ?? null;
+  }
   method(objectId: string, methodId: string): Readonly<PlanningMethod> | null {
-    return this.getMutable(objectId)?.methods.find((method) => method.id === methodId) ?? null;
+    return (
+      this.getMutable(objectId)?.methods.find(
+        (method) => method.id === methodId,
+      ) ?? null
+    );
   }
 
   add(values: Partial<PlanningObject> = {}): string {
     const id = values.id || createPlanObjectId();
-    this.session.mutate("object", () => this.session.objects.push({
-      id,
-      name: values.name ?? getDefaultPlanObjectName(this.session.objects.length),
-      color: normalizePlanObjectColor(values.color, this.session.objects.length),
-      latestMethod: values.latestMethod ?? "",
-      methods: values.methods?.map((method) => ({ ...method, code: method.code ?? "" })) ?? [],
-    }));
+    this.session.mutate("object", () =>
+      this.session.objects.push({
+        id,
+        name:
+          values.name ?? getDefaultPlanObjectName(this.session.objects.length),
+        color: normalizePlanObjectColor(
+          values.color,
+          this.session.objects.length,
+        ),
+        latestMethod: values.latestMethod ?? "",
+        methods:
+          values.methods?.map((method) => ({
+            ...method,
+            code: method.code ?? "",
+          })) ?? [],
+      }),
+    );
     return id;
   }
 
@@ -32,8 +71,13 @@ export class PlanningObjects {
     const selectedNodeId = this.session.selectedNodeId;
     this.session.mutate("object", () => {
       this.session.objects.splice(index, 1);
-      for (let nodeIndex = this.session.nodes.length - 1; nodeIndex >= 0; nodeIndex -= 1) {
-        if (this.session.nodes[nodeIndex]?.objectId === id) this.session.nodes.splice(nodeIndex, 1);
+      for (
+        let nodeIndex = this.session.nodes.length - 1;
+        nodeIndex >= 0;
+        nodeIndex -= 1
+      ) {
+        if (this.session.nodes[nodeIndex]?.objectId === id)
+          this.session.nodes.splice(nodeIndex, 1);
       }
     });
     if (selectedNodeId && this.session.selectedNodeId !== selectedNodeId) {
@@ -41,44 +85,72 @@ export class PlanningObjects {
     }
   }
 
-  rename(id: string, name: string): void { this.update(id, { name }); }
+  rename(id: string, name: string): void {
+    this.update(id, { name });
+  }
   setColor(id: string, color: string): void {
     const index = this.session.objects.findIndex((object) => object.id === id);
     if (index < 0) return;
     this.update(id, { color: normalizePlanObjectColor(color, index) });
   }
-  setLatestMethod(id: string, latestMethod: string): void { this.update(id, { latestMethod }); }
+  setLatestMethod(id: string, latestMethod: string): void {
+    this.update(id, { latestMethod });
+  }
 
-  update(id: string, values: Partial<Omit<PlanningObject, "id" | "methods">>): void {
+  update(
+    id: string,
+    values: Partial<Omit<PlanningObject, "id" | "methods">>,
+  ): void {
     const object = this.getMutable(id);
     if (!object) return;
     this.session.mutate("object", () => Object.assign(object, values));
   }
 
-  addMethod(objectId: string, values: Partial<PlanningMethod> = {}): string | null {
+  addMethod(
+    objectId: string,
+    values: Partial<PlanningMethod> = {},
+  ): string | null {
     const object = this.getMutable(objectId);
     if (!object) return null;
     const id = values.id || createPlanMethodId();
-    this.session.mutate("method", () => object.methods.push({ id, name: values.name ?? "", code: values.code ?? "" }));
+    this.session.mutate("method", () =>
+      object.methods.push({
+        id,
+        name: values.name ?? "",
+        code: values.code ?? "",
+      }),
+    );
     return id;
   }
 
-  updateMethod(objectId: string, methodId: string, values: Partial<Omit<PlanningMethod, "id">>): void {
-    const method = this.getMutable(objectId)?.methods.find((entry) => entry.id === methodId);
+  updateMethod(
+    objectId: string,
+    methodId: string,
+    values: Partial<Omit<PlanningMethod, "id">>,
+  ): void {
+    const method = this.getMutable(objectId)?.methods.find(
+      (entry) => entry.id === methodId,
+    );
     if (!method) return;
     this.session.mutate("method", () => Object.assign(method, values));
   }
 
   removeMethod(objectId: string, methodId: string): void {
     const object = this.getMutable(objectId);
-    const index = object?.methods.findIndex((method) => method.id === methodId) ?? -1;
+    const index =
+      object?.methods.findIndex((method) => method.id === methodId) ?? -1;
     if (!object || index < 0) return;
     const selectedNodeId = this.session.selectedNodeId;
     this.session.mutate("method", () => {
       object.methods.splice(index, 1);
-      for (let nodeIndex = this.session.nodes.length - 1; nodeIndex >= 0; nodeIndex -= 1) {
+      for (
+        let nodeIndex = this.session.nodes.length - 1;
+        nodeIndex >= 0;
+        nodeIndex -= 1
+      ) {
         const node = this.session.nodes[nodeIndex];
-        if (node?.objectId === objectId && node.methodId === methodId) this.session.nodes.splice(nodeIndex, 1);
+        if (node?.objectId === objectId && node.methodId === methodId)
+          this.session.nodes.splice(nodeIndex, 1);
       }
     });
     if (selectedNodeId && this.session.selectedNodeId !== selectedNodeId) {
@@ -95,15 +167,28 @@ export interface EffectivePlanningMethod {
   hasOverride: boolean;
 }
 
-export function getPlanObjectById(objects: readonly PlanningObjectView[], objectId: string): PlanningObjectView | null {
+export function getPlanObjectById(
+  objects: readonly PlanningObjectView[],
+  objectId: string,
+): PlanningObjectView | null {
   return objects.find((entry) => entry.id === objectId) ?? null;
 }
 
-export function getPlanMethodById(objects: readonly PlanningObjectView[], objectId: string, methodId: string): Readonly<PlanningMethod> | null {
-  return getPlanObjectById(objects, objectId)?.methods?.find((entry) => entry.id === methodId) ?? null;
+export function getPlanMethodById(
+  objects: readonly PlanningObjectView[],
+  objectId: string,
+  methodId: string,
+): Readonly<PlanningMethod> | null {
+  return (
+    getPlanObjectById(objects, objectId)?.methods?.find(
+      (entry) => entry.id === methodId,
+    ) ?? null
+  );
 }
 
-export function hasPlanNodeMethodOverride(node: PlanningNode | null | undefined): boolean {
+export function hasPlanNodeMethodOverride(
+  node: PlanningNode | null | undefined,
+): boolean {
   return !!node && Object.prototype.hasOwnProperty.call(node, "code");
 }
 
@@ -116,7 +201,9 @@ export function getPlanNodeEffectiveMethod(
   if (!method) return null;
   return {
     name: method.name,
-    code: Object.prototype.hasOwnProperty.call(node, "code") ? String(node.code || "") : method.code,
+    code: Object.prototype.hasOwnProperty.call(node, "code")
+      ? String(node.code || "")
+      : method.code,
     hostName: method.name,
     hostCode: method.code,
     hasOverride: hasPlanNodeMethodOverride(node),
@@ -135,7 +222,8 @@ export function setPlanNodeCodeOverride(
   const hadCodeOverride = Object.prototype.hasOwnProperty.call(node, "code");
   const currentCode = hadCodeOverride ? node.code : method.code;
   const matchesHost = nextCode === String(method.code || "");
-  const changed = nextCode !== String(currentCode || "") || (hadCodeOverride && matchesHost);
+  const changed =
+    nextCode !== String(currentCode || "") || (hadCodeOverride && matchesHost);
   if (!changed) return false;
   if (matchesHost) delete node.code;
   else node.code = nextCode;
@@ -144,15 +232,26 @@ export function setPlanNodeCodeOverride(
 
 export function serializePlanNode(node: PlanningNode): PlanningNode {
   const serialized: PlanningNode = {
-    id: node.id, objectId: node.objectId, methodId: node.methodId,
-    beforeWaypoint: node.beforeWaypoint, index: node.index,
+    id: node.id,
+    objectId: node.objectId,
+    methodId: node.methodId,
+    beforeWaypoint: node.beforeWaypoint,
+    index: node.index,
   };
-  if (Object.prototype.hasOwnProperty.call(node, "code")) serialized.code = node.code;
+  if (Object.prototype.hasOwnProperty.call(node, "code"))
+    serialized.code = node.code;
   return serialized;
 }
 
-export function getPlanMethodNumber(objects: readonly PlanningObjectView[], objectId: string, methodId: string): number | null {
-  const index = getPlanObjectById(objects, objectId)?.methods.findIndex((entry) => entry.id === methodId) ?? -1;
+export function getPlanMethodNumber(
+  objects: readonly PlanningObjectView[],
+  objectId: string,
+  methodId: string,
+): number | null {
+  const index =
+    getPlanObjectById(objects, objectId)?.methods.findIndex(
+      (entry) => entry.id === methodId,
+    ) ?? -1;
   return index >= 0 ? index + 1 : null;
 }
 

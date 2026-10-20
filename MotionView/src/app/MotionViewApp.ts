@@ -1,4 +1,4 @@
-import { EXIT_TELEMETRY_FLUSH_DEADLINE_MS } from "../telemetry/telemetryClient";
+import { EXIT_TELEMETRY_FLUSH_DEADLINE_MS } from "../telemetry/TelemetryClient";
 import type { TelemetryProperties } from "../telemetry/telemetryTypes";
 import { ViewingFeature } from "../viewing/ViewingFeature";
 import { PlanningFeature } from "../planning/PlanningFeature";
@@ -71,7 +71,8 @@ export class MotionViewApp {
   }
 
   beginExit(reason: AppExitReason): boolean {
-    if (this.#lifecycle === "exiting" || this.#lifecycle === "exited") return false;
+    if (this.#lifecycle === "exiting" || this.#lifecycle === "exited")
+      return false;
     this.#lifecycleBeforeExit = this.#lifecycle;
     this.#exitReason = reason;
     this.transitionTo("exiting");
@@ -81,7 +82,9 @@ export class MotionViewApp {
   finalizeExit(properties: TelemetryProperties = {}): Promise<void> {
     if (this.#finalizePromise) return this.#finalizePromise;
     if (this.#lifecycle !== "exiting") {
-      return Promise.reject(new Error("Cannot finalize MotionView exit before beginExit()."));
+      return Promise.reject(
+        new Error("Cannot finalize MotionView exit before beginExit()."),
+      );
     }
 
     this.#finalizePromise = (async () => {

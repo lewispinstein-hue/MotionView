@@ -18,20 +18,36 @@ export interface ShortcutDefinition {
   readonly helpGroup: ShortcutHelpGroup;
 }
 
-export function matchesShortcut(event: KeyboardEvent, definition: ShortcutDefinition): boolean {
+export function matchesShortcut(
+  event: KeyboardEvent,
+  definition: ShortcutDefinition,
+): boolean {
   return definition.keys.some((chord) => {
-    if (chord.key !== undefined && event.key.toLowerCase() !== chord.key.toLowerCase()) return false;
+    if (
+      chord.key !== undefined &&
+      event.key.toLowerCase() !== chord.key.toLowerCase()
+    )
+      return false;
     if (chord.code !== undefined && event.code !== chord.code) return false;
-    if (chord.primary !== undefined && (event.metaKey || event.ctrlKey) !== chord.primary) return false;
-    if (chord.shift !== undefined && event.shiftKey !== chord.shift) return false;
+    if (
+      chord.primary !== undefined &&
+      (event.metaKey || event.ctrlKey) !== chord.primary
+    )
+      return false;
+    if (chord.shift !== undefined && event.shiftKey !== chord.shift)
+      return false;
     if (chord.alt !== undefined && event.altKey !== chord.alt) return false;
     return true;
   });
 }
 
 export function isTypingTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement
-    && (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable)
-    && target.isConnected
-    && target.closest("[hidden]") == null;
+  return (
+    target instanceof HTMLElement &&
+    (target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target.isContentEditable) &&
+    target.isConnected &&
+    target.closest("[hidden]") == null
+  );
 }

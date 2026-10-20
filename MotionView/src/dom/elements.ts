@@ -36,7 +36,9 @@ export function requiredCanvasContext(
 ): CanvasRenderingContext2D {
   const context = canvas.getContext(contextId);
   if (!context) {
-    throw new Error(`Canvas #${canvas.id || "(unnamed)"} does not support ${contextId}`);
+    throw new Error(
+      `Canvas #${canvas.id || "(unnamed)"} does not support ${contextId}`,
+    );
   }
   return context;
 }

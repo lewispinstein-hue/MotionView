@@ -1,12 +1,19 @@
 import type { BridgeService } from "../app/BridgeService";
 import type { LiveEvents } from "./LiveEvents";
-import type { LiveProjectStatus, ProsDirectoryResponse, ProsDiscoveryResponse } from "./liveTypes";
+import type {
+  LiveProjectStatus,
+  ProsDirectoryResponse,
+  ProsDiscoveryResponse,
+} from "./liveTypes";
 
 export class LiveProject {
   #path = "";
   #valid = false;
   #restored = false;
-  #status: LiveProjectStatus = { kind: "missing", message: "PROS directory not set. Live viewing disabled." };
+  #status: LiveProjectStatus = {
+    kind: "missing",
+    message: "PROS directory not set. Live viewing disabled.",
+  };
   #validationId = 0;
 
   constructor(
@@ -14,9 +21,15 @@ export class LiveProject {
     private readonly events: LiveEvents,
   ) {}
 
-  get path(): string { return this.#path; }
-  get valid(): boolean { return this.#valid; }
-  get status(): LiveProjectStatus { return this.#status; }
+  get path(): string {
+    return this.#path;
+  }
+  get valid(): boolean {
+    return this.#valid;
+  }
+  get status(): LiveProjectStatus {
+    return this.#status;
+  }
 
   restore(path: string): void {
     const next = this.normalizePath(path);
@@ -25,7 +38,10 @@ export class LiveProject {
     this.#valid = false;
     this.#status = next
       ? { kind: "checking", message: "Waiting to validate PROS project..." }
-      : { kind: "missing", message: "PROS directory not set. Live viewing disabled." };
+      : {
+          kind: "missing",
+          message: "PROS directory not set. Live viewing disabled.",
+        };
     this.emit();
   }
 
@@ -35,7 +51,10 @@ export class LiveProject {
     this.#path = next;
     this.#valid = false;
     if (!next) {
-      this.#status = { kind: "missing", message: "PROS directory not set. Live viewing disabled." };
+      this.#status = {
+        kind: "missing",
+        message: "PROS directory not set. Live viewing disabled.",
+      };
       this.emit();
       return false;
     }
@@ -43,33 +62,56 @@ export class LiveProject {
     this.#status = { kind: "checking", message: "Validating PROS project..." };
     this.emit();
     let ready = false;
-    for (let attempt = 0; attempt < 5 && validationId === this.#validationId; attempt += 1) {
-      ready = await this.bridge.waitUntilReady(attempt === 0 ? 4_000 : 1_000, 250);
+    for (
+      let attempt = 0;
+      attempt < 5 && validationId === this.#validationId;
+      attempt += 1
+    ) {
+      ready = await this.bridge.waitUntilReady(
+        attempt === 0 ? 4_000 : 1_000,
+        250,
+      );
       if (ready) break;
-      if (attempt < 4) await new Promise<void>((resolve) => setTimeout(resolve, 500));
+      if (attempt < 4)
+        await new Promise<void>((resolve) => setTimeout(resolve, 500));
     }
     if (validationId !== this.#validationId) return false;
     if (!ready) {
-      this.#status = { kind: "unavailable", message: "Bridge not ready yet. Try again in a moment." };
+      this.#status = {
+        kind: "unavailable",
+        message: "Bridge not ready yet. Try again in a moment.",
+      };
       this.emit();
       return false;
     }
 
-    const response = await this.bridge.post<ProsDirectoryResponse>("/api/pros-dir", { dir: next });
+    const response = await this.bridge.post<ProsDirectoryResponse>(
+      "/api/pros-dir",
+      { dir: next },
+    );
     if (validationId !== this.#validationId) return false;
     if (response.ok && response.json?.ok) {
       this.#path = this.normalizePath(response.json.dir ?? next);
       this.#valid = true;
       this.#status = { kind: "valid", message: "PROS project configured." };
       this.emit();
-      this.events.notice.emit({ kind: "success", message: "PROS project configured." });
+      this.events.notice.emit({
+        kind: "success",
+        message: "PROS project configured.",
+      });
       return true;
     }
 
     const reason = response.json?.status || "validation failed";
-    this.#status = { kind: "invalid", message: `Invalid PROS directory: ${reason}` };
+    this.#status = {
+      kind: "invalid",
+      message: `Invalid PROS directory: ${reason}`,
+    };
     this.emit();
-    this.events.notice.emit({ kind: "error", message: `Failed to set PROS directory: ${reason}` });
+    this.events.notice.emit({
+      kind: "error",
+      message: `Failed to set PROS directory: ${reason}`,
+    });
     return false;
   }
 
@@ -83,11 +125,15 @@ export class LiveProject {
       this.emit();
       return;
     }
-    const response = await this.bridge.get<ProsDirectoryResponse>("/api/pros-dir");
+    const response =
+      await this.bridge.get<ProsDirectoryResponse>("/api/pros-dir");
     const path = this.normalizePath(response.json?.dir ?? "");
     if (!response.ok || !response.json?.ok || !path) {
       this.#valid = false;
-      this.#status = { kind: "missing", message: "PROS directory not set. Live viewing disabled." };
+      this.#status = {
+        kind: "missing",
+        message: "PROS directory not set. Live viewing disabled.",
+      };
       this.emit();
       return;
     }
@@ -102,9 +148,13 @@ export class LiveProject {
       this.events.notice.emit({ kind: "error", message: "Backend not ready." });
       return [];
     }
-    const response = await this.bridge.get<ProsDiscoveryResponse>("/api/pros-dir/auto");
+    const response =
+      await this.bridge.get<ProsDiscoveryResponse>("/api/pros-dir/auto");
     if (!response.ok || !response.json?.ok) {
-      this.events.notice.emit({ kind: "error", message: response.json?.status || "Auto-detect failed." });
+      this.events.notice.emit({
+        kind: "error",
+        message: response.json?.status || "Auto-detect failed.",
+      });
       return [];
     }
     return response.json.candidates ?? [];
@@ -116,6 +166,10 @@ export class LiveProject {
   }
 
   private emit(): void {
-    this.events.projectChanged.emit({ path: this.#path, valid: this.#valid, status: this.#status });
+    this.events.projectChanged.emit({
+      path: this.#path,
+      valid: this.#valid,
+      status: this.#status,
+    });
   }
 }

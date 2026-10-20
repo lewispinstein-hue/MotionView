@@ -20,32 +20,57 @@ export class AppCommands {
     private readonly planningLayout: PlanningLayoutView,
     private readonly viewingLayout: ViewingLayoutView,
     document: Document = globalThis.document,
-  ) { this.#planOverlayButton = requiredElement("btnTogglePlanOverlay", HTMLButtonElement, document); }
+  ) {
+    this.#planOverlayButton = requiredElement(
+      "btnTogglePlanOverlay",
+      HTMLButtonElement,
+      document,
+    );
+  }
 
   bind(): void {
     if (this.#bound) return;
     this.#bound = true;
-    this.#planOverlayButton.addEventListener("click", () => this.togglePlanningOverlay());
-    this.#planOverlayButton.classList.toggle("isOn", this.app.planning.overlayVisible);
-    this.#planOverlayButton.setAttribute("aria-pressed", String(this.app.planning.overlayVisible));
+    this.#planOverlayButton.addEventListener("click", () =>
+      this.togglePlanningOverlay(),
+    );
+    this.#planOverlayButton.classList.toggle(
+      "isOn",
+      this.app.planning.overlayVisible,
+    );
+    this.#planOverlayButton.setAttribute(
+      "aria-pressed",
+      String(this.app.planning.overlayVisible),
+    );
   }
 
-  openRoute(): void { this.topBar.openFilePicker(); }
-  fitField(): void { this.field.resetFieldPosition(); }
-  setViewingMode(): void { this.app.core.mode.setMode("viewing"); }
-  setPlanningMode(): void { this.app.core.mode.setMode("planning"); }
+  openRoute(): void {
+    this.topBar.openFilePicker();
+  }
+  fitField(): void {
+    this.field.resetFieldPosition();
+  }
+  setViewingMode(): void {
+    this.app.core.mode.setMode("viewing");
+  }
+  setPlanningMode(): void {
+    this.app.core.mode.setMode("planning");
+  }
 
   toggleTimeline(): void {
-    if (this.app.core.mode.getMode() === "planning") this.planningLayout.toggleTimeline();
+    if (this.app.core.mode.getMode() === "planning")
+      this.planningLayout.toggleTimeline();
     else this.viewingLayout.toggleTimeline();
   }
 
   toggleLeftSidebar(): void {
-    if (this.app.core.mode.getMode() === "viewing") this.viewingLayout.toggleLeftSidebar();
+    if (this.app.core.mode.getMode() === "viewing")
+      this.viewingLayout.toggleLeftSidebar();
   }
 
   toggleRightSidebar(): void {
-    if (this.app.core.mode.getMode() === "planning") this.planningLayout.toggleRightSidebar();
+    if (this.app.core.mode.getMode() === "planning")
+      this.planningLayout.toggleRightSidebar();
     else this.viewingLayout.toggleRightSidebar();
   }
 
@@ -60,7 +85,12 @@ export class AppCommands {
 
   async clearCurrent(): Promise<void> {
     if (this.app.core.mode.getMode() === "planning") {
-      if (!await this.confirmPlanningClear("Are you sure you want to clear Planning mode? This will remove all waypoints, objects, methods, and nodes.")) return;
+      if (
+        !(await this.confirmPlanningClear(
+          "Are you sure you want to clear Planning mode? This will remove all waypoints, objects, methods, and nodes.",
+        ))
+      )
+        return;
       this.app.planning.clear();
       requestDrawAll();
       this.app.core.status.setStatus("Cleared Planned Path");
@@ -71,7 +101,12 @@ export class AppCommands {
   }
 
   async clearAll(): Promise<void> {
-    if (!await this.confirmPlanningClear("Are you sure you want to clear the field and Planning mode? This will remove all waypoints, objects, methods, and nodes.")) return;
+    if (
+      !(await this.confirmPlanningClear(
+        "Are you sure you want to clear the field and Planning mode? This will remove all waypoints, objects, methods, and nodes.",
+      ))
+    )
+      return;
     this.clearViewing();
     this.app.planning.clear();
     requestDrawAll();
@@ -88,6 +123,8 @@ export class AppCommands {
   }
 
   private async confirmPlanningClear(message: string): Promise<boolean> {
-    return !this.app.planning.hasData || this.planningDialogs.confirm({ message });
+    return (
+      !this.app.planning.hasData || this.planningDialogs.confirm({ message })
+    );
   }
 }

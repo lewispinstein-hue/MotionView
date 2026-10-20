@@ -17,7 +17,10 @@ export interface PersistedViewingLayout {
   readonly timelineHeight?: unknown;
 }
 
-function requiredElement<T extends HTMLElement>(document: Document, id: string): T {
+function requiredElement<T extends HTMLElement>(
+  document: Document,
+  id: string,
+): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`MotionView Viewing layout requires #${id}.`);
   return element as T;
@@ -50,15 +53,21 @@ export class ViewingLayoutView {
     this.#sidebar = requiredElement(document, "rightViewing");
     this.#leftSidebar = requiredElement(document, "left");
     this.#leftSplitter = requiredElement(document, "vSplitL");
-    this.#row = this.#sidebar.closest<HTMLElement>(".row")
-      ?? (() => { throw new Error("MotionView Viewing layout requires a .row container."); })();
+    this.#row =
+      this.#sidebar.closest<HTMLElement>(".row") ??
+      (() => {
+        throw new Error("MotionView Viewing layout requires a .row container.");
+      })();
     this.#timelineBar = requiredElement(document, "timelineBar");
   }
 
   bind(): void {
     this.#leftSplitter.addEventListener("mousedown", (event) => {
       if (getMode() !== "viewing") return;
-      this.#leftSidebarDrag = { x: event.clientX, width: this.leftSidebarWidth };
+      this.#leftSidebarDrag = {
+        x: event.clientX,
+        width: this.leftSidebarWidth,
+      };
       document.body.style.cursor = "col-resize";
       event.preventDefault();
     });
@@ -97,14 +106,20 @@ export class ViewingLayoutView {
 
   activate(): void {
     if (getMode() !== "viewing") return;
-    this.#timelineBar.classList.toggle("isCollapsed", this.timelineHeight <= COLLAPSE_TIMELINE_PX);
+    this.#timelineBar.classList.toggle(
+      "isCollapsed",
+      this.timelineHeight <= COLLAPSE_TIMELINE_PX,
+    );
     this.resize();
   }
 
   applyPersistedLayout(layout: PersistedViewingLayout): void {
     const leftSidebarWidth = this.parseNumber(layout.leftSidebarWidth);
     if (leftSidebarWidth !== null) {
-      const width = Math.max(0, Math.min(this.maxLeftSidebarWidth, leftSidebarWidth));
+      const width = Math.max(
+        0,
+        Math.min(this.maxLeftSidebarWidth, leftSidebarWidth),
+      );
       this.setLeftSidebarWidth(width);
       if (width > COLLAPSE_LEFT_SIDEBAR_PX) this.#lastLeftSidebarWidth = width;
     }
@@ -133,7 +148,12 @@ export class ViewingLayoutView {
 
   toggleLeftSidebar(): void {
     if (this.leftSidebarWidth <= COLLAPSE_LEFT_SIDEBAR_PX) {
-      this.setLeftSidebarWidth(Math.max(COLLAPSE_LEFT_SIDEBAR_PX + 1, Math.min(this.maxLeftSidebarWidth, this.#lastLeftSidebarWidth)));
+      this.setLeftSidebarWidth(
+        Math.max(
+          COLLAPSE_LEFT_SIDEBAR_PX + 1,
+          Math.min(this.maxLeftSidebarWidth, this.#lastLeftSidebarWidth),
+        ),
+      );
     } else {
       this.#lastLeftSidebarWidth = this.leftSidebarWidth;
       this.setLeftSidebarWidth(0);
@@ -142,8 +162,14 @@ export class ViewingLayoutView {
   }
 
   toggleRightSidebar(): void {
-    if (this.sidebarWidth <= COLLAPSE_SIDEBAR_PX) this.setSidebarWidth(Math.max(COLLAPSE_SIDEBAR_PX + 1, this.#lastSidebarWidth));
-    else { this.#lastSidebarWidth = this.sidebarWidth; this.setSidebarWidth(0); }
+    if (this.sidebarWidth <= COLLAPSE_SIDEBAR_PX)
+      this.setSidebarWidth(
+        Math.max(COLLAPSE_SIDEBAR_PX + 1, this.#lastSidebarWidth),
+      );
+    else {
+      this.#lastSidebarWidth = this.sidebarWidth;
+      this.setSidebarWidth(0);
+    }
     this.finishSidebarToggle();
   }
 
@@ -159,39 +185,60 @@ export class ViewingLayoutView {
     this.changed.emit({});
   }
 
-  private get sidebarWidth(): number { return this.cssNumber("--rightSidebarWViewing", 360); }
-  private get leftSidebarWidth(): number { return this.cssNumber("--leftSidebarW", 391); }
-  private get timelineHeight(): number { return this.cssNumber("--timelineH", 260); }
+  private get sidebarWidth(): number {
+    return this.cssNumber("--rightSidebarWViewing", 360);
+  }
+  private get leftSidebarWidth(): number {
+    return this.cssNumber("--leftSidebarW", 391);
+  }
+  private get timelineHeight(): number {
+    return this.cssNumber("--timelineH", 260);
+  }
 
   private move(event: MouseEvent): void {
     if (this.#leftSidebarDrag) {
-      const width = Math.max(0, Math.min(
-        this.maxLeftSidebarWidth,
-        this.#leftSidebarDrag.width + event.clientX - this.#leftSidebarDrag.x,
-      ));
+      const width = Math.max(
+        0,
+        Math.min(
+          this.maxLeftSidebarWidth,
+          this.#leftSidebarDrag.width + event.clientX - this.#leftSidebarDrag.x,
+        ),
+      );
       this.setLeftSidebarWidth(width <= COLLAPSE_LEFT_SIDEBAR_PX ? 0 : width);
       if (width > COLLAPSE_LEFT_SIDEBAR_PX) this.#lastLeftSidebarWidth = width;
       this.resize();
     }
     if (this.#sidebarDrag) {
       const splitterWidth = this.#splitter.getBoundingClientRect().width;
-      const leftSplitterWidth = this.#leftSplitter.getBoundingClientRect().width;
-      const availableWidth = this.#row.clientWidth
-        - this.#leftSidebar.getBoundingClientRect().width
-        - splitterWidth
-        - leftSplitterWidth
-        - MIN_FIELD_WIDTH_PX;
-      const width = Math.max(0, Math.min(
-        MAX_SIDEBAR_PX,
-        availableWidth,
-        this.#sidebarDrag.width - (event.clientX - this.#sidebarDrag.x),
-      ));
+      const leftSplitterWidth =
+        this.#leftSplitter.getBoundingClientRect().width;
+      const availableWidth =
+        this.#row.clientWidth -
+        this.#leftSidebar.getBoundingClientRect().width -
+        splitterWidth -
+        leftSplitterWidth -
+        MIN_FIELD_WIDTH_PX;
+      const width = Math.max(
+        0,
+        Math.min(
+          MAX_SIDEBAR_PX,
+          availableWidth,
+          this.#sidebarDrag.width - (event.clientX - this.#sidebarDrag.x),
+        ),
+      );
       this.setSidebarWidth(width <= COLLAPSE_SIDEBAR_PX ? 0 : width);
       if (width > COLLAPSE_SIDEBAR_PX) this.#lastSidebarWidth = width;
       this.resize();
     }
     if (this.#timelineDrag) {
-      const height = Math.max(0, Math.min(MAX_TIMELINE_PX, window.innerHeight * 0.8, this.#timelineDrag.height - (event.clientY - this.#timelineDrag.y)));
+      const height = Math.max(
+        0,
+        Math.min(
+          MAX_TIMELINE_PX,
+          window.innerHeight * 0.8,
+          this.#timelineDrag.height - (event.clientY - this.#timelineDrag.y),
+        ),
+      );
       this.setTimelineHeight(height <= COLLAPSE_TIMELINE_PX ? 0 : height);
       if (height > COLLAPSE_TIMELINE_PX) this.#lastTimelineHeight = height;
       this.resize();
@@ -199,7 +246,8 @@ export class ViewingLayoutView {
   }
 
   private end(): void {
-    if (!this.#leftSidebarDrag && !this.#sidebarDrag && !this.#timelineDrag) return;
+    if (!this.#leftSidebarDrag && !this.#sidebarDrag && !this.#timelineDrag)
+      return;
     this.#leftSidebarDrag = null;
     this.#sidebarDrag = null;
     this.#timelineDrag = null;
@@ -209,11 +257,15 @@ export class ViewingLayoutView {
   }
 
   private get maxLeftSidebarWidth(): number {
-    const reservedWidth = this.#sidebar.getBoundingClientRect().width
-      + this.#splitter.getBoundingClientRect().width
-      + this.#leftSplitter.getBoundingClientRect().width
-      + MIN_FIELD_WIDTH_PX;
-    return Math.max(0, Math.min(MAX_LEFT_SIDEBAR_PX, this.#row.clientWidth - reservedWidth));
+    const reservedWidth =
+      this.#sidebar.getBoundingClientRect().width +
+      this.#splitter.getBoundingClientRect().width +
+      this.#leftSplitter.getBoundingClientRect().width +
+      MIN_FIELD_WIDTH_PX;
+    return Math.max(
+      0,
+      Math.min(MAX_LEFT_SIDEBAR_PX, this.#row.clientWidth - reservedWidth),
+    );
   }
 
   private setLeftSidebarWidth(width: number): void {
@@ -236,11 +288,16 @@ export class ViewingLayoutView {
 
   private setTimelineHeight(height: number): void {
     this.#root.style.setProperty("--timelineH", `${height}px`);
-    this.#timelineBar.classList.toggle("isCollapsed", height <= COLLAPSE_TIMELINE_PX);
+    this.#timelineBar.classList.toggle(
+      "isCollapsed",
+      height <= COLLAPSE_TIMELINE_PX,
+    );
   }
 
   private cssNumber(property: string, fallback: number): number {
-    const value = Number.parseFloat(getComputedStyle(this.#root).getPropertyValue(property));
+    const value = Number.parseFloat(
+      getComputedStyle(this.#root).getPropertyValue(property),
+    );
     return Number.isFinite(value) ? value : fallback;
   }
 

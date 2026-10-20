@@ -4,7 +4,10 @@ export interface PoseReader extends Iterable<Readonly<Pose>> {
   readonly length: number;
   readonly [index: number]: Readonly<Pose> | undefined;
   at(index: number): Readonly<Pose> | undefined;
-  map<T>(callback: (pose: Readonly<Pose>, index: number, reader: PoseReader) => T, thisArg?: unknown): T[];
+  map<T>(
+    callback: (pose: Readonly<Pose>, index: number, reader: PoseReader) => T,
+    thisArg?: unknown,
+  ): T[];
 }
 
 export interface PoseStore extends PoseReader {
@@ -29,7 +32,8 @@ export function createPoseStore(initialCapacity = 1024): PoseStore {
   let speedNormValues = new Float32Array(capacity);
 
   const readNullable = (value: number) => (Number.isNaN(value) ? null : value);
-  const writeNullable = (value: unknown) => (typeof value === "number" && Number.isFinite(value)) ? value : Number.NaN;
+  const writeNullable = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) ? value : Number.NaN;
 
   function grow(nextLength: number) {
     if (nextLength <= capacity) return;
@@ -64,7 +68,8 @@ export function createPoseStore(initialCapacity = 1024): PoseStore {
   }
 
   function getPose(index: number): Pose | undefined {
-    if (!Number.isInteger(index) || index < 0 || index >= length) return undefined;
+    if (!Number.isInteger(index) || index < 0 || index >= length)
+      return undefined;
     return {
       t: readNullable(tValues[index]),
       x: xValues[index],
@@ -98,7 +103,10 @@ export function createPoseStore(initialCapacity = 1024): PoseStore {
     length = 0;
   }
 
-  function mapPoses<T>(callback: (pose: Pose, index: number, store: PoseStore) => T, thisArg?: unknown) {
+  function mapPoses<T>(
+    callback: (pose: Pose, index: number, store: PoseStore) => T,
+    thisArg?: unknown,
+  ) {
     const out = new Array<T>(length);
     for (let i = 0; i < length; i += 1) {
       out[i] = callback.call(thisArg, getPose(i) as Pose, i, proxy);
@@ -127,7 +135,8 @@ export function createPoseStore(initialCapacity = 1024): PoseStore {
   const proxy = new Proxy(api, {
     get(target, prop, receiver) {
       if (prop === "length") return length;
-      if (typeof prop === "string" && /^\d+$/.test(prop)) return getPose(Number(prop));
+      if (typeof prop === "string" && /^\d+$/.test(prop))
+        return getPose(Number(prop));
       return Reflect.get(target, prop, receiver);
     },
   }) as unknown as PoseStore;

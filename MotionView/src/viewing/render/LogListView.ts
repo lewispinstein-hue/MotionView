@@ -3,7 +3,13 @@ import type { LogEntry } from "../../state/models";
 import type { ViewingListsDom } from "../ViewingDom";
 import type { ViewingFeature } from "../ViewingFeature";
 import { createVirtualList, type VirtualList } from "./virtualList";
-import { escapeHtml, formatNumber, levelSortRank, levelStyle, normalizeLogLevel } from "../viewingPresentation";
+import {
+  escapeHtml,
+  formatNumber,
+  levelSortRank,
+  levelStyle,
+  normalizeLogLevel,
+} from "../viewingPresentation";
 
 export class LogListView {
   readonly #list: VirtualList<Readonly<LogEntry>>;
@@ -26,7 +32,8 @@ export class LogListView {
       renderItem: (entry) => this.createItem(entry),
       syncItem: (row, entry) => this.syncItem(row, entry),
     });
-    if (!list) throw new Error("MotionView could not initialize the log virtual list.");
+    if (!list)
+      throw new Error("MotionView could not initialize the log virtual list.");
     this.#list = list;
   }
 
@@ -34,17 +41,25 @@ export class LogListView {
     this.dom.logSort.addEventListener("change", () => this.render());
   }
 
-  get itemCount(): number { return this.#itemCount; }
+  get itemCount(): number {
+    return this.#itemCount;
+  }
 
   setSearch(value: string): void {
     this.#searchTerm = value.trim().toLocaleLowerCase();
   }
 
   render(): void {
-    const items = Array.from(this.viewing.data.logs).filter((entry) => this.filterMatches(entry) && this.searchMatches(entry));
+    const items = Array.from(this.viewing.data.logs).filter(
+      (entry) => this.filterMatches(entry) && this.searchMatches(entry),
+    );
     const mode = this.dom.logSort.value;
     items.sort((left, right) => {
-      if (mode === "level") return levelSortRank(right.level) - levelSortRank(left.level) || right.t - left.t;
+      if (mode === "level")
+        return (
+          levelSortRank(right.level) - levelSortRank(left.level) ||
+          right.t - left.t
+        );
       return mode === "time" ? left.t - right.t : right.t - left.t;
     });
     this.#itemCount = items.length;
@@ -54,7 +69,9 @@ export class LogListView {
 
   private searchMatches(entry: Readonly<LogEntry>): boolean {
     if (!this.#searchTerm) return true;
-    return `${entry.label ?? ""} ${entry.message ?? entry.value ?? ""}`.toLocaleLowerCase().includes(this.#searchTerm);
+    return `${entry.label ?? ""} ${entry.message ?? entry.value ?? ""}`
+      .toLocaleLowerCase()
+      .includes(this.#searchTerm);
   }
 
   private filterMatches(entry: Readonly<LogEntry>): boolean {
@@ -81,7 +98,8 @@ export class LogListView {
       passedIndex = index;
       latestTime = entry.t;
     }
-    this.#previewKey = passedIndex >= 0 ? this.keyFor(items[passedIndex]!) : null;
+    this.#previewKey =
+      passedIndex >= 0 ? this.keyFor(items[passedIndex]!) : null;
     if (passedIndex >= 0) this.#list.scrollToIndex(passedIndex, 12, "center");
     this.#list.refresh();
   }
@@ -105,10 +123,12 @@ export class LogListView {
     </div><div class="bigValue selectableText"><span class="eventSelectableText">${escapeHtml(entry.message ?? entry.value ?? "")}</span></div></div>`;
     this.constrainTextSelection(element);
     element.addEventListener("pointerenter", () => {
-      if (!this.viewing.playback.isPlaying) this.viewing.navigation.setTimelineHover(entry.t);
+      if (!this.viewing.playback.isPlaying)
+        this.viewing.navigation.setTimelineHover(entry.t);
     });
     element.addEventListener("pointerleave", () => {
-      if (this.viewing.navigation.hoverTimelineTime === entry.t) this.viewing.navigation.setTimelineHover(null);
+      if (this.viewing.navigation.hoverTimelineTime === entry.t)
+        this.viewing.navigation.setTimelineHover(null);
     });
     const selectLog = () => {
       if (this.viewing.navigation.selectedLog === entry) {
@@ -117,31 +137,62 @@ export class LogListView {
       }
       this.viewing.playback.pause();
       this.viewing.navigation.setTimelineHover(null);
-      const nearest = this.viewing.projection.nearestIndex(entry.t, Number.POSITIVE_INFINITY);
+      const nearest = this.viewing.projection.nearestIndex(
+        entry.t,
+        Number.POSITIVE_INFINITY,
+      );
       const index = nearest?.index ?? -1;
-      const pose = this.viewing.projection.interpolatePose(entry.t) ?? this.viewing.projection.poseAt(index);
+      const pose =
+        this.viewing.projection.interpolatePose(entry.t) ??
+        this.viewing.projection.poseAt(index);
       if (index >= 0 && pose) this.viewing.navigation.lockTrack(pose, index);
       this.viewing.navigation.selectLog(entry);
-      if (nearest) setStatus(`Log @${entry.t}ms mapped to closest pose @${this.viewing.data.poses[index]?.t}ms (Δ=${nearest.deltaMs}ms).`);
+      if (nearest)
+        setStatus(
+          `Log @${entry.t}ms mapped to closest pose @${this.viewing.data.poses[index]?.t}ms (Δ=${nearest.deltaMs}ms).`,
+        );
       else setStatus(`Log @${entry.t}ms selected (no poses loaded).`);
       this.highlight(true);
     };
-    element.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || (event.target instanceof Element && event.target.closest(".eventSelectableText"))) return;
-      event.preventDefault();
-      selectLog();
-    }, { passive: false });
+    element.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (
+          event.button !== 0 ||
+          (event.target instanceof Element &&
+            event.target.closest(".eventSelectableText"))
+        )
+          return;
+        event.preventDefault();
+        selectLog();
+      },
+      { passive: false },
+    );
     element.addEventListener("click", (event) => {
-      const text = event.target instanceof Element ? event.target.closest<HTMLElement>(".eventSelectableText") : null;
-      if (!text || text.dataset.selectionCancelled === "true" || window.getSelection()?.toString()) return;
+      const text =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>(".eventSelectableText")
+          : null;
+      if (
+        !text ||
+        text.dataset.selectionCancelled === "true" ||
+        window.getSelection()?.toString()
+      )
+        return;
       selectLog();
     });
     return element;
   }
 
   private syncItem(element: HTMLElement, entry: Readonly<LogEntry>): void {
-    element.classList.toggle("selected", entry === this.viewing.navigation.selectedLog);
-    element.classList.toggle("previewSelected", this.#previewKey === this.keyFor(entry));
+    element.classList.toggle(
+      "selected",
+      entry === this.viewing.navigation.selectedLog,
+    );
+    element.classList.toggle(
+      "previewSelected",
+      this.#previewKey === this.keyFor(entry),
+    );
     element.dataset.t = String(entry.t);
   }
 
@@ -157,23 +208,32 @@ export class LogListView {
   }
 
   private constrainTextSelection(item: HTMLElement): void {
-    for (const text of item.querySelectorAll<HTMLElement>(".eventSelectableText")) {
-      text.addEventListener("pointerdown", (event) => {
-        if (event.button !== 0) return;
-        text.dataset.selectionCancelled = "";
-        const constrain = (move: PointerEvent) => {
-          const target = document.elementFromPoint(move.clientX, move.clientY);
-          if (target && text.contains(target)) return;
-          text.dataset.selectionCancelled = "true";
-          window.getSelection()?.removeAllRanges();
-        };
-        const release = () => {
-          window.removeEventListener("pointermove", constrain);
-          window.setTimeout(() => delete text.dataset.selectionCancelled, 0);
-        };
-        window.addEventListener("pointermove", constrain, { passive: true });
-        window.addEventListener("pointerup", release, { once: true });
-      }, { passive: true });
+    for (const text of item.querySelectorAll<HTMLElement>(
+      ".eventSelectableText",
+    )) {
+      text.addEventListener(
+        "pointerdown",
+        (event) => {
+          if (event.button !== 0) return;
+          text.dataset.selectionCancelled = "";
+          const constrain = (move: PointerEvent) => {
+            const target = document.elementFromPoint(
+              move.clientX,
+              move.clientY,
+            );
+            if (target && text.contains(target)) return;
+            text.dataset.selectionCancelled = "true";
+            window.getSelection()?.removeAllRanges();
+          };
+          const release = () => {
+            window.removeEventListener("pointermove", constrain);
+            window.setTimeout(() => delete text.dataset.selectionCancelled, 0);
+          };
+          window.addEventListener("pointermove", constrain, { passive: true });
+          window.addEventListener("pointerup", release, { once: true });
+        },
+        { passive: true },
+      );
     }
   }
 }

@@ -1,8 +1,14 @@
-function optionalElement<T extends HTMLElement>(document: Document, id: string): T | null {
+function optionalElement<T extends HTMLElement>(
+  document: Document,
+  id: string,
+): T | null {
   return document.getElementById(id) as T | null;
 }
 
-function requiredElement<T extends HTMLElement>(document: Document, id: string): T {
+function requiredElement<T extends HTMLElement>(
+  document: Document,
+  id: string,
+): T {
   const element = optionalElement<T>(document, id);
   if (!element) throw new Error(`MotionView Viewing UI requires #${id}.`);
   return element;
@@ -23,7 +29,9 @@ export interface ViewingTimelineDom {
 export interface ViewingListsDom {
   readonly sectionTabs: readonly HTMLButtonElement[];
   readonly sectionScroller: HTMLElement;
-  readonly panels: Readonly<Record<"watches" | "logs" | "waypoints" | "poses", HTMLElement>>;
+  readonly panels: Readonly<
+    Record<"watches" | "logs" | "waypoints" | "poses", HTMLElement>
+  >;
   readonly scrollContainer: HTMLElement;
   readonly searchWrap: HTMLElement;
   readonly search: HTMLInputElement;
@@ -120,7 +128,9 @@ export class ViewingDom {
       top: optionalElement(document, "timelineTop"),
     };
     this.lists = {
-      sectionTabs: Array.from(document.querySelectorAll<HTMLButtonElement>("[data-viewing-section]")),
+      sectionTabs: Array.from(
+        document.querySelectorAll<HTMLButtonElement>("[data-viewing-section]"),
+      ),
       sectionScroller: requiredElement(document, "viewingSidebarTabs"),
       panels: {
         watches: requiredElement(document, "watchPanel"),
