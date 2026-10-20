@@ -2374,7 +2374,7 @@ body:not(.mode-planning) #rightPlanning {
 }
 
 .pinnedWatchPanel {
-  --pw-bg: rgba(18, 18, 20, 0.60);
+  --pw-bg: rgba(18, 18, 20, 0.80);
   --pw-border: rgba(255, 255, 255, 0.12);
   --pw-line: rgba(255, 255, 255, 0.10);
   --pw-text: rgba(255, 255, 255, 0.92);
