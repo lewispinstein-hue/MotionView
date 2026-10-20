@@ -7,7 +7,7 @@ import { PlanningRoute } from "./PlanningRoute";
 import { PlanningSelection } from "./PlanningSelection";
 import { PlanningTimeline } from "./planningTimelineDomain";
 import { PlanningSession } from "./planningSession";
-import type { PlanningExportView, PlanningTelemetrySnapshot } from "./planningTypes";
+import type { PlanningExportView, PlanningNodeView, PlanningTelemetrySnapshot } from "./planningTypes";
 
 const DEFAULT_EXPORT_TEMPLATE = "moveToPoint(${x}, ${y}, ${theta});";
 
@@ -76,6 +76,22 @@ export class PlanningFeature {
     };
   }
 
+  /** Returns the last timeline node reached at the current playback distance. */
+  latestExecutedNode(objectId?: string): PlanningNodeView | null {
+    let latestInitial: PlanningNodeView | null = null;
+    for (const node of this.timeline.nodes) {
+      if (node.beforeWaypoint !== 0 || (objectId && node.objectId !== objectId)) continue;
+      if (!latestInitial || this.isLaterNode(node, latestInitial)) latestInitial = node;
+    }
+
+    let latestPlacement: (typeof this.projection.nodePlacements)[number] | null = null;
+    for (const placement of this.projection.nodePlacements) {
+      if (placement.distance > this.playback.distance || (objectId && placement.node.objectId !== objectId)) continue;
+      if (!latestPlacement || this.isLaterPlacement(placement, latestPlacement)) latestPlacement = placement;
+    }
+    return latestPlacement?.node ?? latestInitial;
+  }
+
   telemetryProperties(extra: Record<string, unknown> = {}): PlanningTelemetrySnapshot {
     return {
       plan_waypoints: this.route.length,
@@ -84,6 +100,20 @@ export class PlanningFeature {
       plan_nodes: this.timeline.length,
       ...extra,
     };
+  }
+
+  private isLaterPlacement(
+    candidate: (typeof this.projection.nodePlacements)[number],
+    current: (typeof this.projection.nodePlacements)[number],
+  ): boolean {
+    if (candidate.distance !== current.distance) return candidate.distance > current.distance;
+    return this.isLaterNode(candidate.node, current.node);
+  }
+
+  private isLaterNode(candidate: PlanningNodeView, current: PlanningNodeView): boolean {
+    if (candidate.beforeWaypoint !== current.beforeWaypoint) return candidate.beforeWaypoint > current.beforeWaypoint;
+    if (candidate.index !== current.index) return candidate.index > current.index;
+    return candidate.id.localeCompare(current.id) > 0;
   }
 
 }

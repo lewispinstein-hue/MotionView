@@ -16,20 +16,34 @@ export class TelemetrySettingsBinding {
   bind(): void {
     if (this.#bound) return;
     this.#bound = true;
-    this.settings.changed.subscribe(({ settings, keys }) => this.apply(settings, keys));
+    this.settings.changed.subscribe(({ settings, keys, source }) => this.apply(settings, keys, source));
     this.dom.telemetryEnabled.addEventListener("change", () => {
       this.settings.update({ telemetryEnabled: this.dom.telemetryEnabled.checked });
     });
   }
 
   applyAll(): void {
-    this.apply(this.settings.current, ["telemetryEnabled"]);
+    this.apply(this.settings.current, ["telemetryEnabled"], "load");
   }
 
-  private apply(values: Readonly<MotionViewSettings>, keys: readonly (keyof MotionViewSettings)[]): void {
+  private apply(
+    values: Readonly<MotionViewSettings>,
+    keys: readonly (keyof MotionViewSettings)[],
+    source: "load" | "user" | "system",
+  ): void {
     if (!keys.includes("telemetryEnabled")) return;
     const enabled = values.telemetryEnabled === true;
     this.dom.telemetryEnabled.checked = enabled;
+
+    // Explicit setting changes are retained even if sending fails, while the
+    // disabled state still immediately stops all automatic telemetry.
+    if (source === "user") {
+      void this.telemetry.capture(
+        "telemetry_preference_changed",
+        { telemetry_enabled: enabled },
+        { explicitUserAction: true },
+      );
+    }
     this.telemetry.setEnabled(enabled);
   }
 }

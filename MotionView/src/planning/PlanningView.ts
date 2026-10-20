@@ -6,6 +6,7 @@ import type { PlanningDialogs } from "./PlanningDialogs";
 import type { PlanningDom } from "./PlanningDom";
 import type { PlanningFeature } from "./PlanningFeature";
 import { PlanningWaypointEditor } from "./PlanningWaypointEditor";
+import { getPlanNodeEffectiveMethod } from "./planningObjects";
 import { PlanningDragCoordinator } from "./render/PlanningDragCoordinator";
 import { PlanningFieldView } from "./render/PlanningFieldView";
 import { PlanningSidebarView } from "./render/PlanningSidebarView";
@@ -42,12 +43,17 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
     this.planning.events.documentChanged.subscribe(() => this.render());
     this.planning.events.documentPreviewChanged.subscribe(() => this.render());
     this.planning.events.selectionChanged.subscribe(() => this.render());
-    this.planning.events.projectionChanged.subscribe(() => { this.#timeline.render(); requestDrawAll(); });
+    this.planning.events.projectionChanged.subscribe(() => {
+      this.#timeline.render();
+      this.updateLatestPill();
+      requestDrawAll();
+    });
     this.planning.events.playbackChanged.subscribe((event) => {
       this.dom.timePill.textContent = `Plan: ${formatDistanceFromInches(event.distance, 2)} / ${formatDistanceFromInches(this.planning.projection.totalLength, 2)} ${getCurrentUnits()}`;
       this.dom.pointPill.textContent = `Points: ${this.planning.route.length}`;
       this.#sidebar.updatePlayback();
       this.#timeline.draw();
+      this.updateLatestPill();
       requestDrawAll();
     });
   }
@@ -55,6 +61,7 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
   render(): void {
     this.#sidebar.render();
     this.#timeline.render();
+    this.updateLatestPill();
     requestDrawAll();
   }
 
@@ -64,5 +71,12 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
 
   currentPose(): FieldPose | null {
     return this.planning.projection.sample(this.planning.playback.distance);
+  }
+
+  private updateLatestPill(): void {
+    const node = this.#timeline.latestNodeAtProgress();
+    const object = node ? this.planning.objects.get(node.objectId) : null;
+    const method = node ? getPlanNodeEffectiveMethod(this.planning.objects.items, node) : null;
+    this.dom.latestPill.textContent = object && method ? `${object.name} • ${method.name}` : "—";
   }
 }

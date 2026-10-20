@@ -5,13 +5,27 @@ import type { ExportService } from "./ExportService";
 import type { ExportLocation, ExportRequest } from "./exportTypes";
 import type { MotionViewExportType } from "../persistence";
 
-function filename(value: string): string { return value.replace(/\.json\s*$/i, "").replace(/[<>:"/\\|?*\u0000-\u001F]/g, "").replace(/\s+/g, " ").trim().replace(/[. ]+$/g, "").replace(/[^A-Za-z0-9 _-]/g, "").trim(); }
-function pathName(value: string): string { return value.replace(/\s+/g, " ").trim(); }
+function filename(value: string): string {
+  return value.replace(/\.json\s*$/i, "")
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "")
+    .replace(/\s+/g, " ").trim().replace(/[. ]+$/g, "")
+    .replace(/[^A-Za-z0-9 _-]/g, "")
+    .trim();
+}
+
+function pathName(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
 
 export class ExportDialog {
   #bound = false;
   #submitError = "";
-  constructor(private readonly app: MotionViewApp, private readonly dom: ExportDom, private readonly service: ExportService) {}
+  constructor(
+    private readonly app: MotionViewApp,
+    private readonly dom: ExportDom,
+    private readonly service: ExportService
+  ) {}
+
   bind(): void {
     if (this.#bound) return; this.#bound = true;
     this.dom.open.addEventListener("click", () => this.open());
@@ -28,13 +42,41 @@ export class ExportDialog {
     this.app.planning.events.documentChanged.subscribe(() => this.renderAvailability()); this.app.viewing.events.dataChanged.subscribe(() => this.renderAvailability()); this.app.live.events.streamChanged.subscribe(() => this.renderAvailability()); this.app.live.events.projectChanged.subscribe(() => this.render());
     this.renderAvailability();
   }
-  get isOpen(): boolean { return !this.dom.modal.hasAttribute("hidden"); }
-  open(type: MotionViewExportType = this.app.core.mode.getMode()): void { if (!this.dom.pathName.value) this.dom.pathName.value = "Untitled Path"; if (!this.dom.filename.value) this.dom.filename.value = "motionview-path"; this.dom.type.value = type; this.#submitError = ""; this.dom.success.hidden = true; this.render(); this.dom.modal.removeAttribute("hidden"); this.dom.modal.style.display = "flex"; requestAnimationFrame(() => this.dom.pathName.focus()); }
-  close(): void { this.dom.modal.setAttribute("hidden", ""); this.dom.modal.style.display = "none"; }
-  private renderAvailability(): void { this.dom.open.disabled = this.app.live.stream.state !== "idle" || !(this.app.planning.hasData || this.app.viewing.data.hasData); }
+
+  get isOpen(): boolean {
+    return !this.dom.modal.hasAttribute("hidden");
+  }
+  
+  open(type: MotionViewExportType = this.app.core.mode.getMode()): void {
+    if (!this.dom.pathName.value) this.dom.pathName.value = "Untitled Path";
+    if (!this.dom.filename.value) this.dom.filename.value = "motionview-path";
+    this.dom.type.value = type; this.#submitError = "";
+    this.dom.success.hidden = true; this.render();
+    this.dom.modal.removeAttribute("hidden");
+    this.dom.modal.style.display = "flex";
+    requestAnimationFrame(() => this.dom.pathName.focus());
+  }
+
+  close(): void {
+    this.dom.modal.setAttribute("hidden", "");
+    this.dom.modal.style.display = "none";
+  }
+
+  private renderAvailability(): void {
+    const disabledState = 
+      this.app.live.stream.state !== "idle" || 
+      !(this.app.planning.hasData || this.app.viewing.data.hasData);
+
+    this.dom.open.disabled = disabledState;
+  }
+    
   private render(): void {
-    this.syncProjectOption(); const type = this.exportType; const location = this.location; const validType = type === "viewing" ? this.app.viewing.data.hasData : type === "planning" ? this.app.planning.hasData : this.app.viewing.data.hasData || this.app.planning.hasData;
-    this.dom.customWrap.hidden = location !== "custom"; this.dom.filenameHint.textContent = this.dom.filename.value ? `File: ${filename(this.dom.filename.value)}.json` : "Only letters, numbers, spaces, dashes, and underscores are kept."; this.dom.customHint.textContent = location === "project" ? "Exports to the configured PROS project's MotionView-Routes folder." : "Enter a folder path.";
+    this.syncProjectOption();
+    const type = this.exportType;
+    const location = this.location;
+    const validType = type === "viewing" ? this.app.viewing.data.hasData : type === "planning" ? this.app.planning.hasData : this.app.viewing.data.hasData || this.app.planning.hasData;
+    this.dom.customWrap.hidden = location !== "custom";
+    this.dom.filenameHint.textContent = this.dom.filename.value ? `File: ${filename(this.dom.filename.value)}.json` : "Only letters, numbers, spaces, dashes, and underscores are kept."; this.dom.customHint.textContent = location === "project" ? "Exports to the configured PROS project's MotionView-Routes folder." : "Enter a folder path.";
     const message = !pathName(this.dom.pathName.value) ? "Enter a path name to continue." : !filename(this.dom.filename.value) ? "Enter a filename to continue." : location === "custom" && !this.dom.customPath.value.trim() ? "Enter a custom folder path to continue." : !validType ? `There is no ${type === "both" ? "Viewing or Planning" : type === "viewing" ? "Viewing mode" : "Planning mode"} data to export.` : this.#submitError;
     this.dom.validation.textContent = message; this.dom.confirm.disabled = !!message;
   }

@@ -390,11 +390,7 @@ export class PlanningSidebarView {
   }
 
   private latestMethodName(objectId: string): string {
-    let latest = "—";
-    for (const placement of this.planning.projection.nodePlacements) {
-      if (placement.node.objectId !== objectId || placement.distance > this.planning.playback.distance) continue;
-      latest = getPlanNodeEffectiveMethod(this.planning.objects.items, placement.node)?.name || "—";
-    }
-    return latest;
+    const node = this.planning.latestExecutedNode(objectId);
+    return getPlanNodeEffectiveMethod(this.planning.objects.items, node)?.name || "—";
   }
 }

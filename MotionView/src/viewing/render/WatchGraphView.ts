@@ -247,7 +247,9 @@ export class WatchGraphView {
             ticks: {
               color: "rgba(255,255,255,.62)",
               stepSize: allBoolean ? 1 : undefined,
-              callback: allBoolean ? (value) => Number(value) === 0 || Number(value) === 1 ? String(value) : "" : undefined,
+              callback: allBoolean
+                ? (value) => Number(value) === 0 || Number(value) === 1 ? String(value) : ""
+                : (value) => formatNumber(Number(value), 2),
             },
           },
         },

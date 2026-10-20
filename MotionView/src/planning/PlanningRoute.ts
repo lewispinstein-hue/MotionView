@@ -24,7 +24,14 @@ export class PlanningRoute {
 
   add(waypoint: PlanningWaypoint, index = this.session.waypoints.length): number {
     const insertionIndex = Math.max(0, Math.min(this.session.waypoints.length, Math.trunc(index)));
-    this.session.mutate("route", () => this.session.waypoints.splice(insertionIndex, 0, cloneWaypoint(waypoint)));
+    this.session.mutate("route", () => {
+      // Nodes in the split segment remain after its original starting waypoint.
+      // Later buckets advance so they stay after their existing waypoint.
+      for (const node of this.session.nodes) {
+        if (node.beforeWaypoint > insertionIndex) node.beforeWaypoint += 1;
+      }
+      this.session.waypoints.splice(insertionIndex, 0, cloneWaypoint(waypoint));
+    });
     return insertionIndex;
   }
 

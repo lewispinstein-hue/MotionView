@@ -16,11 +16,13 @@ const server = await createServer({
 try {
   const { buildPlanExportCode } = await server.ssrLoadModule("/planning/planningTemplate.ts");
   const { generatePlanningCode } = await server.ssrLoadModule("/planning/planningCode.ts");
+  const { roundExportNumber, stringifyExportJson } = await server.ssrLoadModule("/app/export/exportJson.ts");
   const { getWaypointIndicatorTooltip } = await server.ssrLoadModule("/planning/planningIndicators.ts");
   const { PlanningFeature } = await server.ssrLoadModule("/planning/PlanningFeature.ts");
   assert.equal(getWaypointIndicatorTooltip("forward"), "moveToPoint • Linear Motion");
+  assert.equal(roundExportNumber(-0.0004), 0);
   const { getPlanMethodTooltipName } = await server.ssrLoadModule("/planning/planningObjects.ts");
-  const { constrainTimelineTooltipPosition } = await server.ssrLoadModule("/planning/render/PlanningTimelineView.ts");
+  const { constrainTimelineTooltipPosition, latestTimelineNodeAtProgress } = await server.ssrLoadModule("/planning/render/PlanningTimelineView.ts");
   const waypoints = [
     { x: 0, y: 0, theta: 0, speed: 11 },
     { x: 0, y: 5, theta: 270, speed: 22, overrideCode: "segment(${iteration},${x},${y},${theta},${distance},${speed},${forwards});" },
@@ -125,6 +127,46 @@ try {
   assert.equal(terminalNodePlanning.timeline.nodes[0]?.beforeWaypoint, 2);
   assert.equal(terminalNodePlanning.timeline.insert("object", "method", 3, 0)?.beforeWaypoint, 2);
 
+  const latestNodePlanning = new PlanningFeature();
+  latestNodePlanning.load({
+    "planned-segment-export": true,
+    "planned-path": [
+      { x: 0, y: 0, theta: 0, speed: 127 },
+      { x: 12, y: 0, theta: 0, speed: 127 },
+      { x: 24, y: 0, theta: 0, speed: 127 },
+    ],
+    "planned-objects": objects,
+    "planned-nodes": [
+      { id: "start-first", objectId: "object", methodId: "method", beforeWaypoint: 0, index: 0 },
+      { id: "start-last", objectId: "object", methodId: "method", beforeWaypoint: 0, index: 1 },
+      { id: "later", objectId: "object", methodId: "method", beforeWaypoint: 1, index: 0 },
+    ],
+  });
+  assert.equal(latestNodePlanning.latestExecutedNode()?.id, "start-last");
+  assert.equal(latestNodePlanning.latestExecutedNode("object")?.id, "start-last");
+  latestNodePlanning.playback.setDistance(6);
+  assert.equal(latestNodePlanning.latestExecutedNode()?.id, "later");
+
+  const insertionPlanning = new PlanningFeature();
+  insertionPlanning.load({
+    "planned-segment-export": true,
+    "planned-path": [
+      { x: 0, y: 0, theta: 0, speed: 50, indicatorIcons: ["forward"], overrideCode: "move(${x});" },
+      { x: 10, y: 0, theta: 0, speed: 60 },
+      { x: 20, y: 0, theta: 0, speed: 70 },
+    ],
+    "planned-objects": objects,
+    "planned-nodes": [
+      { id: "first-bucket", objectId: "object", methodId: "method", beforeWaypoint: 1, index: 0 },
+      { id: "second-bucket", objectId: "object", methodId: "method", beforeWaypoint: 2, index: 0 },
+    ],
+  });
+  const sourceWaypoint = insertionPlanning.route.waypoints[0];
+  insertionPlanning.route.add({ ...sourceWaypoint, x: 5, y: 0 }, 1);
+  assert.deepEqual(insertionPlanning.timeline.nodes.map((node) => node.beforeWaypoint), [1, 3]);
+  assert.deepEqual(insertionPlanning.route.waypoints[1]?.indicatorIcons, ["forward"]);
+  assert.equal(insertionPlanning.route.waypoints[1]?.overrideCode, "move(${x});");
+
   assert.equal(getPlanMethodTooltipName("123456789012345678901234"), "123456789012345678901234");
   assert.equal(getPlanMethodTooltipName("1234567890123456789012345"), "123456789012345678901234…");
   assert.deepEqual(
@@ -135,6 +177,14 @@ try {
     constrainTimelineTooltipPosition(295, 195, 180, 40, 300, 200),
     { left: 112, top: 152 },
   );
+  const timelineProgressNodes = [
+    { node: { id: "early", objectId: "object", methodId: "method", beforeWaypoint: 1, index: 0 }, x: 40 },
+    { node: { id: "middle", objectId: "object", methodId: "method", beforeWaypoint: 1, index: 1 }, x: 80 },
+    { node: { id: "late", objectId: "object", methodId: "method", beforeWaypoint: 2, index: 0 }, x: 120 },
+  ];
+  assert.equal(latestTimelineNodeAtProgress(timelineProgressNodes, 39), null);
+  assert.equal(latestTimelineNodeAtProgress(timelineProgressNodes, 95)?.id, "middle");
+  assert.equal(latestTimelineNodeAtProgress(timelineProgressNodes, 120)?.id, "late");
 
   const legacyPlanning = new PlanningFeature();
   legacyPlanning.load({

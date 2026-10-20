@@ -11,6 +11,8 @@ import { formatDistanceFromInches } from "../../shared/units";
 
 interface SelectionRect { x0: number; y0: number; x1: number; y1: number }
 interface DragPoint { index: number; x: number; y: number }
+interface PathSegmentHit { index: number; x: number; y: number }
+interface PendingSegmentInsert extends PathSegmentHit { startX: number; startY: number }
 interface NodeMarker {
   readonly node: (PlanningFeature["timeline"]["nodes"])[number];
   readonly x: number;
@@ -41,6 +43,7 @@ export class PlanningFieldView {
   #dragMoved = false;
   #suppressWaypointEditorUntil = 0;
   #selectionRect: SelectionRect | null = null;
+  #pendingSegmentInsert: PendingSegmentInsert | null = null;
   #thetaIndex = -1;
   #thetaStart = 0;
   #thetaOriginal: readonly Readonly<{ index: number; theta: number }>[] = [];
@@ -203,6 +206,12 @@ export class PlanningFieldView {
     this.#pointerId = event.pointerId;
     this.dom.canvas.setPointerCapture(event.pointerId);
     if (event.button === 2) {
+      const waypoint = this.hitWaypoint(point.x, point.y);
+      const segment = waypoint < 0 ? this.hitPathSegment(point.x, point.y) : null;
+      if (segment) {
+        this.#pendingSegmentInsert = { ...segment, startX: point.x, startY: point.y };
+        return;
+      }
       this.#selectionRect = { x0: point.x, y0: point.y, x1: point.x, y1: point.y };
       requestDrawAll();
       return;
@@ -286,6 +295,19 @@ export class PlanningFieldView {
       requestDrawAll();
       return;
     }
+    if (this.#pendingSegmentInsert) {
+      if (Math.hypot(point.x - this.#pendingSegmentInsert.startX, point.y - this.#pendingSegmentInsert.startY) > 3) {
+        this.#selectionRect = {
+          x0: this.#pendingSegmentInsert.startX,
+          y0: this.#pendingSegmentInsert.startY,
+          x1: point.x,
+          y1: point.y,
+        };
+        this.#pendingSegmentInsert = null;
+        requestDrawAll();
+      }
+      return;
+    }
     if (this.#thetaIndex >= 0) {
       this.updateTheta(point.x, point.y);
       return;
@@ -311,7 +333,10 @@ export class PlanningFieldView {
 
   private pointerEnd(event: PointerEvent): void {
     if (getMode() !== "planning" || this.#pointerId !== event.pointerId) return;
-    if (this.#selectionRect) {
+    if (this.#pendingSegmentInsert) {
+      if (event.type !== "pointercancel") this.insertWaypointOnSegment(this.#pendingSegmentInsert);
+      this.#pendingSegmentInsert = null;
+    } else if (this.#selectionRect) {
       const rect = this.#selectionRect;
       const selected: number[] = [];
       this.planning.route.waypoints.forEach((point, index) => {
@@ -349,6 +374,7 @@ export class PlanningFieldView {
     this.#dragMoved = false;
     this.#thetaIndex = -1;
     this.#thetaOriginal = [];
+    this.#pendingSegmentInsert = null;
     this.#pendingAdd = null;
     requestDrawAll();
   }
@@ -386,6 +412,41 @@ export class PlanningFieldView {
       if ((handleX - x) ** 2 + (handleY - y) ** 2 <= handle.radius ** 2) return index;
     }
     return -1;
+  }
+
+  private hitPathSegment(x: number, y: number): PathSegmentHit | null {
+    const points = this.planning.route.waypoints;
+    const threshold = Math.max(6, this.waypointRadius(false) * 0.8);
+    let best: PathSegmentHit | null = null;
+    let bestDistance = threshold * threshold;
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const start = points[index];
+      const end = points[index + 1];
+      if (!start || !end) continue;
+      const startScreen = this.field.worldToScreen(start.x, start.y);
+      const endScreen = this.field.worldToScreen(end.x, end.y);
+      const dx = endScreen.x - startScreen.x;
+      const dy = endScreen.y - startScreen.y;
+      const lengthSquared = dx * dx + dy * dy;
+      if (lengthSquared <= 0) continue;
+      const progress = Math.max(0, Math.min(1, ((x - startScreen.x) * dx + (y - startScreen.y) * dy) / lengthSquared));
+      const closestX = startScreen.x + dx * progress;
+      const closestY = startScreen.y + dy * progress;
+      const distance = (x - closestX) ** 2 + (y - closestY) ** 2;
+      if (distance > bestDistance) continue;
+      bestDistance = distance;
+      best = { index, x: closestX, y: closestY };
+    }
+    return best;
+  }
+
+  private insertWaypointOnSegment(segment: PathSegmentHit): void {
+    const source = this.planning.route.waypoints[segment.index];
+    if (!source) return;
+    const point = this.field.screenToWorld(segment.x, segment.y);
+    const waypoint = this.planning.projection.constrain({ ...source, x: point.x, y: point.y });
+    const index = this.planning.route.add(waypoint, segment.index + 1);
+    this.planning.selection.selectWaypoint(index);
   }
 
   private updateTheta(x: number, y: number): void {

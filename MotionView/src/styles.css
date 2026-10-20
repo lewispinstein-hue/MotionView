@@ -960,6 +960,11 @@ label {
   gap: 10px;
 }
 
+#planLatestPill {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
 #planCursorPill {
   margin-left: auto;
 }
@@ -2082,7 +2087,7 @@ body:not(.mode-planning) #rightPlanning {
 }
 
 .watchGraphPanel {
-  --wg-bg: rgba(18, 18, 20, 0.60);
+  --wg-bg: rgba(18, 18, 20, 0.80);
   --wg-border: rgba(255, 255, 255, 0.12);
   --wg-line: rgba(255, 255, 255, 0.10);
   --wg-text: rgba(255, 255, 255, 0.92);
@@ -2526,7 +2531,7 @@ body:not(.mode-planning) #rightPlanning {
 
 /* Floating window container */
 #floatingInfo {
-  --float-bg: rgba(18, 18, 20, 0.60);
+  --float-bg: rgba(18, 18, 20, 0.80);
   --float-border: rgba(255, 255, 255, 0.12);
   --float-line: rgba(255, 255, 255, 0.10);
   --float-text: rgba(255, 255, 255, 0.92);

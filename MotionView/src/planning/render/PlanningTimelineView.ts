@@ -66,6 +66,12 @@ interface TimelineExitAnimation extends TimelineNodeSnapshot {
   readonly duration: number;
 }
 
+export interface TimelineNodeProgressPosition {
+  readonly node: PlanningNodeView;
+  /** Horizontal center of the rendered timeline node. */
+  readonly x: number;
+}
+
 export function constrainTimelineTooltipPosition(
   pointerX: number,
   pointerY: number,
@@ -80,6 +86,27 @@ export function constrainTimelineTooltipPosition(
     left: Math.max(TOOLTIP_EDGE_INSET, Math.min(pointerX + TOOLTIP_OFFSET, maxLeft)),
     top: Math.max(TOOLTIP_EDGE_INSET, Math.min(pointerY + TOOLTIP_OFFSET, maxTop)),
   };
+}
+
+/** Returns the rightmost timeline node reached by the visual progress bar. */
+export function latestTimelineNodeAtProgress(
+  positions: readonly TimelineNodeProgressPosition[],
+  progressX: number,
+): PlanningNodeView | null {
+  let latest: TimelineNodeProgressPosition | null = null;
+  for (const position of positions) {
+    if (position.x > progressX) continue;
+    if (!latest || position.x > latest.x || (position.x === latest.x && isLaterTimelineNode(position.node, latest.node))) {
+      latest = position;
+    }
+  }
+  return latest?.node ?? null;
+}
+
+function isLaterTimelineNode(candidate: PlanningNodeView, current: PlanningNodeView): boolean {
+  if (candidate.beforeWaypoint !== current.beforeWaypoint) return candidate.beforeWaypoint > current.beforeWaypoint;
+  if (candidate.index !== current.index) return candidate.index > current.index;
+  return candidate.id.localeCompare(current.id) > 0;
 }
 
 export class PlanningTimelineView {
@@ -235,6 +262,15 @@ export class PlanningTimelineView {
   }
 
   resize(): void { this.render(); }
+
+  /** Uses the displayed timeline geometry, rather than field-route distance. */
+  latestNodeAtProgress(): PlanningNodeView | null {
+    const layout = this.#layout ?? this.buildLayout([...this.planning.timeline.nodes]);
+    return latestTimelineNodeAtProgress(
+      this.nodeProgressPositions(layout),
+      this.xForDistance(this.planning.playback.distance, layout),
+    );
+  }
 
   private scrub(clientX: number): void {
     const rect = this.dom.timelineCanvas.getBoundingClientRect();
@@ -471,6 +507,13 @@ export class PlanningTimelineView {
       };
     });
     return { contentWidth, waypointX, buckets: layouts };
+  }
+
+  private nodeProgressPositions(layout: TimelineLayout): TimelineNodeProgressPosition[] {
+    return layout.buckets.flatMap((bucket) => bucket.nodes.map((node) => ({
+      node,
+      x: bucket.nodeStart + node.index * NODE_SLOT + NODE_WIDTH / 2,
+    })));
   }
 
   private dropTarget(clientX: number): Readonly<{ beforeWaypoint: number; index: number; x: number }> | null {
