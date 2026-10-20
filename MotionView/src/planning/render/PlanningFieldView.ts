@@ -146,6 +146,23 @@ export class PlanningFieldView {
     });
     context.stroke();
 
+    context.lineWidth = this.field.sizes.screen({ width: 4, height: 4 }).width;
+    context.lineCap = "round";
+    context.strokeStyle = "rgba(190,225,255,0.98)";
+    for (const index of this.planning.selection.waypointIndices) {
+      const start = waypoints[index];
+      const end = waypoints[index + 1];
+      if (!start || !end) continue;
+      const startScreen = this.field.worldToScreen(start.x, start.y);
+      const endScreen = this.field.worldToScreen(end.x, end.y);
+      context.beginPath();
+      context.moveTo(startScreen.x, startScreen.y);
+      context.lineTo(endScreen.x, endScreen.y);
+      context.stroke();
+    }
+    context.lineCap = "butt";
+    context.lineWidth = this.field.sizes.screen({ width: 2, height: 2 }).width;
+
     waypoints.forEach((point, index) => {
       const screen = this.field.worldToScreen(point.x, point.y);
       const selected = this.planning.selection.isWaypointSelected(index);

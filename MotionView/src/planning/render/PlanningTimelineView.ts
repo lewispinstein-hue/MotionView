@@ -85,7 +85,7 @@ interface TimelineExitAnimation extends TimelineNodeSnapshot {
 
 export interface TimelineNodeProgressPosition {
   readonly node: PlanningNodeView;
-  /** Horizontal center of the rendered timeline node. */
+  /** Horizontal left edge of the rendered timeline node. */
   readonly x: number;
 }
 
@@ -725,7 +725,7 @@ export class PlanningTimelineView {
     return layout.buckets.flatMap((bucket) =>
       bucket.nodes.map((node) => ({
         node,
-        x: bucket.nodeStart + node.index * NODE_SLOT + NODE_WIDTH / 2,
+        x: bucket.nodeStart + node.index * NODE_SLOT,
       })),
     );
   }

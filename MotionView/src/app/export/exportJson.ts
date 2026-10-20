@@ -1,6 +1,6 @@
 const EXPORT_DECIMAL_PLACES = 3;
 
-function roundExportNumber(
+export function roundExportNumber(
   value: number,
   decimals = EXPORT_DECIMAL_PLACES,
 ): number {
