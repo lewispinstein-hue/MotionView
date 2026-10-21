@@ -64,6 +64,18 @@ try {
     "override(1,0,5,270,5,22,false,${unknown});",
   ].join("\n"));
 
+  const shorthandOptions = {
+    ...options,
+    template: "short(@x,@y,@dist,@spd,@th,@iter,@fwd,${x},${y},${distance},${speed},${theta},${iteration},${forwards});",
+    waypoints: waypoints.map(({ overrideCode: _overrideCode, ...waypoint }) => waypoint),
+    nodes: [],
+    getSortedPlanNodes: () => [],
+  };
+  assert.equal(buildPlanExportCode(shorthandOptions), [
+    "short(0,5,5,11,270,0,true,0,5,5,11,270,0,true);",
+    "short(5,5,5,22,90,1,false,5,5,5,22,90,1,false);",
+  ].join("\n"));
+
   const legacyOptions = {
     ...options,
     template: "move();",

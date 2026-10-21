@@ -2,7 +2,7 @@ import type { PlanningDialogs } from "./PlanningDialogs";
 import type { PlanningFeature } from "./PlanningFeature";
 
 const WAYPOINT_PLACEHOLDERS =
-  "This code moves from this waypoint to the next. ${x}, ${y}, and ${theta} use the destination; ${speed} and ${forwards} use this waypoint. The final waypoint does not emit code.";
+  "This code moves from this waypoint to the next. ${x}, ${y}, and ${theta} use the destination; ${speed} and ${forwards} use this waypoint. Shorthand aliases: @x, @y, @dist, @spd, @th, @iter, and @fwd. The final waypoint does not emit code.";
 
 /** Opens the shared code editor for a single waypoint and applies its content atomically. */
 export class PlanningWaypointEditor {

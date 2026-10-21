@@ -7,6 +7,16 @@ import type {
 } from "./planningTypes";
 import { getPlanNodeEffectiveMethod } from "./planningObjects";
 
+const TEMPLATE_SHORTHAND_TOKENS: Readonly<Record<string, string>> = {
+  x: "x",
+  y: "y",
+  dist: "distance",
+  spd: "speed",
+  th: "theta",
+  iter: "iteration",
+  fwd: "forwards",
+};
+
 export interface BuildPlanExportCodeOptions {
   template: string;
   waypoints: readonly PlanningWaypointView[];
@@ -95,10 +105,16 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     template: string,
     replacements: Readonly<Record<string, string>>,
   ) => {
-    return String(template || "").replace(
-      /\$\{(x|y|theta|distance|iteration|speed|forwards)\}/g,
-      (_, token) => replacements[token] ?? "",
-    );
+    return String(template || "")
+      .replace(
+        /\$\{(x|y|theta|distance|iteration|speed|forwards)\}/g,
+        (_, token) => replacements[token] ?? "",
+      )
+      .replace(
+        /(^|[^A-Za-z0-9_])@(x|y|dist|spd|th|iter|fwd)(?![A-Za-z0-9_])/g,
+        (_, prefix: string, token: string) =>
+          `${prefix}${replacements[TEMPLATE_SHORTHAND_TOKENS[token]] ?? ""}`,
+      );
   };
 
   const renderSegmentTemplate = (

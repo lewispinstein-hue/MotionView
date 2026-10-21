@@ -1,5 +1,4 @@
 #include "main.h"
-#include "mvlib/watches.hpp"
 
 #define MVLIB_USE_SIMPLES
 #include "mvlib/api.hpp"
@@ -16,10 +15,12 @@ pros::MotorGroup right_mg({-4, 5, -6},
                 pros::MotorGearset::blue,
                 pros::v5::MotorUnits::degrees); // Creates a motor group with forwards port 5 and reversed ports 4 & 6
 
-pros::MotorGroup intakeMotors({12, -14});
-pros::adi::Pneumatics stopperPiston(1, 'A');
-
-void moveToPoint(float, float, float) {} // Function outline: mock PID
+// Mock objects for autonomous
+pros::MotorGroup intakeMotors({});
+pros::adi::Pneumatics stopperPiston(-1, 'A');
+typedef struct Parameters {float maxSpeed{}; bool forwards{};} Parameters;
+void moveToPoint(float, float, float, Parameters) {} // Function outline: mock PID
+void turnToHeading(float, float, Parameters) {} // Function outline: mock PID
 
 /**
  * Runs initialization code. This occurs as soon as the program is started.
@@ -111,23 +112,26 @@ void autonomous() {
 
   // MotionView generated autonomous code
   stopperPiston.set_value(false);
-  moveToPoint(61, 4, 270);
-  moveToPoint(21, 14, 0);
+  moveToPoint(21, 14.2, 4000, {.maxSpeed = 127, .forwards = true});
+  turnToHeading(0, 1000, {.maxSpeed = 127});
+  moveToPoint(23.8, 28, 4000, {.maxSpeed = 30, .forwards = true});
+  turnToHeading(30, 1000, {.maxSpeed = 30});
   intakeMotors.move(127);
-  moveToPoint(24, 28, 40);
+  moveToPoint(43.8, 46, 4000, {.maxSpeed = 127, .forwards = true});
+  turnToHeading(90, 1000, {.maxSpeed = 127});
   intakeMotors.move(0);
-  moveToPoint(44, 46, 90);
-  moveToPoint(66, 46, 90);
+  moveToPoint(66, 46, 4000, {.maxSpeed = 90, .forwards = true});
+  turnToHeading(90, 1000, {.maxSpeed = 90});
+  moveToPoint(24, 47, 4000, {.maxSpeed = 127, .forwards = false});
   intakeMotors.move(127);
   pros::delay(5000);
   intakeMotors.move(0);
-  moveToPoint(24, 47, 90);
+  moveToPoint(56.5, 40.9, 4000, {.maxSpeed = 127, .forwards = true});
   stopperPiston.set_value(true);
   intakeMotors.move(127);
   pros::delay(3000);
   intakeMotors.move(0);
-  moveToPoint(56.5, 40.9, 170);
-  moveToPoint(62, -1, 180);
+  moveToPoint(62, -1, 4000, {.maxSpeed = 127, .forwards = true});
 
   logger.info("Finished autonomous! Time: %d ms", pros::millis() - startTime);
 }

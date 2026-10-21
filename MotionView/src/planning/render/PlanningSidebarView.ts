@@ -39,7 +39,7 @@ function format(value: unknown, decimals = 2): string {
 }
 
 const METHOD_TEMPLATE_DESCRIPTION =
-  "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}. They expand when this method is emitted by a placed timeline node.";
+  "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}";
 
 export class PlanningSidebarView {
   #editingObjectId: string | null = null;
@@ -516,7 +516,9 @@ export class PlanningSidebarView {
       title: "Edit Template",
       groupTitle: "Planning Export Template",
       description:
-        "One block is generated from each waypoint to the next; the final waypoint emits none. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}.",
+        "One block is generated from each waypoint to the next; " +
+        "the final waypoint emits none. Available placeholders: " +
+        "${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}",
       code: previous,
       placeholder: "moveToPoint(${x}, ${y}, ${theta});",
     });
