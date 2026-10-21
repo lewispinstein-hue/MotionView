@@ -28,6 +28,7 @@ Within these docs, there are referrals to human-readable files that are likely u
 - [JSON Schema v3](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/MotionViewSchemaV3.md): Current MotionView JSON route/export shape and import rules.
 - [JSON Schema v2](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/MotionViewSchemaV2.md): Legacy MotionView JSON route/export shape and import rules.
 - [Logging API](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/MotionViewAPI.md): Text telemetry tags, expected fields, parsing behavior, and examples.
+- [Changelog v1.4.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/Changelog/v1.4.0.md): MotionView v1.4.0 features, livestream improvements, and fixes.
 - [Changelog v1.3.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/Changelog/v1.3.0.md): MotionView v1.3.0 breaking changes, features, improvements, and fixes.
 - [Changelog v1.2.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MotionView/Changelog/v1.2.0.md): MotionView v1.2.0 breaking changes, features, removals, and fixes.
 
@@ -41,5 +42,6 @@ Within these docs, there are referrals to human-readable files that are likely u
 - [Updating to v3.0.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/UpdatingTo-v3.0.0.md): MVLib v3.0.0 migration checklist, before/after examples, and renamed APIs.
 
 ### Changelogs
+- [Changelog v3.0.2](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Changelog/v3.0.2.md): MVLib v3.0.2 telemetry, reliability, and logger-state fixes.
 - [Changelog v3.0.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Changelog/v3.0.0.md): MVLib v3.0.0 breaking changes, features, improvements, removals, and fixes.
 - [Changelog v2.0.0](https://raw.githubusercontent.com/lewispinstein-hue/MotionView/refs/heads/gh-pages/docs/MVLib/Changelog/v2.0.0.md): MVLib v2.0.0 breaking changes, features, removals, and fixes.
