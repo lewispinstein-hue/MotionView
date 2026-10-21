@@ -49,7 +49,7 @@ const NODE_THICK = 3.75;
 const NODE_TICK = 10;
 const NODE_BORDER = 1.5;
 const NODE_TEMPLATE_DESCRIPTION =
-  "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}; shorthand aliases: @x, @y, @dist, @spd, @th, @iter, and @fwd. Values come from the preceding waypoint; nodes before the first waypoint use the first waypoint.";
+  "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}";
 
 function normalizeDegrees(value: number): number {
   return ((value % 360) + 360) % 360;

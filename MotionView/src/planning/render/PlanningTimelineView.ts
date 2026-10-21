@@ -39,7 +39,7 @@ const NODE_ENTER_MS = 240;
 const NODE_EXIT_MS = 220;
 const NODE_MOVE_EPSILON = 0.5;
 const NODE_TEMPLATE_DESCRIPTION =
-  "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}; shorthand aliases: @x, @y, @dist, @spd, @th, @iter, and @fwd. Values come from the preceding waypoint; nodes before the first waypoint use the first waypoint.";
+  "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}";
 
 interface TimelineBucketLayout {
   readonly beforeWaypoint: number;
