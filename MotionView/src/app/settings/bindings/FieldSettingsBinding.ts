@@ -121,8 +121,13 @@ export class FieldSettingsBinding {
   ): Promise<void> {
     if (!file) return;
     try {
-      await this.field.loadRobotImageFromFile(file);
+      const accepted = await this.field.loadRobotImageFromFile(file);
+      if (!accepted) return;
       this.captureRobotImage();
+      void viewingTelemetry.robotImageUploaded({
+        image_type: file.type,
+        image_bytes: file.size,
+      });
     } catch (error) {
       console.error("Error loading robot image:", error);
     } finally {
@@ -150,7 +155,8 @@ export class FieldSettingsBinding {
   ): Promise<void> {
     if (!file) return;
     try {
-      await this.field.loadCustomFieldImageFromFile(file);
+      const accepted = await this.field.loadCustomFieldImageFromFile(file);
+      if (!accepted) return;
       this.settings.update(
         {
           customFieldImage: {
@@ -163,6 +169,10 @@ export class FieldSettingsBinding {
         },
         "system",
       );
+      void viewingTelemetry.customFieldImageUploaded({
+        image_type: file.type,
+        image_bytes: file.size,
+      });
     } catch (error) {
       console.error("Error loading custom field image:", error);
     } finally {

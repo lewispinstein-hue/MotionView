@@ -67,7 +67,7 @@ export class FieldRenderer {
   declare setFieldRotationDeg: (deg: number) => void;
   declare loadFieldImage: (fieldKey: string) => Promise<void>;
   declare hasCustomFieldImage: () => boolean;
-  declare loadCustomFieldImageFromFile: (file: File) => Promise<void>;
+  declare loadCustomFieldImageFromFile: (file: File) => Promise<boolean>;
   declare loadCustomFieldImageFromPath: (path: string | null) => Promise<void>;
   declare getCustomFieldImagePath: () => string | null;
   declare setCustomFieldImagePath: (path: string | null) => void;
@@ -79,7 +79,7 @@ export class FieldRenderer {
   declare loadRobotImage: () => void;
   declare loadRobotImageFromPath: (path: string | null) => Promise<void>;
   declare loadRobotImageFromDataUrl: (dataUrl: string | null) => void;
-  declare loadRobotImageFromFile: (file: File) => Promise<void>;
+  declare loadRobotImageFromFile: (file: File) => Promise<boolean>;
   declare setRobotImageEnabled: (enabled: boolean) => void;
   declare isRobotImageEnabled: () => boolean;
   declare isRobotImageReady: () => boolean;
@@ -654,6 +654,7 @@ export class FieldRenderer {
           };
           reader.readAsDataURL(file);
         });
+        return true;
       },
       async loadCustomFieldImageFromPath(path: string | null) {
         if (!path) return;
@@ -745,11 +746,11 @@ export class FieldRenderer {
         ]);
         if (!supportedTypes.has(file.type)) {
           alert("Please select a PNG, JPEG, GIF, WebP, or BMP image");
-          return;
+          return false;
         }
         if (file.size > 10 * 1024 * 1024) {
           alert("Robot images must be 10 MB or smaller");
-          return;
+          return false;
         }
         robotImagePath =
           typeof (file as File & { path?: string }).path === "string" &&
@@ -803,6 +804,7 @@ export class FieldRenderer {
           };
           reader.readAsDataURL(file);
         });
+        return true;
       },
       setRobotImageEnabled(enabled: boolean) {
         robotImageEnabled = enabled;

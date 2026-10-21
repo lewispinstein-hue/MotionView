@@ -21,6 +21,14 @@ export class ViewingTelemetry {
     });
   }
 
+  customFieldImageUploaded(properties: TelemetryProperties = {}) {
+    return this.telemetry.capture("custom_field_image_uploaded", properties);
+  }
+
+  robotImageUploaded(properties: TelemetryProperties = {}) {
+    return this.telemetry.capture("robot_image_uploaded", properties);
+  }
+
   floatingInfoToggled(
     properties: TelemetryProperties = {},
     options: TelemetryCaptureOptions = { debounceMs: 1000 },
