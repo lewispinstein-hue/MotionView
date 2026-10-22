@@ -1,14 +1,4 @@
 <!-- MotionView icon asset -->
 <svg xmlns="http://www.w3.org/2000/svg" id="icon-flipHorizontal" viewBox="0 0 24 24">
-  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
-    <path d="M9 4H5v16h4" />
-    <path d="M15 4h4v16h-4" />
-  </g>
-  <g fill="currentColor">
-    <circle cx="12" cy="4" r="1" />
-    <circle cx="12" cy="8" r="1" />
-    <circle cx="12" cy="12" r="1" />
-    <circle cx="12" cy="16" r="1" />
-    <circle cx="12" cy="20" r="1" />
-  </g>
+  <path fill="currentColor" d="M15 21h2v-2h-2zm4-12h2V7h-2zM3 5v14c0 1.1.9 2 2 2h4v-2H5V5h4V3H5c-1.1 0-2 .9-2 2m16-2v2h2c0-1.1-.9-2-2-2m-8 20h2V1h-2zm8-6h2v-2h-2zM15 5h2V3h-2zm4 8h2v-2h-2zm0 8c1.1 0 2-.9 2-2h-2z" />
 </svg>
