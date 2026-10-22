@@ -251,9 +251,10 @@ fn approved_image_path(app: &AppHandle, path: String) -> Result<PathBuf, String>
     }
 
     let roots = [app.path().resource_dir(), app.path().app_data_dir()];
-    let approved = roots.iter().filter_map(|root| {
-        root.as_ref().ok()?.canonicalize().ok()
-    }).any(|root| is_within(&path, &root));
+    let approved = roots
+        .iter()
+        .filter_map(|root| root.as_ref().ok()?.canonicalize().ok())
+        .any(|root| is_within(&path, &root));
     if !approved {
         return Err("image path is outside MotionView-managed directories".into());
     }
