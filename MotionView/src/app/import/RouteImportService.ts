@@ -1,5 +1,6 @@
 import type { MotionViewApp } from "../MotionViewApp";
 import type { PlanningDialogs } from "../../planning";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   buildWaypointState,
   normalizeLogs,
@@ -7,7 +8,12 @@ import {
   normalizeWatches,
 } from "../../viewing";
 import { viewingTelemetry } from "../../telemetry/createTelemetry";
-import { isTauriRuntime, readUpgradeState } from "../../tauri/commands";
+import {
+  isTauriRuntime,
+  openDroppedRouteFile,
+  openRouteFile,
+  readUpgradeState,
+} from "../../tauri/commands";
 import { requestDrawAll } from "../../render/renderScheduler";
 import type { TopBarView } from "../topBar";
 import type { RouteImportResult } from "./importTypes";
@@ -74,6 +80,8 @@ function assertDocumentLimits(record: Record<string, unknown>): void {
 }
 
 export class RouteImportService {
+  #dropBound = false;
+
   constructor(
     private readonly app: MotionViewApp,
     private readonly dialogs: PlanningDialogs,
@@ -86,36 +94,75 @@ export class RouteImportService {
     input?: HTMLInputElement | null,
   ): Promise<RouteImportResult | null> {
     if (!file) return null;
-    const name = file.name.toLowerCase();
-    if (
-      ![".json", ".txt", ".log"].some((extension) => name.endsWith(extension))
-    ) {
-      window.alert(
-        "Invalid file type. Please select a .txt, .log, or .json file",
+    try {
+      return await this.openContents(file.name, await file.text(), file.size);
+    } finally {
+      if (input) input.value = "";
+    }
+  }
+
+  async openNativeFile(): Promise<RouteImportResult | null> {
+    try {
+      const file = await openRouteFile();
+      if (!file) return null;
+      return await this.openContents(file.name, file.contents, file.size);
+    } catch (error) {
+      console.error(error);
+      this.app.core.status.setStatus(
+        `Failed to open file: ${error instanceof Error ? error.message : String(error)}`,
       );
-      this.app.core.status.setStatus("Invalid file type.");
-      input && (input.value = "");
       return null;
     }
-    if (file.size > MAX_IMPORT_BYTES) {
+  }
+
+  bindFileDrop(): void {
+    if (this.#dropBound) return;
+    this.#dropBound = true;
+    if (isTauriRuntime()) {
+      void this.bindNativeFileDrop();
+      return;
+    }
+    window.addEventListener("dragover", (event) => {
+      if (this.eventHasFiles(event)) event.preventDefault();
+    });
+    window.addEventListener("drop", (event) => {
+      if (!this.eventHasFiles(event)) return;
+      event.preventDefault();
+      void this.openFile(event.dataTransfer?.files.item(0) ?? null);
+    });
+  }
+
+  private async openContents(
+    fileName: string,
+    contents: string,
+    fileSize: number,
+  ): Promise<RouteImportResult | null> {
+    const name = fileName.toLowerCase();
+    if (
+      ![".json", ".txt", ".log", ".csv"].some((extension) => name.endsWith(extension))
+    ) {
+      window.alert(
+        "Invalid file type. Please select a .json, .log, .txt, or .csv file",
+      );
+      this.app.core.status.setStatus("Invalid file type.");
+      return null;
+    }
+    if (fileSize > MAX_IMPORT_BYTES) {
       window.alert("File is too large. MotionView imports files up to 32 MB.");
       this.app.core.status.setStatus("File is too large to import.");
-      input && (input.value = "");
       return null;
     }
     try {
       const result = name.endsWith(".json")
-        ? await this.loadJson(await file.text())
-        : await this.loadCapture(await file.text());
-      input && (input.value = "");
-      if (result.loaded) this.app.core.status.setStatus(`Loaded ${file.name}`);
+        ? await this.loadJson(contents)
+        : await this.loadCapture(contents);
+      if (result.loaded) this.app.core.status.setStatus(`Loaded ${fileName}`);
       await viewingTelemetry.fileLoaded({
         file_type: result.type,
-        file_size: file.size,
+        file_size: fileSize,
       });
       return result;
     } catch (error) {
-      input && (input.value = "");
       console.error(error);
       this.app.core.status.setStatus(
         `Failed to load: ${error instanceof Error ? error.message : String(error)}`,
@@ -125,6 +172,37 @@ export class RouteImportService {
       });
       return null;
     }
+  }
+
+  private async bindNativeFileDrop(): Promise<void> {
+    try {
+      await getCurrentWindow().onDragDropEvent(({ payload }) => {
+        if (payload.type !== "drop") return;
+        const path = payload.paths[0];
+        if (path) void this.openDroppedNativeFile(path);
+      });
+    } catch (error) {
+      console.error("Failed to bind route file drag-and-drop:", error);
+    }
+  }
+
+  private async openDroppedNativeFile(
+    path: string,
+  ): Promise<RouteImportResult | null> {
+    try {
+      const file = await openDroppedRouteFile(path);
+      return await this.openContents(file.name, file.contents, file.size);
+    } catch (error) {
+      console.error(error);
+      this.app.core.status.setStatus(
+        `Failed to open dropped file: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
+  private eventHasFiles(event: DragEvent): boolean {
+    return Array.from(event.dataTransfer?.types ?? []).includes("Files");
   }
 
   async loadJson(text: string): Promise<RouteImportResult> {

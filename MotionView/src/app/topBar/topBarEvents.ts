@@ -1,6 +1,7 @@
 import { TypedEvent } from "../typedEvent";
 
 export type TopBarActionRequestedEvent =
+  | { readonly kind: "native-route-file-requested" }
   | { readonly kind: "file-selected"; readonly file: File | null; readonly input: HTMLInputElement; }
   | { readonly kind: "robot-image-selected"; readonly file: File | null; readonly input: HTMLInputElement; }
   | { readonly kind: "custom-field-image-selected"; readonly file: File | null; readonly input: HTMLInputElement; }

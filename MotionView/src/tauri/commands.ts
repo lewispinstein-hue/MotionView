@@ -23,6 +23,24 @@ export function readImageData(path: string): Promise<string> {
   return invokeCommand<string>("read_image_data", { path });
 }
 
+export interface ImportedRouteFile {
+  readonly name: string;
+  readonly contents: string;
+  readonly size: number;
+}
+
+export function openRouteFile(): Promise<ImportedRouteFile | null> {
+  return invokeCommand<ImportedRouteFile | null>("open_route_file");
+}
+
+export function openDroppedRouteFile(
+  path: string,
+): Promise<ImportedRouteFile> {
+  return invokeCommand<ImportedRouteFile>("open_dropped_route_file", {
+    path,
+  });
+}
+
 export function saveRobotImage(dataUrl: string): Promise<string | null> {
   return invokeCommand<string | null>("save_robot_image", { dataUrl });
 }

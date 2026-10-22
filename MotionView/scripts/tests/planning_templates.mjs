@@ -110,6 +110,35 @@ try {
   });
   assert.equal(generatePlanningCode(wholeNumberSpeedPlanning), "move(50);");
 
+  const methodOrderPlanning = new PlanningFeature();
+  methodOrderPlanning.load({
+    "planned-objects": [{
+      id: "order-object",
+      name: "Order Object",
+      color: "#ffffff",
+      latestMethod: "",
+      methods: [
+        { id: "first", name: "First", code: "first();" },
+        { id: "second", name: "Second", code: "second();" },
+        { id: "third", name: "Third", code: "third();" },
+      ],
+    }],
+  });
+  assert.equal(
+    methodOrderPlanning.objects.moveMethod("order-object", "third", 0),
+    true,
+  );
+  assert.deepEqual(
+    methodOrderPlanning.objects.get("order-object")?.methods.map(
+      (method) => method.id,
+    ),
+    ["third", "first", "second"],
+  );
+  assert.equal(
+    methodOrderPlanning.objects.moveMethod("order-object", "third", 0),
+    false,
+  );
+
   const backwardsSegmentOptions = {
     ...options,
     template: "move(${x}, ${forwards});",

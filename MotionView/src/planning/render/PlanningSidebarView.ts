@@ -41,11 +41,30 @@ function format(value: unknown, decimals = 2): string {
 const METHOD_TEMPLATE_DESCRIPTION =
   "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}";
 
+interface ActiveMethodReorder {
+  readonly objectId: string;
+  readonly methodId: string;
+  readonly sourceElement: HTMLElement;
+  readonly methodsElement: HTMLElement;
+  readonly startX: number;
+  readonly startY: number;
+  ghost: HTMLElement | null;
+  started: boolean;
+  dropIndex: number | null;
+}
+
+interface MethodOrderAnimation {
+  readonly objectId: string;
+  readonly positions: ReadonlyMap<string, number>;
+}
+
 export class PlanningSidebarView {
   #editingObjectId: string | null = null;
   #selectObjectName = false;
   #openColorObjectId: string | null = null;
   #copySuccessTimer: number | null = null;
+  #activeMethodReorder: ActiveMethodReorder | null = null;
+  #methodOrderAnimation: MethodOrderAnimation | null = null;
   #bound = false;
 
   constructor(
@@ -87,6 +106,12 @@ export class PlanningSidebarView {
       },
       true,
     );
+    window.addEventListener("pointermove", (event) =>
+      this.moveMethodReorder(event),
+    );
+    window.addEventListener("pointerup", () => this.finishMethodReorder());
+    window.addEventListener("pointercancel", () => this.cancelMethodReorder());
+    window.addEventListener("blur", () => this.cancelMethodReorder());
   }
 
   render(): void {
@@ -231,6 +256,7 @@ export class PlanningSidebarView {
       card.appendChild(header);
       const methods = document.createElement("div");
       methods.className = "planMethodList";
+      methods.dataset.objectId = object.id;
       if (!object.methods.length)
         methods.innerHTML = `<div class="planMethodEmpty">No methods yet.</div>`;
       object.methods.forEach((method, methodIndex) => {
@@ -250,11 +276,11 @@ export class PlanningSidebarView {
               event.target.closest(".planMethodRemoveBtn"))
           )
             return;
-          this.drag.begin({
-            source: "sidebar",
+          this.beginMethodReorder({
             objectId: object.id,
             methodId: method.id,
             sourceElement: methodCard,
+            methodsElement: methods,
             startX: event.clientX,
             startY: event.clientY,
           });
@@ -336,6 +362,7 @@ export class PlanningSidebarView {
       card.style.color = getContrastTextColor(object.color);
       this.dom.objectList.appendChild(card);
     });
+    this.animateMethodReorder();
   }
 
   updatePlayback(): void {
@@ -346,6 +373,176 @@ export class PlanningSidebarView {
       if (value)
         value.textContent = this.latestMethodName(card.dataset.objectId ?? "");
     }
+  }
+
+  private beginMethodReorder(
+    drag: Omit<ActiveMethodReorder, "ghost" | "started" | "dropIndex">,
+  ): void {
+    this.cancelMethodReorder();
+    this.#activeMethodReorder = {
+      ...drag,
+      ghost: null,
+      started: false,
+      dropIndex: null,
+    };
+  }
+
+  private moveMethodReorder(event: PointerEvent): void {
+    const drag = this.#activeMethodReorder;
+    if (!drag) return;
+    if (
+      !drag.started &&
+      Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4
+    )
+      return;
+    if (!drag.started) {
+      drag.started = true;
+      drag.sourceElement.classList.add("isDragging");
+      drag.ghost = this.createMethodReorderGhost(drag.sourceElement);
+      document.body.appendChild(drag.ghost);
+      document.body.style.cursor = "grabbing";
+      document.body.style.userSelect = "none";
+    }
+    if (drag.ghost) {
+      drag.ghost.style.left = `${event.clientX + 12}px`;
+      drag.ghost.style.top = `${event.clientY + 12}px`;
+    }
+    const target = document.elementFromPoint(event.clientX, event.clientY);
+    if (target && drag.methodsElement.contains(target)) {
+      this.updateMethodReorderDrop(drag, event.clientY);
+      return;
+    }
+    this.clearMethodReorderDrop(drag);
+    if (target && this.dom.timelineViewport.contains(target))
+      this.handoffMethodDrag(drag);
+  }
+
+  private finishMethodReorder(): void {
+    const drag = this.#activeMethodReorder;
+    if (!drag) return;
+    if (drag.started && drag.dropIndex !== null) {
+      const positions = this.methodPositions(drag.objectId);
+      if (
+        this.planning.objects.moveMethod(
+          drag.objectId,
+          drag.methodId,
+          drag.dropIndex,
+      )
+      ) {
+        this.#methodOrderAnimation = { objectId: drag.objectId, positions };
+        this.animateMethodReorder();
+      }
+    }
+    this.cancelMethodReorder();
+  }
+
+  private cancelMethodReorder(): void {
+    const drag = this.#activeMethodReorder;
+    if (!drag) return;
+    drag.sourceElement.classList.remove("isDragging");
+    drag.ghost?.remove();
+    this.clearMethodReorderDrop(drag);
+    this.#activeMethodReorder = null;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  }
+
+  private handoffMethodDrag(drag: ActiveMethodReorder): void {
+    this.cancelMethodReorder();
+    this.drag.begin({
+      source: "sidebar",
+      objectId: drag.objectId,
+      methodId: drag.methodId,
+      sourceElement: drag.sourceElement,
+      startX: drag.startX,
+      startY: drag.startY,
+    });
+  }
+
+  private updateMethodReorderDrop(
+    drag: ActiveMethodReorder,
+    pointerY: number,
+  ): void {
+    const cards = Array.from(
+      drag.methodsElement.querySelectorAll<HTMLElement>(
+        ".planMethodCard[data-method-id]",
+      ),
+    ).filter((card) => card.dataset.methodId !== drag.methodId);
+    const nextIndex = cards.findIndex((card) => {
+      const rect = card.getBoundingClientRect();
+      return pointerY < rect.top + rect.height / 2;
+    });
+    drag.dropIndex = nextIndex >= 0 ? nextIndex : cards.length;
+    const listRect = drag.methodsElement.getBoundingClientRect();
+    const anchor =
+      nextIndex >= 0 ? cards[nextIndex] : cards[cards.length - 1];
+    const anchorRect = anchor?.getBoundingClientRect();
+    const top = anchorRect
+      ? (nextIndex >= 0 ? anchorRect.top : anchorRect.bottom) - listRect.top
+      : 0;
+    let line = drag.methodsElement.querySelector<HTMLElement>(
+      ".planMethodDropLine",
+    );
+    if (!line) {
+      line = document.createElement("div");
+      line.className = "planMethodDropLine";
+      line.setAttribute("aria-hidden", "true");
+      drag.methodsElement.appendChild(line);
+    }
+    line.style.top = `${top}px`;
+  }
+
+  private clearMethodReorderDrop(drag: ActiveMethodReorder): void {
+    drag.dropIndex = null;
+    drag.methodsElement.querySelector(".planMethodDropLine")?.remove();
+  }
+
+  private createMethodReorderGhost(source: HTMLElement): HTMLElement {
+    const ghost = source.cloneNode(true) as HTMLElement;
+    const rect = source.getBoundingClientRect();
+    ghost.className = "planMethodCard planMethodReorderGhost";
+    ghost.removeAttribute("data-object-id");
+    ghost.removeAttribute("data-method-id");
+    ghost.style.width = `${rect.width}px`;
+    return ghost;
+  }
+
+  private methodPositions(objectId: string): ReadonlyMap<string, number> {
+    const positions = new Map<string, number>();
+    for (const card of this.dom.objectList.querySelectorAll<HTMLElement>(
+      `.planMethodCard[data-object-id="${CSS.escape(objectId)}"]`,
+    )) {
+      const methodId = card.dataset.methodId;
+      if (methodId) positions.set(methodId, card.getBoundingClientRect().top);
+    }
+    return positions;
+  }
+
+  private animateMethodReorder(): void {
+    const animation = this.#methodOrderAnimation;
+    if (!animation) return;
+    this.#methodOrderAnimation = null;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    requestAnimationFrame(() => {
+      for (const card of this.dom.objectList.querySelectorAll<HTMLElement>(
+        `.planMethodCard[data-object-id="${CSS.escape(animation.objectId)}"]`,
+      )) {
+        const methodId = card.dataset.methodId;
+        const previousTop = methodId
+          ? animation.positions.get(methodId)
+          : undefined;
+        if (previousTop === undefined) continue;
+        const offset = previousTop - card.getBoundingClientRect().top;
+        if (Math.abs(offset) < 1) continue;
+        card.animate(
+          [
+            { transform: `translateY(${offset}px)` },
+            { transform: "translateY(0)" },
+          ],
+          { duration: 220, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+        );
+      }
+    });
   }
 
   private bindSelectionField(

@@ -135,6 +135,23 @@ export class PlanningObjects {
     this.session.mutate("method", () => Object.assign(method, values));
   }
 
+  moveMethod(objectId: string, methodId: string, index: number): boolean {
+    const object = this.getMutable(objectId);
+    const currentIndex =
+      object?.methods.findIndex((method) => method.id === methodId) ?? -1;
+    if (!object || currentIndex < 0) return false;
+    const targetIndex = Math.max(
+      0,
+      Math.min(object.methods.length - 1, Math.trunc(index)),
+    );
+    if (targetIndex === currentIndex) return false;
+    this.session.mutate("method", () => {
+      const [method] = object.methods.splice(currentIndex, 1);
+      if (method) object.methods.splice(targetIndex, 0, method);
+    });
+    return true;
+  }
+
   removeMethod(objectId: string, methodId: string): void {
     const object = this.getMutable(objectId);
     const index =

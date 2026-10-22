@@ -2,6 +2,7 @@ import type { FieldRenderer } from "../../render/field";
 import type { FieldOption } from "../../render/field/fieldImages";
 import type { MotionViewApp } from "../MotionViewApp";
 import type { AppMode } from "../modeController";
+import { isTauriRuntime } from "../../tauri/commands";
 import type { TopBarDom } from "./TopBarDom";
 import { TopBarEvents } from "./topBarEvents";
 
@@ -161,6 +162,10 @@ export class TopBarView {
   }
 
   openFilePicker(): void {
+    if (isTauriRuntime()) {
+      this.events.actionRequested.emit({ kind: "native-route-file-requested" });
+      return;
+    }
     this.dom.fileInput.click();
   }
 

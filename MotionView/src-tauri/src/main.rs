@@ -1,4 +1,4 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]   
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #[cfg(not(target_os = "macos"))]
 use sha2::{Digest, Sha256};
 #[cfg(not(target_os = "macos"))]
@@ -18,6 +18,7 @@ use std::{
 };
 
 use tauri::{Emitter, Manager, RunEvent, State, Window};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_posthog::{init as posthog_init, PostHogConfig, PostHogOptions};
 mod export;
 mod settings;
@@ -44,6 +45,47 @@ struct SpawnedBridge {
 struct SystemInfo {
     os: String,
     arch: String,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ImportedRouteFile {
+    name: String,
+    contents: String,
+    size: u64,
+}
+
+const MAX_ROUTE_IMPORT_BYTES: u64 = 32 * 1024 * 1024;
+
+fn has_supported_route_extension(path: &std::path::Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|extension| extension.to_str())
+            .map(|extension| extension.to_ascii_lowercase())
+            .as_deref(),
+        Some("json" | "log" | "txt" | "csv")
+    )
+}
+
+fn read_route_file(path: &std::path::Path) -> Result<ImportedRouteFile, String> {
+    if !has_supported_route_extension(path) {
+        return Err("Please select a .json, .log, .txt, or .csv file.".to_string());
+    }
+    let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
+    if metadata.len() > MAX_ROUTE_IMPORT_BYTES {
+        return Err("MotionView imports files up to 32 MB.".to_string());
+    }
+    let contents = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("route")
+        .to_string();
+    Ok(ImportedRouteFile {
+        name,
+        contents,
+        size: metadata.len(),
+    })
 }
 
 fn load_posthog_config() -> Option<PostHogConfig> {
@@ -694,6 +736,32 @@ fn get_system_info() -> SystemInfo {
 }
 
 #[tauri::command]
+async fn open_route_file(app: tauri::AppHandle) -> Result<Option<ImportedRouteFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(file_path) = app
+            .dialog()
+            .file()
+            .set_title("Open MotionView Route")
+            .add_filter("MotionView routes", &["json", "log", "txt", "csv"])
+            .blocking_pick_file()
+        else {
+            return Ok(None);
+        };
+        let path = file_path.into_path().map_err(|error| error.to_string())?;
+        read_route_file(&path).map(Some)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn open_dropped_route_file(path: String) -> Result<ImportedRouteFile, String> {
+    tauri::async_runtime::spawn_blocking(move || read_route_file(std::path::Path::new(&path)))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 fn get_bridge_origin(state: State<'_, BridgeOrigin>) -> Option<String> {
     state.0.lock().unwrap().clone()
 }
@@ -766,7 +834,7 @@ fn main() {
 fn run_app() {
     println!("DO NOT CLOSE THIS WINDOW. MotionView runs off of it and cannot function without this window open.");
 
-    let builder = tauri::Builder::default();
+    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
     // This is paired with the larger Windows application thread above. Tauri
     // normally requires the native entry thread, so explicitly opt into its
     // supported Windows event-loop mode for a dedicated application thread.
@@ -804,6 +872,8 @@ fn run_app() {
             set_windows_fullscreen,
             get_window_fullscreen_state,
             get_system_info,
+            open_route_file,
+            open_dropped_route_file,
             get_bridge_origin,
             get_bridge_token,
             get_posthog_distinct_id,

@@ -124,6 +124,7 @@ appInput.bind();
 modeCoordinator.bind();
 windowController.bind();
 persistence.bind();
+importer.bindFileDrop();
 
 planningLayout.changed.subscribe(() => layoutSettings.capture());
 viewingLayout.changed.subscribe(() => layoutSettings.capture());
@@ -134,7 +135,8 @@ app.live.events.projectChanged.subscribe(() => {
 });
 
 topBar.events.actionRequested.subscribe((action) => {
-  if (action.kind === "file-selected") void importer.openFile(action.file, action.input);
+  if (action.kind === "native-route-file-requested") void importer.openNativeFile();
+  else if (action.kind === "file-selected") void importer.openFile(action.file, action.input);
   else if (action.kind === "robot-image-selected") void fieldSettings.handleRobotImageFile(action.file, action.input);
   else if (action.kind === "custom-field-image-selected") void fieldSettings.handleCustomFieldImageFile(action.file, action.input);
   else if (action.kind === "clear-requested") void (action.clearAll ? appCommands.clearAll() : appCommands.clearCurrent());

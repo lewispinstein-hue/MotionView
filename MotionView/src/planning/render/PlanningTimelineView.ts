@@ -4,6 +4,7 @@ import { planningTelemetry } from "../../telemetry/createTelemetry";
 import type { PlanningDialogs } from "../PlanningDialogs";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningFeature } from "../PlanningFeature";
+import type { PlanningWaypointEditor } from "../PlanningWaypointEditor";
 import type { PlanningNodeView } from "../planningTypes";
 import {
   getPlanMethodNumber,
@@ -167,6 +168,7 @@ export class PlanningTimelineView {
     private readonly dom: PlanningDom,
     private readonly dialogs: PlanningDialogs,
     drag: PlanningDragCoordinator,
+    private readonly waypointEditor: PlanningWaypointEditor,
   ) {
     const context = dom.timelineCanvas.getContext("2d");
     if (!context)
@@ -233,9 +235,21 @@ export class PlanningTimelineView {
     this.dom.eventTimelineHint.hidden = this.planning.route.length >= 2;
     this.dom.timelineContent.style.width = `${layout.contentWidth}px`;
     this.planning.route.waypoints.forEach((_point, index) => {
-      const marker = document.createElement("div");
+      const marker = document.createElement("button");
+      marker.type = "button";
       marker.className = `planningTimelineWaypointConnector${this.planning.selection.isWaypointSelected(index) ? " isSelected" : ""}`;
       marker.style.left = `${layout.waypointX[index] ?? PAD}px`;
+      marker.title = `Select waypoint #${index + 1}`;
+      marker.setAttribute("aria-label", `Select waypoint #${index + 1}`);
+      marker.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.selectWaypoint(index);
+      });
+      marker.addEventListener("dblclick", (event) => {
+        event.stopPropagation();
+        this.selectWaypoint(index);
+        void this.waypointEditor.edit(index);
+      });
       this.dom.timelineWaypointLayer.appendChild(marker);
     });
     for (const node of nodes) {
@@ -384,6 +398,14 @@ export class PlanningTimelineView {
         clientX - rect.left,
         this.#layout ?? this.buildLayout([...this.planning.timeline.nodes]),
       ),
+    );
+  }
+
+  /** Selects a timeline waypoint and moves the field playback robot to it. */
+  private selectWaypoint(index: number): void {
+    this.planning.selection.selectWaypoint(index);
+    this.planning.playback.setDistance(
+      this.planning.projection.distances[index] ?? 0,
     );
   }
 

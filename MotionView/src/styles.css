@@ -1068,22 +1068,39 @@ label {
 
 .planningTimelineWaypointConnector {
   position: absolute;
-  top: 100%;
+  top: calc(100% - 8px);
+  width: 22px;
+  height: 39px;
+  margin-left: -11px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  z-index: 2;
+}
+
+.planningTimelineWaypointConnector::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 8px;
   width: 2px;
   height: 26px;
-  margin-left: -1px;
-  margin-top: 0;
+  transform: translateX(-50%);
   border-radius: 999px;
   background: rgba(180, 220, 255, 0.45);
   box-shadow: 0 0 0 1px rgba(12, 18, 24, 0.28);
-  pointer-events: none;
+  z-index: 0;
 }
 
 .planningTimelineWaypointConnector::before {
   content: "";
   position: absolute;
   left: 50%;
-  top: 0;
+  top: 8px;
   width: 6px;
   height: 6px;
   margin-top: -3px;
@@ -1093,23 +1110,36 @@ label {
   border: 1.5px solid rgba(150, 198, 235, 0.82);
   background: rgba(16, 23, 32, 0.92);
   box-shadow: 0 0 0 1px rgba(12, 18, 24, 0.22);
+  z-index: 1;
 }
 
 .planningTimelineWaypointConnector.isSelected {
+  top: calc(100% - 11px);
+  height: 48px;
+}
+
+.planningTimelineWaypointConnector.isSelected::after {
+  top: 11px;
   width: 4px;
   height: 32px;
-  margin-left: -2px;
   background: rgb(104, 182, 255);
   box-shadow: 0 0 0 1px rgba(8, 14, 22, 0.72);
 }
 
 .planningTimelineWaypointConnector.isSelected::before {
+  top: 11px;
   width: 12px;
   height: 12px;
   margin-top: -6px;
   border: 2px solid rgb(245, 250, 255);
   background: rgb(104, 182, 255);
   box-shadow: 0 0 0 3px rgba(104, 182, 255, 0.24);
+}
+
+.planningTimelineWaypointConnector:hover::before,
+.planningTimelineWaypointConnector:focus-visible::before {
+  border-color: rgba(245, 250, 255, 0.96);
+  box-shadow: 0 0 0 3px rgba(104, 182, 255, 0.2);
 }
 
 .planningTimelineNode {
@@ -3136,6 +3166,7 @@ body:not(.mode-planning) #rightPlanning {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  position: relative;
 }
 
 #rightPlanning .planMethodEmpty {
@@ -3183,6 +3214,30 @@ body:not(.mode-planning) #rightPlanning {
   transform-origin: top left;
   opacity: 0.78;
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+}
+
+.planMethodReorderGhost {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  transform: scale(0.88);
+  transform-origin: top left;
+  opacity: 0.92;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.3);
+}
+
+.planMethodDropLine {
+  position: absolute;
+  right: 8px;
+  left: 8px;
+  z-index: 4;
+  height: 3px;
+  border-radius: 999px;
+  transform: translateY(-1.5px);
+  background: #6fd98f;
+  box-shadow: 0 0 0 1px rgba(7, 20, 12, 0.82), 0 0 10px rgba(111, 217, 143, 0.5);
+  pointer-events: none;
+  transition: top 120ms ease;
 }
 
 .planMethodGrip {

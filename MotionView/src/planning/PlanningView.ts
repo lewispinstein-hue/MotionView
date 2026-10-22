@@ -45,7 +45,13 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
       drag,
       waypointEditor,
     );
-    this.#timeline = new PlanningTimelineView(planning, dom, dialogs, drag);
+    this.#timeline = new PlanningTimelineView(
+      planning,
+      dom,
+      dialogs,
+      drag,
+      waypointEditor,
+    );
   }
 
   get overlayVisible(): boolean {
