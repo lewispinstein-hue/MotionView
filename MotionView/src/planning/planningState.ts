@@ -20,6 +20,19 @@ export function createPlanNodeId() {
   return `plan-node-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+export function createPlanPathId() {
+  return `plan-path-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function getDefaultPlanPathName(
+  paths: readonly Readonly<{ name: string }>[],
+): string {
+  const names = new Set(paths.map((path) => path.name.trim()));
+  let index = 1;
+  while (names.has(`Path ${index}`)) index += 1;
+  return `Path ${index}`;
+}
+
 export function getDefaultPlanObjectColor(index = 0) {
   return DEFAULT_PLAN_OBJECT_COLORS[index % DEFAULT_PLAN_OBJECT_COLORS.length];
 }

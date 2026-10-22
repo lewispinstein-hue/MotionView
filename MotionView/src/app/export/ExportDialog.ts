@@ -101,7 +101,9 @@ export class ExportDialog {
   }
 
   open(type: MotionViewExportType = this.app.core.mode.getMode()): void {
-    if (!this.dom.pathName.value) this.dom.pathName.value = "Untitled Path";
+    if (type !== "viewing")
+      this.dom.pathName.value = this.app.planning.paths.active.name;
+    else if (!this.dom.pathName.value) this.dom.pathName.value = "Untitled Path";
     if (!this.dom.filename.value) this.dom.filename.value = "motionview-path";
     this.dom.type.value = type;
     this.#submitError = "";
@@ -175,6 +177,12 @@ export class ExportDialog {
               : null,
       },
     };
+
+    if (request.exportType !== "viewing")
+      this.app.planning.paths.rename(
+        this.app.planning.paths.activeId,
+        request.pathName,
+      );
 
     try {
       await this.service.export(request);

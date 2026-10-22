@@ -40,9 +40,6 @@ export class PlanningSettingsBinding {
     bind(this.dom.planSnapStep, "planSnapStep", "change");
     bind(this.dom.planThetaSnapStep, "planThetaSnapStep", "change");
     bind(this.dom.planLimitBounds, "planLimitBounds", "change");
-    this.codeExport.changed.subscribe((planningCodeExport) =>
-      this.settings.update({ planningCodeExport }),
-    );
     this.planning.events.documentChanged.subscribe(({ kind }) => {
       if (kind === "template") {
         this.settings.update(
@@ -99,7 +96,10 @@ export class PlanningSettingsBinding {
       this.planning.setExportTemplate(values.planExportTemplate);
     }
     if (changed("planningCodeExport")) {
-      this.codeExport.applySettings(values.planningCodeExport);
+      this.planning.paths.setLegacyCodeExportSettings(
+        values.planningCodeExport,
+      );
+      this.codeExport.applySettings(this.planning.paths.codeExportSettings);
     }
   }
   private configureProjection(): void {

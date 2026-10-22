@@ -7,6 +7,8 @@ export type PlanningDocumentChangeKind =
   | "object"
   | "method"
   | "node"
+  | "path"
+  | "path-export"
   | "template"
   | "overlay"
   | "history";

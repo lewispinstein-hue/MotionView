@@ -1,24 +1,10 @@
 import type { PlanWaypointIndicatorIcon } from "../state/models";
+import { clonePlanningWaypoint } from "./planningDocument";
 import { normalizeWaypointIndicatorIcons } from "./planningIndicators";
 import type { PlanningSession } from "./planningSession";
 import type { PlanningWaypoint, PlanningWaypointView } from "./planningTypes";
 
-function cloneWaypoint(waypoint: Readonly<PlanningWaypoint>): PlanningWaypoint {
-  const cloned: PlanningWaypoint = { ...waypoint };
-  const indicatorIcons = normalizeWaypointIndicatorIcons(
-    waypoint.indicatorIcons,
-  );
-  if (
-    indicatorIcons.length ||
-    Object.prototype.hasOwnProperty.call(waypoint, "indicatorIcons")
-  ) {
-    cloned.indicatorIcons = indicatorIcons;
-  }
-  if (Object.prototype.hasOwnProperty.call(waypoint, "overrideCode")) {
-    cloned.overrideCode = String(waypoint.overrideCode ?? "");
-  }
-  return cloned;
-}
+export type PlanningMirrorDirection = "left-right" | "top-bottom";
 
 export class PlanningRoute {
   constructor(private readonly session: PlanningSession) {}
@@ -49,7 +35,11 @@ export class PlanningRoute {
       for (const node of this.session.nodes) {
         if (node.beforeWaypoint > insertionIndex) node.beforeWaypoint += 1;
       }
-      this.session.waypoints.splice(insertionIndex, 0, cloneWaypoint(waypoint));
+      this.session.waypoints.splice(
+        insertionIndex,
+        0,
+        clonePlanningWaypoint(waypoint),
+      );
     });
     return insertionIndex;
   }
@@ -57,7 +47,7 @@ export class PlanningRoute {
   replace(waypoints: readonly PlanningWaypoint[]): void {
     this.session.mutate("route", () => {
       this.session.waypoints.length = 0;
-      this.session.waypoints.push(...waypoints.map(cloneWaypoint));
+      this.session.waypoints.push(...waypoints.map(clonePlanningWaypoint));
     });
   }
 
@@ -127,6 +117,27 @@ export class PlanningRoute {
         waypoint.y = next.y;
       }
     });
+  }
+
+  mirror(
+    direction: PlanningMirrorDirection,
+    constrain?: (point: Readonly<PlanningWaypoint>) => PlanningWaypoint,
+  ): boolean {
+    if (!this.session.waypoints.length) return false;
+    this.session.mutate("route", () => {
+      for (const waypoint of this.session.waypoints) {
+        const theta = Number.isFinite(waypoint.theta) ? waypoint.theta! : 0;
+        const mirrored =
+          direction === "left-right"
+            ? { ...waypoint, x: -waypoint.x, theta: -theta }
+            : { ...waypoint, y: -waypoint.y, theta: 180 - theta };
+        const next = constrain?.(mirrored) ?? mirrored;
+        waypoint.x = next.x;
+        waypoint.y = next.y;
+        waypoint.theta = ((next.theta ?? 0) % 360 + 360) % 360;
+      }
+    });
+    return true;
   }
 
   remove(indices: Iterable<number>): void {

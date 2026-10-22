@@ -12,20 +12,10 @@ import type { PlanningFeature } from "./PlanningFeature";
 import type { SettingsFeature } from "../app/settings";
 import { generatePlanningCode } from "./planningCode";
 import { bindModalBackdropDismissal } from "../app/dialogs/modalDismissal";
-
-export type PlanningCodeExportTarget =
-  | "downloads"
-  | "desktop"
-  | "documents"
-  | "project"
-  | "custom";
-
-export interface PlanningCodeExportSettings {
-  readonly header: string;
-  readonly footer: string;
-  readonly target: PlanningCodeExportTarget;
-  readonly path: string;
-}
+import type {
+  PlanningCodeExportSettings,
+  PlanningCodeExportTarget,
+} from "./planningTypes";
 
 const DEFAULT_FILENAME = "autonomous.cpp";
 

@@ -1,4 +1,4 @@
-import type { PlanningCodeExportSettings } from "../../planning/PlanningCodeExportDialog";
+import type { PlanningCodeExportSettings } from "../../planning/planningTypes";
 import type { FieldCompetition } from "../../render/field/fieldImages";
 
 export interface PersistedRobotImage {

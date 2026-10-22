@@ -71,13 +71,11 @@ export class PlanningObjects {
     const selectedNodeId = this.session.selectedNodeId;
     this.session.mutate("object", () => {
       this.session.objects.splice(index, 1);
-      for (
-        let nodeIndex = this.session.nodes.length - 1;
-        nodeIndex >= 0;
-        nodeIndex -= 1
-      ) {
-        if (this.session.nodes[nodeIndex]?.objectId === id)
-          this.session.nodes.splice(nodeIndex, 1);
+      for (const path of this.session.pathEntries) {
+        for (let nodeIndex = path.nodes.length - 1; nodeIndex >= 0; nodeIndex -= 1) {
+          if (path.nodes[nodeIndex]?.objectId === id)
+            path.nodes.splice(nodeIndex, 1);
+        }
       }
     });
     if (selectedNodeId && this.session.selectedNodeId !== selectedNodeId) {
@@ -160,14 +158,12 @@ export class PlanningObjects {
     const selectedNodeId = this.session.selectedNodeId;
     this.session.mutate("method", () => {
       object.methods.splice(index, 1);
-      for (
-        let nodeIndex = this.session.nodes.length - 1;
-        nodeIndex >= 0;
-        nodeIndex -= 1
-      ) {
-        const node = this.session.nodes[nodeIndex];
-        if (node?.objectId === objectId && node.methodId === methodId)
-          this.session.nodes.splice(nodeIndex, 1);
+      for (const path of this.session.pathEntries) {
+        for (let nodeIndex = path.nodes.length - 1; nodeIndex >= 0; nodeIndex -= 1) {
+          const node = path.nodes[nodeIndex];
+          if (node?.objectId === objectId && node.methodId === methodId)
+            path.nodes.splice(nodeIndex, 1);
+        }
       }
     });
     if (selectedNodeId && this.session.selectedNodeId !== selectedNodeId) {

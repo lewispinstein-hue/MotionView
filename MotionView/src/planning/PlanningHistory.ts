@@ -4,10 +4,10 @@ import type { PlanningSession } from "./planningSession";
 export class PlanningHistory {
   constructor(private readonly session: PlanningSession) {}
   get canUndo(): boolean {
-    return this.session.undoStack.length > 0;
+    return this.session.canUndo;
   }
   get canRedo(): boolean {
-    return this.session.redoStack.length > 0;
+    return this.session.canRedo;
   }
   begin(kind: PlanningDocumentChangeKind = "route"): void {
     this.session.beginTransaction(kind);

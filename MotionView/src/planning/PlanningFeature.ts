@@ -2,6 +2,7 @@ import { PlanningEvents } from "./planningEvents";
 import { PlanningHistory } from "./PlanningHistory";
 import { PlanningObjects } from "./planningObjects";
 import { PlanningPlayback } from "./planningPlayback";
+import { PlanningPaths } from "./PlanningPaths";
 import { PlanningProjection } from "./PlanningProjection";
 import { PlanningRoute } from "./PlanningRoute";
 import { PlanningSelection } from "./PlanningSelection";
@@ -18,6 +19,7 @@ const DEFAULT_EXPORT_TEMPLATE = "moveToPoint(${x}, ${y}, ${theta});";
 export class PlanningFeature {
   readonly events = new PlanningEvents();
   readonly route: PlanningRoute;
+  readonly paths: PlanningPaths;
   readonly objects: PlanningObjects;
   readonly timeline: PlanningTimeline;
   readonly selection: PlanningSelection;
@@ -36,6 +38,7 @@ export class PlanningFeature {
       maxUndoSteps,
     );
     this.route = new PlanningRoute(this.#session);
+    this.paths = new PlanningPaths(this.#session, this.route);
     this.objects = new PlanningObjects(this.#session);
     this.timeline = new PlanningTimeline(this.#session);
     this.selection = new PlanningSelection(this.#session, this.events);
@@ -61,7 +64,9 @@ export class PlanningFeature {
   }
   get hasData(): boolean {
     return (
-      this.route.length > 0 ||
+      this.paths.items.some(
+        (path) => path.waypoints.length > 0 || path.nodes.length > 0,
+      ) ||
       this.objects.length > 0 ||
       this.timeline.length > 0
     );

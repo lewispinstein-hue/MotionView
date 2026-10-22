@@ -588,6 +588,35 @@
 
       <div id="canvasWrap">
         <canvas id="c"></canvas>
+        <aside id="planningPathManager" class="planningPathManager planningOnly" aria-label="Planning paths">
+          <div class="planningPathManagerHeader">
+            <div id="planActivePathName" class="planningPathManagerActiveName">Path 1</div>
+            <button id="btnPlanPathManagerToggle" class="planningPathManagerToggle" type="button"
+              title="Open paths" aria-label="Open paths" aria-expanded="false">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></svg>
+            </button>
+          </div>
+          <div id="planningPathManagerBody" class="planningPathManagerBody" aria-hidden="true" inert>
+            <div class="planningPathManagerContent">
+              <div class="planningPathManagerActions">
+                <button id="btnPlanCreatePath" class="planningPathManagerNew" type="button"
+                  title="New Path" aria-label="New Path">
+                  <svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/addPlanningObject.svg#icon-addPlanningObject"></use></svg>
+                </button>
+                <button id="btnPlanMirrorTopBottom" class="planningPathManagerAction" type="button"
+                  title="Flip Vertical" aria-label="Flip Vertical">
+                  <svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/flipVertical.svg#icon-flipVertical"></use></svg>
+                </button>
+                <button id="btnPlanMirrorLeftRight" class="planningPathManagerAction" type="button"
+                  title="Flip Horizontal" aria-label="Flip Horizontal">
+                  <svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/flipHorizontal.svg#icon-flipHorizontal"></use></svg>
+                </button>
+              </div>
+              <div id="planPathCount" class="planningPathManagerCount">1 Path</div>
+              <div id="planPathList" class="planningPathManagerList" aria-label="Saved Planning paths"></div>
+            </div>
+          </div>
+        </aside>
       </div>
 
       <div id="vSplit" class="splitterV" title="Drag to resize sidebar"></div>
@@ -740,7 +769,7 @@
         <div class="section planningOnly">
           <div class="statsPanel planEventsPanel">
             <div class="statsHeader">
-              <div class="statsTitle" style="margin-bottom: 4px; align-items: center;">Custom Events</div>
+              <div class="statsTitle" style="margin-bottom: 4px; align-items: center;">Custom Events <span class="planSharedScope">shared</span></div>
               <button id="btnPlanAddObject" class="iconBtn secondaryBtn planEventAddBtn" type="button"
                 title="Add Object" aria-label="Add Object">
                 <svg width="20" height="20">

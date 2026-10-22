@@ -10,6 +10,15 @@ function requiredElement<T extends HTMLElement>(
 /** Stable typed references to elements owned by Planning presentation. */
 export class PlanningDom {
   readonly canvas: HTMLCanvasElement;
+  readonly pathManager: HTMLElement;
+  readonly pathManagerToggle: HTMLButtonElement;
+  readonly pathManagerBody: HTMLElement;
+  readonly activePathName: HTMLElement;
+  readonly pathCount: HTMLElement;
+  readonly pathList: HTMLElement;
+  readonly createPath: HTMLButtonElement;
+  readonly mirrorLeftRight: HTMLButtonElement;
+  readonly mirrorTopBottom: HTMLButtonElement;
   readonly timelineCanvas: HTMLCanvasElement;
   readonly timelineViewport: HTMLElement;
   readonly timelineContent: HTMLElement;
@@ -73,6 +82,18 @@ export class PlanningDom {
 
   private constructor(document: Document) {
     this.canvas = requiredElement(document, "c");
+    this.pathManager = requiredElement(document, "planningPathManager");
+    this.pathManagerToggle = requiredElement(
+      document,
+      "btnPlanPathManagerToggle",
+    );
+    this.pathManagerBody = requiredElement(document, "planningPathManagerBody");
+    this.activePathName = requiredElement(document, "planActivePathName");
+    this.pathCount = requiredElement(document, "planPathCount");
+    this.pathList = requiredElement(document, "planPathList");
+    this.createPath = requiredElement(document, "btnPlanCreatePath");
+    this.mirrorLeftRight = requiredElement(document, "btnPlanMirrorLeftRight");
+    this.mirrorTopBottom = requiredElement(document, "btnPlanMirrorTopBottom");
     this.timelineCanvas = requiredElement(document, "planningTimelineCanvas");
     this.timelineViewport = requiredElement(
       document,

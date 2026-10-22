@@ -48,6 +48,7 @@ function assertArrayLimit(value: unknown, name: string): void {
 function assertDocumentLimits(record: Record<string, unknown>): void {
   for (const name of [
     "planned-path",
+    "planned-paths",
     "planned-objects",
     "planned-nodes",
     "poses",
@@ -59,6 +60,15 @@ function assertDocumentLimits(record: Record<string, unknown>): void {
     "waypoints",
   ]) {
     assertArrayLimit(record[name], name);
+  }
+
+  for (const path of Array.isArray(record["planned-paths"])
+    ? record["planned-paths"]
+    : []) {
+    if (!path || typeof path !== "object") continue;
+    const route = path as Record<string, unknown>;
+    assertArrayLimit(route["planned-path"], "planned path");
+    assertArrayLimit(route["planned-nodes"], "planned path nodes");
   }
 
   let methodCount = 0;
@@ -218,8 +228,15 @@ export class RouteImportService {
     const record = document as Record<string, unknown>;
     assertDocumentLimits(record);
     const planning =
-      Array.isArray(record["planned-path"]) &&
-      record["planned-path"].length > 0;
+      (Array.isArray(record["planned-path"]) &&
+        record["planned-path"].length > 0) ||
+      (Array.isArray(record["planned-paths"]) &&
+        record["planned-paths"].some(
+          (path) =>
+            !!path &&
+            typeof path === "object" &&
+            Array.isArray((path as Record<string, unknown>)["planned-path"]),
+        ));
     const viewing = this.hasViewing(record);
     if (
       planning &&

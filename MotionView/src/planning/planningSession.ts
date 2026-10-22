@@ -1,19 +1,39 @@
 import type {
-  PlanningEvents,
   PlanningDocumentChangeKind,
+  PlanningEvents,
 } from "./planningEvents";
-import { normalizePlanNodes, normalizePlanObjects } from "./planningState";
-import { normalizeWaypointIndicatorIcons } from "./planningIndicators";
+import {
+  clonePlanningCodeExportSettings,
+  clonePlanningObject,
+  clonePlanningPath,
+  DEFAULT_PLANNING_CODE_EXPORT_SETTINGS,
+  loadPlanningPaths,
+  normalizePlanningCodeExportSettings,
+  normalizePlanningPathName,
+} from "./planningDocument";
+import {
+  maintainPlanningDocumentInvariants,
+  type PlanningMethodSelection,
+} from "./planningInvariants";
+import { PlanningPathStore } from "./PlanningPathStore";
+import { PlanningSessionHistory } from "./planningSessionHistory";
+import { normalizePlanObjects } from "./planningState";
 import type {
+  PlanningCodeExportSettings,
   PlanningNode,
   PlanningObject,
-  PlanningWaypoint,
+  PlanningPath,
+  PlanningPathView,
 } from "./planningTypes";
 
+export type { PlanningMethodSelection } from "./planningInvariants";
+
 interface PlanningHistorySnapshot {
-  waypoints: PlanningWaypoint[];
+  paths: PlanningPath[];
+  activePathId: string;
+  /** The active path after the mutation that stored this pre-change snapshot. */
+  historyPathId: string;
   objects: PlanningObject[];
-  nodes: PlanningNode[];
   selected: number[];
   selectedIndex: number;
   selectedNodeId: string | null;
@@ -22,83 +42,13 @@ interface PlanningHistorySnapshot {
   exportTemplate: string;
 }
 
-export interface PlanningMethodSelection {
-  readonly objectId: string;
-  readonly methodId: string;
-}
-
-function cloneWaypoint(point: Readonly<PlanningWaypoint>): PlanningWaypoint {
-  const cloned: PlanningWaypoint = {
-    x: point.x,
-    y: point.y,
-    theta: point.theta ?? 0,
-    speed: point.speed ?? 127,
-  };
-  const indicatorIcons = normalizeWaypointIndicatorIcons(point.indicatorIcons);
-  if (
-    indicatorIcons.length ||
-    Object.prototype.hasOwnProperty.call(point, "indicatorIcons")
-  )
-    cloned.indicatorIcons = indicatorIcons;
-  if (Object.prototype.hasOwnProperty.call(point, "overrideCode"))
-    cloned.overrideCode = String(point.overrideCode ?? "");
-  return cloned;
-}
-
-function cloneObject(object: Readonly<PlanningObject>): PlanningObject {
-  return {
-    ...object,
-    methods: object.methods.map((method) => ({ ...method })),
-  };
-}
-
-function cloneNode(node: Readonly<PlanningNode>): PlanningNode {
-  return { ...node };
-}
-
-function finiteNumber(value: unknown, fallback = 0): number {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
-}
-
-function usesLegacyWaypointExport(
-  data: Readonly<Record<string, unknown>>,
-): boolean {
-  if (data["planned-segment-export"] === true) return false;
-  const meta =
-    data.meta && typeof data.meta === "object"
-      ? (data.meta as Record<string, unknown>)
-      : null;
-  const schemaVersion = Number(meta?.SchemaVersion);
-  return !Number.isFinite(schemaVersion) || schemaVersion < 4;
-}
-
-/** Moves legacy arrival-based waypoint content onto its departing route segment. */
-function migrateLegacyWaypointExport(waypoints: PlanningWaypoint[]): void {
-  if (waypoints.length < 2) return;
-  const legacyWaypoints = waypoints.map(cloneWaypoint);
-  for (let index = 0; index < waypoints.length - 1; index += 1) {
-    const source = waypoints[index]!;
-    const destination = legacyWaypoints[index + 1]!;
-    source.speed = destination.speed;
-    if (Object.prototype.hasOwnProperty.call(destination, "overrideCode"))
-      source.overrideCode = destination.overrideCode ?? "";
-    else delete source.overrideCode;
-    if (Object.prototype.hasOwnProperty.call(destination, "indicatorIcons")) {
-      source.indicatorIcons = normalizeWaypointIndicatorIcons(
-        destination.indicatorIcons,
-      );
-    } else delete source.indicatorIcons;
-  }
-  const finalWaypoint = waypoints.at(-1)!;
-  delete finalWaypoint.overrideCode;
-  delete finalWaypoint.indicatorIcons;
-}
-
+/**
+ * Coordinates Planning's shared state. Focused stores own path selection,
+ * document parsing, invariants, and history mechanics.
+ */
 export class PlanningSession {
-  readonly waypoints: PlanningWaypoint[] = [];
+  readonly #pathStore = new PlanningPathStore();
   readonly objects: PlanningObject[] = [];
-  readonly nodes: PlanningNode[] = [];
   readonly selectedWaypoints = new Set<number>();
   selectedWaypoint = -1;
   selectedNodeId: string | null = null;
@@ -107,20 +57,135 @@ export class PlanningSession {
   overlayVisible = false;
   playbackDistance = 0;
   routeRevision = 0;
-  readonly undoStack: PlanningHistorySnapshot[] = [];
-  readonly redoStack: PlanningHistorySnapshot[] = [];
-  #transaction: {
-    snapshot: PlanningHistorySnapshot;
-    kind: PlanningDocumentChangeKind;
-    changed: boolean;
-  } | null = null;
+  readonly #history: PlanningSessionHistory<PlanningHistorySnapshot>;
 
   constructor(
     readonly events: PlanningEvents,
     readonly defaultExportTemplate: string,
-    readonly maxUndoSteps: number,
+    maxUndoSteps: number,
   ) {
     this.exportTemplate = defaultExportTemplate;
+    this.#history = new PlanningSessionHistory(maxUndoSteps);
+  }
+
+  get activePathId(): string {
+    return this.#pathStore.activePathId;
+  }
+  get activePath(): PlanningPath {
+    return this.#pathStore.active;
+  }
+  get paths(): readonly PlanningPathView[] {
+    return this.#pathStore.paths;
+  }
+  get pathEntries(): PlanningPath[] {
+    return this.#pathStore.entries;
+  }
+  get waypoints() {
+    return this.activePath.waypoints;
+  }
+  get nodes(): PlanningNode[] {
+    return this.activePath.nodes;
+  }
+  get codeExportSettings(): Readonly<PlanningCodeExportSettings> {
+    return this.activePath.codeExport;
+  }
+  get canUndo(): boolean {
+    return this.#history.undoStack.length > 0;
+  }
+  get canRedo(): boolean {
+    return this.#history.redoStack.length > 0;
+  }
+
+  /** Seeds defaults when opening a legacy route with global export settings. */
+  setLegacyCodeExportSettings(
+    settings: Partial<PlanningCodeExportSettings> | null | undefined,
+  ): void {
+    const next = normalizePlanningCodeExportSettings(
+      settings,
+      DEFAULT_PLANNING_CODE_EXPORT_SETTINGS,
+    );
+    this.#pathStore.setLegacyCodeExportSettings(next);
+    if (
+      this.pathEntries.length === 1 &&
+      this.activePath.waypoints.length === 0 &&
+      this.activePath.nodes.length === 0
+    ) {
+      this.activePath.codeExport = clonePlanningCodeExportSettings(next);
+    }
+  }
+
+  addPath(): string {
+    let id = "";
+    this.mutate("path", () => {
+      id = this.#pathStore.add().id;
+      this.resetActivePathTransientState();
+    });
+    this.events.selectionChanged.emit({ kind: "cleared" });
+    return id;
+  }
+
+  selectPath(id: string): boolean {
+    if (id === this.activePathId) return true;
+    if (!this.#pathStore.select(id)) return false;
+    this.resetActivePathTransientState();
+    this.routeRevision += 1;
+    this.events.projectionChanged.emit({ kind: "route" });
+    this.events.selectionChanged.emit({ kind: "cleared" });
+    // Path switches are persisted but deliberately not undoable.
+    this.events.documentChanged.emit({ kind: "path" });
+    return true;
+  }
+
+  renamePath(id: string, name: string): boolean {
+    const path = this.pathEntries.find((entry) => entry.id === id);
+    if (!path) return false;
+    const next = normalizePlanningPathName(name, path.name);
+    if (next === path.name) return false;
+    this.mutate("path", () => {
+      path.name = next;
+    });
+    return true;
+  }
+
+  removePath(id: string): boolean {
+    if (
+      this.pathEntries.length <= 1 ||
+      !this.pathEntries.some((path) => path.id === id)
+    ) {
+      return false;
+    }
+    let removed = false;
+    this.mutate("path", () => {
+      const wasActive = id === this.activePathId;
+      removed = this.#pathStore.remove(id);
+      if (removed && wasActive) this.resetActivePathTransientState();
+    });
+    if (removed) this.events.selectionChanged.emit({ kind: "cleared" });
+    return removed;
+  }
+
+  updateCodeExportSettings(
+    settings: Partial<PlanningCodeExportSettings>,
+  ): void {
+    const next = normalizePlanningCodeExportSettings(
+      settings,
+      this.activePath.codeExport,
+    );
+    if (
+      next.header === this.activePath.codeExport.header &&
+      next.footer === this.activePath.codeExport.footer &&
+      next.target === this.activePath.codeExport.target &&
+      next.path === this.activePath.codeExport.path
+    ) {
+      return;
+    }
+    this.mutate(
+      "path-export",
+      () => {
+        this.activePath.codeExport = next;
+      },
+      false,
+    );
   }
 
   mutate(
@@ -128,59 +193,55 @@ export class PlanningSession {
     mutation: () => void,
     recordHistory = true,
   ): void {
-    const before = recordHistory && !this.#transaction ? this.snapshot() : null;
+    const before =
+      recordHistory && !this.#history.inTransaction ? this.snapshot() : null;
     mutation();
     this.maintainDocumentInvariants();
-    if (kind === "route") this.routeRevision += 1;
-    if (this.#transaction) {
-      this.#transaction.changed = true;
-      this.#transaction.kind = kind;
+    if (this.affectsRouteProjection(kind)) this.routeRevision += 1;
+    if (this.#history.inTransaction) {
+      this.#history.markChanged(kind);
       this.events.documentPreviewChanged.emit({ kind });
       return;
     }
-    if (before) this.pushUndoSnapshot(before);
-    if (
-      kind === "route" ||
-      kind === "imported" ||
-      kind === "cleared" ||
-      kind === "history"
-    ) {
+    if (before) {
+      this.#history.push(before, this.activePathId, (snapshot) =>
+        this.matchesCurrent(snapshot),
+      );
+    }
+    if (this.affectsRouteProjection(kind)) {
       this.events.projectionChanged.emit({ kind: "route" });
     }
     this.events.documentChanged.emit({ kind });
   }
 
   beginTransaction(kind: PlanningDocumentChangeKind): void {
-    if (!this.#transaction)
-      this.#transaction = { snapshot: this.snapshot(), kind, changed: false };
+    this.#history.begin(this.snapshot(), kind);
   }
 
   commitTransaction(): void {
-    const transaction = this.#transaction;
-    this.#transaction = null;
-    if (!transaction?.changed) return;
-    this.pushUndoSnapshot(transaction.snapshot);
-    if (transaction.kind === "route" || transaction.kind === "history") {
+    const kind = this.#history.commit(this.activePathId, (snapshot) =>
+      this.matchesCurrent(snapshot),
+    );
+    if (!kind) return;
+    if (this.affectsRouteProjection(kind)) {
       this.events.projectionChanged.emit({ kind: "route" });
     }
-    this.events.documentChanged.emit({ kind: transaction.kind });
+    this.events.documentChanged.emit({ kind });
   }
 
   cancelTransaction(): void {
-    const transaction = this.#transaction;
-    this.#transaction = null;
-    if (transaction?.changed) {
-      this.applySnapshot(transaction.snapshot);
-      this.events.projectionChanged.emit({ kind: "route" });
-      this.events.selectionChanged.emit({ kind: "waypoint" });
-    }
+    const snapshot = this.#history.cancel();
+    if (!snapshot) return;
+    this.applySnapshot(snapshot);
+    this.events.projectionChanged.emit({ kind: "route" });
+    this.events.selectionChanged.emit({ kind: "waypoint" });
   }
 
   undo(): boolean {
-    const snapshot = this.undoStack.pop();
-    if (!snapshot) return false;
-    this.redoStack.push(this.snapshot());
-    this.applySnapshot(snapshot);
+    const changed = this.#history.undo(this.snapshot(), (snapshot) => {
+      this.applySnapshot(snapshot);
+    });
+    if (!changed) return false;
     this.events.projectionChanged.emit({ kind: "route" });
     this.events.selectionChanged.emit({ kind: "cleared" });
     this.events.documentChanged.emit({ kind: "history" });
@@ -188,10 +249,10 @@ export class PlanningSession {
   }
 
   redo(): boolean {
-    const snapshot = this.redoStack.pop();
-    if (!snapshot) return false;
-    this.undoStack.push(this.snapshot());
-    this.applySnapshot(snapshot);
+    const changed = this.#history.redo(this.snapshot(), (snapshot) => {
+      this.applySnapshot(snapshot);
+    });
+    if (!changed) return false;
     this.events.projectionChanged.emit({ kind: "route" });
     this.events.selectionChanged.emit({ kind: "cleared" });
     this.events.documentChanged.emit({ kind: "history" });
@@ -203,34 +264,12 @@ export class PlanningSession {
       value && typeof value === "object"
         ? (value as Record<string, unknown>)
         : {};
-    const waypoints = Array.isArray(data["planned-path"])
-      ? data["planned-path"].map((raw) => {
-          const point = raw as Record<string, unknown>;
-          const waypoint: PlanningWaypoint = {
-            x: finiteNumber(point?.x),
-            y: finiteNumber(point?.y),
-            theta: finiteNumber(point?.theta),
-            speed: Number.isFinite(Number(point?.speed))
-              ? Math.max(1, Math.min(127, Number(point?.speed)))
-              : 127,
-          };
-          const indicatorIcons = normalizeWaypointIndicatorIcons(
-            point?.indicatorIcons,
-          );
-          if (indicatorIcons.length) waypoint.indicatorIcons = indicatorIcons;
-          if (
-            Object.prototype.hasOwnProperty.call(point || {}, "overrideCode") &&
-            typeof point?.overrideCode === "string"
-          ) {
-            waypoint.overrideCode = point.overrideCode;
-          }
-          return waypoint;
-        })
-      : [];
-    if (usesLegacyWaypointExport(data)) migrateLegacyWaypointExport(waypoints);
-    this.replace(this.waypoints, waypoints);
+    const paths = loadPlanningPaths(
+      data,
+      this.#pathStore.legacyCodeExportSettings,
+    );
+    this.#pathStore.replace(paths, String(data["planned-active-path-id"] ?? ""));
     this.replace(this.objects, normalizePlanObjects(data["planned-objects"]));
-    this.replace(this.nodes, normalizePlanNodes(data["planned-nodes"]));
     if (data["planned-export-template"] !== undefined) {
       const template = String(data["planned-export-template"] || "");
       this.exportTemplate = template.trim()
@@ -246,9 +285,8 @@ export class PlanningSession {
   }
 
   clear(): void {
-    this.waypoints.length = 0;
+    this.#pathStore.reset();
     this.objects.length = 0;
-    this.nodes.length = 0;
     this.exportTemplate = this.defaultExportTemplate;
     this.overlayVisible = false;
     this.routeRevision += 1;
@@ -260,9 +298,10 @@ export class PlanningSession {
 
   private snapshot(): PlanningHistorySnapshot {
     return {
-      waypoints: this.waypoints.map(cloneWaypoint),
-      objects: this.objects.map(cloneObject),
-      nodes: this.nodes.map(cloneNode),
+      paths: this.pathEntries.map(clonePlanningPath),
+      activePathId: this.activePathId,
+      historyPathId: this.activePathId,
+      objects: this.objects.map(clonePlanningObject),
       selected: [...this.selectedWaypoints],
       selectedIndex: this.selectedWaypoint,
       selectedNodeId: this.selectedNodeId,
@@ -273,9 +312,11 @@ export class PlanningSession {
   }
 
   private applySnapshot(snapshot: PlanningHistorySnapshot): void {
-    this.replace(this.waypoints, snapshot.waypoints.map(cloneWaypoint));
-    this.replace(this.objects, snapshot.objects.map(cloneObject));
-    this.replace(this.nodes, snapshot.nodes.map(cloneNode));
+    this.#pathStore.replace(
+      snapshot.paths.map(clonePlanningPath),
+      snapshot.activePathId,
+    );
+    this.replace(this.objects, snapshot.objects.map(clonePlanningObject));
     this.selectedWaypoints.clear();
     for (const index of snapshot.selected) this.selectedWaypoints.add(index);
     this.selectedWaypoint = snapshot.selectedIndex;
@@ -289,15 +330,9 @@ export class PlanningSession {
     this.routeRevision += 1;
   }
 
-  private pushUndoSnapshot(snapshot: PlanningHistorySnapshot): void {
-    if (this.matchesCurrent(snapshot)) return;
-    this.undoStack.push(snapshot);
-    if (this.undoStack.length > this.maxUndoSteps) this.undoStack.shift();
-    this.redoStack.length = 0;
-  }
-
   private matchesCurrent(snapshot: PlanningHistorySnapshot): boolean {
     return (
+      snapshot.activePathId === this.activePathId &&
       snapshot.selectedIndex === this.selectedWaypoint &&
       snapshot.selectedNodeId === this.selectedNodeId &&
       snapshot.selectedMethod?.objectId === this.selectedMethod?.objectId &&
@@ -306,77 +341,45 @@ export class PlanningSession {
       snapshot.exportTemplate === this.exportTemplate &&
       snapshot.selected.length === this.selectedWaypoints.size &&
       snapshot.selected.every((index) => this.selectedWaypoints.has(index)) &&
-      JSON.stringify(snapshot.waypoints) === JSON.stringify(this.waypoints) &&
-      JSON.stringify(snapshot.objects) === JSON.stringify(this.objects) &&
-      JSON.stringify(snapshot.nodes) === JSON.stringify(this.nodes)
+      JSON.stringify(snapshot.paths) === JSON.stringify(this.pathEntries) &&
+      JSON.stringify(snapshot.objects) === JSON.stringify(this.objects)
     );
   }
 
-  private resetTransientDomainState(): void {
+  private resetActivePathTransientState(): void {
     this.selectedWaypoints.clear();
     this.selectedWaypoint = -1;
     this.selectedNodeId = null;
     this.selectedMethod = null;
     this.playbackDistance = 0;
-    this.undoStack.length = 0;
-    this.redoStack.length = 0;
-    this.#transaction = null;
+  }
+
+  private resetTransientDomainState(): void {
+    this.resetActivePathTransientState();
+    this.#history.clear();
   }
 
   private maintainDocumentInvariants(): void {
-    const maxBucket = Math.max(0, this.waypoints.length - 1);
-    const hasRouteSegments = this.waypoints.length >= 2;
-    const objects = new Map(this.objects.map((object) => [object.id, object]));
-    for (let index = this.nodes.length - 1; index >= 0; index -= 1) {
-      const node = this.nodes[index];
-      const object = node ? objects.get(node.objectId) : null;
-      if (
-        !node ||
-        !hasRouteSegments ||
-        !object?.methods.some((method) => method.id === node.methodId)
-      ) {
-        this.nodes.splice(index, 1);
-        continue;
-      }
-      node.beforeWaypoint = Math.max(
-        0,
-        Math.min(maxBucket, Math.round(Number(node.beforeWaypoint) || 0)),
-      );
-      node.index = Math.max(0, Math.round(Number(node.index) || 0));
-    }
-    this.nodes.sort(
-      (a, b) =>
-        a.beforeWaypoint - b.beforeWaypoint ||
-        a.index - b.index ||
-        a.id.localeCompare(b.id),
+    this.#pathStore.ensureActivePath();
+    maintainPlanningDocumentInvariants(
+      this.pathEntries,
+      this.activePathId,
+      this.objects,
+      this,
     );
-    const bucketCounts = new Map<number, number>();
-    for (const node of this.nodes) {
-      const index = bucketCounts.get(node.beforeWaypoint) ?? 0;
-      node.index = index;
-      bucketCounts.set(node.beforeWaypoint, index + 1);
-    }
-    if (
-      this.selectedNodeId &&
-      !this.nodes.some((node) => node.id === this.selectedNodeId)
-    )
-      this.selectedNodeId = null;
-    if (
-      this.selectedMethod &&
-      !objects
-        .get(this.selectedMethod.objectId)
-        ?.methods.some((method) => method.id === this.selectedMethod?.methodId)
-    ) {
-      this.selectedMethod = null;
-    }
-    for (const index of [...this.selectedWaypoints]) {
-      if (index < 0 || index >= this.waypoints.length)
-        this.selectedWaypoints.delete(index);
-    }
-    if (!this.selectedWaypoints.has(this.selectedWaypoint)) {
-      this.selectedWaypoint =
-        this.selectedWaypoints.values().next().value ?? -1;
-    }
+  }
+
+  private affectsRouteProjection(kind: PlanningDocumentChangeKind): boolean {
+    return (
+      kind === "route" ||
+      kind === "path" ||
+      kind === "node" ||
+      kind === "object" ||
+      kind === "method" ||
+      kind === "imported" ||
+      kind === "cleared" ||
+      kind === "history"
+    );
   }
 
   private replace<T>(target: T[], values: readonly T[]): void {

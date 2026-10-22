@@ -106,6 +106,21 @@ registerViewingRenderLayer(viewingView.timelineLayer);
 
 planningDialogs.bind();
 planningCodeExportDialog.bind();
+planningCodeExportDialog.changed.subscribe((settings) =>
+  app.planning.paths.updateCodeExportSettings(settings),
+);
+app.planning.events.documentChanged.subscribe(({ kind }) => {
+  if (
+    kind === "imported" ||
+    kind === "path" ||
+    kind === "history" ||
+    kind === "cleared"
+  ) {
+    planningCodeExportDialog.applySettings(
+      app.planning.paths.codeExportSettings,
+    );
+  }
+});
 planningView.bind();
 planningInput.bind();
 viewingView.bind();

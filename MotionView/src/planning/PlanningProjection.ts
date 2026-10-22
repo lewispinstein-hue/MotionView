@@ -48,6 +48,9 @@ export class PlanningProjection {
     events.documentChanged.subscribe(({ kind }) => {
       if (
         kind === "route" ||
+        kind === "path" ||
+        kind === "object" ||
+        kind === "method" ||
         kind === "node" ||
         kind === "imported" ||
         kind === "cleared" ||
@@ -57,7 +60,8 @@ export class PlanningProjection {
       }
     });
     events.documentPreviewChanged.subscribe(({ kind }) => {
-      if (kind === "route" || kind === "node") this.#nodePlacementsDirty = true;
+      if (kind === "route" || kind === "node" || kind === "path")
+        this.#nodePlacementsDirty = true;
     });
   }
   get configuration(): Readonly<PlanningProjectionConfiguration> {

@@ -30,7 +30,7 @@ export class MotionViewDocumentSerializer {
   savedPaths(): string {
     const planning = this.app.planning.exportData();
     return JSON.stringify({
-      ...this.planningDocument(planning),
+      ...this.planningSessionDocument(planning),
       "robot-path": this.app.viewing.data.poses.map((pose) => ({
         t: pose.t ?? null,
         x: pose.x,
@@ -76,7 +76,7 @@ export class MotionViewDocumentSerializer {
     if (type !== "viewing")
       Object.assign(
         payload,
-        this.planningDocument(this.app.planning.exportData()),
+        this.planningSessionDocument(this.app.planning.exportData()),
       );
     if (type !== "planning") {
       const viewing = this.app.viewing.exportData();
@@ -124,21 +124,7 @@ export class MotionViewDocumentSerializer {
     planning: ReturnType<MotionViewApp["planning"]["exportData"]>,
   ): Record<string, unknown> {
     return {
-      "planned-path": planning.waypoints.map((point) => {
-        const indicatorIcons = normalizeWaypointIndicatorIcons(
-          point.indicatorIcons,
-        );
-        const serialized: Record<string, unknown> = {
-          x: point.x,
-          y: point.y,
-          theta: point.theta ?? 0,
-          speed: Math.max(1, Math.min(127, Number(point.speed) || 127)),
-        };
-        if (indicatorIcons.length) serialized.indicatorIcons = indicatorIcons;
-        if (Object.prototype.hasOwnProperty.call(point, "overrideCode"))
-          serialized.overrideCode = point.overrideCode ?? "";
-        return serialized;
-      }),
+      "planned-path": this.serializeWaypoints(planning.waypoints),
       "planned-segment-export": true,
       "planned-export-template": planning.template,
       "planned-objects": planning.objects.map((object) => ({
@@ -153,7 +139,47 @@ export class MotionViewDocumentSerializer {
         })),
       })),
       "planned-nodes": planning.nodes.map(serializePlanNode),
+      "planned-code-export": {
+        ...this.app.planning.paths.codeExportSettings,
+      },
     };
+  }
+
+  /** Full autosave shape, retaining every Planning path and the active path. */
+  private planningSessionDocument(
+    planning: ReturnType<MotionViewApp["planning"]["exportData"]>,
+  ): Record<string, unknown> {
+    return {
+      ...this.planningDocument(planning),
+      "planned-active-path-id": this.app.planning.paths.activeId,
+      "planned-paths": this.app.planning.paths.items.map((path) => ({
+        id: path.id,
+        name: path.name,
+        "planned-path": this.serializeWaypoints(path.waypoints),
+        "planned-nodes": path.nodes.map(serializePlanNode),
+        "planned-code-export": { ...path.codeExport },
+      })),
+    };
+  }
+
+  private serializeWaypoints(
+    waypoints: ReturnType<MotionViewApp["planning"]["exportData"]>["waypoints"],
+  ): Record<string, unknown>[] {
+    return waypoints.map((point) => {
+      const indicatorIcons = normalizeWaypointIndicatorIcons(
+        point.indicatorIcons,
+      );
+      const serialized: Record<string, unknown> = {
+        x: point.x,
+        y: point.y,
+        theta: point.theta ?? 0,
+        speed: Math.max(1, Math.min(127, Number(point.speed) || 127)),
+      };
+      if (indicatorIcons.length) serialized.indicatorIcons = indicatorIcons;
+      if (Object.prototype.hasOwnProperty.call(point, "overrideCode"))
+        serialized.overrideCode = point.overrideCode ?? "";
+      return serialized;
+    });
   }
 
   private metadata(

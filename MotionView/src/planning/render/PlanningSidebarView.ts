@@ -631,9 +631,11 @@ export class PlanningSidebarView {
       }))
     )
       return;
-    const nodes = this.planning.timeline.nodes.filter(
-      (node) => node.objectId === id,
-    ).length;
+    const nodes = this.planning.paths.items.reduce(
+      (count, path) =>
+        count + path.nodes.filter((node) => node.objectId === id).length,
+      0,
+    );
     this.planning.objects.remove(id);
     void planningTelemetry.objectRemoved(
       this.planning.telemetryProperties({
@@ -691,9 +693,14 @@ export class PlanningSidebarView {
   ): Promise<void> {
     const method = this.planning.objects.method(objectId, methodId);
     if (!method) return;
-    const nodes = this.planning.timeline.nodes.filter(
-      (node) => node.objectId === objectId && node.methodId === methodId,
-    ).length;
+    const nodes = this.planning.paths.items.reduce(
+      (count, path) =>
+        count +
+        path.nodes.filter(
+          (node) => node.objectId === objectId && node.methodId === methodId,
+        ).length,
+      0,
+    );
     if (
       nodes &&
       !(await this.dialogs.confirm({

@@ -23,6 +23,7 @@ try {
   assert.equal(roundExportNumber(-0.0004), 0);
   const { getPlanMethodTooltipName } = await server.ssrLoadModule("/planning/planningObjects.ts");
   const { constrainTimelineTooltipPosition, latestTimelineNodeAtProgress } = await server.ssrLoadModule("/planning/render/PlanningTimelineView.ts");
+  const { MotionViewDocumentSerializer } = await server.ssrLoadModule("/app/persistence/MotionViewDocumentSerializer.ts");
   const waypoints = [
     { x: 0, y: 0, theta: 0, speed: 11 },
     { x: 0, y: 5, theta: 270, speed: 22, overrideCode: "segment(${iteration},${x},${y},${theta},${distance},${speed},${forwards});" },
@@ -109,6 +110,98 @@ try {
     ],
   });
   assert.equal(generatePlanningCode(wholeNumberSpeedPlanning), "move(50);");
+
+  const namedLegacyPathPlanning = new PlanningFeature();
+  namedLegacyPathPlanning.load({
+    meta: { SchemaVersion: 4, PathName: "Qualifying Route" },
+    "planned-segment-export": true,
+    "planned-path": [
+      { x: 0, y: 0, theta: 0, speed: 127 },
+      { x: 12, y: 0, theta: 0, speed: 127 },
+    ],
+  });
+  assert.equal(namedLegacyPathPlanning.paths.active.name, "Qualifying Route");
+
+  const multiPathPlanning = new PlanningFeature();
+  multiPathPlanning.load({
+    "planned-segment-export": true,
+    "planned-objects": objects,
+    "planned-paths": [
+      {
+        id: "path-a",
+        name: "Match Route",
+        "planned-path": [
+          { x: 10, y: 20, theta: 30, speed: 127 },
+          { x: 30, y: 20, theta: 30, speed: 127 },
+        ],
+        "planned-nodes": [{ id: "path-a-node", objectId: "object", methodId: "method", beforeWaypoint: 1, index: 0 }],
+        "planned-code-export": { header: "// A", footer: "// end A", target: "custom", path: "/tmp/a.cpp" },
+      },
+      {
+        id: "path-b",
+        name: "Skills Route",
+        "planned-path": [
+          { x: -12, y: 6, theta: 270, speed: 100 },
+          { x: -12, y: 30, theta: 270, speed: 100 },
+        ],
+        "planned-code-export": { header: "// B", footer: "// end B", target: "downloads", path: "" },
+      },
+    ],
+    "planned-active-path-id": "path-a",
+  });
+  assert.equal(multiPathPlanning.paths.items.length, 2);
+  assert.equal(multiPathPlanning.paths.active.name, "Match Route");
+  assert.equal(multiPathPlanning.paths.codeExportSettings.header, "// A");
+  const routeSerializer = new MotionViewDocumentSerializer({
+    planning: multiPathPlanning,
+    viewing: { data: { poses: [], watches: [], logs: [], waypoints: [] } },
+    version: "test",
+  });
+  const exportedMultiPathRoute = routeSerializer.exportPayload(
+    "planning",
+    "Exported Route",
+    {},
+  );
+  assert.equal(exportedMultiPathRoute["planned-paths"]?.length, 2);
+  assert.equal(exportedMultiPathRoute["planned-active-path-id"], "path-a");
+  const reimportedMultiPathPlanning = new PlanningFeature();
+  reimportedMultiPathPlanning.load(exportedMultiPathRoute);
+  assert.deepEqual(
+    reimportedMultiPathPlanning.paths.items.map((path) => path.name),
+    ["Match Route", "Skills Route"],
+  );
+  multiPathPlanning.route.updateField(0, "x", 11);
+  multiPathPlanning.paths.select("path-b");
+  assert.equal(multiPathPlanning.paths.active.name, "Skills Route");
+  assert.equal(multiPathPlanning.paths.codeExportSettings.header, "// B");
+  assert.equal(multiPathPlanning.history.undo(), true);
+  assert.equal(multiPathPlanning.paths.activeId, "path-a");
+  assert.equal(multiPathPlanning.route.waypoints[0]?.x, 10);
+  assert.equal(multiPathPlanning.history.redo(), true);
+  assert.equal(multiPathPlanning.paths.activeId, "path-a");
+  assert.equal(multiPathPlanning.route.waypoints[0]?.x, 11);
+  assert.equal(multiPathPlanning.paths.mirror("left-right"), true);
+  assert.deepEqual(
+    multiPathPlanning.route.waypoints.map((point) => [point.x, point.y, point.theta]),
+    [[-11, 20, 330], [-30, 20, 330]],
+  );
+  assert.equal(multiPathPlanning.paths.mirror("left-right"), true);
+  assert.equal(multiPathPlanning.paths.mirror("top-bottom"), true);
+  assert.deepEqual(
+    multiPathPlanning.route.waypoints.map((point) => [point.x, point.y, point.theta]),
+    [[11, -20, 150], [30, -20, 150]],
+  );
+  multiPathPlanning.paths.select("path-b");
+  assert.equal(multiPathPlanning.timeline.nodes.length, 0);
+  const newPathId = multiPathPlanning.paths.add();
+  assert.equal(newPathId.startsWith("plan-path-"), true);
+  assert.equal(multiPathPlanning.paths.active.name, "Path 1");
+  assert.equal(multiPathPlanning.history.undo(), true);
+  assert.equal(multiPathPlanning.paths.activeId, "path-b");
+  assert.equal(multiPathPlanning.paths.items.length, 2);
+  assert.equal(multiPathPlanning.history.redo(), true);
+  assert.equal(multiPathPlanning.paths.activeId, newPathId);
+  assert.equal(multiPathPlanning.paths.items.length, 3);
 
   const methodOrderPlanning = new PlanningFeature();
   methodOrderPlanning.load({

@@ -13,12 +13,14 @@ import { PlanningWaypointEditor } from "./PlanningWaypointEditor";
 import { getPlanNodeEffectiveMethod } from "./planningObjects";
 import { PlanningDragCoordinator } from "./render/PlanningDragCoordinator";
 import { PlanningFieldView } from "./render/PlanningFieldView";
+import { PlanningPathManagerView } from "./render/PlanningPathManagerView";
 import { PlanningSidebarView } from "./render/PlanningSidebarView";
 import { PlanningTimelineView } from "./render/PlanningTimelineView";
 
 /** Owns all Planning DOM and canvas presentation. */
 export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
   readonly #fieldView: PlanningFieldView;
+  readonly #pathManager: PlanningPathManagerView;
   readonly #sidebar: PlanningSidebarView;
   readonly #timeline: PlanningTimelineView;
   #bound = false;
@@ -38,6 +40,7 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
       dialogs,
       waypointEditor,
     );
+    this.#pathManager = new PlanningPathManagerView(planning, dom, dialogs);
     this.#sidebar = new PlanningSidebarView(
       planning,
       dom,
@@ -62,6 +65,7 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
     if (this.#bound) return;
     this.#bound = true;
     this.#fieldView.bind();
+    this.#pathManager.bind();
     this.#sidebar.bind();
     this.#timeline.bind();
     this.planning.events.documentChanged.subscribe(() => this.render());
@@ -83,6 +87,7 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
   }
 
   render(): void {
+    this.#pathManager.render();
     this.#sidebar.render();
     this.#timeline.render();
     this.updateLatestPill();
