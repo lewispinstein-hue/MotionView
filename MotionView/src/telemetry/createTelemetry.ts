@@ -1,16 +1,16 @@
-import { AppTelemetry } from "./AppTelemetry";
-import { ExportTelemetry } from "./ExportTelemetry";
-import { FeedbackTelemetry } from "./FeedbackTelemetry";
-import { LiveTelemetry } from "./LiveTelemetry";
-import { PlanningTelemetry } from "./PlanningTelemetry";
-import { TelemetryClient } from "./TelemetryClient";
-import { ViewingTelemetry } from "./ViewingTelemetry";
+import { AppTelemetry } from "./appTelemetry";
+import { ExportTelemetry } from "./exportTelemetry";
+import { FeedbackTelemetry } from "./feedbackTelemetry";
+import { LiveTelemetry } from "./liveTelemetry";
+import { PlanningTelemetry } from "./planningTelemetry";
+import { TelemetryClient } from "./telemetryClient";
+import { ViewingTelemetry } from "./viewingTelemetry";
 
 export type {
   FeedbackArea,
   FeedbackProduct,
   FeedbackType,
-} from "./FeedbackTelemetry";
+} from "./feedbackTelemetry";
 
 export const telemetryClient = new TelemetryClient();
 export const appTelemetry = new AppTelemetry(telemetryClient);

@@ -336,7 +336,7 @@ export class FieldRenderer {
         const ox = Number(robotImgTx.offXIn) || 0;
         const oy = Number(robotImgTx.offYIn) || 0;
         const r = ((Number(robotImgTx.rotDeg) || 0) * Math.PI) / 180;
-        const imgAlpha = clamp(Number(robotImgTx.alpha) || 1, 0, 1);
+        const imgAlpha = clamp(Number.isFinite(robotImgTx.alpha) ? robotImgTx.alpha : 1, 0, 1);
 
         ctx.save();
         ctx.globalAlpha = alpha * imgAlpha;
@@ -848,8 +848,10 @@ export class FieldRenderer {
           robotImgTx.offYIn = Number(transform.offYIn) || 0;
         if (transform.rotDeg != null)
           robotImgTx.rotDeg = Number(transform.rotDeg) || 0;
-        if (transform.alpha != null)
-          robotImgTx.alpha = clamp(Number(transform.alpha) || 1, 0, 1);
+        if (transform.alpha != null) {
+          const alpha = Number(transform.alpha);
+          robotImgTx.alpha = clamp(Number.isFinite(alpha) ? alpha : 1, 0, 1);
+        }
       },
       handleWheel(event: WheelEvent) {
         event.preventDefault();

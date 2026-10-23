@@ -37,7 +37,11 @@ export class LiveStream {
     return this.session.streamState === "streaming";
   }
   get acceptingData(): boolean {
-    return this.streaming || this.session.streamState === "starting";
+    return (
+      this.streaming ||
+      this.session.streamState === "starting" ||
+      this.session.streamState === "stopping"
+    );
   }
   get state(): LiveStreamState {
     return this.session.streamState;
@@ -78,6 +82,7 @@ export class LiveStream {
         return false;
       }
       this.setState("streaming");
+      this.restartRefreshTimer();
       liveTelemetry.streamingStarted();
       this.events.notice.emit({
         kind: "success",
@@ -88,13 +93,20 @@ export class LiveStream {
     });
   }
 
-  stop(options: Readonly<{ force?: boolean }> = {}): Promise<boolean> {
+  stop(
+    options: Readonly<{ force?: boolean; reason?: "app_closed" }> = {},
+  ): Promise<boolean> {
     return this.serialize(async () => {
+      const endReason =
+        options.reason ?? (options.force ? "force_stop" : "manual_stop");
       if (
         !options.force &&
         !this.streaming &&
         this.session.streamState !== "starting"
       ) {
+        this.stopRefreshTimer();
+        this.applyPendingBatch();
+        this.metrics.endRun(endReason);
         this.session.clearPending();
         return true;
       }
@@ -113,6 +125,10 @@ export class LiveStream {
           { timeoutMs: 5_000 },
         );
       }
+      // Include records received while the backend was stopping. A normal
+      // refresh is paused in this state; the final drain has no interval or
+      // active-connection requirement.
+      this.applyPendingBatch();
       if (!response.ok || response.json?.ok === false) {
         this.appendConsole(
           `[api] stop/kill failed (${response.json?.status || response.status})`,
@@ -120,7 +136,8 @@ export class LiveStream {
         this.setState(wasStreaming ? "streaming" : "idle");
         return false;
       }
-      this.metrics.endRun(force ? "force_stop" : "manual_stop");
+      this.stopRefreshTimer();
+      this.metrics.endRun(endReason);
       this.session.clearPending();
       this.session.resetParser();
       this.setState("idle");
@@ -135,11 +152,20 @@ export class LiveStream {
   refreshNow(): ViewingAppendResult {
     if (this.session.connectionState !== "connected")
       return EMPTY_APPEND_RESULT;
-    if (this.session.streamState === "starting") return EMPTY_APPEND_RESULT;
+    if (
+      this.session.streamState === "starting" ||
+      this.session.streamState === "stopping"
+    )
+      return EMPTY_APPEND_RESULT;
     if (!this.streaming) {
       this.session.clearPending();
       return EMPTY_APPEND_RESULT;
     }
+    return this.applyPendingBatch();
+  }
+
+  /** Apply accepted records before ending a capture, even with refresh Off. */
+  private applyPendingBatch(): ViewingAppendResult {
     const pending = this.session.pending.batch();
     if (!pending) return EMPTY_APPEND_RESULT;
     let parsed: ParsedLiveBatchResult | null = null;
@@ -178,7 +204,7 @@ export class LiveStream {
       if (detail !== this.#lastBatchFailure) {
         this.#lastBatchFailure = detail;
         this.appendConsole(
-          `[UI] Skipped a live-data batch (${detail}). Streaming will continue.`,
+          `[UI] Skipped a live-data batch (${detail}).`,
         );
       }
       console.error("MotionView could not process a live-data batch:", error);
@@ -216,6 +242,7 @@ export class LiveStream {
     return this.serialize(async () => {
       if (!this.streaming && this.session.streamState !== "starting") return;
       this.stopRefreshTimer();
+      this.applyPendingBatch();
       this.metrics.endRun("terminal_disconnected");
       this.session.clearPending();
       this.session.resetParser();
@@ -227,6 +254,7 @@ export class LiveStream {
 
   async connectionClosed(): Promise<void> {
     this.stopRefreshTimer();
+    this.applyPendingBatch();
     this.metrics.endRun("connection_closed");
     this.session.clearPending();
     this.session.resetParser();
@@ -254,6 +282,7 @@ export class LiveStream {
     this.stopRefreshTimer();
     if (
       this.session.connectionState !== "connected" ||
+      !this.streaming ||
       this.session.refreshIntervalMs <= 0
     )
       return;

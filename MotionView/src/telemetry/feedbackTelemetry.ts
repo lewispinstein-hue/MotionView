@@ -1,4 +1,4 @@
-import type { TelemetryClient } from "./TelemetryClient";
+import type { TelemetryClient } from "./telemetryClient";
 
 const FEEDBACK_RATE_LIMIT_MS = 5 * 60 * 1000;
 const LAST_SUBMISSION_STORAGE_KEY = "motionview.feedback.last-submitted-at";

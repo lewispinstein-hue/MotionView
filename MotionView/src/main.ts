@@ -63,7 +63,8 @@ const planningLayout = new PlanningLayoutView(fieldRenderer, planningView);
 const viewingLayout = new ViewingLayoutView(fieldRenderer, viewingView);
 
 const settingsDom = SettingsDom.from();
-const settingsView = new SettingsView(fieldRenderer, settingsDom);
+const windowController = new WindowController();
+const settingsView = new SettingsView(fieldRenderer, settingsDom, () => windowController.resetLayout());
 const fieldSettings = new FieldSettingsBinding(app.settings, fieldRenderer, topBar, settingsDom);
 const viewingSettings = new ViewingSettingsBinding(app.settings, app.viewing, settingsDom);
 const planningSettings = new PlanningSettingsBinding(app.settings, app.planning, fieldRenderer, planningCodeExportDialog, settingsDom);
@@ -81,7 +82,6 @@ const routeInfoView = new RouteInfoView(app, RouteInfoDom.from());
 const appCommands = new AppCommands(app, fieldRenderer, topBar, planningDialogs, planningLayout, viewingLayout);
 const appInput = new AppInput(appCommands);
 const modeCoordinator = new ModeCoordinator(app, fieldRenderer, planningLayout, viewingLayout);
-const windowController = new WindowController();
 const shutdown = new AppShutdown(app, fieldRenderer, persistence);
 const bootstrap = new AppBootstrap(
   app,

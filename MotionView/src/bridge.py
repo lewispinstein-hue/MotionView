@@ -360,8 +360,10 @@ def resolve_pros_command() -> Optional[List[str]]:
         entry = repo_root / "src" / "pros-cli" / "motionview_terminal_entry.py"
         if entry.is_file():
             venv_python = repo_root / ".venv" / ("Scripts/python.exe" if platform.system() == "Windows" else "bin/python")
-            python = venv_python if venv_python.is_file() else Path(sys.executable).resolve()
-            return [str(python), str(entry)]
+            # Resolving a venv's interpreter symlink selects the base Python
+            # and loses dependencies installed only in that environment.
+            python = str(venv_python) if venv_python.is_file() else sys.executable
+            return [python, str(entry)]
     executable = resolve_pros_exe()
     return [executable] if executable else None
 
@@ -866,10 +868,33 @@ class ProsTerminalRunner:
             return
 
         proc = self.proc
+        stdout = proc.stdout
+        discarding_line = False
         while True:
-            line = await self.proc.stdout.readline()
+            try:
+                # Unlike readline(), readuntil() leaves an over-limit line in
+                # the buffer. This lets us discard the entire physical line,
+                # even when its remaining bytes arrive in subsequent reads.
+                line = await stdout.readuntil(b"\n")
+            except asyncio.LimitOverrunError as error:
+                if not discarding_line:
+                    self._enqueue_broadcast(
+                        f"Decoder Error: {type(error).__name__}: {error}"
+                    )
+                discarding_line = True
+                await stdout.readexactly(error.consumed)
+                continue
+            except asyncio.IncompleteReadError as error:
+                line = error.partial
+                if discarding_line:
+                    break
             if not line:
                 break
+            if discarding_line:
+                # readuntil() consumed the bad line's terminating newline,
+                # leaving any following valid records available for the loop.
+                discarding_line = False
+                continue
             text = line.decode("utf-8", errors="replace").rstrip("\r\n")
             if text.strip():
                 self._enqueue_broadcast(text)

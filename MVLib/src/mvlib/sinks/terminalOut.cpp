@@ -1,5 +1,6 @@
 #include "mvlib/private/terminalOut.hpp"
 #include "mvlib/core.hpp"
+#include "mvlib/private/singleLineText.hpp"
 #include "pros/rtos.hpp"
 #include <algorithm>
 #include <array>
@@ -287,7 +288,9 @@ void Telemetry::sendWatchText(WatchId id, LogLevel lvl, const std::string& text,
   std::array<uint8_t, kTelemetryMaxPayloadBytes> payload{};
 
   memcpy(payload.data(), &header, sizeof(WatchTextPacketHeader));
-  memcpy(payload.data() + sizeof(WatchTextPacketHeader), text.data(), textLen);
+  copySingleLineText(
+      reinterpret_cast<char*>(payload.data() + sizeof(WatchTextPacketHeader)),
+      text.data(), textLen);
 
   // SubType 2 = textual watch sample, SubType 3 = textual watch sample with tripped predicate.
   transmit(encodeMsgAll(lvl, MsgType::WATCH, tripped ? 3 : 2), payload.data(), totalPayloadSize);
@@ -297,7 +300,8 @@ void Telemetry::sendRoster(uint16_t id, const std::string& name, bool isElevated
   RosterPacket pkt;
   pkt.id = id;
   memset(pkt.name, 0, sizeof(pkt.name));
-  strncpy(pkt.name, name.c_str(), sizeof(pkt.name) - 1);
+  copySingleLineText(pkt.name, name.data(),
+                    std::min(name.size(), sizeof(pkt.name) - 1));
 
   // SubType 1 indicates this is the secondary/elevated label for the ID
   transmit(encodeMsgAll(LogLevel::OVERRIDE, MsgType::ROSTER, isElevated ? 1 : 0),
@@ -327,7 +331,9 @@ void Telemetry::sendLog(LogLevel level, LogSource source, const char *fmt, ...) 
   std::array<uint8_t, kTelemetryMaxPayloadBytes> payload;
 
   memcpy(payload.data(), &header, sizeof(LogPacketHeader));
-  memcpy(payload.data() + sizeof(LogPacketHeader), textBuf.data(), static_cast<size_t>(textLen));
+  copySingleLineText(
+      reinterpret_cast<char*>(payload.data() + sizeof(LogPacketHeader)),
+      textBuf.data(), static_cast<size_t>(textLen));
 
   uint8_t subType = static_cast<uint8_t>(source);
   transmit(encodeMsgAll(level, MsgType::LOG, subType), payload.data(), totalPayloadSize);

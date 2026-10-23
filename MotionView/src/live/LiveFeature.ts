@@ -86,7 +86,9 @@ export class LiveFeature {
     return this.stream.start();
   }
 
-  stop(options: Readonly<{ force?: boolean }> = {}): Promise<boolean> {
+  stop(
+    options: Readonly<{ force?: boolean; reason?: "app_closed" }> = {},
+  ): Promise<boolean> {
     return this.stream.stop(options);
   }
 

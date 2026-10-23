@@ -7,6 +7,7 @@ import { WatchListView } from "./WatchListView";
 import { WaypointListView } from "./WaypointListView";
 import type { FloatingInfoView } from "./FloatingInfoView";
 import type { WatchGraphView } from "./WatchGraphView";
+import { hasOpenModal } from "../../app/dialogs/modalActivity";
 
 type SidebarSection = "watches" | "logs" | "waypoints" | "poses";
 
@@ -113,7 +114,7 @@ export class ViewingSidebarView {
       { passive: true },
     );
     window.addEventListener("keydown", (event) => {
-      if (event.key !== "Shift") return;
+      if (event.key !== "Shift" || hasOpenModal()) return;
       this.#shiftHeld = true;
       this.startShiftSync();
     });

@@ -1,5 +1,5 @@
 import { APP_SHORTCUTS } from "./shortcutCatalog";
-import { isTypingTarget, matchesShortcut } from "./shortcutTypes";
+import { hasOpenModal, isTypingTarget, matchesShortcut } from "./shortcutTypes";
 import type { AppCommands } from "./AppCommands";
 
 /** Translates global shortcuts into application commands. */
@@ -15,7 +15,7 @@ export class AppInput {
   }
 
   handleKeydown(event: KeyboardEvent): boolean {
-    if (event.defaultPrevented || isTypingTarget(event.target)) return false;
+    if (event.defaultPrevented || hasOpenModal() || isTypingTarget(event.target)) return false;
     const run = (command: () => void): true => {
       event.preventDefault();
       command();

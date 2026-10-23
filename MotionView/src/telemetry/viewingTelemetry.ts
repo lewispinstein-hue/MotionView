@@ -1,4 +1,4 @@
-import type { TelemetryClient } from "./TelemetryClient";
+import type { TelemetryClient } from "./telemetryClient";
 import type {
   TelemetryCaptureOptions,
   TelemetryProperties,

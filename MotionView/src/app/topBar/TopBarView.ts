@@ -242,8 +242,9 @@ export class TopBarView {
     const centeredCurrentlyTruncates = this.dom.status.scrollWidth > this.dom.status.clientWidth;
     const centeredCenterRight = idealCenterX + centerWidth / 2;
     const centeredRightGap = rightRect.left - topBarRect.left - centeredCenterRight;
+    const centeredFitsLeft = idealCenterLeft >= statusStartX + CENTER_STATUS_GAP_PX;
 
-    if (!centeredCurrentlyTruncates && centeredRightGap >= CENTER_RIGHT_SCROLL_GAP_PX) {
+    if (!centeredCurrentlyTruncates && centeredFitsLeft && centeredRightGap >= CENTER_RIGHT_SCROLL_GAP_PX) {
       this.#savedScrollLeft = 0;
       return;
     }
@@ -256,7 +257,7 @@ export class TopBarView {
     const shiftedCenterRight = shiftedCenterX + centerWidth / 2;
     const shiftedRightGap = rightRect.left - topBarRect.left - shiftedCenterRight;
 
-    if (centeredKeepsStatusUntruncated) {
+    if (centeredKeepsStatusUntruncated && centeredFitsLeft && centeredRightGap >= CENTER_RIGHT_SCROLL_GAP_PX) {
       this.dom.status.style.maxWidth = `${Math.max(0, desiredStatusWidth)}px`;
       this.#savedScrollLeft = 0;
       return;

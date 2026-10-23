@@ -1,6 +1,7 @@
 import { getMode } from "../app/modeController";
 import {
   isTypingTarget,
+  hasOpenModal,
   matchesShortcut,
   PLANNING_SHORTCUTS,
 } from "../app/input";
@@ -31,7 +32,7 @@ export class PlanningInput {
 
   handleKeydown(event: KeyboardEvent): boolean {
     if (getMode() !== "planning" || event.defaultPrevented) return false;
-    if (isTypingTarget(event.target)) return false;
+    if (hasOpenModal() || isTypingTarget(event.target)) return false;
     if (matchesShortcut(event, PLANNING_SHORTCUTS.undo)) {
       event.preventDefault();
       this.planning.history.undo();

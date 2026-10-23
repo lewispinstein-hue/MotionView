@@ -1,6 +1,7 @@
 import { getMode } from "../app/modeController";
 import {
   isTypingTarget,
+  hasOpenModal,
   matchesShortcut,
   VIEWING_SHORTCUTS,
 } from "../app/input";
@@ -29,6 +30,7 @@ export class ViewingInput {
     if (
       getMode() !== "viewing" ||
       event.defaultPrevented ||
+      hasOpenModal() ||
       isTypingTarget(event.target)
     )
       return false;

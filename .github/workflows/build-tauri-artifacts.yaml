@@ -53,8 +53,57 @@ jobs:
           echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
         shell: bash
 
+  verify:
+    needs: validate-version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: MotionView
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install bridge test dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Install host compiler for MVLib transport fixtures
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: MotionView/pnpm-lock.yaml
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Python decoder and MVLib transport regressions
+        env:
+          PYTHONPATH: src/pros-cli
+        run: python -m unittest discover -s src/pros-cli/tests -v
+      - name: Python bridge regressions
+        run: python -m unittest discover -s tests -v
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Check tracked import filename casing
+        run: pnpm test:imports
+      - name: Live behavior regressions
+        run: pnpm test:live
+      - name: Planning behavior regressions
+        run: pnpm test:planning
+      - name: Web build
+        run: pnpm build:web
+
   build:
-    needs: validate-version 
+    needs: [validate-version, verify]
     strategy:
       fail-fast: false
       matrix:
@@ -246,6 +295,9 @@ jobs:
             exit 1
           fi
         shell: bash
+
+      - name: Native window layout regressions
+        run: cargo test --release --locked --manifest-path src-tauri/Cargo.toml
 
       - name: Submit and poll macOS notarization
         if: matrix.os_name == 'macos'

@@ -3,6 +3,8 @@ import { optionalElement, requiredElement } from "../../dom/elements";
 export class SettingsDom {
   readonly modal: HTMLElement;
   readonly closeButton: HTMLButtonElement;
+  readonly resetWindowLayoutButton: HTMLButtonElement;
+  readonly windowLayoutStatus: HTMLElement;
   readonly telemetryEnabled: HTMLInputElement;
   readonly uploadRobotImageButton: HTMLButtonElement;
   readonly robotImageToggle: HTMLInputElement;
@@ -44,6 +46,8 @@ export class SettingsDom {
   private constructor(document: Document) {
     this.modal = requiredElement("settingsModal", HTMLElement, document);
     this.closeButton = requiredElement("btnSettingsClose", HTMLButtonElement, document);
+    this.resetWindowLayoutButton = requiredElement("btnResetWindowLayout", HTMLButtonElement, document);
+    this.windowLayoutStatus = requiredElement("settingsWindowLayoutStatus", HTMLElement, document);
     this.telemetryEnabled = requiredElement("settingsTelemetryEnabled", HTMLInputElement, document);
     this.uploadRobotImageButton = requiredElement("btnUploadRobotImage", HTMLButtonElement, document);
     this.robotImageToggle = requiredElement("robotImageToggle", HTMLInputElement, document);

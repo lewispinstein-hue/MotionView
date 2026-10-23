@@ -1,7 +1,6 @@
 import csv
 import io
 import math
-import re
 import struct
 import time
 from collections import defaultdict
@@ -56,8 +55,6 @@ WATCH_NUMERIC_TRIPPED = 0x01
 WATCH_TEXT = 0x02
 WATCH_TEXT_TRIPPED = 0x03
 
-ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
-
 
 def _reset_decoder_state() -> None:
     global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, LAST_TIMESTAMP_WALL, PENDING_ROSTER_EVENT_COUNT
@@ -71,26 +68,6 @@ def _reset_decoder_state() -> None:
     LAST_TIMESTAMP_WALL = None
 
 
-def _strip_ansi(text: str) -> str:
-    return ANSI_ESCAPE_RE.sub("", text)
-
-
-def _looks_like_banner_line(text: str) -> bool:
-    stripped = _strip_ansi(text).strip()
-    if not stripped:
-        return False
-
-    if "Powered by PROS for VEX V5" in stripped:
-        return True
-    if "Copyright (c) Purdue University ACM SIGBots" in stripped:
-        return True
-    if stripped.startswith("Version:") and "Platform:" in stripped:
-        return True
-
-    art_chars = sum(1 for ch in stripped if ch in r"\/|_`.-+=*:")
-    return len(stripped) >= 8 and art_chars >= max(6, len(stripped) // 2)
-
-
 def cobs_decode(data: bytes) -> bytes:
     """De-stuffs COBS encoded data. Expects data without the trailing 0x00."""
     out = bytearray()
@@ -98,12 +75,12 @@ def cobs_decode(data: bytes) -> bytes:
     while pos < len(data):
         code = data[pos]
         if code == 0:
-            break
-        if code != 1 and pos + code > len(data) + 1:
-            break
+            raise ValueError("NUL inside a COBS frame")
+        if pos + code > len(data):
+            raise ValueError("truncated COBS block")
 
         next_pos = pos + code
-        out.extend(data[pos + 1:min(next_pos, len(data))])
+        out.extend(data[pos + 1:next_pos])
         pos = next_pos
 
         if code < 0xFF and pos < len(data):
@@ -451,7 +428,10 @@ def _parse_binary_frame(frame: bytes) -> Optional[str]:
     if not frame:
         return ""
 
-    raw = cobs_decode(frame)
+    try:
+        raw = cobs_decode(frame)
+    except ValueError:
+        return None
     if len(raw) < 1:
         return None
 
@@ -466,7 +446,9 @@ def _parse_binary_frame(frame: bytes) -> Optional[str]:
     if expected_len is None:
         return None
 
-    if msg_type in (MSG_TYPE_WATCH, MSG_TYPE_LOG):
+    if msg_type == MSG_TYPE_LOG or (
+        msg_type == MSG_TYPE_WATCH and subtype in (WATCH_TEXT, WATCH_TEXT_TRIPPED)
+    ):
         if len(payload) < expected_len:
             return None
     elif msg_type == MSG_TYPE_WPOINT and subtype == WPOINT_CREATED:
@@ -533,14 +515,58 @@ def _decode_binary_frame(frame: bytes) -> str:
 
 def _decode_text_chunk(chunk: bytes, encoding: str, errors: str) -> str:
     try:
-        decoded = chunk.decode(encoding=encoding, errors=errors)
+        return chunk.decode(encoding=encoding, errors=errors)
     except Exception:
         return bytes_to_str(chunk) + "\n"
 
-    if _looks_like_banner_line(decoded):
-        _reset_decoder_state()
 
-    return decoded
+def _could_be_binary_frame(prefix: Union[bytes, bytearray]) -> bool:
+    """Whether this unterminated COBS prefix can still form an MVLib packet.
+
+    This check must not parse packets or mutate timestamp/roster state. A
+    printable prefix (including an in-band LF) is still binary when the COBS
+    blocks and packet header allow a completion of the expected payload size.
+    Ambiguous raw text waits for more bytes rather than destroying a packet.
+    """
+    if not prefix:
+        return True
+    # MVLib headers are nonzero, so the first block must contain the header.
+    if prefix[0] < 2:
+        return False
+    if len(prefix) < 2:
+        return True
+
+    header = prefix[1]
+    msg_type = (header >> 5) & 0x07
+    subtype = header & 0x03
+    expected_len = _expected_payload_len(msg_type, subtype)
+    if expected_len is None:
+        return False
+
+    max_payload_len = expected_len
+    if msg_type == MSG_TYPE_LOG or (
+        msg_type == MSG_TYPE_WATCH and subtype in (WATCH_TEXT, WATCH_TEXT_TRIPPED)
+    ):
+        max_payload_len = MAX_STREAM_BUFFER_BYTES - 1
+    elif msg_type == MSG_TYPE_WPOINT and subtype == WPOINT_CREATED:
+        max_payload_len += 1  # Optional retriggerable byte in newer MVLib.
+
+    raw_len = 0
+    pos = 0
+    while pos < len(prefix):
+        code = prefix[pos]
+        if code == 0:
+            return False
+        # Even a partial block promises this many nonzero payload bytes.
+        raw_len += code - 1
+        if raw_len > max_payload_len + 1:
+            return False
+        pos += code
+        if pos >= len(prefix):
+            return True
+        if code < 0xFF:
+            raw_len += 1
+    return raw_len <= max_payload_len + 1
 
 
 def _looks_like_text_line(chunk: bytes) -> bool:
@@ -594,9 +620,10 @@ def decode_bytes_to_str(data: Union[bytes, bytearray], encoding: str = "utf-8", 
             # frame. A 0x0A can occur naturally inside the float/timestamp bytes of
             # a COBS-encoded packet, so only treat it as a text line delimiter when
             # the bytes actually look like text; otherwise wait for more data
-            # instead of slicing the still-arriving frame in half.
+            # instead of slicing the still-arriving frame in half. Printable
+            # bytes alone cannot disambiguate a valid binary prefix.
             candidate = bytes(STREAM_BUFFER[:nl_idx + 1])
-            if _looks_like_text_line(candidate):
+            if not _could_be_binary_frame(STREAM_BUFFER) and _looks_like_text_line(candidate):
                 del STREAM_BUFFER[:nl_idx + 1]
                 outputs.append(_decode_text_chunk(candidate, encoding, errors))
                 continue

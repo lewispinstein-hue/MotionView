@@ -22,6 +22,7 @@ const DEFAULT_FILENAME = "autonomous.cpp";
 export class PlanningCodeExportDialog {
   readonly changed = new TypedEvent<PlanningCodeExportSettings>();
   #projectPath = "";
+  #pathRevision = 0;
   #bound = false;
 
   constructor(
@@ -88,12 +89,16 @@ export class PlanningCodeExportDialog {
       : "downloads";
     this.dom.codeExportPath.value = String(settings.path ?? "");
     this.updateProjectAvailability();
+    this.syncProjectPath();
     this.updateValidation();
   }
 
   setProjectPath(path: string): void {
-    this.#projectPath = path.trim();
+    const next = path.trim();
+    if (next !== this.#projectPath) this.#pathRevision += 1;
+    this.#projectPath = next;
     this.updateProjectAvailability();
+    this.syncProjectPath();
   }
 
   get isOpen(): boolean {
@@ -107,6 +112,7 @@ export class PlanningCodeExportDialog {
 
   private async open(): Promise<void> {
     this.updateProjectAvailability();
+    this.syncProjectPath();
     if (!this.dom.codeExportPath.value.trim() && this.target !== "custom")
       await this.fillTargetPath();
     this.clearResult();
@@ -124,38 +130,49 @@ export class PlanningCodeExportDialog {
   }
 
   private async fillTargetPath(): Promise<void> {
+    const revision = ++this.#pathRevision;
+    const target = this.target;
+    const projectPath = this.#projectPath;
     if (!isTauriRuntime()) {
       this.dom.codeExportValidation.textContent =
         "Code file export is available in the desktop app.";
       return;
     }
-    if (this.target === "project" && !this.#projectPath) {
+    if (target === "project" && !projectPath) {
       this.dom.codeExportValidation.textContent =
         "Select a valid PROS project before using this target.";
       return;
     }
     try {
       const projectSourcePath =
-        this.target === "project"
-          ? this.joinPath(this.#projectPath, "src")
+        target === "project"
+          ? this.joinPath(projectPath, "src")
           : undefined;
       const directory = await resolveExportDirectory(
-        this.target,
+        target,
         projectSourcePath,
       );
+      if (
+        revision !== this.#pathRevision || target !== this.target ||
+        projectPath !== this.#projectPath
+      ) return;
       const separator =
         directory.includes("\\") && !directory.includes("/") ? "\\" : "/";
       this.dom.codeExportPath.value = `${directory.replace(/[\\/]+$/, "")}${separator}${DEFAULT_FILENAME}`;
     } catch (error) {
+      if (revision !== this.#pathRevision || target !== this.target || projectPath !== this.#projectPath) return;
       this.dom.codeExportValidation.textContent =
         error instanceof Error ? error.message : String(error);
     }
   }
 
   private async export(): Promise<void> {
+    // Resolve Project against the currently configured project, including
+    // restored settings or a path edited while the dialog was closed.
+    this.syncProjectPath();
     const code = generatePlanningCode(this.planning);
     const path = this.dom.codeExportPath.value.trim();
-    if (!code || !path || !isTauriRuntime()) {
+    if (!code || !path || !isTauriRuntime() || (this.target === "project" && !this.#projectPath)) {
       this.updateValidation();
       return;
     }
@@ -177,10 +194,9 @@ export class PlanningCodeExportDialog {
           (error instanceof Error ? error.message : String(error)) !== "exists"
         )
           throw error;
-        const filename = path.split(/[\\/]/).pop() || path;
         const result = await this.dialogs.confirmWithResult({
           title: "Replace File",
-          message: `${filename} already exists. Replace it?`,
+          message: `${path} already exists. Replace it?`,
           confirmLabel: "Replace",
           showDontShowAgain: true,
         });
@@ -197,7 +213,7 @@ export class PlanningCodeExportDialog {
         overwrite = true;
         await exportPlanningCode(path, contents, overwrite);
       }
-      this.dom.codeExportSuccess.textContent = "Planning code exported.";
+      this.dom.codeExportSuccess.textContent = `Planning code exported to ${path}.`;
       this.dom.codeExportSuccess.classList.remove("isError");
       this.dom.codeExportSuccess.hidden = false;
       this.dom.codeExportValidation.textContent = "";
@@ -227,6 +243,8 @@ export class PlanningCodeExportDialog {
     else if (!code)
       message =
         "Add at least two waypoints and a template before exporting code.";
+    else if (this.target === "project" && !this.#projectPath)
+      message = "Select a valid PROS project before using this target.";
     else if (!path) message = "Enter an export path including a filename.";
     this.dom.codeExportValidation.textContent = message;
     this.dom.codeExportConfirm.disabled = message.length > 0;
@@ -237,6 +255,14 @@ export class PlanningCodeExportDialog {
       'option[value="project"]',
     );
     if (option) option.disabled = !this.#projectPath;
+  }
+
+  private syncProjectPath(): void {
+    if (this.target !== "project") return;
+    const filename = this.dom.codeExportPath.value.trim().split(/[\\/]/).pop() || DEFAULT_FILENAME;
+    this.dom.codeExportPath.value = this.#projectPath
+      ? this.joinPath(this.joinPath(this.#projectPath, "src"), filename)
+      : "";
   }
 
   private emitChanged(): void {

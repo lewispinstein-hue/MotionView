@@ -1,7 +1,7 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../tauri/commands";
-import { TelemetryQueue } from "./TelemetryQueue";
+import { TelemetryQueue } from "./telemetryQueue";
 import { createTelemetryId } from "./telemetryIds";
 import type {
   QueuedTelemetryEvent,

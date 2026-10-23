@@ -3,5 +3,17 @@
         "mvlib",
         "motionview",
         "tauri"
+    ],
+    "python-envs.pythonProjects": [
+        {
+            "path": "MotionView/src/pros-cli",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        },
+        {
+            "path": "MotionView/src/pros-cli/pros",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        }
     ]
 }

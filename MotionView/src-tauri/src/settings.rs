@@ -313,20 +313,28 @@ pub fn save_window_state(app: &AppHandle, window: &tauri::WebviewWindow) -> Resu
     // restore, growing the window a bit taller on each launch.
     let size = window.inner_size().map_err(|e| e.to_string())?;
     let fullscreen = window.is_fullscreen().unwrap_or(false);
-    let payload = serde_json::json!({
-        "x": pos.x,
-        "y": pos.y,
-        "width": size.width,
-        "height": size.height,
-        "fullscreen": fullscreen
-    });
+    write_window_state(
+        app,
+        &WindowState {
+            x: pos.x,
+            y: pos.y,
+            width: size.width,
+            height: size.height,
+            fullscreen,
+            scale_factor: Some(window.scale_factor().map_err(|e| e.to_string())?),
+        },
+    )
+}
+
+#[cfg(not(mobile))]
+pub fn write_window_state(app: &AppHandle, state: &WindowState) -> Result<(), String> {
     let path = window_state_path(app)?;
-    let contents = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
+    let contents = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
     std::fs::write(path, contents).map_err(|e| e.to_string())
 }
 
 #[cfg(not(mobile))]
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[warn(dead_code)]
 pub struct WindowState {
     pub x: i32,
@@ -334,6 +342,8 @@ pub struct WindowState {
     pub width: u32,
     pub height: u32,
     pub fullscreen: bool,
+    #[serde(default, rename = "scaleFactor")]
+    pub scale_factor: Option<f64>,
 }
 
 #[cfg(not(mobile))]

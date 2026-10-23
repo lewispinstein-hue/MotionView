@@ -1,4 +1,4 @@
-import type { TelemetryClient } from "../../../telemetry/TelemetryClient";
+import type { TelemetryClient } from "../../../telemetry/telemetryClient";
 import type { SettingsDom } from "../SettingsDom";
 import type { SettingsFeature } from "../SettingsFeature";
 import type { MotionViewSettings } from "../settingsTypes";

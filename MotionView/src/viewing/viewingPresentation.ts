@@ -23,6 +23,8 @@ export function formatNumber(
   decimals = 2,
   fallback = "—",
 ): string {
+  if (value == null || (typeof value === "string" && !value.trim()))
+    return fallback;
   const number = Number(value);
   return Number.isFinite(number)
     ? number.toFixed(decimals).replace(/\.0+$|(?<=\.[0-9]*?)0+$/g, "")
@@ -82,14 +84,14 @@ export function levelFillWithAlpha(value: unknown, alpha: number): string {
 export function watchKey(
   watch: Partial<WatchEntry> | null | undefined,
 ): string {
-  const id = Number(watch?.id);
+  const id = watch?.id == null ? NaN : Number(watch.id);
   return Number.isInteger(id) ? `id:${id}` : `entry:${Number(watch?.t)}`;
 }
 
 export function watchGraphKey(
   watch: Partial<WatchEntry> | null | undefined,
 ): string {
-  const id = Number(watch?.id);
+  const id = watch?.id == null ? NaN : Number(watch.id);
   return Number.isInteger(id)
     ? `id:${id}`
     : `label:${String(watch?.label ?? "").trim()}`;

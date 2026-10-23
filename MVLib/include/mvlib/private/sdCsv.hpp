@@ -4,6 +4,7 @@
  * @brief Internal helpers for writing free-text fields into SD CSV records.
  */
 #include <string>
+#include "mvlib/private/singleLineText.hpp"
 
 namespace mvlib {
 namespace detail {
@@ -15,7 +16,7 @@ namespace detail {
 inline std::string escapeSdCsvField(const std::string& field) {
   std::string sanitized;
   sanitized.reserve(field.size());
-  for (char c : field) sanitized += (c == '\r' || c == '\n') ? ' ' : c;
+  for (char c : field) sanitized += singleLineCharacter(c);
 
   if (sanitized.find_first_of(",\"") == std::string::npos) return sanitized;
 
@@ -34,7 +35,7 @@ inline std::string escapeSdCsvField(const std::string& field) {
 // the record on one line.
 inline void stripSdLineBreaks(char* text) {
   for (char* p = text; *p; ++p) {
-    if (*p == '\r' || *p == '\n') *p = ' ';
+    *p = singleLineCharacter(*p);
   }
 }
 

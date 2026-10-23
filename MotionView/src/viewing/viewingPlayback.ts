@@ -20,7 +20,18 @@ export class ViewingPlayback {
     private readonly events: ViewingEvents,
   ) {
     events.dataChanged.subscribe((change) => {
-      if (change.kind === "replaced" || change.kind === "cleared") this.pause();
+      if (change.kind === "replaced" || change.kind === "cleared") {
+        // Navigation already points into the new data. Pausing would lock the
+        // old cached frame back into it.
+        const wasPlaying = this.#playing;
+        if (this.#frame != null) cancelAnimationFrame(this.#frame);
+        this.#frame = null;
+        this.#playing = false;
+        this.#lastWallTime = null;
+        this.#timeMs = null;
+        this.#pose = null;
+        this.events.playbackChanged.emit({ kind: wasPlaying ? "paused" : "frame" });
+      }
     });
     events.navigationChanged.subscribe(({ kind }) => {
       if (this.#playing || kind === "hover" || kind === "live-state") return;

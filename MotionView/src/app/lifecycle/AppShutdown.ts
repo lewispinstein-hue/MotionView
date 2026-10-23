@@ -43,6 +43,14 @@ export class AppShutdown {
     );
 
     try {
+      // Stop applies the final accepted records even when automatic refresh
+      // is Off. Persist only after that drain has updated Viewing.
+      await this.app.live.stop({ reason: "app_closed" });
+    } catch (error) {
+      console.warn("Failed to stop live streaming during exit:", error);
+    }
+
+    try {
       const dataUrl = this.field.getRobotImageDataUrl();
       if (dataUrl && !this.field.getRobotImagePath()) {
         const path = await saveRobotImage(dataUrl);

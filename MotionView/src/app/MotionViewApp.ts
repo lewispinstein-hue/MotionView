@@ -1,4 +1,4 @@
-import { EXIT_TELEMETRY_FLUSH_DEADLINE_MS } from "../telemetry/TelemetryClient";
+import { EXIT_TELEMETRY_FLUSH_DEADLINE_MS } from "../telemetry/telemetryClient";
 import type { TelemetryProperties } from "../telemetry/telemetryTypes";
 import { ViewingFeature } from "../viewing/ViewingFeature";
 import { PlanningFeature } from "../planning/PlanningFeature";

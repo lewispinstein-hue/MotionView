@@ -44,7 +44,7 @@ function normalizedMetadata(value: unknown): Record<string, unknown> | null {
 export function watchVisibilityKey(
   watch: Pick<WatchEntry, "id" | "t">,
 ): string {
-  const id = Number(watch.id);
+  const id = watch.id == null ? NaN : Number(watch.id);
   return Number.isInteger(id) ? `id:${id}` : `entry:${Number(watch.t)}`;
 }
 

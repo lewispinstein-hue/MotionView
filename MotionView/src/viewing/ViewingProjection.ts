@@ -260,7 +260,7 @@ export class ViewingProjection {
       }
     }
     this.#markers.length = 0;
-    this.#markers.push(...merged);
+    for (const marker of merged) this.#markers.push(marker);
     this.rebuildMarkerTimeIndex();
     this.events.projectionChanged.emit({
       kind: "appended",
@@ -277,7 +277,7 @@ export class ViewingProjection {
 
   private rebuildMarkerTimeIndex(): void {
     this.#markersByTime.length = 0;
-    this.#markersByTime.push(...this.#markers);
+    for (const marker of this.#markers) this.#markersByTime.push(marker);
     this.#markersByTime.sort((left, right) => left.t - right.t);
   }
 

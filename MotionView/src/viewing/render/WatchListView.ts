@@ -285,15 +285,22 @@ export class WatchListView {
       if (icon && icon.innerHTML !== iconSvg) icon.innerHTML = iconSvg;
     }
 
-    element
-      .querySelector(".watchPinBtn")
-      ?.classList.toggle(
-        "isOn",
-        this.floatingInfo.isWatchPinned(watch.id ?? null),
-      );
-    element
-      .querySelector(".watchGraphBtn")
-      ?.classList.toggle("isOn", this.watchGraph.isOpenFor(marker));
+    const pin = element.querySelector<HTMLButtonElement>(".watchPinBtn");
+    if (pin) {
+      const pinned = this.floatingInfo.isWatchPinned(watch.id ?? null);
+      pin.classList.toggle("isOn", pinned);
+      pin.title = `${pinned ? "Unpin" : "Pin"} watch`;
+      pin.setAttribute("aria-label", `${pin.title}: ${watch.label}`);
+      pin.setAttribute("aria-pressed", String(pinned));
+    }
+    const graph = element.querySelector<HTMLButtonElement>(".watchGraphBtn");
+    if (graph) {
+      const open = this.watchGraph.isOpenFor(marker);
+      graph.classList.toggle("isOn", open);
+      graph.title = `${open ? "Hide" : "Show"} watch graph`;
+      graph.setAttribute("aria-label", `${graph.title}: ${watch.label}`);
+      graph.setAttribute("aria-pressed", String(open));
+    }
   }
 
   private keyFor(marker: Readonly<WatchMarker>): string {

@@ -120,3 +120,6 @@ export function getWindowFullscreenState(): Promise<boolean> {
 export function setWindowFullscreen(enable: boolean): Promise<boolean> {
   return invokeCommand<boolean>("set_windows_fullscreen", { enable });
 }
+export function resetWindowLayout(): Promise<void> {
+  return invokeCommand<void>("reset_window_layout");
+}

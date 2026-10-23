@@ -22,6 +22,8 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_posthog::{init as posthog_init, PostHogConfig, PostHogOptions};
 mod export;
 mod settings;
+#[cfg(not(mobile))]
+mod window_layout;
 
 struct BridgeState(Mutex<Option<Child>>);
 struct BridgeOrigin(Mutex<Option<String>>);
@@ -728,6 +730,19 @@ fn get_window_fullscreen_state(window: Window) -> Result<bool, String> {
 }
 
 #[tauri::command]
+fn reset_window_layout(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(not(mobile))]
+    {
+        window_layout::reset(&app, &window)
+    }
+    #[cfg(mobile)]
+    {
+        let _ = (app, window);
+        Err("Window layout reset is available on desktop only".into())
+    }
+}
+
+#[tauri::command]
 fn get_system_info() -> SystemInfo {
     SystemInfo {
         os: std::env::consts::OS.to_string(),
@@ -871,6 +886,7 @@ fn run_app() {
             export::export_planning_code,
             set_windows_fullscreen,
             get_window_fullscreen_state,
+            reset_window_layout,
             get_system_info,
             open_route_file,
             open_dropped_route_file,
@@ -901,16 +917,8 @@ fn run_app() {
                 #[cfg(not(mobile))]
                 {
                     if let Ok(Some(state)) = settings::read_window_state(app.handle()) {
-                        if state.fullscreen {
-                            let _ = win.set_fullscreen(true);
-                        } else {
-                            let _ = win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
-                                state.width,
-                                state.height,
-                            )));
-                            let _ = win.set_position(tauri::Position::Physical(
-                                tauri::PhysicalPosition::new(state.x, state.y),
-                            ));
+                        if let Err(error) = window_layout::restore(&win, &state) {
+                            eprintln!("Failed to restore window layout: {error}");
                         }
                     }
                 }

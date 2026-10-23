@@ -1,5 +1,5 @@
 import { getMode } from "../app/modeController";
-import { isTypingTarget, LIVE_SHORTCUTS, matchesShortcut } from "../app/input";
+import { hasOpenModal, isTypingTarget, LIVE_SHORTCUTS, matchesShortcut } from "../app/input";
 import type { LiveFeature } from "./LiveFeature";
 
 export class LiveInput {
@@ -17,6 +17,7 @@ export class LiveInput {
     if (
       getMode() !== "viewing" ||
       event.defaultPrevented ||
+      hasOpenModal() ||
       isTypingTarget(event.target)
     )
       return false;

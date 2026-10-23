@@ -1,6 +1,7 @@
 import {
   getWindowFullscreenState,
   isTauriRuntime,
+  resetWindowLayout,
   setWindowFullscreen,
 } from "../../tauri/commands";
 
@@ -11,6 +12,12 @@ export class WindowController {
     isTauriRuntime() &&
     typeof navigator === "object" &&
     /Windows/.test(navigator.userAgent);
+
+  async resetLayout(): Promise<void> {
+    await resetWindowLayout();
+    this.#fullscreen = false;
+  }
+
   bind(): void {
     if (this.#bound || !this.#windows) return;
     this.#bound = true;

@@ -275,11 +275,17 @@ export class WatchGraphView {
           comparisonBoolean,
         ),
       );
-    const allPoints = [...primaryData, ...compareData];
-    const times = allPoints.map((point) => point.x);
-    const minimumTime = times.length ? Math.min(...times) : 0;
-    const maximumTime = times.length ? Math.max(...times) : 0;
-    this.#xBounds = times.length
+    let minimumTime = Infinity;
+    let maximumTime = -Infinity;
+    for (const points of [primaryData, compareData]) {
+      for (const point of points) {
+        minimumTime = Math.min(minimumTime, point.x);
+        maximumTime = Math.max(maximumTime, point.x);
+      }
+    }
+    const hasPoints = primaryData.length > 0 || compareData.length > 0;
+    if (!hasPoints) minimumTime = maximumTime = 0;
+    this.#xBounds = hasPoints
       ? { minimum: minimumTime, maximum: maximumTime }
       : null;
     const viewport = this.nextViewport(
@@ -468,21 +474,27 @@ export class WatchGraphView {
       minimum: HTMLElement,
       maximum: HTMLElement,
     ) => {
-      const values = markers
-        .map((marker) => numericValue(marker.watch.value))
-        .filter((value): value is number => value != null);
-      count.textContent = values.length ? String(values.length) : "—";
-      average.textContent = values.length
-        ? formatNumber(
-            values.reduce((sum, value) => sum + value, 0) / values.length,
-            3,
-          )
+      let length = 0;
+      let sum = 0;
+      let minimumValue = Infinity;
+      let maximumValue = -Infinity;
+      for (const marker of markers) {
+        const value = numericValue(marker.watch.value);
+        if (value == null) continue;
+        length += 1;
+        sum += value;
+        minimumValue = Math.min(minimumValue, value);
+        maximumValue = Math.max(maximumValue, value);
+      }
+      count.textContent = length ? String(length) : "—";
+      average.textContent = length
+        ? formatNumber(sum / length, 3)
         : "—";
-      minimum.textContent = values.length
-        ? formatNumber(Math.min(...values), 3)
+      minimum.textContent = length
+        ? formatNumber(minimumValue, 3)
         : "—";
-      maximum.textContent = values.length
-        ? formatNumber(Math.max(...values), 3)
+      maximum.textContent = length
+        ? formatNumber(maximumValue, 3)
         : "—";
     };
     write(

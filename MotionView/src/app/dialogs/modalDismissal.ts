@@ -1,8 +1,11 @@
+import { bindModalActivity } from "./modalActivity";
+
 /** Closes a modal only when the press and release both happen on its backdrop. */
 export function bindModalBackdropDismissal(
   modal: HTMLElement,
   dismiss: () => void,
 ): void {
+  bindModalActivity(modal, dismiss);
   let startedOnBackdrop = false;
   let releasedOnBackdrop = false;
   const isBackdrop = (target: EventTarget | null): boolean =>
