@@ -4,6 +4,8 @@ import type { ExportDom } from "./ExportDom";
 import type { ExportService } from "./ExportService";
 import type { ExportLocation, ExportRequest } from "./exportTypes";
 import type { MotionViewExportType } from "../persistence";
+import type { PlanningDialogs } from "../../planning/PlanningDialogs";
+import { isExportFileConflict, nativeErrorMessage } from "../../tauri/commands";
 
 function filename(value: string): string {
   return value
@@ -23,10 +25,12 @@ function pathName(value: string): string {
 export class ExportDialog {
   #bound = false;
   #submitError = "";
+  #submitting = false;
   constructor(
     private readonly app: MotionViewApp,
     private readonly dom: ExportDom,
     private readonly service: ExportService,
+    private readonly dialogs: PlanningDialogs,
   ) { }
 
   bind(): void {
@@ -155,12 +159,14 @@ export class ExportDialog {
             ? `There is no ${type === "both" ? "Viewing or Planning" : type === "viewing" ? "Viewing mode" : "Planning mode"} data to export.`
             : this.#submitError;
     this.dom.validation.textContent = message;
-    this.dom.confirm.disabled = !!message;
+    this.dom.confirm.disabled = this.#submitting || !!message;
   }
 
   private async submit(): Promise<void> {
+    if (this.#submitting) return;
     this.render();
     if (this.dom.confirm.disabled) return;
+    this.#submitting = true;
     this.dom.confirm.disabled = true;
     this.dom.success.hidden = true;
     const request: ExportRequest = {
@@ -185,16 +191,35 @@ export class ExportDialog {
       );
 
     try {
-      await this.service.export(request);
+      let result;
+      try {
+        result = await this.service.export(request,
+          this.app.settings.current.skipMotionViewJsonExportOverwriteConfirmation === true);
+      } catch (error) {
+        if (!isExportFileConflict(error)) throw error;
+        const confirmation = await this.dialogs.confirmWithResult({
+          title: "Replace File",
+          message: `${error.path} already exists. Replace it?`,
+          confirmLabel: "Replace",
+          showDontShowAgain: true,
+        });
+        if (!confirmation.confirmed) return;
+        if (confirmation.dontShowAgain) {
+          this.app.settings.update({ skipMotionViewJsonExportOverwriteConfirmation: true });
+          await this.app.settings.saveNow();
+        }
+        result = await this.service.export(request, true);
+      }
       this.#submitError = "";
-      this.dom.success.textContent = `Successfully exported ${request.pathName}.`;
+      this.dom.success.textContent = `Exported to ${result.path}.`;
       this.dom.success.hidden = false;
       this.dom.validation.textContent = "";
-      this.app.core.status.setStatus(`Exported ${request.filenameBase}.json.`);
+      this.app.core.status.setStatus(`Exported to ${result.path}.`);
     } catch (error) {
       console.error("Failed to export MotionView JSON:", error);
-      this.#submitError = `Failed to export file: ${error instanceof Error ? error.message : String(error)}`;
+      this.#submitError = `Failed to export file: ${nativeErrorMessage(error)}`;
     } finally {
+      this.#submitting = false;
       this.render();
     }
   }

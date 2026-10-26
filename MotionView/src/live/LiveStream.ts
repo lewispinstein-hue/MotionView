@@ -21,6 +21,8 @@ const EMPTY_APPEND_RESULT: ViewingAppendResult = {
 export class LiveStream {
   #command: Promise<unknown> = Promise.resolve();
   #lastBatchFailure: string | null = null;
+  #projectPath: string | null = null;
+  #applyingLiveBatch = false;
 
   constructor(
     private readonly session: LiveSession,
@@ -31,6 +33,14 @@ export class LiveStream {
     private readonly metrics: LiveMetrics,
   ) {
     events.preferencesChanged.subscribe(() => this.restartRefreshTimer());
+    events.projectChanged.subscribe(({ path }) => {
+      if (this.#projectPath != null && path !== this.#projectPath)
+        this.session.forgetTimestamp();
+      this.#projectPath = path;
+    });
+    viewing.events.dataChanged.subscribe((event) => {
+      if (event.kind === "replaced" && !this.#applyingLiveBatch) this.reset();
+    });
   }
 
   get streaming(): boolean {
@@ -60,7 +70,7 @@ export class LiveStream {
       liveTelemetry.resetCurrentStreamingSession();
       const response = await this.bridge.post<LiveApiResponse>(
         "/api/start",
-        undefined,
+        { resume: this.session.timestampResume() },
         { timeoutMs: 5_000 },
       );
       if (!response.ok || response.json?.ok === false) {
@@ -173,9 +183,13 @@ export class LiveStream {
       parsed = this.parser.parse(
         pending,
         this.viewing.data,
-        this.session.lastPoseTimestamp,
+        // Stop/exit and imported data can reset parser state without clearing
+        // Viewing. Never append a pose behind the existing route's tail.
+        this.viewing.data.poses[this.viewing.data.poses.length - 1]?.t ??
+          this.session.lastPoseTimestamp,
       );
       if (parsed.runStart) this.metrics.beginRun(parsed.runStart);
+      this.#applyingLiveBatch = true;
       const result = parsed.startsNewRun
         ? this.viewing.loadParsedBatch(parsed.batch)
         : this.viewing.appendLiveBatch(parsed.batch);
@@ -209,6 +223,8 @@ export class LiveStream {
       }
       console.error("MotionView could not process a live-data batch:", error);
       return EMPTY_APPEND_RESULT;
+    } finally {
+      this.#applyingLiveBatch = false;
     }
   }
 
@@ -230,6 +246,7 @@ export class LiveStream {
     const parsed = this.parser.parse(pending, this.viewing.data, null);
     const result = this.viewing.loadParsedBatch(parsed.batch);
     this.session.resetParser();
+    this.session.forgetTimestamp();
     this.session.clearPending();
     return result;
   }
@@ -267,6 +284,7 @@ export class LiveStream {
   reset(): void {
     this.session.clearPending();
     this.session.resetParser();
+    this.session.forgetTimestamp();
   }
 
   /**

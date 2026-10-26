@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { createServer } from "vite";
 import { runLiveShutdownRegressions } from "./live_shutdown_regressions.mjs";
 import { runReleaseRegressions } from "./release_regressions.mjs";
+import { runPersistenceRegressions } from "./persistence_regressions.mjs";
+import { runLiveResumeRegressions } from "./live_resume_regressions.mjs";
 
 const server = await createServer({
   configFile: "vite.config.js",
@@ -375,7 +377,9 @@ try {
   }
 
   await runLiveShutdownRegressions(server);
+  await runLiveResumeRegressions(server);
   await runReleaseRegressions(server);
+  await runPersistenceRegressions(server);
   console.log("Live-stream regression tests passed.");
 } finally {
   if (originalRequestAnimationFrame) globalThis.requestAnimationFrame = originalRequestAnimationFrame;

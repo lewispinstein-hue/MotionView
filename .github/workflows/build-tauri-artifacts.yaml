@@ -296,7 +296,7 @@ jobs:
           fi
         shell: bash
 
-      - name: Native window layout regressions
+      - name: Native Rust regressions
         run: cargo test --release --locked --manifest-path src-tauri/Cargo.toml
 
       - name: Submit and poll macOS notarization

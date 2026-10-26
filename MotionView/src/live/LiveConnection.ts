@@ -127,7 +127,12 @@ export class LiveConnection {
         if (event.data.startsWith("[UI] terminal exited"))
           void this.stream.remoteExit();
         const tagged = this.parser.classify(event.data);
-        if (tagged) this.session.pending.push(tagged);
+        if (tagged) {
+          const anchor = this.parser.timestampAnchor(tagged);
+          if (anchor)
+            this.session.observeTimestamp(anchor.timestampMs, anchor.startsNewRun);
+          this.session.pending.push(tagged);
+        }
         const parsedWaypoint = tagged.startsWith("[WPOINT],")
           ? this.parser.parseWaypointLine(tagged)
           : null;

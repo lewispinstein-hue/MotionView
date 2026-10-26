@@ -3921,10 +3921,16 @@ body:not(.mode-planning) #rightPlanning {
   max-width: 360px !important;
 }
 
+.planConfirmModalCard button[hidden] {
+  display: none;
+}
+
 .planConfirmMessage {
   color: var(--text);
   font-size: 13px;
   line-height: 1.45;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 
 .planConfirmDontShowAgain {
@@ -4045,9 +4051,11 @@ body:not(.mode-planning) #rightPlanning {
 .exportValidationMessage {
   min-height: 16px;
   color: #f2cb6b;
+  overflow-wrap: anywhere;
 }
 
 .exportSuccessMessage {
+  overflow-wrap: anywhere;
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid rgba(120, 220, 150, 0.35);

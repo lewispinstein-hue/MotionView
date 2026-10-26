@@ -12,6 +12,7 @@ export class ExportService {
   ) {}
   async export(
     request: Readonly<ExportRequest>,
+    overwrite = false,
   ): Promise<Readonly<{ path: string; json: string }>> {
     const payload = this.serializer.exportPayload(
       request.exportType,
@@ -24,6 +25,7 @@ export class ExportService {
       location: request.destination.kind,
       customPath: request.destination.customPath,
       jsonContents: json,
+      overwrite,
     });
     const planning = request.exportType !== "viewing";
     const viewing = request.exportType !== "planning";

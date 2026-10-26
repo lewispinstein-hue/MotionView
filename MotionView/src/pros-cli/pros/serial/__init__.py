@@ -1,6 +1,8 @@
 import csv
 import io
+import json
 import math
+import os
 import struct
 import time
 from collections import defaultdict
@@ -17,6 +19,7 @@ PENDING_ROSTER_EVENT_COUNT = 0
 LAST_TIMESTAMP_RAW: Optional[int] = None
 TIMESTAMP_WRAP_OFFSET = 0
 LAST_TIMESTAMP_WALL: Optional[float] = None
+TIMESTAMP_RESUME_PENDING = False
 STREAM_BUFFER = bytearray()
 MAX_STREAM_BUFFER_BYTES = 256 * 1024
 
@@ -57,7 +60,7 @@ WATCH_TEXT_TRIPPED = 0x03
 
 
 def _reset_decoder_state() -> None:
-    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, LAST_TIMESTAMP_WALL, PENDING_ROSTER_EVENT_COUNT
+    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, LAST_TIMESTAMP_WALL, PENDING_ROSTER_EVENT_COUNT, TIMESTAMP_RESUME_PENDING
 
     DEFAULT_ROSTER.clear()
     ELEVATED_ROSTER.clear()
@@ -66,6 +69,7 @@ def _reset_decoder_state() -> None:
     LAST_TIMESTAMP_RAW = None
     TIMESTAMP_WRAP_OFFSET = 0
     LAST_TIMESTAMP_WALL = None
+    TIMESTAMP_RESUME_PENDING = False
 
 
 def cobs_decode(data: bytes) -> bytes:
@@ -113,7 +117,7 @@ def _decode_theta(theta_raw: int) -> float:
 
 
 def _expand_timestamp(raw_timestamp: int) -> int:
-    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, LAST_TIMESTAMP_WALL
+    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, LAST_TIMESTAMP_WALL, TIMESTAMP_RESUME_PENDING
 
     now = time.monotonic()
 
@@ -127,7 +131,7 @@ def _expand_timestamp(raw_timestamp: int) -> int:
     # packets stop for longer than half a wrap, that backwards jump can be
     # missed; wall time then selects the nearest number of elapsed wraps.
     gap_ms = (now - (LAST_TIMESTAMP_WALL if LAST_TIMESTAMP_WALL is not None else now)) * 1_000.0
-    if gap_ms > 30_000:
+    if TIMESTAMP_RESUME_PENDING or gap_ms > 30_000:
         last_expanded = TIMESTAMP_WRAP_OFFSET + LAST_TIMESTAMP_RAW
         wraps = round((last_expanded + gap_ms - raw_timestamp) / 0x10000)
         TIMESTAMP_WRAP_OFFSET = 0x10000 * max(0, wraps)
@@ -136,18 +140,45 @@ def _expand_timestamp(raw_timestamp: int) -> int:
 
     LAST_TIMESTAMP_RAW = raw_timestamp
     LAST_TIMESTAMP_WALL = now
+    TIMESTAMP_RESUME_PENDING = False
     return TIMESTAMP_WRAP_OFFSET + raw_timestamp
 
 
 def _seed_timestamp(full_timestamp: int) -> int:
     """Reset the unwrap state to an authoritative 32-bit PROS millisecond value."""
-    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, LAST_TIMESTAMP_WALL
+    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, LAST_TIMESTAMP_WALL, TIMESTAMP_RESUME_PENDING
 
     timestamp = full_timestamp & 0xFFFF_FFFF
     LAST_TIMESTAMP_RAW = timestamp & 0xFFFF
     TIMESTAMP_WRAP_OFFSET = timestamp & ~0xFFFF
     LAST_TIMESTAMP_WALL = time.monotonic()
+    TIMESTAMP_RESUME_PENDING = False
     return timestamp
+
+
+def resume_timestamp(full_timestamp: int, observed_monotonic: float) -> None:
+    """Continue a local capture across terminal processes until a real START.
+
+    Host monotonic time includes terminal startup time. The first packet uses
+    the nearest wrap to the expected robot time, including multiple wraps.
+    """
+    global LAST_TIMESTAMP_RAW, TIMESTAMP_WRAP_OFFSET, LAST_TIMESTAMP_WALL, TIMESTAMP_RESUME_PENDING
+
+    if (not isinstance(full_timestamp, int) or isinstance(full_timestamp, bool)
+            or not 0 <= full_timestamp <= 9_007_199_254_740_991
+            or not math.isfinite(observed_monotonic)):
+        raise ValueError("invalid timestamp resume anchor")
+    LAST_TIMESTAMP_RAW = full_timestamp & 0xFFFF
+    TIMESTAMP_WRAP_OFFSET = full_timestamp & ~0xFFFF
+    LAST_TIMESTAMP_WALL = observed_monotonic
+    TIMESTAMP_RESUME_PENDING = True
+
+
+def resume_timestamp_from_environment() -> None:
+    raw = os.environ.get("MOTIONVIEW_TIMESTAMP_ANCHOR")
+    if raw:
+        anchor = json.loads(raw)
+        resume_timestamp(anchor["timestamp"], anchor["monotonic"])
 
 
 def _decode_text(payload: bytes) -> str:

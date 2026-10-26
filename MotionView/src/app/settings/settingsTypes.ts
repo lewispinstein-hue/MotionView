@@ -40,6 +40,7 @@ export interface MotionViewSettings {
   readonly customFieldWidthIn?: string | number;
   readonly customFieldHeightIn?: string | number;
   readonly skipPlanningCodeExportOverwriteConfirmation?: boolean;
+  readonly skipMotionViewJsonExportOverwriteConfirmation?: boolean;
   readonly fieldRotation?: string | number;
   readonly layoutLeftSidebarWidth?: number;
   readonly layoutRightSidebarWidthViewing?: number;
@@ -89,6 +90,7 @@ export const DEFAULT_SETTINGS: Readonly<MotionViewSettings> = {
   customFieldWidthIn: 144,
   customFieldHeightIn: 144,
   skipPlanningCodeExportOverwriteConfirmation: false,
+  skipMotionViewJsonExportOverwriteConfirmation: false,
   layoutLeftSidebarWidth: 360,
   layoutRightSidebarWidthViewing: 370,
   layoutRightSidebarWidthPlanning: 370,

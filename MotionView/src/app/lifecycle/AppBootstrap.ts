@@ -12,6 +12,7 @@ import type {
 import type { SessionPersistence } from "../persistence";
 import type { RouteImportService } from "../import";
 import type { ViewingLayoutView } from "../../viewing/render/ViewingLayoutView";
+import type { PlanningDialogs } from "../../planning/PlanningDialogs";
 
 export class AppBootstrap {
   constructor(
@@ -27,6 +28,7 @@ export class AppBootstrap {
     private readonly persistence: SessionPersistence,
     private readonly importer: RouteImportService,
     private readonly viewingLayout: ViewingLayoutView,
+    private readonly dialogs: PlanningDialogs,
   ) {}
   async start(): Promise<void> {
     await this.app.settings.load();
@@ -55,5 +57,18 @@ export class AppBootstrap {
       plan_saved: this.app.planning.route.length > 0,
       plan_points: this.app.planning.route.length,
     });
+    if (this.app.core.tauri.isTauriRuntime()) {
+      try {
+        const notices = await this.app.core.tauri.takePersistenceNotices();
+        if (notices.length) {
+          void this.dialogs.confirm({
+            title: "Saved Data Recovered",
+            message: notices.join("\n\n"),
+            confirmLabel: "OK",
+            hideCancel: true,
+          });
+        }
+      } catch (error) { console.warn("Could not check saved-data recovery notices:", error); }
+    }
   }
 }

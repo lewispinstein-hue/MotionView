@@ -13,6 +13,7 @@ export class SessionPersistence {
   #timer: number | null = null;
   #bound = false;
   #lastStreamingSaveMs = 0;
+  #saveQueue: Promise<void> = Promise.resolve();
   constructor(
     private readonly app: MotionViewApp,
     private readonly serializer: MotionViewDocumentSerializer,
@@ -29,7 +30,7 @@ export class SessionPersistence {
   async restore(): Promise<boolean> {
     try {
       const serialized = await this.#repository.read();
-      if (!serialized) return false;
+      if (!serialized) { this.schedule(); return false; }
       const document: unknown = JSON.parse(serialized);
       this.app.planning.load(document);
       this.app.viewing.load(document);
@@ -56,10 +57,9 @@ export class SessionPersistence {
   async saveNow(): Promise<void> {
     if (this.#timer !== null) window.clearTimeout(this.#timer);
     this.#timer = null;
-    try {
-      await this.#repository.write(this.serializer.savedPaths());
-    } catch (error) {
+    this.#saveQueue = this.#saveQueue.then(() => this.#repository.write(this.serializer.savedPaths())).catch((error) => {
       console.warn("Failed to save paths:", error);
-    }
+    });
+    await this.#saveQueue;
   }
 }

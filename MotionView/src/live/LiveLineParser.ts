@@ -141,6 +141,44 @@ export class LiveLineParser {
     return stripToTag(line);
   }
 
+  /** A malformed console line must not seed the next decoder's clock. */
+  timestampAnchor(
+    line: string,
+  ): { timestampMs: number; startsNewRun: boolean } | null {
+    if (line.startsWith("[START],")) {
+      const start = parseRunStart(line);
+      return start
+        ? { timestampMs: start.robotStartTimestampMs, startsNewRun: true }
+        : null;
+    }
+    let t: number | null = null;
+    if (line.startsWith("[WPOINT],")) {
+      t = this.parseWaypointLine(line).waypointEvent?.t ?? null;
+    } else if (line.startsWith("[LOG],")) {
+      const parts = line.split(",");
+      if (
+        parts.length >= 4 &&
+        normalizeSystemLogMessage(parts.slice(3).join(",")).message
+      )
+        t = parseViewingNumber(parts[1]);
+    } else {
+      const parts = parseCsvLine(line);
+      if (!parts) return null;
+      if (
+        line.startsWith("[POSE],") &&
+        parts.length >= 7 &&
+        parseViewingNumber(parts[2]) != null &&
+        parseViewingNumber(parts[3]) != null
+      )
+        t = parseViewingNumber(parts[1]);
+      else if (line.startsWith("[WATCH],") && parts.length >= 5)
+        t = parseViewingNumber(parts[1]);
+    }
+    return t != null && Number.isSafeInteger(t) && t >= 0
+      ? { timestampMs: t, startsNewRun: false }
+      : null;
+  }
+
   parse(
     pending: Readonly<LivePendingBatch>,
     viewing: ViewingDataReader,

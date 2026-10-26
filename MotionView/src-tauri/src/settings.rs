@@ -1,3 +1,4 @@
+use crate::storage::{self, DocumentKind};
 use std::path::PathBuf;
 
 use base64::Engine as _;
@@ -62,11 +63,12 @@ fn window_state_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 #[tauri::command]
 pub fn read_settings(app: AppHandle) -> Result<Option<String>, String> {
+    let _guard = storage::DOCUMENT_LOCK.lock().map_err(|error| error.to_string())?;
     let path = settings_path(&app)?;
-    if path.exists() {
-        return std::fs::read_to_string(path)
-            .map(Some)
-            .map_err(|e| e.to_string());
+    let outcome = storage::read_document(&path, DocumentKind::Settings)?;
+    storage::remember_notice(outcome.notice);
+    if outcome.contents.is_some() {
+        return Ok(outcome.contents);
     }
 
     let legacy_path = legacy_settings_path(&app)?;
@@ -74,11 +76,18 @@ pub fn read_settings(app: AppHandle) -> Result<Option<String>, String> {
         return Ok(None);
     }
 
-    let contents = std::fs::read_to_string(&legacy_path).map_err(|e| e.to_string())?;
+    let contents = match std::fs::read_to_string(&legacy_path) {
+        Ok(contents) => contents,
+        Err(error) if matches!(error.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidData) => return Ok(None),
+        Err(error) => return Err(error.to_string()),
+    };
+    if storage::validate(&contents, DocumentKind::Settings).is_err() {
+        return Ok(None);
+    }
     // Best-effort migration to the new location.
     if let Some(parent) = path.parent() {
         if std::fs::create_dir_all(parent).is_ok() {
-            if std::fs::write(&path, &contents).is_ok() {
+            if storage::atomic_write(&path, contents.as_bytes()).is_ok() {
                 let _ = std::fs::remove_file(&legacy_path);
             }
         }
@@ -88,9 +97,10 @@ pub fn read_settings(app: AppHandle) -> Result<Option<String>, String> {
 
 #[tauri::command]
 pub fn write_settings(app: AppHandle, contents: String) -> Result<(), String> {
-    serde_json::from_str::<serde_json::Value>(&contents).map_err(|e| e.to_string())?;
+    storage::validate(&contents, DocumentKind::Settings)?;
+    let _guard = storage::DOCUMENT_LOCK.lock().map_err(|error| error.to_string())?;
     let path = settings_path(&app)?;
-    std::fs::write(path, contents).map_err(|e| e.to_string())
+    storage::atomic_write(&path, contents.as_bytes()).map_err(|e| e.to_string())
 }
 
 fn read_settings_value(app: &AppHandle) -> Result<serde_json::Value, String> {
@@ -101,9 +111,8 @@ fn read_settings_value(app: &AppHandle) -> Result<serde_json::Value, String> {
 }
 
 fn write_settings_value(app: &AppHandle, value: &serde_json::Value) -> Result<(), String> {
-    let path = settings_path(app)?;
     let contents = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
-    std::fs::write(path, contents).map_err(|e| e.to_string())
+    write_settings(app.clone(), contents)
 }
 
 fn parse_version(value: &str) -> Option<Version> {
@@ -158,20 +167,23 @@ pub fn was_previous_version_old(app: AppHandle) -> Result<PreviousVersionStatus,
 
 #[tauri::command]
 pub fn read_saved_paths(app: AppHandle) -> Result<Option<String>, String> {
+    let _guard = storage::DOCUMENT_LOCK.lock().map_err(|error| error.to_string())?;
     let path = saved_paths_path(&app)?;
-    if !path.exists() {
-        return Ok(None);
-    }
-    std::fs::read_to_string(path)
-        .map(Some)
-        .map_err(|e| e.to_string())
+    let outcome = storage::read_document(&path, DocumentKind::SavedPaths)?;
+    storage::remember_notice(outcome.notice);
+    Ok(outcome.contents)
 }
 
 #[tauri::command]
 pub fn write_saved_paths(app: AppHandle, contents: String) -> Result<(), String> {
-    serde_json::from_str::<serde_json::Value>(&contents).map_err(|e| e.to_string())?;
+    storage::validate(&contents, DocumentKind::SavedPaths)?;
+    let _guard = storage::DOCUMENT_LOCK.lock().map_err(|error| error.to_string())?;
     let path = saved_paths_path(&app)?;
-    std::fs::write(path, contents).map_err(|e| e.to_string())
+    storage::atomic_write(&path, contents.as_bytes()).map_err(|e| e.to_string())
+}
+
+pub fn commit_clean_shutdown(app: &AppHandle, data: &storage::ShutdownData) -> Result<(), String> {
+    storage::commit_clean_shutdown(&settings_path(app)?, &saved_paths_path(app)?, data)
 }
 
 fn mime_from_ext(path: &std::path::Path) -> &'static str {
@@ -330,7 +342,7 @@ pub fn save_window_state(app: &AppHandle, window: &tauri::WebviewWindow) -> Resu
 pub fn write_window_state(app: &AppHandle, state: &WindowState) -> Result<(), String> {
     let path = window_state_path(app)?;
     let contents = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
-    std::fs::write(path, contents).map_err(|e| e.to_string())
+    storage::atomic_write(&path, contents.as_bytes()).map_err(|e| e.to_string())
 }
 
 #[cfg(not(mobile))]

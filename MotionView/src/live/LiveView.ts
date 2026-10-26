@@ -105,14 +105,37 @@ export class LiveView {
         busy || (!this.live.project.valid && !this.live.connection.connected);
       this.dom.startStopButton.textContent = streaming ? "Stop" : "Start";
       this.dom.startStopButton.classList.toggle("isOn", streaming);
-      this.dom.startStopButton.title = streaming
-        ? "Stop streaming. Cmd/Ctrl+Click to force kill."
-        : "Start streaming.";
+      this.dom.startStopButton.title = this.dom.startStopButton.disabled
+        ? this.disabledStreamTooltip()
+        : streaming
+          ? "Stop streaming. Cmd/Ctrl+Click to force kill."
+          : "Start streaming.";
     }
     if (this.dom.refreshButton)
       this.dom.refreshButton.disabled = !streaming || busy;
     if (this.dom.fileButton) this.dom.fileButton.disabled = streaming;
     if (this.dom.playButton && streaming) this.dom.playButton.disabled = true;
+  }
+
+  private disabledStreamTooltip(): string {
+    if (this.live.stream.state === "starting")
+      return "Starting stream. Please wait.";
+    if (this.live.stream.state === "stopping")
+      return "Stopping stream. Please wait.";
+    if (this.live.connection.state === "connecting")
+      return "Connecting to bridge. Please wait.";
+    if (this.live.connection.state === "disconnecting")
+      return "Disconnecting from bridge. Please wait.";
+    switch (this.live.project.status.kind) {
+      case "unavailable":
+        return "Bridge not ready. Try again later.";
+      case "checking":
+        return "Checking PROS project directory. Please wait.";
+      case "invalid":
+        return "Invalid PROS project directory. Check it in Settings.";
+      default:
+        return "Set PROS Project directory in Settings to start streaming.";
+    }
   }
 
   private renderProject(): void {

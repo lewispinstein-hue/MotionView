@@ -146,6 +146,26 @@ class PipeReaderTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ProsCommandTests(unittest.TestCase):
+    def test_launch_resume_uses_elapsed_time_and_removes_inherited_anchor(self):
+        resume = bridge.TimestampResume(timestampMs=70_040, elapsedMs=135_000)
+        with patch.object(bridge.time, "monotonic", return_value=1_000.0), \
+                patch.dict(os.environ, {"MOTIONVIEW_TIMESTAMP_ANCHOR": "stale"}):
+            env = bridge._pros_launch_env(resume)
+            self.assertEqual(json.loads(env["MOTIONVIEW_TIMESTAMP_ANCHOR"]), {
+                "timestamp": 70_040, "monotonic": 865.0,
+            })
+            self.assertNotIn("MOTIONVIEW_TIMESTAMP_ANCHOR", bridge._pros_launch_env())
+
+    def test_start_request_rejects_invalid_timestamp_context(self):
+        for context in [
+            {"timestampMs": -1, "elapsedMs": 0},
+            {"timestampMs": 1.5, "elapsedMs": 0},
+            {"timestampMs": 1, "elapsedMs": -1},
+            {"timestampMs": 1, "elapsedMs": float("inf")},
+        ]:
+            with self.subTest(context=context), self.assertRaises(ValueError):
+                bridge.StartRequest.model_validate({"resume": context})
+
     def test_fallback_keeps_venv_symlink_and_environment_only_import(self):
         with tempfile.TemporaryDirectory(prefix="motionview-python-test-") as temporary:
             root = Path(temporary).resolve()

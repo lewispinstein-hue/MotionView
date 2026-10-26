@@ -16,6 +16,7 @@ export class SettingsFeature {
   #settings: MotionViewSettings = { ...DEFAULT_SETTINGS };
   #loaded = false;
   #saveTimer: number | null = null;
+  #saveQueue: Promise<void> = Promise.resolve();
 
   get current(): Readonly<MotionViewSettings> {
     return this.#settings;
@@ -79,11 +80,11 @@ export class SettingsFeature {
   async saveNow(): Promise<void> {
     if (this.#saveTimer !== null) window.clearTimeout(this.#saveTimer);
     this.#saveTimer = null;
-    try {
-      await this.#repository.write(this.#settings);
-    } catch (error) {
+    const settings = this.#settings;
+    this.#saveQueue = this.#saveQueue.then(() => this.#repository.write(settings)).catch((error) => {
       console.error("Failed to save settings:", error);
       this.saveFailed.emit({ error });
-    }
+    });
+    await this.#saveQueue;
   }
 }

@@ -6,6 +6,7 @@ import { LiveFeature } from "../live/LiveFeature";
 import type { AppExitReason, AppLifecycleState } from "./appEvents";
 import { CoreServices } from "./coreServices";
 import { SettingsFeature } from "./settings/SettingsFeature";
+import { MotionViewDocumentSerializer } from "./persistence/MotionViewDocumentSerializer";
 
 export class MotionViewApp {
   readonly core = new CoreServices();
@@ -95,7 +96,10 @@ export class MotionViewApp {
           maxAttempts: 1,
           deadlineMs: EXIT_TELEMETRY_FLUSH_DEADLINE_MS,
         });
-        await this.core.tauri.finalizeAppQuit();
+        await this.core.tauri.finalizeAppQuit({
+          settingsContents: JSON.stringify(this.settings.current),
+          savedPathsContents: new MotionViewDocumentSerializer(this).savedPaths(),
+        });
         this.transitionTo("exited");
       } catch (error) {
         this.#exitReason = null;

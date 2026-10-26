@@ -76,7 +76,7 @@ const serializer = new MotionViewDocumentSerializer(app);
 const helpView = new HelpView(app, HelpDom.from(), serializer);
 const persistence = new SessionPersistence(app, serializer);
 const importer = new RouteImportService(app, planningDialogs, topBar, demoRouteUrl);
-const exportDialog = new ExportDialog(app, ExportDom.from(), new ExportService(app, serializer));
+const exportDialog = new ExportDialog(app, ExportDom.from(), new ExportService(app, serializer), planningDialogs);
 const routeInfoView = new RouteInfoView(app, RouteInfoDom.from());
 
 const appCommands = new AppCommands(app, fieldRenderer, topBar, planningDialogs, planningLayout, viewingLayout);
@@ -96,6 +96,7 @@ const bootstrap = new AppBootstrap(
   persistence,
   importer,
   viewingLayout,
+  planningDialogs,
 );
 
 configureRenderScheduler({ drawField: () => fieldRenderer.draw() });
@@ -163,5 +164,6 @@ topBar.events.actionRequested.subscribe((action) => {
 
 planningView.render();
 viewingView.render();
-void shutdown.bind();
+await shutdown.bind();
 await bootstrap.start();
+await shutdown.ready();

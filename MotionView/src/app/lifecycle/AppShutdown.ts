@@ -2,9 +2,10 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { MotionViewApp } from "../MotionViewApp";
 import type { FieldRenderer } from "../../render/field";
 import type { SessionPersistence } from "../persistence";
-import { saveCustomFieldImage, saveRobotImage } from "../../tauri/commands";
+import { registerAppQuitHandler, saveCustomFieldImage, saveRobotImage } from "../../tauri/commands";
 
 export class AppShutdown {
+  #ready = false;
   constructor(
     private readonly app: MotionViewApp,
     private readonly field: FieldRenderer,
@@ -15,14 +16,15 @@ export class AppShutdown {
     const window = getCurrentWindow();
     await window.listen(
       "tauri://close-requested",
-      () => void this.quit("window-close"),
+      () => { if (this.#ready) void this.quit("window-close"); },
     );
     await window.listen(
       "motionview://app-quit-requested",
-      () => void this.quit("backend-request"),
+      () => { if (this.#ready) void this.quit("backend-request"); },
     );
     globalThis.addEventListener("keydown", (event) => {
       if (
+        this.#ready &&
         (event.metaKey || event.ctrlKey) &&
         !event.shiftKey &&
         !event.altKey &&
@@ -32,6 +34,11 @@ export class AppShutdown {
         void this.quit("keyboard");
       }
     });
+  }
+  async ready(): Promise<void> {
+    if (!this.app.core.tauri.isTauriRuntime()) return;
+    await registerAppQuitHandler();
+    this.#ready = true;
   }
   private async quit(
     reason: "window-close" | "backend-request" | "keyboard",
@@ -95,6 +102,7 @@ export class AppShutdown {
       await this.app.finalizeExit({ uptime: Number(seconds.toFixed(2)) });
     } catch (error) {
       console.error("Failed to finalize app quit:", error);
+      this.app.core.status.setStatus("Could not save the shutdown backup. MotionView is still open; close it again to retry.");
     }
   }
 }

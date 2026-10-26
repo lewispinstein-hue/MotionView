@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import hashlib
+import json
 import os
 import secrets
 import signal
@@ -16,7 +17,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi.websockets import WebSocket
 import uvicorn
 
@@ -196,10 +197,26 @@ def _ensure_executable(path: Path) -> Optional[str]:
 def _bridge_log(message: str) -> None:
     print(f"[MotionView Bridge] {message}", file=sys.stderr, flush=True)
 
-def _pros_launch_env() -> dict:
+class TimestampResume(BaseModel):
+    timestampMs: int = Field(ge=0, le=9_007_199_254_740_991)
+    elapsedMs: float = Field(ge=0, allow_inf_nan=False)
+
+
+class StartRequest(BaseModel):
+    resume: Optional[TimestampResume] = None
+
+
+def _pros_launch_env(resume: Optional[TimestampResume] = None) -> dict:
     env = os.environ.copy()
     env["MOTIONVIEW_HEADLESS"] = "1"
     env["PYTHONWARNINGS"] = "ignore"
+    # This configures the local decoder only; robot communication stays one-way.
+    env.pop("MOTIONVIEW_TIMESTAMP_ANCHOR", None)
+    if resume is not None:
+        env["MOTIONVIEW_TIMESTAMP_ANCHOR"] = json.dumps({
+            "timestamp": resume.timestampMs,
+            "monotonic": time.monotonic() - resume.elapsedMs / 1_000,
+        })
     return env
 
 def resolve_bundled_pros_exe() -> Optional[str]:
@@ -568,6 +585,7 @@ class ProsTerminalRunner:
         self._pty_master_fd: Optional[int] = None
         self._pty_buf: bytes = b""
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._timestamp_resume: Optional[TimestampResume] = None
 
     def _ensure_broadcast_worker(self):
         if self._broadcast_task is not None and not self._broadcast_task.done():
@@ -633,11 +651,13 @@ class ProsTerminalRunner:
     def pid(self) -> Optional[int]:
         return None if self.proc is None else self.proc.pid
 
-    async def start(self) -> dict:
+    async def start(self, resume: Optional[TimestampResume] = None) -> dict:
         async with self._op_lock:
             self._prune_exited_process_state()
             if self.running:
                 return {"ok": True, "status": "already running", "pid": self.pid}
+
+            self._timestamp_resume = resume
 
             self._loop = asyncio.get_running_loop()
             self._ensure_broadcast_worker()
@@ -782,7 +802,7 @@ class ProsTerminalRunner:
         lock = _get_lock()
         async with lock:
             pros_dir = str(PROS_PROJECT_DIR)
-        env = _pros_launch_env()
+        env = _pros_launch_env(self._timestamp_resume)
         # Spawn `pros terminal` with stdio attached to PTY slave
         if not PROS_COMMAND:
             raise RuntimeError("MotionView PROS terminal is unavailable")
@@ -845,7 +865,7 @@ class ProsTerminalRunner:
         lock = _get_lock()
         async with lock:
             pros_dir = str(PROS_PROJECT_DIR)
-        env = _pros_launch_env()
+        env = _pros_launch_env(self._timestamp_resume)
         if not PROS_COMMAND:
             raise RuntimeError("MotionView PROS terminal is unavailable")
         _bridge_log(f"launching motionview-pros (pipes): {PROS_COMMAND}")
@@ -931,9 +951,9 @@ async def _shutdown():
         pass
 
 @app.post("/api/start")
-async def api_start():
+async def api_start(body: Optional[StartRequest] = None):
     try:
-        return await runner.start()
+        return await runner.start(body.resume if body else None)
     except FileNotFoundError:
         return {"ok": False, "status": "Bundled MotionView PROS CLI not found"}
     except Exception as e:

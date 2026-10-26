@@ -8,6 +8,23 @@ pub struct ExportResult {
     pub path: String,
 }
 
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportError {
+    code: &'static str,
+    message: String,
+    path: Option<String>,
+}
+impl From<String> for ExportError {
+    fn from(message: String) -> Self {
+        Self {
+            code: "exportFailed",
+            message,
+            path: None,
+        }
+    }
+}
+
 fn sanitize_filename_base(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for ch in value.chars() {
@@ -91,15 +108,28 @@ pub fn export_motionview_json(
     location: String,
     custom_path: Option<String>,
     json_contents: String,
-) -> Result<ExportResult, String> {
+    overwrite: Option<bool>,
+) -> Result<ExportResult, ExportError> {
     serde_json::from_str::<serde_json::Value>(&json_contents)
         .map_err(|e| format!("invalid export JSON payload: {e}"))?;
 
     let dir = resolve_export_dir(&app, &location, custom_path.as_deref())?;
     let export_path = build_export_path(&dir, &filename_base)?;
 
-    std::fs::write(&export_path, json_contents)
-        .map_err(|e| format!("failed to write export file {}: {e}", export_path.display()))?;
+    crate::storage::write_export(
+        &export_path,
+        json_contents.as_bytes(),
+        overwrite.unwrap_or(false),
+    )
+    .map_err(|error| ExportError {
+        code: if error.kind() == std::io::ErrorKind::AlreadyExists {
+            "exists"
+        } else {
+            "exportFailed"
+        },
+        message: format!("Could not write {}: {error}", export_path.display()),
+        path: Some(export_path.to_string_lossy().into_owned()),
+    })?;
 
     Ok(ExportResult {
         path: export_path.to_string_lossy().to_string(),
@@ -149,17 +179,18 @@ pub fn export_planning_code(
             parent.display()
         ));
     }
-    if !overwrite && export_path.exists() {
-        // A distinct, non-sentence error string so the frontend can recognize this case
-        // and offer an in-app overwrite confirmation instead of failing outright.
-        return Err("exists".to_string());
-    }
-    std::fs::write(&export_path, contents).map_err(|e| {
-        format!(
-            "failed to write planning code {}: {e}",
-            export_path.display()
-        )
-    })?;
+    crate::storage::write_export(&export_path, contents.as_bytes(), overwrite).map_err(
+        |error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                "exists".to_string()
+            } else {
+                format!(
+                    "failed to write planning code {}: {error}",
+                    export_path.display()
+                )
+            }
+        },
+    )?;
     Ok(ExportResult {
         path: export_path.to_string_lossy().to_string(),
     })

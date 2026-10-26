@@ -147,6 +147,30 @@ class MotionViewSerialDecoderTests(unittest.TestCase):
         self.assertEqual(decoder._expand_timestamp(65_520), 65_520)
         self.assertEqual(decoder._expand_timestamp(20), 65_556)
 
+    def test_resume_continues_short_gaps_and_multiple_wraps(self) -> None:
+        for last, gap_ms in [(70_040, 20), (65_520, 36), (50_000, 35_000), (70_040, 135_000)]:
+            with self.subTest(last=last, gap_ms=gap_ms):
+                decoder._reset_decoder_state()
+                decoder.resume_timestamp(last, 1_000.0)
+                with patch.object(decoder.time, "monotonic", return_value=1_000 + gap_ms / 1000):
+                    self.assertEqual(decoder._expand_timestamp((last + gap_ms) & 0xFFFF), last + gap_ms)
+                    self.assertEqual(decoder._expand_timestamp((last + gap_ms + 20) & 0xFFFF), last + gap_ms + 20)
+
+    def test_start_overrides_resume_before_the_first_data_packet(self) -> None:
+        decoder.resume_timestamp(700_040, 0.0)
+        with patch.object(decoder.time, "monotonic", return_value=1_000.0):
+            decoded = decoder._parse_binary_frame(frame(decoder.MSG_TYPE_START, struct.pack("<IBI", 0, 2, 300_001)))
+            self.assertEqual(decoded, "[START],0,2,300001\n")
+            self.assertFalse(decoder.TIMESTAMP_RESUME_PENDING)
+            self.assertEqual(decoder._expand_timestamp(20), 20)
+
+    def test_invalid_resume_anchor_does_not_change_decoder_state(self) -> None:
+        for timestamp, observed in [(-1, 0), (True, 0), (1.5, 0), (9_007_199_254_740_992, 0), (1, float("nan")), (1, float("inf"))]:
+            with self.subTest(timestamp=timestamp, observed=observed):
+                with self.assertRaises(ValueError):
+                    decoder.resume_timestamp(timestamp, observed)
+                self.assertIsNone(decoder.LAST_TIMESTAMP_RAW)
+
     def test_start_resets_a_70_second_run_to_zero(self) -> None:
         self.assertEqual(decoder._expand_timestamp(65_520), 65_520)
         self.assertEqual(decoder._expand_timestamp(4_464), 70_000)

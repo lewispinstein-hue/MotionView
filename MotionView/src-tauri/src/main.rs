@@ -22,6 +22,7 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_posthog::{init as posthog_init, PostHogConfig, PostHogOptions};
 mod export;
 mod settings;
+mod storage;
 #[cfg(not(mobile))]
 mod window_layout;
 
@@ -29,6 +30,7 @@ struct BridgeState(Mutex<Option<Child>>);
 struct BridgeOrigin(Mutex<Option<String>>);
 struct BridgeToken(Mutex<Option<String>>);
 struct QuitState(Mutex<bool>);
+struct FrontendReady(Mutex<bool>);
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -787,10 +789,20 @@ fn get_bridge_token(state: State<'_, BridgeToken>) -> Option<String> {
 }
 
 #[tauri::command]
-fn finalize_app_quit(app: tauri::AppHandle, state: State<'_, QuitState>) -> Result<(), String> {
+fn finalize_app_quit(
+    app: tauri::AppHandle,
+    state: State<'_, QuitState>,
+    checkpoint: storage::ShutdownData,
+) -> Result<(), String> {
+    settings::commit_clean_shutdown(&app, &checkpoint)?;
     *state.0.lock().unwrap() = true;
     app.exit(0);
     Ok(())
+}
+
+#[tauri::command]
+fn register_app_quit_handler(state: State<'_, FrontendReady>) {
+    *state.0.lock().unwrap() = true;
 }
 
 #[tauri::command]
@@ -872,6 +884,7 @@ fn run_app() {
         .manage(BridgeOrigin(Mutex::new(None)))
         .manage(BridgeToken(Mutex::new(None)))
         .manage(QuitState(Mutex::new(false)))
+        .manage(FrontendReady(Mutex::new(false)))
         .invoke_handler(tauri::generate_handler![
             settings::read_settings,
             settings::write_settings,
@@ -893,6 +906,8 @@ fn run_app() {
             get_bridge_origin,
             get_bridge_token,
             get_posthog_distinct_id,
+            register_app_quit_handler,
+            storage::take_persistence_notices,
             finalize_app_quit
         ])
         .setup(|app| {
@@ -933,8 +948,16 @@ fn run_app() {
                 RunEvent::WindowEvent { label, event, .. } => {
                     if label == "main" {
                         match event {
-                            tauri::WindowEvent::CloseRequested { .. } => {
+                            tauri::WindowEvent::CloseRequested { api, .. } => {
                                 persist_window_state(&app_handle);
+                                let ready = *app_handle.state::<FrontendReady>().0.lock().unwrap();
+                                let quitting = *app_handle.state::<QuitState>().0.lock().unwrap();
+                                if ready && !quitting {
+                                    api.prevent_close();
+                                    if let Some(win) = app_handle.get_webview_window("main") {
+                                        let _ = win.emit("motionview://app-quit-requested", ());
+                                    }
+                                }
                             }
                             tauri::WindowEvent::Destroyed => {
                                 // In dev, frontend reloads can recreate the window; keep bridge alive.
@@ -954,7 +977,8 @@ fn run_app() {
                 // Fires on quit requests (Cmd+Q / Dock Quit / menu Quit)
                 RunEvent::ExitRequested { api, .. } => {
                     let quit_ready = *app_handle.state::<QuitState>().0.lock().unwrap();
-                    if !quit_ready {
+                    let frontend_ready = *app_handle.state::<FrontendReady>().0.lock().unwrap();
+                    if !quit_ready && frontend_ready {
                         if let Some(win) = app_handle.get_webview_window("main") {
                             api.prevent_exit();
                             let _ = win.emit("motionview://app-quit-requested", ());

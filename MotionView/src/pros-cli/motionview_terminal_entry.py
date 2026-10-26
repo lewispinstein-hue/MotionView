@@ -20,6 +20,14 @@ import pros.common.sentry
 import pros.common.ui.log
 from pros.cli.terminal import terminal_cli
 from pros.common.utils import get_version, logger
+from pros.serial import resume_timestamp_from_environment
+
+
+def resume_decoder_from_environment():
+    try:
+        resume_timestamp_from_environment()
+    except (ValueError, TypeError, KeyError):
+        logger(__name__).warning("Ignoring invalid timestamp resume anchor")
 
 def configure_logging():
     ctx_obj = {}
@@ -38,6 +46,7 @@ def configure_logging():
 def main():
     try:
         ctx_obj = configure_logging()
+        resume_decoder_from_environment()
         terminal_cli.main(prog_name="pros", args=sys.argv[1:], obj=ctx_obj, windows_expand_args=False)
     except KeyboardInterrupt:
         click.echo("Aborted!")

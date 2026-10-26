@@ -16,6 +16,10 @@ function visible(element: HTMLElement): boolean {
     element.style.display !== "none" && element.getClientRects().length > 0;
 }
 
+function restorable(element: HTMLElement): boolean {
+  return visible(element) && !element.matches(":disabled") && element.closest("[inert]") == null;
+}
+
 /** Background shortcuts must not act through any visible application modal. */
 export function hasOpenModal(): boolean {
   if (typeof document === "undefined") return false;
@@ -54,11 +58,11 @@ function syncModals(): void {
     const current = active.at(-1);
     if (current && !current.modal.contains(document.activeElement)) {
       const restore = previous && !previous.open ? previous.previousFocus : null;
-      if (restore && current.modal.contains(restore) && visible(restore))
+      if (restore && current.modal.contains(restore) && restorable(restore))
         restore.focus({ preventScroll: true });
       else focusModal(current);
     }
-    else if (!current && previous && !previous.open && previous.previousFocus && visible(previous.previousFocus))
+    else if (!current && previous && !previous.open && previous.previousFocus && restorable(previous.previousFocus))
       previous.previousFocus.focus({ preventScroll: true });
   } finally {
     syncing = false;

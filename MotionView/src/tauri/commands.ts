@@ -49,8 +49,18 @@ export function saveCustomFieldImage(dataUrl: string): Promise<string | null> {
   return invokeCommand<string | null>("save_custom_field_image", { dataUrl });
 }
 
-export function finalizeAppQuit(): Promise<void> {
-  return invokeCommand<void>("finalize_app_quit");
+export interface CleanShutdownData {
+  readonly settingsContents: string;
+  readonly savedPathsContents: string;
+}
+export function finalizeAppQuit(checkpoint: CleanShutdownData): Promise<void> {
+  return invokeCommand<void>("finalize_app_quit", { checkpoint });
+}
+export function registerAppQuitHandler(): Promise<void> {
+  return invokeCommand<void>("register_app_quit_handler");
+}
+export function takePersistenceNotices(): Promise<string[]> {
+  return invokeCommand<string[]>("take_persistence_notices");
 }
 
 export function readSettings(): Promise<string | null> {
@@ -99,6 +109,23 @@ export interface MotionViewJsonExportRequest {
   readonly location: string;
   readonly customPath: string | null;
   readonly jsonContents: string;
+  readonly overwrite?: boolean;
+}
+
+export interface ExportFileConflict {
+  readonly code: "exists";
+  readonly path: string;
+}
+export function isExportFileConflict(error: unknown): error is ExportFileConflict {
+  return !!error && typeof error === "object" &&
+    (error as ExportFileConflict).code === "exists" &&
+    typeof (error as ExportFileConflict).path === "string";
+}
+export function nativeErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error)
+    return String(error.message);
+  return String(error);
 }
 export function exportMotionViewJson(
   request: Readonly<MotionViewJsonExportRequest>,
