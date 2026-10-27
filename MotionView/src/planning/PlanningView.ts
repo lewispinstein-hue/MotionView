@@ -5,6 +5,7 @@ import type {
 } from "../render/field";
 import type { PlanningRenderLayer } from "../render/renderScheduler";
 import { requestDrawAll } from "../render/renderScheduler";
+import { subscribeMode } from "../app/modeController";
 import { formatDistanceFromInches, getCurrentUnits } from "../shared/units";
 import type { PlanningDialogs } from "./PlanningDialogs";
 import type { PlanningDom } from "./PlanningDom";
@@ -16,6 +17,7 @@ import { PlanningFieldView } from "./render/PlanningFieldView";
 import { PlanningPathManagerView } from "./render/PlanningPathManagerView";
 import { PlanningSidebarView } from "./render/PlanningSidebarView";
 import { PlanningTimelineView } from "./render/PlanningTimelineView";
+import { PlanningNodeTooltip } from "./render/PlanningNodeTooltip";
 
 /** Owns all Planning DOM and canvas presentation. */
 export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
@@ -23,6 +25,7 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
   readonly #pathManager: PlanningPathManagerView;
   readonly #sidebar: PlanningSidebarView;
   readonly #timeline: PlanningTimelineView;
+  readonly #nodeTooltip: PlanningNodeTooltip;
   #bound = false;
 
   constructor(
@@ -33,12 +36,14 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
   ) {
     const drag = new PlanningDragCoordinator();
     const waypointEditor = new PlanningWaypointEditor(planning, dialogs);
+    this.#nodeTooltip = new PlanningNodeTooltip(dom.nodeTooltip);
     this.#fieldView = new PlanningFieldView(
       planning,
       field,
       dom,
       dialogs,
       waypointEditor,
+      this.#nodeTooltip,
     );
     this.#pathManager = new PlanningPathManagerView(planning, dom, dialogs);
     this.#sidebar = new PlanningSidebarView(
@@ -54,6 +59,7 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
       dialogs,
       drag,
       waypointEditor,
+      this.#nodeTooltip,
     );
   }
 
@@ -68,6 +74,10 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
     this.#pathManager.bind();
     this.#sidebar.bind();
     this.#timeline.bind();
+    subscribeMode((mode) => {
+      if (mode !== "planning") this.#nodeTooltip.hide(true);
+    });
+    window.addEventListener("blur", () => this.#nodeTooltip.hide(true));
     this.planning.events.documentChanged.subscribe(() => this.render());
     this.planning.events.documentPreviewChanged.subscribe(() => this.render());
     this.planning.events.selectionChanged.subscribe(() => this.render());

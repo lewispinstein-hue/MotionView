@@ -11,6 +11,7 @@ import {
 } from "../planningObjects";
 import { planningTelemetry } from "../../telemetry/createTelemetry";
 import { formatDistanceFromInches } from "../../shared/units";
+import type { PlanningNodeTooltip } from "./PlanningNodeTooltip";
 
 interface SelectionRect {
   x0: number;
@@ -75,7 +76,6 @@ export class PlanningFieldView {
     clearSelection: boolean;
   }> | null = null;
   #hoverNodeId: string | null = null;
-  #tooltipTimer: number | null = null;
 
   constructor(
     private readonly planning: PlanningFeature,
@@ -83,6 +83,7 @@ export class PlanningFieldView {
     private readonly dom: PlanningDom,
     private readonly dialogs: PlanningDialogs,
     private readonly waypointEditor: PlanningWaypointEditor,
+    private readonly nodeTooltip: PlanningNodeTooltip,
   ) {}
 
   bind(): void {
@@ -753,20 +754,20 @@ export class PlanningFieldView {
     clientX: number,
     clientY: number,
   ): void {
-    this.hideNodeTooltip();
     const node = this.planning.timeline.get(nodeId);
     const object = node ? this.planning.objects.get(node.objectId) : null;
     const method = node
       ? getPlanNodeEffectiveMethod(this.planning.objects.items, node)
       : null;
-    if (!node || !object || !method) return;
-    this.#tooltipTimer = window.setTimeout(() => {
-      this.dom.nodeTooltip.textContent = `${object.name || "Object"} • ${getPlanMethodTooltipName(method.name)}`;
-      this.dom.nodeTooltip.classList.toggle("hasOverride", method.hasOverride);
-      this.dom.nodeTooltip.hidden = false;
-      this.dom.nodeTooltip.classList.add("isVisible");
-      this.positionNodeTooltip(clientX, clientY);
-    }, 250);
+    if (!node || !object || !method) {
+      this.hideNodeTooltip();
+      return;
+    }
+    this.nodeTooltip.show(
+      `${object.name || "Object"} • ${getPlanMethodTooltipName(method.name)}`,
+      method.hasOverride,
+      () => this.positionNodeTooltip(clientX, clientY),
+    );
   }
 
   private positionNodeTooltip(clientX: number, clientY: number): void {
@@ -777,10 +778,7 @@ export class PlanningFieldView {
   }
 
   private hideNodeTooltip(): void {
-    if (this.#tooltipTimer != null) window.clearTimeout(this.#tooltipTimer);
-    this.#tooltipTimer = null;
-    this.dom.nodeTooltip.classList.remove("isVisible", "hasOverride");
-    this.dom.nodeTooltip.hidden = true;
+    this.nodeTooltip.hide();
   }
 
   private async editNode(nodeId: string): Promise<void> {

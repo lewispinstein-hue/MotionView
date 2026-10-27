@@ -19,6 +19,7 @@ import type {
   PlanningMethodDrag,
   PlanningDragCoordinator,
 } from "./PlanningDragCoordinator";
+import type { PlanningNodeTooltip } from "./PlanningNodeTooltip";
 
 const PAD = 6;
 const NODE_WIDTH = 18;
@@ -154,7 +155,6 @@ export class PlanningTimelineView {
   #drop: Readonly<{ beforeWaypoint: number; index: number; x: number }> | null =
     null;
   #scrubbing = false;
-  #tooltipTimer: number | null = null;
   #layout: TimelineLayout | null = null;
   #renderedRouteRevision = -1;
   #bound = false;
@@ -169,6 +169,7 @@ export class PlanningTimelineView {
     private readonly dialogs: PlanningDialogs,
     drag: PlanningDragCoordinator,
     private readonly waypointEditor: PlanningWaypointEditor,
+    private readonly nodeTooltip: PlanningNodeTooltip,
   ) {
     const context = dom.timelineCanvas.getContext("2d");
     if (!context)
@@ -182,6 +183,25 @@ export class PlanningTimelineView {
   bind(): void {
     if (this.#bound) return;
     this.#bound = true;
+    const scroller = this.dom.timelineViewport;
+    scroller.addEventListener(
+      "wheel",
+      (event) => {
+        if (event.ctrlKey || scroller.scrollWidth <= scroller.clientWidth)
+          return;
+        const distance = event.deltaX || event.deltaY;
+        if (!distance) return;
+        const multiplier =
+          event.deltaMode === WheelEvent.DOM_DELTA_LINE
+            ? 16
+            : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+              ? scroller.clientWidth
+              : 1;
+        scroller.scrollLeft += distance * multiplier;
+        event.preventDefault();
+      },
+      { passive: false },
+    );
     this.dom.timelineCanvas.addEventListener("pointerdown", (event) => {
       if (getMode() !== "planning") return;
       this.#scrubbing = true;
@@ -871,14 +891,7 @@ export class PlanningTimelineView {
     y: number,
     edited: boolean,
   ): void {
-    this.hideTooltip();
-    this.#tooltipTimer = window.setTimeout(() => {
-      this.dom.nodeTooltip.textContent = text;
-      this.dom.nodeTooltip.classList.toggle("hasOverride", edited);
-      this.dom.nodeTooltip.hidden = false;
-      this.dom.nodeTooltip.classList.add("isVisible");
-      this.positionTooltip(x, y);
-    }, 250);
+    this.nodeTooltip.show(text, edited, () => this.positionTooltip(x, y));
   }
 
   private positionTooltip(x: number, y: number): void {
@@ -893,9 +906,6 @@ export class PlanningTimelineView {
   }
 
   private hideTooltip(): void {
-    if (this.#tooltipTimer != null) window.clearTimeout(this.#tooltipTimer);
-    this.#tooltipTimer = null;
-    this.dom.nodeTooltip.classList.remove("isVisible");
-    this.dom.nodeTooltip.hidden = true;
+    this.nodeTooltip.hide();
   }
 }
