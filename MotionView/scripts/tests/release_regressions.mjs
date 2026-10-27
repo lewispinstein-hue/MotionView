@@ -28,7 +28,6 @@ export async function runReleaseRegressions(server) {
   const { AppInput } = await server.ssrLoadModule("/app/input/AppInput.ts");
   const { LiveInput } = await server.ssrLoadModule("/live/LiveInput.ts");
   const { ViewingInput } = await server.ssrLoadModule("/viewing/ViewingInput.ts");
-  const { SettingsView } = await server.ssrLoadModule("/app/settings/SettingsView.ts");
   const { WindowController } = await server.ssrLoadModule("/app/window/WindowController.ts");
   const { getMode, setMode } = await server.ssrLoadModule("/app/modeController.ts");
 
@@ -179,19 +178,11 @@ export async function runReleaseRegressions(server) {
     const controller = new WindowController();
     controller.bind();
     await new Promise(setImmediate);
-    const dom = { resetWindowLayoutButton: field(), windowLayoutStatus: field() };
-    const view = new SettingsView({}, dom, () => controller.resetLayout());
-    await view.resetWindowLayout();
+    await controller.resetLayout();
     assert(commands.includes("reset_window_layout"));
-    assert.equal(dom.windowLayoutStatus.textContent, "Window centered at its default size.");
-    assert.equal(dom.resetWindowLayoutButton.disabled, false);
     keydown({ key: "F11", preventDefault() {} });
     await new Promise(setImmediate);
     assert.equal(fullscreen, true, "F11 must enter fullscreen after resetting a fullscreen window");
-    const failure = new SettingsView({}, dom, async () => { throw new Error("Window access failed"); });
-    await failure.resetWindowLayout();
-    assert.equal(dom.windowLayoutStatus.textContent, "Could not reset window: Window access failed");
-    assert.equal(dom.resetWindowLayoutButton.disabled, false, "a failed reset remains retryable");
   } finally {
     if (originalWindow === undefined) delete globalThis.window;
     else globalThis.window = originalWindow;

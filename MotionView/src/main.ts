@@ -64,7 +64,7 @@ const viewingLayout = new ViewingLayoutView(fieldRenderer, viewingView);
 
 const settingsDom = SettingsDom.from();
 const windowController = new WindowController();
-const settingsView = new SettingsView(fieldRenderer, settingsDom, () => windowController.resetLayout());
+const settingsView = new SettingsView(fieldRenderer, settingsDom);
 const fieldSettings = new FieldSettingsBinding(app.settings, fieldRenderer, topBar, settingsDom);
 const viewingSettings = new ViewingSettingsBinding(app.settings, app.viewing, settingsDom);
 const planningSettings = new PlanningSettingsBinding(app.settings, app.planning, planningView, fieldRenderer, planningCodeExportDialog, settingsDom);
