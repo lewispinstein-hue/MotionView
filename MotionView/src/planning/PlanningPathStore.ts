@@ -1,8 +1,13 @@
 import {
   clonePlanningCodeExportSettings,
+  clonePlanningPath,
   DEFAULT_PLANNING_CODE_EXPORT_SETTINGS,
 } from "./planningDocument";
-import { createPlanPathId, getDefaultPlanPathName } from "./planningState";
+import {
+  createPlanNodeId,
+  createPlanPathId,
+  getDefaultPlanPathName,
+} from "./planningState";
 import type {
   PlanningCodeExportSettings,
   PlanningPath,
@@ -46,6 +51,24 @@ export class PlanningPathStore {
   add(): PlanningPath {
     const path = this.createEmpty();
     this.entries.push(path);
+    this.#activePathId = path.id;
+    return path;
+  }
+
+  derive(id: string): PlanningPath | null {
+    const index = this.entries.findIndex((path) => path.id === id);
+    const source = this.entries[index];
+    if (!source) return null;
+    const path = clonePlanningPath(source);
+    path.id = createPlanPathId();
+    const names = new Set(this.entries.map((entry) => entry.name));
+    path.name = `${source.name} (Copy)`;
+    let copyIndex = 2;
+    while (names.has(path.name)) {
+      path.name = `${source.name} (Copy ${copyIndex++})`;
+    }
+    for (const node of path.nodes) node.id = createPlanNodeId();
+    this.entries.splice(index + 1, 0, path);
     this.#activePathId = path.id;
     return path;
   }

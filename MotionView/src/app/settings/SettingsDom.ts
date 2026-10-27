@@ -30,6 +30,7 @@ export class SettingsDom {
   readonly planSnapStep: HTMLSelectElement;
   readonly planThetaSnapStep: HTMLSelectElement;
   readonly planLimitBounds: HTMLInputElement;
+  readonly planShowFieldNodes: HTMLInputElement;
   readonly planSnapStepLabel: HTMLElement | null;
   readonly planMoveStepLabel: HTMLElement | null;
   readonly robotImageScale: HTMLInputElement;
@@ -73,6 +74,7 @@ export class SettingsDom {
     this.planSnapStep = requiredElement("settingsPlanSnapStep", HTMLSelectElement, document);
     this.planThetaSnapStep = requiredElement("settingsPlanThetaSnapStep", HTMLSelectElement, document);
     this.planLimitBounds = requiredElement("settingsPlanLimitBounds", HTMLInputElement, document);
+    this.planShowFieldNodes = requiredElement("settingsPlanShowFieldNodes", HTMLInputElement, document);
     this.planSnapStepLabel = optionalElement("settingsPlanSnapStepLabel", HTMLElement, document);
     this.planMoveStepLabel = optionalElement("settingsPlanMoveStepLabel", HTMLElement, document);
     this.robotImageScale = requiredElement("settingsRobotImgScale", HTMLInputElement, document);

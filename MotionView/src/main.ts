@@ -67,7 +67,7 @@ const windowController = new WindowController();
 const settingsView = new SettingsView(fieldRenderer, settingsDom, () => windowController.resetLayout());
 const fieldSettings = new FieldSettingsBinding(app.settings, fieldRenderer, topBar, settingsDom);
 const viewingSettings = new ViewingSettingsBinding(app.settings, app.viewing, settingsDom);
-const planningSettings = new PlanningSettingsBinding(app.settings, app.planning, fieldRenderer, planningCodeExportDialog, settingsDom);
+const planningSettings = new PlanningSettingsBinding(app.settings, app.planning, planningView, fieldRenderer, planningCodeExportDialog, settingsDom);
 const liveSettings = new LiveSettingsBinding(app.settings, app.live);
 const layoutSettings = new LayoutSettingsBinding(app.settings, planningLayout, viewingLayout);
 const telemetrySettings = new TelemetrySettingsBinding(app.settings, app.core.telemetry.telemetryClient, settingsDom);

@@ -76,6 +76,7 @@ export class PlanningFieldView {
     clearSelection: boolean;
   }> | null = null;
   #hoverNodeId: string | null = null;
+  #nodesVisible = true;
 
   constructor(
     private readonly planning: PlanningFeature,
@@ -85,6 +86,16 @@ export class PlanningFieldView {
     private readonly waypointEditor: PlanningWaypointEditor,
     private readonly nodeTooltip: PlanningNodeTooltip,
   ) {}
+
+  setNodesVisible(visible: boolean): void {
+    if (this.#nodesVisible === visible) return;
+    this.#nodesVisible = visible;
+    if (!visible && this.#hoverNodeId !== null) {
+      this.#hoverNodeId = null;
+      this.nodeTooltip.hide(true);
+    }
+    requestDrawAll();
+  }
 
   bind(): void {
     this.dom.canvas.addEventListener("pointerdown", (event) =>
@@ -740,6 +751,7 @@ export class PlanningFieldView {
   }
 
   private nodeMarkers(): readonly NodeMarker[] {
+    if (!this.#nodesVisible) return [];
     return this.planning.projection.nodePlacements.map((placement) => ({
       node: placement.node,
       x: placement.x,

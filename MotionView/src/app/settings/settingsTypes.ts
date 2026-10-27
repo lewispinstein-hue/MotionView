@@ -23,6 +23,7 @@ export interface MotionViewSettings {
   readonly planSnapStep?: string;
   readonly planThetaSnapStep?: string;
   readonly planLimitBounds?: boolean;
+  readonly planShowFieldNodes?: boolean;
   readonly planExportTemplate?: string;
   readonly planningCodeExport?: PlanningCodeExportSettings;
   readonly refreshIntervalMs?: string | number;
@@ -73,6 +74,7 @@ export const DEFAULT_SETTINGS: Readonly<MotionViewSettings> = {
   planSnapStep: "0",
   planThetaSnapStep: "0",
   planLimitBounds: true,
+  planShowFieldNodes: true,
   planExportTemplate: "moveToPoint(${x}, ${y}, ${theta});",
   planningCodeExport: { header: "", footer: "", target: "downloads", path: "" },
   refreshIntervalMs: "500",

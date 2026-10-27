@@ -31,6 +31,9 @@ export class PlanningPaths {
   add(): string {
     return this.session.addPath();
   }
+  derive(id: string): string | null {
+    return this.session.derivePath(id);
+  }
   select(id: string): boolean {
     return this.session.selectPath(id);
   }

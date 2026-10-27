@@ -1,5 +1,6 @@
 import type { FieldRenderer } from "../../../render/field";
 import type { PlanningFeature } from "../../../planning/PlanningFeature";
+import type { PlanningView } from "../../../planning/PlanningView";
 import type { PlanningCodeExportDialog } from "../../../planning/PlanningCodeExportDialog";
 import { currentUnitsToInches, getCurrentUnits } from "../../../shared/units";
 import type { SettingsDom } from "../SettingsDom";
@@ -11,6 +12,7 @@ export class PlanningSettingsBinding {
   constructor(
     private readonly settings: SettingsFeature,
     private readonly planning: PlanningFeature,
+    private readonly planningView: PlanningView,
     private readonly field: FieldRenderer,
     private readonly codeExport: PlanningCodeExportDialog,
     private readonly dom: SettingsDom,
@@ -40,6 +42,7 @@ export class PlanningSettingsBinding {
     bind(this.dom.planSnapStep, "planSnapStep", "change");
     bind(this.dom.planThetaSnapStep, "planThetaSnapStep", "change");
     bind(this.dom.planLimitBounds, "planLimitBounds", "change");
+    bind(this.dom.planShowFieldNodes, "planShowFieldNodes", "change");
     this.planning.events.documentChanged.subscribe(({ kind }) => {
       if (kind === "template") {
         this.settings.update(
@@ -88,6 +91,11 @@ export class PlanningSettingsBinding {
         this.dom.planMoveStepLabel.textContent = `Arrow move step (${unit})`;
       }
       this.configureProjection();
+    }
+    if (changed("planShowFieldNodes")) {
+      const visible = values.planShowFieldNodes !== false;
+      this.dom.planShowFieldNodes.checked = visible;
+      this.planningView.setFieldNodesVisible(visible);
     }
     if (
       changed("planExportTemplate") &&

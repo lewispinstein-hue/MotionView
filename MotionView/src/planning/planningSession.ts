@@ -124,6 +124,17 @@ export class PlanningSession {
     return id;
   }
 
+  derivePath(id: string): string | null {
+    if (!this.pathEntries.some((path) => path.id === id)) return null;
+    let derivedId: string | null = null;
+    this.mutate("path", () => {
+      derivedId = this.#pathStore.derive(id)?.id ?? null;
+      this.resetActivePathTransientState();
+    });
+    this.events.selectionChanged.emit({ kind: "cleared" });
+    return derivedId;
+  }
+
   selectPath(id: string): boolean {
     if (id === this.activePathId) return true;
     if (!this.#pathStore.select(id)) return false;

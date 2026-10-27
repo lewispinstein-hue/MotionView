@@ -203,6 +203,58 @@ try {
   assert.equal(multiPathPlanning.paths.activeId, newPathId);
   assert.equal(multiPathPlanning.paths.items.length, 3);
 
+  const derivedPathPlanning = new PlanningFeature();
+  derivedPathPlanning.load(exportedMultiPathRoute);
+  derivedPathPlanning.route.updateContent(0, "", ["rotate", "forward"]);
+  derivedPathPlanning.timeline.setCodeOverride("path-a-node", "copied(@x);");
+  const sourcePath = structuredClone(derivedPathPlanning.paths.active);
+  const sourceCode = generatePlanningCode(derivedPathPlanning);
+  derivedPathPlanning.paths.select("path-b");
+  const derivedId = derivedPathPlanning.paths.derive("path-a");
+  assert.ok(derivedId);
+  assert.notEqual(derivedId, "path-a");
+  assert.equal(derivedPathPlanning.paths.activeId, derivedId);
+  assert.equal(derivedPathPlanning.paths.active.name, "Match Route (Copy)");
+  assert.deepEqual(derivedPathPlanning.route.waypoints, sourcePath.waypoints);
+  assert.deepEqual(derivedPathPlanning.paths.codeExportSettings, sourcePath.codeExport);
+  assert.equal(generatePlanningCode(derivedPathPlanning), sourceCode);
+  assert.notEqual(derivedPathPlanning.timeline.nodes[0]?.id, sourcePath.nodes[0].id);
+  assert.deepEqual(
+    derivedPathPlanning.timeline.nodes.map(({ id: _id, ...node }) => node),
+    sourcePath.nodes.map(({ id: _id, ...node }) => node),
+  );
+  assert.deepEqual(derivedPathPlanning.objects.items, objects);
+  assert.equal(derivedPathPlanning.history.undo(), true);
+  assert.equal(derivedPathPlanning.paths.activeId, "path-b");
+  assert.equal(derivedPathPlanning.paths.items.length, 2);
+  assert.equal(derivedPathPlanning.history.redo(), true);
+  assert.equal(derivedPathPlanning.paths.activeId, derivedId);
+
+  derivedPathPlanning.route.updateContent(0, "derived();", ["forward"]);
+  derivedPathPlanning.route.updateField(0, "x", 42);
+  derivedPathPlanning.timeline.setCodeOverride(derivedPathPlanning.timeline.nodes[0].id, "derivedNode();");
+  derivedPathPlanning.paths.updateCodeExportSettings({ header: "// copy" });
+  assert.deepEqual(
+    derivedPathPlanning.paths.items.find((path) => path.id === "path-a"),
+    sourcePath,
+  );
+  const secondDerivedId = derivedPathPlanning.paths.derive("path-a");
+  assert.ok(secondDerivedId);
+  assert.equal(derivedPathPlanning.paths.active.name, "Match Route (Copy 2)");
+  assert.equal(derivedPathPlanning.paths.derive("missing-path"), null);
+  assert.equal(derivedPathPlanning.paths.activeId, secondDerivedId);
+  assert.equal(derivedPathPlanning.paths.items.length, 4);
+
+  const derivedPathSerializer = new MotionViewDocumentSerializer({
+    planning: derivedPathPlanning,
+    viewing: { data: { poses: [], watches: [], logs: [], waypoints: [] } },
+    version: "test",
+  });
+  const reimportedDerivedPaths = new PlanningFeature();
+  reimportedDerivedPaths.load(derivedPathSerializer.exportPayload("planning", "Derived Routes", {}));
+  assert.deepEqual(reimportedDerivedPaths.paths.items, derivedPathPlanning.paths.items);
+  assert.equal(reimportedDerivedPaths.paths.activeId, secondDerivedId);
+
   const methodOrderPlanning = new PlanningFeature();
   methodOrderPlanning.load({
     "planned-objects": [{

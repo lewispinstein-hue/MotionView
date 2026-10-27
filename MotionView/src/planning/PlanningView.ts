@@ -114,6 +114,10 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
     this.#fieldView.draw(force);
   }
 
+  setFieldNodesVisible(visible: boolean): void {
+    this.#fieldView.setNodesVisible(visible);
+  }
+
   currentPose(): FieldPose | null {
     return this.planning.projection.sample(this.planning.playback.distance);
   }

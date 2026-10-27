@@ -97,6 +97,17 @@ export class PlanningPathManagerView {
       meta.textContent = `${waypointCount} Waypoint${waypointCount === 1 ? "" : "s"} • ${nodeCount} Node${nodeCount === 1 ? "" : "s"}`;
       details.appendChild(meta);
 
+      const derive = document.createElement("button");
+      derive.type = "button";
+      derive.className = "planningPathManagerDerive";
+      derive.innerHTML = `<svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/copyCode.svg#icon-copyCode"></use></svg>`;
+      derive.title = "Derive path";
+      derive.setAttribute("aria-label", derive.title);
+      derive.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.planning.paths.derive(path.id);
+      });
+
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "planningPathManagerDelete";
@@ -112,12 +123,13 @@ export class PlanningPathManagerView {
       const select = () => this.planning.paths.select(path.id);
       row.addEventListener("click", select);
       row.addEventListener("keydown", (event) => {
+        if (event.target !== row) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           select();
         }
       });
-      row.append(details, remove);
+      row.append(details, derive, remove);
       this.dom.pathList.appendChild(row);
     }
   }
