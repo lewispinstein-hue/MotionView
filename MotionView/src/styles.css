@@ -413,6 +413,7 @@ body:not(.mode-planning) .planningPathManager {
   font-weight: 700;
 }
 
+.planningPathManagerDerive,
 .planningPathManagerDelete {
   width: 24px;
   min-width: 24px;
@@ -426,9 +427,16 @@ body:not(.mode-planning) .planningPathManager {
   place-items: center;
 }
 
+.planningPathManagerDerive svg,
 .planningPathManagerDelete svg {
   width: 14px;
   height: 14px;
+}
+
+.planningPathManagerDerive:hover,
+.planningPathManagerDerive:focus-visible {
+  background: rgba(94, 156, 218, 0.24);
+  color: #fff;
 }
 
 .planningPathManagerDelete:hover:not(:disabled),
