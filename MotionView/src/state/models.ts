@@ -90,7 +90,17 @@ export interface PlanWaypoint {
   speed?: number;
   overrideCode?: string;
   indicatorIcons?: PlanWaypointIndicatorIcon[];
+  /** Ordered departing motions; an explicit empty array emits no motion code. */
+  motions?: PlanWaypointMotion[];
 }
+
+export interface PlanWaypointMotion {
+  id: string;
+  type: PlanWaypointIndicatorIcon;
+  overrideCode?: string;
+}
+
+export type PlanMotionTemplates = Record<PlanWaypointIndicatorIcon, string>;
 
 export type PlanWaypointIndicatorIcon =
   | "rotate"

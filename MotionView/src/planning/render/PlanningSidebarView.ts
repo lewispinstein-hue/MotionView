@@ -7,10 +7,10 @@ import {
   formatDistanceFromInches,
 } from "../../shared/units";
 import { planningTelemetry } from "../../telemetry/createTelemetry";
-import type { PlanWaypointIndicatorIcon } from "../../state/models";
 import type { PlanningDialogs } from "../PlanningDialogs";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningFeature } from "../PlanningFeature";
+import type { PlanningWaypointView } from "../planningTypes";
 import { getPlanNodeEffectiveMethod } from "../planningObjects";
 import {
   createWaypointIndicatorIcon,
@@ -24,6 +24,7 @@ import {
 } from "../planningState";
 import type { PlanningDragCoordinator } from "./PlanningDragCoordinator";
 import type { PlanningWaypointEditor } from "../PlanningWaypointEditor";
+import { animateVerticalReorder, captureVerticalPositions } from "./verticalReorderAnimation";
 
 function icon(svg: string): string {
   return svg.replace(
@@ -138,7 +139,7 @@ export class PlanningSidebarView {
         "waypointIndicatorStrip waypointIndicatorStripSmall";
       this.appendWaypointIndicators(
         indicators,
-        point.indicatorIcons ?? [],
+        point,
         "waypointIndicatorIconSmall",
       );
       row.append(number, details, indicators);
@@ -175,7 +176,7 @@ export class PlanningSidebarView {
     this.dom.selectedIndicators.replaceChildren();
     this.appendWaypointIndicators(
       this.dom.selectedIndicators,
-      point.indicatorIcons ?? [],
+      point,
     );
     this.dom.editWaypoint.disabled = false;
     for (const input of inputs) input.disabled = false;
@@ -188,10 +189,12 @@ export class PlanningSidebarView {
 
   private appendWaypointIndicators(
     target: HTMLElement,
-    icons: readonly PlanWaypointIndicatorIcon[],
+    point: PlanningWaypointView,
     className = "",
   ): void {
-    for (const indicator of orderWaypointIndicatorIcons(icons))
+    const icons = point.motions?.map((motion) => motion.type)
+      ?? orderWaypointIndicatorIcons(point.indicatorIcons ?? []);
+    for (const indicator of icons)
       target.appendChild(createWaypointIndicatorIcon(indicator, className));
   }
 
@@ -508,41 +511,25 @@ export class PlanningSidebarView {
   }
 
   private methodPositions(objectId: string): ReadonlyMap<string, number> {
-    const positions = new Map<string, number>();
-    for (const card of this.dom.objectList.querySelectorAll<HTMLElement>(
-      `.planMethodCard[data-object-id="${CSS.escape(objectId)}"]`,
-    )) {
-      const methodId = card.dataset.methodId;
-      if (methodId) positions.set(methodId, card.getBoundingClientRect().top);
-    }
-    return positions;
+    return captureVerticalPositions(
+      this.dom.objectList.querySelectorAll<HTMLElement>(
+        `.planMethodCard[data-object-id="${CSS.escape(objectId)}"]`,
+      ),
+      "methodId",
+    );
   }
 
   private animateMethodReorder(): void {
     const animation = this.#methodOrderAnimation;
     if (!animation) return;
     this.#methodOrderAnimation = null;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    requestAnimationFrame(() => {
-      for (const card of this.dom.objectList.querySelectorAll<HTMLElement>(
+    animateVerticalReorder(
+      () => this.dom.objectList.querySelectorAll<HTMLElement>(
         `.planMethodCard[data-object-id="${CSS.escape(animation.objectId)}"]`,
-      )) {
-        const methodId = card.dataset.methodId;
-        const previousTop = methodId
-          ? animation.positions.get(methodId)
-          : undefined;
-        if (previousTop === undefined) continue;
-        const offset = previousTop - card.getBoundingClientRect().top;
-        if (Math.abs(offset) < 1) continue;
-        card.animate(
-          [
-            { transform: `translateY(${offset}px)` },
-            { transform: "translateY(0)" },
-          ],
-          { duration: 220, easing: "cubic-bezier(0.2, 0, 0, 1)" },
-        );
-      }
-    });
+      ),
+      "methodId",
+      animation.positions,
+    );
   }
 
   private bindSelectionField(
@@ -715,7 +702,7 @@ export class PlanningSidebarView {
   }
 
   private async editTemplate(): Promise<void> {
-    const previous = this.planning.exportTemplate;
+    const previous = this.planning.motionTemplates;
     const result = await this.dialogs.edit({
       title: "Edit Template",
       groupTitle: "Planning Export Template",
@@ -723,12 +710,13 @@ export class PlanningSidebarView {
         "One block is generated from each waypoint to the next; " +
         "the final waypoint emits none. Available placeholders: " +
         "${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}",
-      code: previous,
+      code: previous.forward,
       placeholder: "moveToPoint(${x}, ${y}, ${theta});",
+      motionEditor: { mode: "templates", templates: previous },
     });
-    if (!result) return;
-    this.planning.setExportTemplate(result.code);
-    if (previous !== this.planning.exportTemplate)
+    if (!result?.motionTemplates) return;
+    this.planning.setMotionTemplates(result.motionTemplates);
+    if (JSON.stringify(previous) !== JSON.stringify(this.planning.motionTemplates))
       void planningTelemetry.templateUpdated(
         this.planning.telemetryProperties(),
       );

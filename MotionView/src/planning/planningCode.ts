@@ -12,6 +12,7 @@ export function generatePlanningCode(planning: PlanningFeature): string {
   const data = planning.exportData();
   return buildPlanExportCode({
     template: data.template,
+    motionTemplates: data.motionTemplates,
     waypoints: data.waypoints,
     nodes: data.nodes,
     objects: data.objects,

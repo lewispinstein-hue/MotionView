@@ -1,4 +1,5 @@
 import { normalizeWaypointIndicatorIcons } from "./planningIndicators";
+import { normalizeWaypointMotions } from "./planningMotions";
 import {
   createPlanPathId,
   normalizePlanNodes,
@@ -38,6 +39,7 @@ export function clonePlanningWaypoint(
   if (Object.prototype.hasOwnProperty.call(point, "overrideCode")) {
     cloned.overrideCode = String(point.overrideCode ?? "");
   }
+  if (Array.isArray(point.motions)) cloned.motions = normalizeWaypointMotions(point.motions);
   return cloned;
 }
 
@@ -189,10 +191,13 @@ function migrateLegacyWaypointExport(waypoints: PlanningWaypoint[]): void {
     } else {
       delete source.indicatorIcons;
     }
+    if (Array.isArray(destination.motions)) source.motions = normalizeWaypointMotions(destination.motions);
+    else delete source.motions;
   }
   const finalWaypoint = waypoints.at(-1)!;
   delete finalWaypoint.overrideCode;
   delete finalWaypoint.indicatorIcons;
+  delete finalWaypoint.motions;
 }
 
 function normalizePlanningPath(
@@ -238,6 +243,7 @@ function normalizeWaypoints(value: unknown): PlanningWaypoint[] {
       point?.indicatorIcons,
     );
     if (indicatorIcons.length) waypoint.indicatorIcons = indicatorIcons;
+    if (Array.isArray(point?.motions)) waypoint.motions = normalizeWaypointMotions(point.motions);
     if (
       Object.prototype.hasOwnProperty.call(point || {}, "overrideCode") &&
       typeof point?.overrideCode === "string"

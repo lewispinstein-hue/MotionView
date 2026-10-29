@@ -6,6 +6,8 @@ import type {
   PlanningWaypointView,
 } from "./planningTypes";
 import { getPlanNodeEffectiveMethod } from "./planningObjects";
+import type { PlanMotionTemplates } from "../state/models";
+import { createDefaultMotionTemplates, getWaypointCode, normalizeMotionTemplates } from "./planningMotions";
 
 const TEMPLATE_SHORTHAND_TOKENS: Readonly<Record<string, string>> = {
   x: "x",
@@ -19,6 +21,7 @@ const TEMPLATE_SHORTHAND_TOKENS: Readonly<Record<string, string>> = {
 
 export interface BuildPlanExportCodeOptions {
   template: string;
+  motionTemplates?: Readonly<PlanMotionTemplates>;
   waypoints: readonly PlanningWaypointView[];
   nodes: readonly PlanningNodeView[];
   objects: readonly PlanningObjectView[];
@@ -44,6 +47,7 @@ function isWaypointForwards(
 
 export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
   const rawTemplate = String(options.template ?? "");
+  const motionTemplates = normalizeMotionTemplates(options.motionTemplates, createDefaultMotionTemplates(rawTemplate));
   const defaultReplacements: Record<string, string> = {
     x: "0",
     y: "0",
@@ -157,9 +161,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     const start = options.waypoints[i];
     const end = options.waypoints[i + 1];
     if (!start || !end) continue;
-    const template = Object.prototype.hasOwnProperty.call(start, "overrideCode")
-      ? String(start.overrideCode ?? "")
-      : rawTemplate;
+    const template = getWaypointCode(start, motionTemplates);
     blocks.push(renderSegmentTemplate(template, start, end, i));
     appendBucketMethods(i + 1);
   }

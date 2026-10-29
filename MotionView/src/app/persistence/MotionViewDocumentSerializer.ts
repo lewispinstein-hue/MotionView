@@ -1,6 +1,7 @@
 import type { MotionViewApp } from "../MotionViewApp";
 import {
   normalizeWaypointIndicatorIcons,
+  normalizeWaypointMotions,
   serializePlanNode,
 } from "../../planning";
 import { normalizeWaypointType, waypointEventCount } from "../../viewing";
@@ -127,6 +128,7 @@ export class MotionViewDocumentSerializer {
       "planned-path": this.serializeWaypoints(planning.waypoints),
       "planned-segment-export": true,
       "planned-export-template": planning.template,
+      "planned-motion-templates": { ...planning.motionTemplates },
       "planned-objects": planning.objects.map((object) => ({
         id: object.id,
         name: object.name,
@@ -176,6 +178,7 @@ export class MotionViewDocumentSerializer {
         speed: Math.max(1, Math.min(127, Number(point.speed) || 127)),
       };
       if (indicatorIcons.length) serialized.indicatorIcons = indicatorIcons;
+      if (Array.isArray(point.motions)) serialized.motions = normalizeWaypointMotions(point.motions);
       if (Object.prototype.hasOwnProperty.call(point, "overrideCode"))
         serialized.overrideCode = point.overrideCode ?? "";
       return serialized;
@@ -190,7 +193,7 @@ export class MotionViewDocumentSerializer {
     const start = poses[0]?.t ?? null;
     const end = poses[poses.length - 1]?.t ?? null;
     return {
-      SchemaVersion: 4,
+      SchemaVersion: 5,
       CreationDate: new Intl.DateTimeFormat("en-GB", {
         year: "numeric",
         month: "2-digit",

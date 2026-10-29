@@ -8,6 +8,8 @@ import { PlanningRoute } from "./PlanningRoute";
 import { PlanningSelection } from "./PlanningSelection";
 import { PlanningTimeline } from "./planningTimelineDomain";
 import { PlanningSession } from "./planningSession";
+import type { PlanMotionTemplates } from "../state/models";
+import { normalizeMotionTemplates } from "./planningMotions";
 import type {
   PlanningExportView,
   PlanningNodeView,
@@ -59,6 +61,9 @@ export class PlanningFeature {
   get exportTemplate(): string {
     return this.#session.exportTemplate;
   }
+  get motionTemplates(): Readonly<PlanMotionTemplates> {
+    return this.#session.motionTemplates;
+  }
   get overlayVisible(): boolean {
     return this.#session.overlayVisible;
   }
@@ -76,6 +81,12 @@ export class PlanningFeature {
     this.#session.mutate("template", () => {
       this.#session.exportTemplate =
         String(template || "").trim() || this.#session.defaultExportTemplate;
+    });
+  }
+
+  setMotionTemplates(templates: Readonly<PlanMotionTemplates>): void {
+    this.#session.mutate("template", () => {
+      this.#session.motionTemplates = normalizeMotionTemplates(templates, this.#session.motionTemplates);
     });
   }
 
@@ -110,6 +121,7 @@ export class PlanningFeature {
       objects: this.#session.objects,
       nodes: this.#session.nodes,
       template: this.#session.exportTemplate,
+      motionTemplates: this.#session.motionTemplates,
     };
   }
 

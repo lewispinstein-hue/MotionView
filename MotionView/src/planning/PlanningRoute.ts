@@ -1,4 +1,5 @@
-import type { PlanWaypointIndicatorIcon } from "../state/models";
+import type { PlanWaypointIndicatorIcon, PlanWaypointMotion } from "../state/models";
+import { normalizeWaypointMotions } from "./planningMotions";
 import { clonePlanningWaypoint } from "./planningDocument";
 import { normalizeWaypointIndicatorIcons } from "./planningIndicators";
 import type { PlanningSession } from "./planningSession";
@@ -70,6 +71,20 @@ export class PlanningRoute {
       else delete waypoint.indicatorIcons;
       if (code === this.session.exportTemplate) delete waypoint.overrideCode;
       else waypoint.overrideCode = code;
+      delete waypoint.motions;
+    });
+  }
+
+  updateMotions(index: number, motions: readonly Readonly<PlanWaypointMotion>[]): void {
+    const waypoint = this.session.waypoints[index];
+    if (!waypoint) return;
+    this.session.mutate("route", () => {
+      waypoint.motions = normalizeWaypointMotions(motions);
+      for (const motion of waypoint.motions) {
+        if (motion.overrideCode === this.session.motionTemplates[motion.type]) delete motion.overrideCode;
+      }
+      delete waypoint.overrideCode;
+      delete waypoint.indicatorIcons;
     });
   }
 

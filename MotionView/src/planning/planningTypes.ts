@@ -3,6 +3,7 @@ import type {
   PlanNode,
   PlanObject,
   PlanWaypoint,
+  PlanMotionTemplates,
 } from "../state/models";
 
 export interface PlanningMethod extends PlanMethod {
@@ -74,4 +75,5 @@ export interface PlanningExportView {
   readonly objects: readonly PlanningObjectView[];
   readonly nodes: readonly PlanningNodeView[];
   readonly template: string;
+  readonly motionTemplates: Readonly<PlanMotionTemplates>;
 }

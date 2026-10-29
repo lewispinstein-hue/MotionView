@@ -20,6 +20,10 @@ export function createPlanNodeId() {
   return `plan-node-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+export function createPlanMotionId() {
+  return `plan-motion-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export function createPlanPathId() {
   return `plan-path-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }

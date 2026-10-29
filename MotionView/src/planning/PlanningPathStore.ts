@@ -5,6 +5,7 @@ import {
 } from "./planningDocument";
 import {
   createPlanNodeId,
+  createPlanMotionId,
   createPlanPathId,
   getDefaultPlanPathName,
 } from "./planningState";
@@ -68,6 +69,9 @@ export class PlanningPathStore {
       path.name = `${source.name} (Copy ${copyIndex++})`;
     }
     for (const node of path.nodes) node.id = createPlanNodeId();
+    for (const waypoint of path.waypoints) {
+      for (const motion of waypoint.motions ?? []) motion.id = createPlanMotionId();
+    }
     this.entries.splice(index + 1, 0, path);
     this.#activePathId = path.id;
     return path;

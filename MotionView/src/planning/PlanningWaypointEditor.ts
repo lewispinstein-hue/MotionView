@@ -1,5 +1,7 @@
 import type { PlanningDialogs } from "./PlanningDialogs";
 import type { PlanningFeature } from "./PlanningFeature";
+import { formatDistanceFromInches } from "../shared/units";
+import { getWaypointCode, waypointMotionsForEditing } from "./planningMotions";
 
 const WAYPOINT_PLACEHOLDERS =
   "The code that this waypoint will generate. ${x}, ${y}, and ${theta} use the destination; ${speed} and ${forwards} use this waypoint.";
@@ -27,22 +29,22 @@ export class PlanningWaypointEditor {
       });
       return;
     }
-    const code = Object.prototype.hasOwnProperty.call(waypoint, "overrideCode")
-      ? String(waypoint.overrideCode ?? "")
-      : this.planning.exportTemplate;
+    const target = this.planning.route.waypoints[index + 1]!;
+    const theta = Number.isFinite(target.theta) ? Number(target.theta!.toFixed(1)) : 0;
+    const targetPose = `${formatDistanceFromInches(target.x)}, ${formatDistanceFromInches(target.y)}, ${theta}°`;
     const result = await this.dialogs.edit({
       title: "Edit Waypoint",
-      subtitle: `Waypoint #${index + 1} → #${index + 2}`,
+      subtitle: `Waypoint #${index + 1} → #${index + 2} (${targetPose})`,
       groupTitle: "Waypoint Code",
       description: WAYPOINT_PLACEHOLDERS,
-      code,
-      indicatorIcons: waypoint.indicatorIcons ?? [],
+      code: getWaypointCode(waypoint, this.planning.motionTemplates),
+      motionEditor: {
+        mode: "waypoint",
+        templates: this.planning.motionTemplates,
+        motions: waypointMotionsForEditing(waypoint),
+      },
     });
-    if (!result) return;
-    this.planning.route.updateContent(
-      index,
-      result.code,
-      result.indicatorIcons,
-    );
+    if (!result?.motions) return;
+    this.planning.route.updateMotions(index, result.motions);
   }
 }

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "vite";
+import { runPlanningMotionTests } from "./planning_motion_cases.mjs";
+import { runPlanningMotionDragTests } from "./planning_motion_drag_cases.mjs";
 
 function format(value, decimals = 3) {
   const fixed = Number(value).toFixed(decimals);
@@ -387,7 +389,9 @@ try {
   assert.equal(Object.hasOwn(migratedWaypoints[1] ?? {}, "overrideCode"), false);
   assert.equal(Object.hasOwn(migratedWaypoints[1] ?? {}, "indicatorIcons"), false);
 
-  console.log("Planning template regression tests passed.");
+  await runPlanningMotionTests(server);
+  await runPlanningMotionDragTests(server);
+  console.log("Planning template and motion regression tests passed.");
 } finally {
   await server.close();
 }

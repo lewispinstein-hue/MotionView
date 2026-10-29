@@ -61,6 +61,7 @@ export class PlanningDom {
   readonly templateConfirm: HTMLButtonElement;
   readonly templateCode: HTMLTextAreaElement;
   readonly templateIndicatorPicker: HTMLElement;
+  readonly motionPreview: HTMLElement;
   readonly confirmModal: HTMLElement;
   readonly confirmTitle: HTMLElement;
   readonly confirmMessage: HTMLElement;
@@ -169,6 +170,7 @@ export class PlanningDom {
       document,
       "planTemplateIndicatorPicker",
     );
+    this.motionPreview = requiredElement(document, "planMotionPreview");
     this.confirmModal = requiredElement(document, "planObjectDeleteModal");
     this.confirmTitle = requiredElement(document, "planObjectDeleteTitle");
     this.confirmMessage = requiredElement(document, "planObjectDeleteMessage");

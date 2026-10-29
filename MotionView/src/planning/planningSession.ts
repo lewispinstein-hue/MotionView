@@ -18,6 +18,8 @@ import {
 import { PlanningPathStore } from "./PlanningPathStore";
 import { PlanningSessionHistory } from "./planningSessionHistory";
 import { normalizePlanObjects } from "./planningState";
+import type { PlanMotionTemplates } from "../state/models";
+import { createDefaultMotionTemplates, normalizeMotionTemplates } from "./planningMotions";
 import type {
   PlanningCodeExportSettings,
   PlanningNode,
@@ -39,7 +41,7 @@ interface PlanningHistorySnapshot {
   selectedNodeId: string | null;
   selectedMethod: PlanningMethodSelection | null;
   playDist: number;
-  exportTemplate: string;
+  motionTemplates: PlanMotionTemplates;
 }
 
 /**
@@ -53,7 +55,7 @@ export class PlanningSession {
   selectedWaypoint = -1;
   selectedNodeId: string | null = null;
   selectedMethod: PlanningMethodSelection | null = null;
-  exportTemplate: string;
+  motionTemplates: PlanMotionTemplates;
   overlayVisible = false;
   playbackDistance = 0;
   routeRevision = 0;
@@ -64,8 +66,16 @@ export class PlanningSession {
     readonly defaultExportTemplate: string,
     maxUndoSteps: number,
   ) {
-    this.exportTemplate = defaultExportTemplate;
+    this.motionTemplates = createDefaultMotionTemplates(defaultExportTemplate);
     this.#history = new PlanningSessionHistory(maxUndoSteps);
+  }
+
+  /** Compatibility alias for the old single-template API. */
+  get exportTemplate(): string {
+    return this.motionTemplates.forward;
+  }
+  set exportTemplate(template: string) {
+    this.motionTemplates.forward = template;
   }
 
   get activePathId(): string {
@@ -287,6 +297,10 @@ export class PlanningSession {
         ? template
         : this.defaultExportTemplate;
     }
+    this.motionTemplates = normalizeMotionTemplates(
+      data["planned-motion-templates"],
+      createDefaultMotionTemplates(this.exportTemplate),
+    );
     this.maintainDocumentInvariants();
     this.routeRevision += 1;
     this.resetTransientDomainState();
@@ -298,7 +312,7 @@ export class PlanningSession {
   clear(): void {
     this.#pathStore.reset();
     this.objects.length = 0;
-    this.exportTemplate = this.defaultExportTemplate;
+    this.motionTemplates = createDefaultMotionTemplates(this.defaultExportTemplate);
     this.overlayVisible = false;
     this.routeRevision += 1;
     this.resetTransientDomainState();
@@ -318,7 +332,7 @@ export class PlanningSession {
       selectedNodeId: this.selectedNodeId,
       selectedMethod: this.selectedMethod ? { ...this.selectedMethod } : null,
       playDist: this.playbackDistance,
-      exportTemplate: this.exportTemplate,
+      motionTemplates: { ...this.motionTemplates },
     };
   }
 
@@ -336,7 +350,7 @@ export class PlanningSession {
       ? { ...snapshot.selectedMethod }
       : null;
     this.playbackDistance = snapshot.playDist;
-    this.exportTemplate = snapshot.exportTemplate || this.defaultExportTemplate;
+    this.motionTemplates = { ...snapshot.motionTemplates };
     this.maintainDocumentInvariants();
     this.routeRevision += 1;
   }
@@ -349,7 +363,7 @@ export class PlanningSession {
       snapshot.selectedMethod?.objectId === this.selectedMethod?.objectId &&
       snapshot.selectedMethod?.methodId === this.selectedMethod?.methodId &&
       snapshot.playDist === this.playbackDistance &&
-      snapshot.exportTemplate === this.exportTemplate &&
+      JSON.stringify(snapshot.motionTemplates) === JSON.stringify(this.motionTemplates) &&
       snapshot.selected.length === this.selectedWaypoints.size &&
       snapshot.selected.every((index) => this.selectedWaypoints.has(index)) &&
       JSON.stringify(snapshot.paths) === JSON.stringify(this.pathEntries) &&

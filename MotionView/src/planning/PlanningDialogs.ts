@@ -6,6 +6,7 @@ import {
   normalizeWaypointIndicatorIcons,
 } from "./planningIndicators";
 import type { PlanWaypointIndicatorIcon } from "../state/models";
+import { PlanningMotionEditorView, type PlanningMotionEditorOptions, type PlanningMotionEditorResult } from "./render/PlanningMotionEditorView";
 
 export interface PlanningConfirmOptions {
   readonly title?: string;
@@ -33,9 +34,10 @@ export interface PlanningEditorOptions {
   readonly nameDescription?: string;
   readonly confirmLabel?: string;
   readonly indicatorIcons?: readonly PlanWaypointIndicatorIcon[];
+  readonly motionEditor?: PlanningMotionEditorOptions;
 }
 
-export interface PlanningEditorResult {
+export interface PlanningEditorResult extends PlanningMotionEditorResult {
   readonly name: string;
   readonly code: string;
   readonly indicatorIcons: readonly PlanWaypointIndicatorIcon[];
@@ -51,12 +53,16 @@ export class PlanningDialogs {
   #editorUsesIndicators = false;
   #editorIndicatorIcons: PlanWaypointIndicatorIcon[] = [];
   #bound = false;
+  readonly #motionEditor: PlanningMotionEditorView;
 
-  constructor(private readonly dom: PlanningDom) {}
+  constructor(private readonly dom: PlanningDom) {
+    this.#motionEditor = new PlanningMotionEditorView(dom);
+  }
 
   bind(): void {
     if (this.#bound) return;
     this.#bound = true;
+    this.#motionEditor.bind();
     this.dom.confirmClose.addEventListener("click", () =>
       this.closeConfirm(false),
     );
@@ -148,9 +154,10 @@ export class PlanningDialogs {
     this.dom.templateConfirm.textContent = options.confirmLabel ?? "Confirm";
     this.dom.templateValidation.hidden = true;
     this.dom.templateValidation.textContent = "";
+    if (options.motionEditor) this.#motionEditor.open(options.motionEditor);
     this.show(
       this.dom.templateModal,
-      this.#editorUsesName ? this.dom.templateName : this.dom.templateCode,
+      this.#editorUsesName ? this.dom.templateName : options.motionEditor ? this.#motionEditor.focusTarget : this.dom.templateCode,
     );
     return new Promise((resolve) => {
       this.#editorResolver = resolve;
@@ -175,6 +182,10 @@ export class PlanningDialogs {
 
   private confirmEditor(): void {
     if (!this.#editorResolver) return;
+    if (this.#motionEditor.active) {
+      this.closeEditor({ name: "", code: "", indicatorIcons: [], ...this.#motionEditor.result });
+      return;
+    }
     const name = this.dom.templateName.value.trim().slice(0, 25);
     if (this.#editorUsesName && !name) {
       this.dom.templateValidation.textContent = "Enter a name to continue.";
@@ -210,6 +221,7 @@ export class PlanningDialogs {
     this.#editorUsesCode = true;
     this.#editorUsesIndicators = false;
     this.#editorIndicatorIcons = [];
+    this.#motionEditor.close();
     this.hide(this.dom.templateModal);
     resolve?.(result);
   }
