@@ -6,7 +6,7 @@ import type {
 import { isWaypointIndicatorIcon } from "./planningIndicators";
 import { createPlanMotionId } from "./planningState";
 
-export const MAX_WAYPOINT_MOTIONS = 4;
+export const MAX_WAYPOINT_MOTIONS = 2;
 export const PLANNING_MOTION_TYPES = [
   { type: "forward", name: "Straight" },
   { type: "rotate", name: "Turn" },
@@ -36,22 +36,24 @@ export function normalizeMotionTemplates(
   return result;
 }
 
-/** Retains order and empty overrides while repairing IDs and rejecting bad types. */
+/** Retains order and empty overrides, with one or two distinct motion types. */
 export function normalizeWaypointMotions(value: unknown): PlanWaypointMotion[] {
-  if (!Array.isArray(value)) return [];
   const motions: PlanWaypointMotion[] = [];
   const ids = new Set<string>();
-  for (const raw of value) {
+  const types = new Set<PlanWaypointMotion["type"]>();
+  for (const raw of Array.isArray(value) ? value : []) {
     if (!raw || typeof raw !== "object" || !isWaypointIndicatorIcon(raw.type)) continue;
+    if (types.has(raw.type)) continue;
     let id = typeof raw.id === "string" ? raw.id.trim() : "";
     if (!id || ids.has(id)) id = createPlanMotionId();
     ids.add(id);
+    types.add(raw.type);
     const motion: PlanWaypointMotion = { id, type: raw.type };
     if (typeof raw.overrideCode === "string") motion.overrideCode = raw.overrideCode;
     motions.push(motion);
     if (motions.length === MAX_WAYPOINT_MOTIONS) break;
   }
-  return motions;
+  return motions.length ? motions : [{ id: createPlanMotionId(), type: "forward" }];
 }
 
 export function getMotionCode(

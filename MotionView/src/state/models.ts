@@ -90,7 +90,7 @@ export interface PlanWaypoint {
   speed?: number;
   overrideCode?: string;
   indicatorIcons?: PlanWaypointIndicatorIcon[];
-  /** Ordered departing motions; an explicit empty array emits no motion code. */
+  /** One or two distinct departing motions in execution order. */
   motions?: PlanWaypointMotion[];
 }
 

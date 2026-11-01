@@ -2145,11 +2145,6 @@ body:not(.mode-planning) #rightPlanning {
   outline: none;
 }
 
-.modalCard:focus {
-  outline: 2px solid rgba(110, 168, 255, 0.6);
-  outline-offset: 2px;
-}
-
 .modalHeader {
   display: flex;
   justify-content: space-between;
@@ -3949,72 +3944,45 @@ body:not(.mode-planning) #rightPlanning {
   display: none;
 }
 
-.planMotionWaypointLayout {
-  display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 48px;
-}
-
-.planMotionPreviewSection {
-  min-width: 0;
-}
-
-.planMotionSectionHeader {
+.planMotionPicker {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
   margin-bottom: 8px;
 }
 
-.planMotionSectionHeader h3 {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.planMotionSectionHeader > span {
-  color: var(--muted);
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.planMotionPalette,
-.planMotionList {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.planMotionPaletteCard,
-.planMotionPlaced {
-  display: flex;
+.planMotionChoice {
+  display: inline-flex;
   align-items: center;
-  min-width: 0;
-  height: 26px;
-  padding: 3px 7px;
-  gap: 7px;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.035);
-  cursor: grab;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
   user-select: none;
-  touch-action: none;
   transition: border-color 120ms ease, background 120ms ease;
 }
 
-.planMotionPaletteCard:hover:not(.isDisabled),
-.planMotionPlaced:hover {
+.planMotionChoice[aria-pressed="false"]:hover:not(:disabled),
+.planMotionSwap:hover:not(:disabled) {
   border-color: rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.06);
 }
 
-.planMotionGrip {
-  color: rgba(255, 255, 255, 0.28);
-  font-size: 12px;
+.planMotionChoice[aria-pressed="true"] {
+  border-color: rgba(120, 180, 255, 0.75);
+  background: rgba(85, 146, 218, 0.16);
 }
 
-.planMotionPaletteCard.isDisabled {
+.planMotionChoice:disabled,
+.planMotionSwap:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
@@ -4026,139 +3994,64 @@ body:not(.mode-planning) #rightPlanning {
   color: rgba(231, 238, 248, 0.9);
 }
 
-.planMotionCardText {
+.planMotionOrderRow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.planMotionOrderSummary {
   display: flex;
   flex: 1 1 auto;
-  min-width: 0;
-  flex-direction: column;
-  text-align: left;
-}
-
-.planMotionCardText strong {
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.planMotionPreview .waypointIndicatorIcon,
-.planMotionCardText,
-.planMotionGrip,
-.planMotionIndex {
-  pointer-events: none;
-}
-
-.planMotionIndex {
-  flex: 0 0 12px;
-  color: var(--muted);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
-.planMotionTimeline {
-  position: relative;
-  display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  min-height: 134px;
-  padding: 8px;
+  gap: 10px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
   background: rgba(5, 10, 16, 0.65);
 }
 
-.planMotionList {
-  width: 100%;
-}
-
-.planMotionPlaced {
-  background: rgba(5, 10, 16, 0.4);
-}
-
-.planMotionPlaced.isSelected {
-  border-color: rgba(120, 180, 255, 0.75);
-  background: rgba(85, 146, 218, 0.16);
-}
-
-.planMotionPlaced:focus-visible,
-.planMotionTemplateTab:focus-visible {
-  outline: 2px solid #78b4ff;
-  outline-offset: 2px;
-}
-
-.planMotionActions {
+.planMotionOrderIcons {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  gap: 1px;
+  gap: 6px;
 }
 
-.planMotionRemove,
-.planMotionReorder {
+.planMotionOrderLabel {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.planMotionSwap {
   display: grid;
   place-items: center;
-  flex: 0 0 20px;
-  width: 20px;
-  height: 20px;
-  padding: 4px;
-  border: 0;
-  border-radius: 6px;
-  color: rgba(211, 223, 237, 0.6);
-  background: transparent;
+  flex: 0 0 40px;
+  width: 40px;
+  min-height: 40px;
+  padding: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.035);
   cursor: pointer;
 }
 
-.planMotionRemove svg,
-.planMotionReorder svg {
-  width: 12px;
-  height: 12px;
+.planMotionSwap svg {
+  width: 19px;
+  height: 19px;
 }
 
-.planMotionRemove:hover,
-.planMotionRemove:focus-visible {
-  color: #ffb6b6;
-  background: rgba(213, 91, 91, 0.2);
-}
-
-.planMotionReorder:hover:not(:disabled),
-.planMotionReorder:focus-visible {
-  color: #c4ddff;
-  background: rgba(85, 146, 218, 0.2);
-}
-
-.planMotionReorder:disabled {
-  opacity: 0.25;
-  cursor: default;
-}
-
-.planMotionDropLine {
-  position: absolute;
-  height: 2px;
-  left: 8px;
-  right: 8px;
-  border-radius: 2px;
-  background: #81dba5;
-  box-shadow: 0 0 8px rgba(129, 219, 165, 0.25);
-  pointer-events: none;
-}
-
-.planMotionPreview .isDragging {
-  opacity: 0.4;
-}
-
-.planMotionDragGhost {
-  position: fixed;
-  z-index: 1000;
-  pointer-events: none;
-  background: var(--panel);
-  opacity: 0.92;
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.3);
-}
-
-.planMotionDragGhost .waypointIndicatorIcon {
-  width: 17px;
-  height: 17px;
-  flex: 0 0 17px;
+.planMotionChoice:focus-visible,
+.planMotionSwap:focus-visible,
+.planMotionTemplateTab:focus-visible {
+  outline: 2px solid #78b4ff;
+  outline-offset: 2px;
 }
 
 .planMotionTemplateTabs {
@@ -4178,10 +4071,6 @@ body:not(.mode-planning) #rightPlanning {
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.035);
   cursor: pointer;
-}
-
-.planMotionTemplateTab .planMotionCardText {
-  flex: 0 1 auto;
 }
 
 .planMotionTemplateTab[aria-selected="true"] {
@@ -4318,15 +4207,38 @@ body:not(.mode-planning) #rightPlanning {
 }
 
 @media (max-width: 600px) {
-  .planMotionWaypointLayout {
-    grid-template-columns: 1fr;
-    gap: 24px;
-  }
-  .planMotionPalette,
   .planMotionTemplateTabs {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+@media (max-width: 380px) {
+  .planMotionPicker {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .planMotionChoice {
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px 2px;
+    font-size: 11px;
+  }
+}
+
+@media (pointer: coarse) {
+  .planMotionChoice, .planMotionSwap {
+    min-height: 44px;
+  }
+  .planMotionSwap {
+    flex-basis: 44px;
+    width: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planMotionChoice { transition: none; }
 }
 
 .planConfirmModalCard {

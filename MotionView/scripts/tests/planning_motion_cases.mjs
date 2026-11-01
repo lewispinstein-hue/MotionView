@@ -16,7 +16,7 @@ export async function runPlanningMotionTests(server) {
   assert.equal(legacyMotions.length, 1);
   assert.equal(legacyMotions[0].type, "forward");
   assert.equal(legacyMotions[0].overrideCode, legacy.overrideCode);
-  assert.deepEqual(waypointMotionsForEditing({ ...points[0], motions: [] }), []);
+  assert.equal(waypointMotionsForEditing({ ...points[0], motions: [] })[0].type, "forward");
 
   const planning = new PlanningFeature("legacy(@x);");
   planning.load({ "planned-segment-export": true, "planned-path": points });
@@ -31,25 +31,24 @@ export async function runPlanningMotionTests(server) {
   const motions = [
     { id: "linear", type: "forward" },
     { id: "edited", type: "rotate", overrideCode: customCode },
-    { id: "silent", type: "rotate", overrideCode: "" },
-    { id: "pivot", type: "swing" },
   ];
   planning.route.updateMotions(0, motions);
   assert.equal(generatePlanningCode(planning), [
     "move(10,20,90,22.361,0,50,true);",
-    "customTurn(90);", "wait(50);", "", "swing(90);",
+    "customTurn(90);", "wait(50);",
     "move(20,30,180,14.142,1,70,true);",
   ].join("\n"));
   assert.equal(Object.hasOwn(planning.route.waypoints[0], "overrideCode"), false);
 
   planning.route.updateMotions(0, [...motions].reverse());
-  assert.deepEqual(planning.route.waypoints[0].motions.map((motion) => motion.id), ["pivot", "silent", "edited", "linear"]);
+  assert.deepEqual(planning.route.waypoints[0].motions.map((motion) => motion.id), ["edited", "linear"]);
   assert.equal(planning.route.waypoints[0].motions.find((motion) => motion.id === "edited").overrideCode, customCode);
-  assert.ok(generatePlanningCode(planning).startsWith("swing(90);\n\ncustomTurn(90);\nwait(50);\nmove("));
-  planning.route.updateMotions(0, planning.route.waypoints[0].motions.filter((motion) => motion.id !== "silent"));
+  assert.ok(generatePlanningCode(planning).startsWith("customTurn(90);\nwait(50);\nmove("));
+  planning.route.updateMotions(0, planning.route.waypoints[0].motions.filter((motion) => motion.id !== "linear"));
   planning.route.updateMotions(0, [...planning.route.waypoints[0].motions, { id: "pose", type: "boomerang" }]);
   assert.equal(planning.route.waypoints[0].motions.find((motion) => motion.id === "edited").overrideCode, customCode);
   assert.ok(generatePlanningCode(planning).includes("pose(10,20,90);"));
+  planning.route.updateMotions(0, [...motions].reverse());
 
   // Only linked instances follow template changes, not edited instances of that type.
   planning.setMotionTemplates({ ...planning.motionTemplates, rotate: "newTurn(@th);", forward: "newMove(@x);" });
@@ -67,7 +66,7 @@ export async function runPlanningMotionTests(server) {
   const empty = new PlanningFeature("default(@x);");
   empty.load({ "planned-segment-export": true, "planned-path": points.slice(0, 2) });
   empty.route.updateMotions(0, []);
-  assert.equal(generatePlanningCode(empty), "");
+  assert.equal(generatePlanningCode(empty), "default(10);");
   empty.route.updateMotions(0, [{ id: "empty-code", type: "forward", overrideCode: "" }]);
   assert.equal(generatePlanningCode(empty), "");
   assert.equal(Object.hasOwn(empty.route.waypoints[0].motions[0], "overrideCode"), true);
@@ -82,11 +81,11 @@ export async function runPlanningMotionTests(server) {
     { id: "last", type: "swing" },
     { id: "overflow", type: "boomerang" },
   ]);
-  assert.equal(normalized.length, 4);
-  assert.equal(new Set(normalized.map((motion) => motion.id)).size, 4);
-  assert.deepEqual(normalized.map((motion) => motion.type), ["forward", "forward", "rotate", "swing"]);
+  assert.equal(normalized.length, 2);
+  assert.equal(new Set(normalized.map((motion) => motion.id)).size, 2);
+  assert.deepEqual(normalized.map((motion) => motion.type), ["forward", "rotate"]);
   assert.equal(normalized[0].overrideCode, "");
-  assert.equal(Object.hasOwn(normalized[2], "overrideCode"), false);
+  assert.equal(Object.hasOwn(normalized[1], "overrideCode"), false);
 
   // One atomic waypoint update participates in cross-path undo and deep cloning.
   const firstPath = planning.paths.activeId;
@@ -124,7 +123,7 @@ export async function runPlanningMotionTests(server) {
     assert.equal(restored.paths.activeId, planning.paths.activeId);
     assert.equal(generatePlanningCode(restored), generatePlanningCode(planning));
     assert.equal(restored.route.waypoints[0].motions[1].overrideCode, customCode);
-    assert.equal(restored.paths.items.find((path) => path.id === secondPath).waypoints[0].motions.length, 0);
+    assert.equal(restored.paths.items.find((path) => path.id === secondPath).waypoints[0].motions[0].type, "forward");
   }
 
   const derivedId = planning.paths.derive(firstPath);

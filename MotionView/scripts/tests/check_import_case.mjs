@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, extname, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -14,7 +14,7 @@ const names = new Set(
     },
   )
     .split("\0")
-    .filter(Boolean),
+    .filter((name) => name && existsSync(resolve(root, name))),
 );
 
 const canonical = new Map([...names].map((name) => [name.toLowerCase(), name]));
