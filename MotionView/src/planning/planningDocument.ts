@@ -1,5 +1,6 @@
 import { normalizeWaypointIndicatorIcons } from "./planningIndicators";
 import { normalizeWaypointMotions } from "./planningMotions";
+import { normalizePlanningLead } from "./planningSegments";
 import {
   createPlanPathId,
   normalizePlanNodes,
@@ -29,7 +30,9 @@ export function clonePlanningWaypoint(
     theta: point.theta ?? 0,
     speed: point.speed ?? 127,
   };
+  if (typeof point.forwards === "boolean") cloned.forwards = point.forwards;
   const indicatorIcons = normalizeWaypointIndicatorIcons(point.indicatorIcons);
+  if (typeof point.lead === "number" && Number.isFinite(point.lead)) cloned.lead = normalizePlanningLead(point.lead);
   if (
     indicatorIcons.length ||
     Object.prototype.hasOwnProperty.call(point, "indicatorIcons")
@@ -239,9 +242,11 @@ function normalizeWaypoints(value: unknown): PlanningWaypoint[] {
         ? Math.max(1, Math.min(127, Number(point?.speed)))
         : 127,
     };
+    if (typeof point?.forwards === "boolean") waypoint.forwards = point.forwards;
     const indicatorIcons = normalizeWaypointIndicatorIcons(
       point?.indicatorIcons,
     );
+    if (typeof point?.lead === "number" && Number.isFinite(point.lead)) waypoint.lead = normalizePlanningLead(point.lead);
     if (indicatorIcons.length) waypoint.indicatorIcons = indicatorIcons;
     if (Array.isArray(point?.motions)) waypoint.motions = normalizeWaypointMotions(point.motions);
     if (

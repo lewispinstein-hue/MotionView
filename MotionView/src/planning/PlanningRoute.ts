@@ -1,5 +1,11 @@
 import type { PlanWaypointIndicatorIcon, PlanWaypointMotion } from "../state/models";
-import { normalizeWaypointMotions } from "./planningMotions";
+import { normalizeWaypointMotions, waypointMotionsForEditing } from "./planningMotions";
+import {
+  DEFAULT_BOOMERANG_LEAD,
+  isBoomerangWaypoint,
+  normalizePlanningLead,
+} from "./planningSegments";
+import { createPlanMotionId } from "./planningState";
 import { clonePlanningWaypoint } from "./planningDocument";
 import { normalizeWaypointIndicatorIcons } from "./planningIndicators";
 import type { PlanningSession } from "./planningSession";
@@ -72,20 +78,60 @@ export class PlanningRoute {
       if (code === this.session.exportTemplate) delete waypoint.overrideCode;
       else waypoint.overrideCode = code;
       delete waypoint.motions;
+      delete waypoint.lead;
     });
   }
 
-  updateMotions(index: number, motions: readonly Readonly<PlanWaypointMotion>[]): void {
+  updateMotions(index: number, motions: readonly Readonly<PlanWaypointMotion>[], forwards?: boolean): void {
     const waypoint = this.session.waypoints[index];
     if (!waypoint) return;
     this.session.mutate("route", () => {
       waypoint.motions = normalizeWaypointMotions(motions);
+      if (typeof forwards === "boolean") waypoint.forwards = forwards;
+      if (waypoint.motions.some((motion) => motion.type === "boomerang"))
+        waypoint.lead = normalizePlanningLead(waypoint.lead);
+      else delete waypoint.lead;
       for (const motion of waypoint.motions) {
         if (motion.overrideCode === this.session.motionTemplates[motion.type]) delete motion.overrideCode;
       }
       delete waypoint.overrideCode;
       delete waypoint.indicatorIcons;
     });
+  }
+
+  /** Switch the departing translation without rewriting user-authored code. */
+  toggleBoomerang(index: number): boolean {
+    const waypoint = this.session.waypoints[index];
+    if (!waypoint || !this.session.waypoints[index + 1]) return false;
+    const enabled = !isBoomerangWaypoint(waypoint);
+    const motions = waypointMotionsForEditing(waypoint);
+    const type = enabled ? "boomerang" : "forward";
+    const previousType = enabled ? "forward" : "boomerang";
+    const existing = motions.find((motion) => motion.type === type);
+    const replaceIndex = motions.findIndex((motion) => motion.type === previousType);
+    if (existing && replaceIndex >= 0) motions.splice(replaceIndex, 1);
+    else if (!existing && replaceIndex >= 0)
+      motions[replaceIndex] = { ...motions[replaceIndex]!, type };
+    else if (!existing) {
+      // An angular-only pair has no translation slot to switch. Never drop
+      // either action (or its edited code) implicitly to make room for one.
+      if (motions.length === 2) return false;
+      motions.unshift({ id: createPlanMotionId(), type });
+    }
+    this.session.mutate("route", () => {
+      waypoint.motions = motions;
+      if (enabled) waypoint.lead = DEFAULT_BOOMERANG_LEAD;
+      else delete waypoint.lead;
+      delete waypoint.overrideCode;
+      delete waypoint.indicatorIcons;
+    });
+    return true;
+  }
+
+  updateLead(index: number, lead: number): void {
+    const waypoint = this.session.waypoints[index];
+    if (!waypoint || !this.session.waypoints[index + 1] || !isBoomerangWaypoint(waypoint)) return;
+    this.session.mutate("route", () => { waypoint.lead = normalizePlanningLead(lead); });
   }
 
   updateField(

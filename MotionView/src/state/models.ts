@@ -88,6 +88,10 @@ export interface PlanWaypoint {
   y: number;
   theta?: number;
   speed?: number;
+  /** Explicit departing travel direction; absent legacy values use heading inference. */
+  forwards?: boolean;
+  /** Departing Boomerang tangent length as a fraction of the segment chord. */
+  lead?: number;
   overrideCode?: string;
   indicatorIcons?: PlanWaypointIndicatorIcon[];
   /** One or two distinct departing motions in execution order. */

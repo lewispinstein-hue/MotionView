@@ -2,9 +2,10 @@ import type { PlanningDialogs } from "./PlanningDialogs";
 import type { PlanningFeature } from "./PlanningFeature";
 import { formatDistanceFromInches } from "../shared/units";
 import { getWaypointCode, waypointMotionsForEditing } from "./planningMotions";
+import { isSegmentForwards } from "./planningSegments";
 
 const WAYPOINT_PLACEHOLDERS =
-  "The code that this waypoint will generate. ${x}, ${y}, and ${theta} use the destination; ${speed} and ${forwards} use this waypoint.";
+  "The code that this waypoint will generate. ${x}, ${y}, and ${theta} use the destination; ${speed}, ${forwards}, and ${lead} (@ld) use this waypoint. Lead is 0 for straight segments.";
 
 /** Opens the shared code editor for a single waypoint and applies its content atomically. */
 export class PlanningWaypointEditor {
@@ -42,9 +43,10 @@ export class PlanningWaypointEditor {
         mode: "waypoint",
         templates: this.planning.motionTemplates,
         motions: waypointMotionsForEditing(waypoint),
+        forwards: isSegmentForwards(waypoint, target),
       },
     });
     if (!result?.motions) return;
-    this.planning.route.updateMotions(index, result.motions);
+    this.planning.route.updateMotions(index, result.motions, result.forwards);
   }
 }

@@ -6,6 +6,7 @@ import {
 } from "../../planning";
 import { normalizeWaypointType, waypointEventCount } from "../../viewing";
 import type { MotionViewSettings } from "../settings";
+import { isBoomerangWaypoint, waypointLead } from "../../planning/planningSegments";
 
 export type MotionViewExportType = "viewing" | "planning" | "both";
 
@@ -129,6 +130,7 @@ export class MotionViewDocumentSerializer {
       "planned-segment-export": true,
       "planned-export-template": planning.template,
       "planned-motion-templates": { ...planning.motionTemplates },
+      "planned-boomerang-configuration": structuredClone(planning.boomerangConfiguration),
       "planned-objects": planning.objects.map((object) => ({
         id: object.id,
         name: object.name,
@@ -177,7 +179,9 @@ export class MotionViewDocumentSerializer {
         theta: point.theta ?? 0,
         speed: Math.max(1, Math.min(127, Number(point.speed) || 127)),
       };
+      if (typeof point.forwards === "boolean") serialized.forwards = point.forwards;
       if (indicatorIcons.length) serialized.indicatorIcons = indicatorIcons;
+      if (isBoomerangWaypoint(point)) serialized.lead = waypointLead(point);
       if (Array.isArray(point.motions)) serialized.motions = normalizeWaypointMotions(point.motions);
       if (Object.prototype.hasOwnProperty.call(point, "overrideCode"))
         serialized.overrideCode = point.overrideCode ?? "";

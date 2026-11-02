@@ -5,8 +5,11 @@ import type {
 } from "../state/models";
 import { isWaypointIndicatorIcon } from "./planningIndicators";
 import { createPlanMotionId } from "./planningState";
+import { isBoomerangWaypoint } from "./planningSegments";
 
 export const MAX_WAYPOINT_MOTIONS = 2;
+const PREVIOUS_BOOMERANG_DEFAULT = "moveToPose(${x}, ${y}, ${theta}, 4000, {.lead = ${lead}});";
+const DEFAULT_BOOMERANG_TEMPLATE = "moveToPose(${x}, ${y}, ${theta}, 4000, {.forwards = ${forwards}, .lead = ${lead}, .maxSpeed = ${speed}});";
 export const PLANNING_MOTION_TYPES = [
   { type: "forward", name: "Straight" },
   { type: "rotate", name: "Turn" },
@@ -19,13 +22,14 @@ export function createDefaultMotionTemplates(forward: string): PlanMotionTemplat
     forward,
     rotate: "turnToHeading(${theta});",
     swing: "swingToHeading(${theta});",
-    boomerang: "moveToPose(${x}, ${y}, ${theta});",
+    boomerang: DEFAULT_BOOMERANG_TEMPLATE,
   };
 }
 
 export function normalizeMotionTemplates(
   value: unknown,
   fallback: Readonly<PlanMotionTemplates>,
+  restorePreviousDefaults = false,
 ): PlanMotionTemplates {
   const source = value && typeof value === "object"
     ? value as Record<string, unknown> : {};
@@ -33,6 +37,10 @@ export function normalizeMotionTemplates(
   for (const { type } of PLANNING_MOTION_TYPES) {
     if (typeof source[type] === "string") result[type] = source[type];
   }
+  // Repair only our exact previous default during document restore. Explicit
+  // editor input and per-motion overrides remain opaque, even if identical.
+  if (restorePreviousDefaults && result.boomerang === PREVIOUS_BOOMERANG_DEFAULT)
+    result.boomerang = DEFAULT_BOOMERANG_TEMPLATE;
   return result;
 }
 
@@ -67,7 +75,7 @@ export function getMotionCode(
 /** Legacy code is one intact motion, never inferred from its visual-only tags. */
 export function waypointMotionsForEditing(point: Readonly<PlanWaypoint>): PlanWaypointMotion[] {
   if (Array.isArray(point.motions)) return normalizeWaypointMotions(point.motions);
-  const motion: PlanWaypointMotion = { id: createPlanMotionId(), type: "forward" };
+  const motion: PlanWaypointMotion = { id: createPlanMotionId(), type: isBoomerangWaypoint(point) ? "boomerang" : "forward" };
   if (Object.prototype.hasOwnProperty.call(point, "overrideCode")) {
     motion.overrideCode = point.overrideCode ?? "";
   }
@@ -82,5 +90,5 @@ export function getWaypointCode(
     return point.motions.map((motion) => getMotionCode(motion, templates)).join("\n");
   }
   return Object.prototype.hasOwnProperty.call(point, "overrideCode")
-    ? point.overrideCode ?? "" : templates.forward;
+    ? point.overrideCode ?? "" : templates[isBoomerangWaypoint(point) ? "boomerang" : "forward"];
 }

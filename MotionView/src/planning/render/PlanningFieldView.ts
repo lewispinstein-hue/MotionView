@@ -1,6 +1,7 @@
 import { getMode } from "../../app/modeController";
 import type { FieldRenderer } from "../../render/field";
 import { requestDrawAll } from "../../render/renderScheduler";
+import { setStatus } from "../../app/status";
 import type { PlanningFeature } from "../PlanningFeature";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningDialogs } from "../PlanningDialogs";
@@ -12,6 +13,7 @@ import {
 import { planningTelemetry } from "../../telemetry/createTelemetry";
 import { formatDistanceFromInches } from "../../shared/units";
 import type { PlanningNodeTooltip } from "./PlanningNodeTooltip";
+import { PlanningSegmentsView, type PathSegmentHit } from "./PlanningSegmentsView";
 
 interface SelectionRect {
   x0: number;
@@ -20,11 +22,6 @@ interface SelectionRect {
   y1: number;
 }
 interface DragPoint {
-  index: number;
-  x: number;
-  y: number;
-}
-interface PathSegmentHit {
   index: number;
   x: number;
   y: number;
@@ -50,7 +47,7 @@ const NODE_THICK = 3.75;
 const NODE_TICK = 10;
 const NODE_BORDER = 1.5;
 const NODE_TEMPLATE_DESCRIPTION =
-  "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}";
+  "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, ${forwards}, and ${lead} (@ld)";
 
 function normalizeDegrees(value: number): number {
   return ((value % 360) + 360) % 360;
@@ -65,6 +62,9 @@ export class PlanningFieldView {
   #suppressWaypointEditorUntil = 0;
   #selectionRect: SelectionRect | null = null;
   #pendingSegmentInsert: PendingSegmentInsert | null = null;
+  #pendingSegmentToggle: PendingSegmentInsert | null = null;
+  #leadDrag: Readonly<{ index: number; x: number; y: number; lead: number }> | null = null;
+  readonly #segments: PlanningSegmentsView;
   #thetaIndex = -1;
   #thetaStart = 0;
   #thetaOriginal: readonly Readonly<{ index: number; theta: number }>[] = [];
@@ -85,7 +85,9 @@ export class PlanningFieldView {
     private readonly dialogs: PlanningDialogs,
     private readonly waypointEditor: PlanningWaypointEditor,
     private readonly nodeTooltip: PlanningNodeTooltip,
-  ) {}
+  ) {
+    this.#segments = new PlanningSegmentsView(planning, field);
+  }
 
   setNodesVisible(visible: boolean): void {
     if (this.#nodesVisible === visible) return;
@@ -148,30 +150,7 @@ export class PlanningFieldView {
     if (!waypoints.length) return;
     const context = this.field.ctx;
     context.save();
-    context.lineWidth = this.field.sizes.screen({ width: 2, height: 2 }).width;
-    context.strokeStyle = "rgb(120,180,255)";
-    context.beginPath();
-    waypoints.forEach((point, index) => {
-      const screen = this.field.worldToScreen(point.x, point.y);
-      if (index === 0) context.moveTo(screen.x, screen.y);
-      else context.lineTo(screen.x, screen.y);
-    });
-    context.stroke();
-
-    context.lineWidth = this.field.sizes.screen({ width: 4, height: 4 }).width;
-    context.lineCap = "round";
-    context.strokeStyle = "rgba(190,225,255,0.98)";
-    for (const index of this.planning.selection.waypointIndices) {
-      const start = waypoints[index];
-      const end = waypoints[index + 1];
-      if (!start || !end) continue;
-      const startScreen = this.field.worldToScreen(start.x, start.y);
-      const endScreen = this.field.worldToScreen(end.x, end.y);
-      context.beginPath();
-      context.moveTo(startScreen.x, startScreen.y);
-      context.lineTo(endScreen.x, endScreen.y);
-      context.stroke();
-    }
+    this.#segments.draw(getMode() === "planning");
     context.lineCap = "butt";
     context.lineWidth = this.field.sizes.screen({ width: 2, height: 2 }).width;
 
@@ -323,6 +302,16 @@ export class PlanningFieldView {
       return;
     }
     if (event.button !== 0) return;
+    const leadIndex = this.#segments.hitLeadHandle(point.x, point.y);
+    if (leadIndex >= 0) {
+      const world = this.field.screenToWorld(point.x, point.y);
+      this.#leadDrag = {
+        index: leadIndex, ...world,
+        lead: this.planning.projection.segments[leadIndex]!.lead,
+      };
+      this.planning.history.begin("route");
+      return;
+    }
     const thetaIndex = this.hitThetaHandle(point.x, point.y);
     if (thetaIndex >= 0) {
       this.planning.history.begin("route");
@@ -363,6 +352,12 @@ export class PlanningFieldView {
         return waypoint ? [{ index, x: waypoint.x, y: waypoint.y }] : [];
       });
       this.planning.history.begin("route");
+      return;
+    }
+    const segment = this.hitPathSegment(point.x, point.y);
+    if (segment) {
+      this.#pendingSegmentToggle = { ...segment, startX: point.x, startY: point.y };
+      this.field.beginPan(event.pointerId, point.x, point.y);
       return;
     }
     if (this.planning.selection.selectedMethod) {
@@ -408,6 +403,22 @@ export class PlanningFieldView {
       requestDrawAll();
       return;
     }
+    if (this.#leadDrag) {
+      const drag = this.#leadDrag;
+      const segment = this.planning.projection.segments[drag.index];
+      if (segment) {
+        const lead = segment.leadAfterDrag(drag.lead, world.x - drag.x, world.y - drag.y);
+        if (Math.abs(lead - drag.lead) > 1e-6) this.#dragMoved = true;
+        this.planning.route.updateLead(drag.index, lead);
+      }
+      requestDrawAll();
+      return;
+    }
+    if (this.#pendingSegmentToggle && Math.hypot(
+      point.x - this.#pendingSegmentToggle.startX,
+      point.y - this.#pendingSegmentToggle.startY,
+    ) > 3)
+      this.#pendingSegmentToggle = null;
     if (this.#selectionRect) {
       this.#selectionRect.x1 = point.x;
       this.#selectionRect.y1 = point.y;
@@ -477,7 +488,20 @@ export class PlanningFieldView {
 
   private pointerEnd(event: PointerEvent): void {
     if (getMode() !== "planning" || this.#pointerId !== event.pointerId) return;
-    if (this.#pendingSegmentInsert) {
+    if (this.#pendingSegmentToggle) {
+      this.field.endPan(event.pointerId);
+      const release = this.canvasPoint(event);
+      const moved = Math.hypot(
+        release.x - this.#pendingSegmentToggle.startX,
+        release.y - this.#pendingSegmentToggle.startY,
+      ) > 3;
+      if (event.type !== "pointercancel" && !moved) {
+        const index = this.#pendingSegmentToggle.index;
+        if (!this.planning.route.toggleBoomerang(index))
+          setStatus("This waypoint already has two angular motions. Replace one with Straight or Boomerang to curve the segment.");
+        this.planning.selection.selectWaypoint(index);
+      }
+    } else if (this.#pendingSegmentInsert) {
       if (event.type !== "pointercancel")
         this.insertWaypointOnSegment(this.#pendingSegmentInsert);
       this.#pendingSegmentInsert = null;
@@ -496,7 +520,7 @@ export class PlanningFieldView {
       });
       this.planning.selection.setWaypoints(selected);
       this.#selectionRect = null;
-    } else if (this.#thetaIndex >= 0 || this.#dragStart) {
+    } else if (this.#thetaIndex >= 0 || this.#dragStart || this.#leadDrag) {
       if (event.type === "pointercancel") this.planning.history.cancel();
       else this.planning.history.commit();
       if (this.#dragMoved)
@@ -527,6 +551,8 @@ export class PlanningFieldView {
     this.#dragMoved = false;
     this.#thetaIndex = -1;
     this.#thetaOriginal = [];
+    this.#leadDrag = null;
+    this.#pendingSegmentToggle = null;
     this.#pendingSegmentInsert = null;
     this.#pendingAdd = null;
     requestDrawAll();
@@ -569,35 +595,8 @@ export class PlanningFieldView {
   }
 
   private hitPathSegment(x: number, y: number): PathSegmentHit | null {
-    const points = this.planning.route.waypoints;
     const threshold = Math.max(6, this.waypointRadius(false) * 0.8);
-    let best: PathSegmentHit | null = null;
-    let bestDistance = threshold * threshold;
-    for (let index = 0; index < points.length - 1; index += 1) {
-      const start = points[index];
-      const end = points[index + 1];
-      if (!start || !end) continue;
-      const startScreen = this.field.worldToScreen(start.x, start.y);
-      const endScreen = this.field.worldToScreen(end.x, end.y);
-      const dx = endScreen.x - startScreen.x;
-      const dy = endScreen.y - startScreen.y;
-      const lengthSquared = dx * dx + dy * dy;
-      if (lengthSquared <= 0) continue;
-      const progress = Math.max(
-        0,
-        Math.min(
-          1,
-          ((x - startScreen.x) * dx + (y - startScreen.y) * dy) / lengthSquared,
-        ),
-      );
-      const closestX = startScreen.x + dx * progress;
-      const closestY = startScreen.y + dy * progress;
-      const distance = (x - closestX) ** 2 + (y - closestY) ** 2;
-      if (distance > bestDistance) continue;
-      bestDistance = distance;
-      best = { index, x: closestX, y: closestY };
-    }
-    return best;
+    return this.#segments.hitSegment(x, y, threshold);
   }
 
   private insertWaypointOnSegment(segment: PathSegmentHit): void {

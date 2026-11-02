@@ -20,6 +20,10 @@ import { PlanningSessionHistory } from "./planningSessionHistory";
 import { normalizePlanObjects } from "./planningState";
 import type { PlanMotionTemplates } from "../state/models";
 import { createDefaultMotionTemplates, normalizeMotionTemplates } from "./planningMotions";
+import {
+  normalizeBoomerangPreviewConfiguration,
+  type BoomerangPreviewConfiguration,
+} from "./planningBoomerangConfiguration";
 import type {
   PlanningCodeExportSettings,
   PlanningNode,
@@ -42,6 +46,7 @@ interface PlanningHistorySnapshot {
   selectedMethod: PlanningMethodSelection | null;
   playDist: number;
   motionTemplates: PlanMotionTemplates;
+  boomerangConfiguration: BoomerangPreviewConfiguration;
 }
 
 /**
@@ -56,6 +61,7 @@ export class PlanningSession {
   selectedNodeId: string | null = null;
   selectedMethod: PlanningMethodSelection | null = null;
   motionTemplates: PlanMotionTemplates;
+  boomerangConfiguration = normalizeBoomerangPreviewConfiguration(undefined);
   overlayVisible = false;
   playbackDistance = 0;
   routeRevision = 0;
@@ -300,7 +306,9 @@ export class PlanningSession {
     this.motionTemplates = normalizeMotionTemplates(
       data["planned-motion-templates"],
       createDefaultMotionTemplates(this.exportTemplate),
+      true,
     );
+    this.boomerangConfiguration = normalizeBoomerangPreviewConfiguration(data["planned-boomerang-configuration"]);
     this.maintainDocumentInvariants();
     this.routeRevision += 1;
     this.resetTransientDomainState();
@@ -313,6 +321,7 @@ export class PlanningSession {
     this.#pathStore.reset();
     this.objects.length = 0;
     this.motionTemplates = createDefaultMotionTemplates(this.defaultExportTemplate);
+    this.boomerangConfiguration = normalizeBoomerangPreviewConfiguration(undefined);
     this.overlayVisible = false;
     this.routeRevision += 1;
     this.resetTransientDomainState();
@@ -333,6 +342,7 @@ export class PlanningSession {
       selectedMethod: this.selectedMethod ? { ...this.selectedMethod } : null,
       playDist: this.playbackDistance,
       motionTemplates: { ...this.motionTemplates },
+      boomerangConfiguration: normalizeBoomerangPreviewConfiguration(this.boomerangConfiguration),
     };
   }
 
@@ -351,6 +361,7 @@ export class PlanningSession {
       : null;
     this.playbackDistance = snapshot.playDist;
     this.motionTemplates = { ...snapshot.motionTemplates };
+    this.boomerangConfiguration = normalizeBoomerangPreviewConfiguration(snapshot.boomerangConfiguration);
     this.maintainDocumentInvariants();
     this.routeRevision += 1;
   }
@@ -364,6 +375,7 @@ export class PlanningSession {
       snapshot.selectedMethod?.methodId === this.selectedMethod?.methodId &&
       snapshot.playDist === this.playbackDistance &&
       JSON.stringify(snapshot.motionTemplates) === JSON.stringify(this.motionTemplates) &&
+      JSON.stringify(snapshot.boomerangConfiguration) === JSON.stringify(this.boomerangConfiguration) &&
       snapshot.selected.length === this.selectedWaypoints.size &&
       snapshot.selected.every((index) => this.selectedWaypoints.has(index)) &&
       JSON.stringify(snapshot.paths) === JSON.stringify(this.pathEntries) &&
@@ -403,7 +415,8 @@ export class PlanningSession {
       kind === "method" ||
       kind === "imported" ||
       kind === "cleared" ||
-      kind === "history"
+      kind === "history" ||
+      kind === "boomerang-configuration"
     );
   }
 

@@ -8,6 +8,7 @@ import type {
 import { getPlanNodeEffectiveMethod } from "./planningObjects";
 import type { PlanMotionTemplates } from "../state/models";
 import { createDefaultMotionTemplates, getWaypointCode, normalizeMotionTemplates } from "./planningMotions";
+import { isSegmentForwards, waypointLead } from "./planningSegments";
 
 const TEMPLATE_SHORTHAND_TOKENS: Readonly<Record<string, string>> = {
   x: "x",
@@ -17,6 +18,7 @@ const TEMPLATE_SHORTHAND_TOKENS: Readonly<Record<string, string>> = {
   th: "theta",
   iter: "iteration",
   fwd: "forwards",
+  ld: "lead",
 };
 
 export interface BuildPlanExportCodeOptions {
@@ -31,20 +33,6 @@ export interface BuildPlanExportCodeOptions {
   getSortedPlanNodes(): readonly PlanningNodeView[];
 }
 
-function isWaypointForwards(
-  start: Readonly<PlanningWaypoint>,
-  end: Readonly<PlanningWaypoint> | undefined,
-  startTheta: number,
-): boolean {
-  if (!end) return true;
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  if (dx === 0 && dy === 0) return true;
-  const pathTheta = (Math.atan2(dx, dy) * 180) / Math.PI;
-  const delta = ((pathTheta - startTheta + 540) % 360) - 180;
-  return Math.abs(delta) <= 90;
-}
-
 export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
   const rawTemplate = String(options.template ?? "");
   const motionTemplates = normalizeMotionTemplates(options.motionTemplates, createDefaultMotionTemplates(rawTemplate));
@@ -56,6 +44,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     iteration: "0",
     speed: "0",
     forwards: "true",
+    lead: "0",
   };
 
   const replacementsForNodeWaypoint = (
@@ -76,8 +65,9 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
         0,
       ),
       forwards: String(
-        isWaypointForwards(point, options.waypoints[index + 1], theta),
+        isSegmentForwards({ ...point, theta }, options.waypoints[index + 1]),
       ),
+      lead: options.formatTemplateNumber(waypointLead(point)),
     };
   };
 
@@ -100,8 +90,9 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
         0,
       ),
       forwards: String(
-        isWaypointForwards(start, end, options.planThetaDegAt(index)),
+        isSegmentForwards({ ...start, theta: options.planThetaDegAt(index) }, end),
       ),
+      lead: options.formatTemplateNumber(waypointLead(start)),
     };
   };
 
@@ -111,11 +102,11 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
   ) => {
     return String(template || "")
       .replace(
-        /\$\{(x|y|theta|distance|iteration|speed|forwards)\}/g,
+        /\$\{(x|y|theta|distance|iteration|speed|forwards|lead)\}/g,
         (_, token) => replacements[token] ?? "",
       )
       .replace(
-        /(^|[^A-Za-z0-9_])@(x|y|dist|spd|th|iter|fwd)(?![A-Za-z0-9_])/g,
+        /(^|[^A-Za-z0-9_])@(x|y|dist|spd|th|iter|fwd|ld)(?![A-Za-z0-9_])/g,
         (_, prefix: string, token: string) =>
           `${prefix}${replacements[TEMPLATE_SHORTHAND_TOKENS[token]] ?? ""}`,
       );

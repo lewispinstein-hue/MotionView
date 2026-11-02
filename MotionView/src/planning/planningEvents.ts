@@ -10,6 +10,7 @@ export type PlanningDocumentChangeKind =
   | "path"
   | "path-export"
   | "template"
+  | "boomerang-configuration"
   | "overlay"
   | "history";
 

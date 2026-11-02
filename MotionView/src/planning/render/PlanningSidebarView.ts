@@ -40,7 +40,7 @@ function format(value: unknown, decimals = 2): string {
 }
 
 const METHOD_TEMPLATE_DESCRIPTION =
-  "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}";
+  "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, ${forwards}, and ${lead} (@ld)";
 
 interface ActiveMethodReorder {
   readonly objectId: string;
@@ -709,10 +709,15 @@ export class PlanningSidebarView {
       description:
         "One block is generated from each waypoint to the next; " +
         "the final waypoint emits none. Available placeholders: " +
-        "${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, and ${forwards}",
+        "${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, ${forwards}, and ${lead} (@ld)",
       code: previous.forward,
       placeholder: "moveToPoint(${x}, ${y}, ${theta});",
-      motionEditor: { mode: "templates", templates: previous },
+      motionEditor: {
+        mode: "templates",
+        templates: previous,
+        boomerangConfiguration: this.planning.boomerangConfiguration,
+        saveBoomerangConfiguration: (configuration) => this.planning.setBoomerangConfiguration(configuration),
+      },
     });
     if (!result?.motionTemplates) return;
     this.planning.setMotionTemplates(result.motionTemplates);

@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { createServer } from "vite";
 import { runPlanningMotionTests } from "./planning_motion_cases.mjs";
 import { runPlanningMotionSelectionTests } from "./planning_motion_selection_cases.mjs";
+import { runPlanningBoomerangTests } from "./planning_boomerang_cases.mjs";
+import { runBoomerangConfigurationTests } from "./planning_boomerang_configuration_cases.mjs";
+import { runPlanningWaypointDirectionTests } from "./planning_waypoint_direction_cases.mjs";
 
 function format(value, decimals = 3) {
   const fixed = Number(value).toFixed(decimals);
@@ -391,6 +394,9 @@ try {
 
   await runPlanningMotionTests(server);
   await runPlanningMotionSelectionTests(server);
+  await runPlanningBoomerangTests(server);
+  await runBoomerangConfigurationTests(server);
+  await runPlanningWaypointDirectionTests(server);
   console.log("Planning template and motion regression tests passed.");
 } finally {
   await server.close();

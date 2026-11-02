@@ -1,6 +1,13 @@
 import type { PlanningEvents } from "./planningEvents";
 import type { PlanningSession } from "./planningSession";
 import type { PlanningNodeView, PlanningWaypoint } from "./planningTypes";
+import { PlanningSegment } from "./planningSegments";
+import {
+  DEFAULT_BOOMERANG_PREVIEW_CONFIGURATION,
+  normalizeBoomerangPreviewConfiguration,
+  type BoomerangPreviewConfiguration,
+  type BoomerangPreviewConfigurationUpdate,
+} from "./planningBoomerangConfiguration";
 
 const NODE_CLEARANCE_INCHES = 5.5;
 
@@ -21,6 +28,7 @@ export interface PlanningProjectionConfiguration {
   readonly limitBounds: boolean;
   readonly positionSnap: number;
   readonly thetaSnap: number;
+  readonly boomerang: BoomerangPreviewConfiguration;
 }
 
 const DEFAULT_CONFIGURATION: PlanningProjectionConfiguration = {
@@ -31,12 +39,14 @@ const DEFAULT_CONFIGURATION: PlanningProjectionConfiguration = {
   limitBounds: false,
   positionSnap: 0,
   thetaSnap: 0,
+  boomerang: DEFAULT_BOOMERANG_PREVIEW_CONFIGURATION,
 };
 
 export class PlanningProjection {
   #configuration: PlanningProjectionConfiguration = DEFAULT_CONFIGURATION;
   readonly #distances: number[] = [0];
   #distanceRevision = -1;
+  readonly #segments: PlanningSegment[] = [];
   readonly #nodePlacements: PlanningNodePlacement[] = [];
   #nodePlacementsDirty = true;
   #nodePlacementRouteRevision = -1;
@@ -65,29 +75,48 @@ export class PlanningProjection {
     });
   }
   get configuration(): Readonly<PlanningProjectionConfiguration> {
-    return this.#configuration;
+    return { ...this.#configuration, boomerang: this.session.boomerangConfiguration };
   }
 
   configure(values: Partial<PlanningProjectionConfiguration>): void {
     this.#configuration = { ...this.#configuration, ...values };
+    if (values.boomerang) {
+      this.configureBoomerang(values.boomerang);
+      this.#distanceRevision = -1;
+      this.#nodePlacementsDirty = true;
+    }
     this.events.projectionChanged.emit({ kind: "configuration" });
+  }
+
+  configureBoomerang(values: BoomerangPreviewConfigurationUpdate): void {
+    this.session.mutate("boomerang-configuration", () => {
+      this.session.boomerangConfiguration = normalizeBoomerangPreviewConfiguration(values, this.session.boomerangConfiguration);
+    });
   }
 
   get distances(): readonly number[] {
     if (this.#distanceRevision !== this.session.routeRevision) {
+      const cachedSegments = [...this.#segments];
+      this.#segments.length = 0;
       this.#distances.length = 1;
       this.#distances[0] = 0;
       for (let index = 1; index < this.session.waypoints.length; index += 1) {
         const previous = this.session.waypoints[index - 1]!;
         const current = this.session.waypoints[index]!;
-        this.#distances.push(
-          this.#distances[index - 1]! +
-            Math.hypot(current.x - previous.x, current.y - previous.y),
-        );
+        const cached = cachedSegments[index - 1];
+        const segment = cached?.matches(previous, current, this.session.boomerangConfiguration)
+          ? cached : new PlanningSegment(previous, current, this.session.boomerangConfiguration);
+        this.#segments.push(segment);
+        this.#distances.push(this.#distances[index - 1]! + segment.length);
       }
       this.#distanceRevision = this.session.routeRevision;
     }
     return this.#distances;
+  }
+
+  get segments(): readonly PlanningSegment[] {
+    void this.distances;
+    return this.#segments;
   }
 
   get totalLength(): number {
@@ -123,9 +152,8 @@ export class PlanningProjection {
       const start = waypoints[startIndex];
       const end = waypoints[endIndex];
       if (!start || !end) continue;
-      const dx = end.x - start.x;
-      const dy = end.y - start.y;
-      const length = Math.hypot(dx, dy);
+      const segment = this.segments[startIndex]!;
+      const length = segment.length;
       if (length <= 0) continue;
       const clearance = Math.min(length, NODE_CLEARANCE_INCHES);
       const usableLength = Math.max(0, length - clearance);
@@ -133,13 +161,16 @@ export class PlanningProjection {
       nodes.forEach((node, order) => {
         const along =
           clearance + (order / Math.max(1, nodes.length)) * usableLength;
+        const progress = segment.progressAtDistance(along);
+        const point = segment.pointAt(progress);
+        const tangent = segment.tangentAt(progress);
         this.#nodePlacements.push({
           node,
           distance: this.distances[startIndex]! + along,
-          x: start.x + (dx * along) / length,
-          y: start.y + (dy * along) / length,
-          tangentX: dx / length,
-          tangentY: dy / length,
+          x: point.x,
+          y: point.y,
+          tangentX: tangent.x,
+          tangentY: tangent.y,
         });
       });
     }
@@ -184,10 +215,20 @@ export class PlanningProjection {
     const thetaStart = Number.isFinite(start.theta) ? start.theta! : heading;
     const thetaEnd = Number.isFinite(end.theta) ? end.theta! : heading;
     const thetaDelta = ((thetaEnd - thetaStart + 540) % 360) - 180;
+    // Exact waypoint selections remain exact poses, even when the approximate
+    // controller preview predicts settling with an offset from its target.
+    if (amount <= 0) return { ...start, speed: this.speedAt(distance) };
+    if (amount >= 1) return { ...end, speed: this.speedAt(distance) };
+    const segment = this.segments[index]!;
+    const progress = segment.progressAtDistance(distance - distances[index]!);
+    const position = segment.pointAt(progress);
+    const theta = segment.curved
+      ? segment.headingAt(progress)
+      : thetaStart + thetaDelta * amount;
     return {
-      x: start.x + (end.x - start.x) * amount,
-      y: start.y + (end.y - start.y) * amount,
-      theta: (((thetaStart + thetaDelta * amount) % 360) + 360) % 360,
+      x: position.x,
+      y: position.y,
+      theta: ((theta % 360) + 360) % 360,
       speed: this.speedAt(distance),
     };
   }

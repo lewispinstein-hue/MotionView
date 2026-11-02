@@ -1045,6 +1045,10 @@
               <div class="settingsGroupIcon">&lt;/&gt;</div>
               <div id="planTemplateGroupTitle" class="settingsGroupTitle" style="font-size: 20px;">Planning Export
                 Template</div>
+              <button id="btnPlanBoomerangSettings" class="iconBtn planBoomerangSettingsButton" type="button"
+                title="Boomerang settings" aria-label="Boomerang settings" hidden>
+                <svg aria-hidden="true" focusable="false"><use href="./assets/svg/common/settings.svg#icon-settings"></use></svg>
+              </button>
             </div>
             <div class="settingsGroupBody">
               <div id="planTemplateNameField" hidden>
@@ -1069,6 +1073,26 @@
             <button id="btnPlanTemplateConfirm" class="iconBtn secondaryBtn" type="button">Confirm</button>
           </div>
         </div>
+      </div>
+    </div>
+    <div id="planBoomerangSettingsModal" class="modal" hidden>
+      <div class="modalBackdrop"></div>
+      <div class="modalCard settingsCard planBoomerangSettingsCard" role="dialog" aria-modal="true"
+        aria-labelledby="planBoomerangSettingsTitle" aria-describedby="planBoomerangSettingsSubtitle" tabindex="-1">
+        <div class="modalHeader">
+          <div class="modalHeaderContent">
+            <div id="planBoomerangSettingsTitle" class="settingsMainTitle">Boomerang Settings</div>
+            <div id="planBoomerangSettingsSubtitle" class="settingsSubtitle">Shared across paths · Approximate simulation only</div>
+          </div>
+          <button id="btnPlanBoomerangSettingsClose" class="iconBtn closeBtn" type="button" title="Close">✕</button>
+        </div>
+        <form id="planBoomerangSettingsForm" class="modalBody settingsBody">
+          <div id="planBoomerangSettingsContent" class="planBoomerangSettingsContent"></div>
+          <div class="exportFooter">
+            <button id="btnPlanBoomerangSettingsCancel" class="iconBtn secondaryBtn" type="button">Cancel</button>
+            <button id="btnPlanBoomerangSettingsSave" class="iconBtn secondaryBtn" type="button">Save</button>
+          </div>
+        </form>
       </div>
     </div>
     <div id="planObjectDeleteModal" class="modal" hidden>

@@ -10,6 +10,11 @@ import { PlanningTimeline } from "./planningTimelineDomain";
 import { PlanningSession } from "./planningSession";
 import type { PlanMotionTemplates } from "../state/models";
 import { normalizeMotionTemplates } from "./planningMotions";
+import {
+  normalizeBoomerangPreviewConfiguration,
+  type BoomerangPreviewConfiguration,
+  type BoomerangPreviewConfigurationUpdate,
+} from "./planningBoomerangConfiguration";
 import type {
   PlanningExportView,
   PlanningNodeView,
@@ -52,7 +57,7 @@ export class PlanningFeature {
       this.events,
     );
     this.events.projectionChanged.subscribe((change) => {
-      if (change.kind !== "route") return;
+      if (change.kind !== "route" && change.kind !== "configuration") return;
       if (this.route.length < 2) this.playback.pause();
       this.playback.setDistance(this.playback.distance);
     });
@@ -63,6 +68,9 @@ export class PlanningFeature {
   }
   get motionTemplates(): Readonly<PlanMotionTemplates> {
     return this.#session.motionTemplates;
+  }
+  get boomerangConfiguration(): BoomerangPreviewConfiguration {
+    return this.#session.boomerangConfiguration;
   }
   get overlayVisible(): boolean {
     return this.#session.overlayVisible;
@@ -87,6 +95,14 @@ export class PlanningFeature {
   setMotionTemplates(templates: Readonly<PlanMotionTemplates>): void {
     this.#session.mutate("template", () => {
       this.#session.motionTemplates = normalizeMotionTemplates(templates, this.#session.motionTemplates);
+    });
+  }
+
+  setBoomerangConfiguration(values: BoomerangPreviewConfigurationUpdate): void {
+    const next = normalizeBoomerangPreviewConfiguration(values, this.#session.boomerangConfiguration);
+    if (JSON.stringify(next) === JSON.stringify(this.#session.boomerangConfiguration)) return;
+    this.#session.mutate("boomerang-configuration", () => {
+      this.#session.boomerangConfiguration = next;
     });
   }
 
@@ -122,6 +138,7 @@ export class PlanningFeature {
       nodes: this.#session.nodes,
       template: this.#session.exportTemplate,
       motionTemplates: this.#session.motionTemplates,
+      boomerangConfiguration: this.#session.boomerangConfiguration,
     };
   }
 

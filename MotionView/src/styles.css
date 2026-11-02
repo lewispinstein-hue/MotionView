@@ -3920,6 +3920,106 @@ body:not(.mode-planning) #rightPlanning {
   max-width: 760px !important;
 }
 
+.planBoomerangSettingsButton {
+  margin-left: auto;
+  padding: 5px;
+  width: 28px;
+  height: 28px;
+}
+
+.planBoomerangSettingsButton svg {
+  width: 17px;
+  height: 17px;
+}
+
+.planBoomerangSettingsButton[hidden] { display: none; }
+#planBoomerangSettingsModal { z-index: 210; }
+.planBoomerangSettingsCard { width: min(620px, calc(100vw - 28px)); }
+.planBoomerangSettingsCard .settingsBody { max-height: calc(100dvh - 125px); }
+
+.planBoomerangSettingsContent {
+  display: grid;
+  gap: 12px;
+}
+
+.planBoomerangSettingsContent .settingsGroup { padding: 14px; }
+.planBoomerangSettingsContent h3 { margin: 0 0 6px; font-size: 15px; }
+.planBoomerangSettingsContent .settingsDescription { font-size: 12px; }
+
+.planBoomerangFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 12px 0;
+}
+
+.planBoomerangPIDGrid {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.planBoomerangField {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.planBoomerangField .settingsInput, .planBoomerangField .settingsSelect {
+  padding: 7px 10px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.planBoomerangPID {
+  display: grid;
+  grid-template-columns: 86px repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 10px;
+}
+
+.planBoomerangPIDTitle {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.planBoomerangPID .planBoomerangField {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.planBoomerangSettingsCard input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.planBoomerangSettingsCard input[type="number"]::-webkit-inner-spin-button,
+.planBoomerangSettingsCard input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.planBoomerangAssumptions { margin: 0 4px; }
+
+.planBoomerangFieldNote {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.planBoomerangField .settingsInput:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 420px) {
+  .planBoomerangFields { grid-template-columns: minmax(0, 1fr); }
+  .planBoomerangPID { gap: 5px; }
+  .planBoomerangPID .settingsInput { padding: 7px 4px; }
+}
+
 /* Waypoint motion editor and per-type templates. */
 .hasMotionPreview .templateModalCard {
   width: min(800px, calc(100vw - 28px));
@@ -4026,6 +4126,20 @@ body:not(.mode-planning) #rightPlanning {
 .planMotionOrderLabel {
   font-size: 12px;
   font-weight: 600;
+}
+
+.planWaypointDirection {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.planWaypointDirectionLabel {
+  margin-right: 4px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .planMotionSwap {

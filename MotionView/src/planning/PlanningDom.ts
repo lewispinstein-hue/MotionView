@@ -62,6 +62,13 @@ export class PlanningDom {
   readonly templateCode: HTMLTextAreaElement;
   readonly templateIndicatorPicker: HTMLElement;
   readonly motionPreview: HTMLElement;
+  readonly boomerangSettingsButton: HTMLButtonElement;
+  readonly boomerangSettingsModal: HTMLElement;
+  readonly boomerangSettingsForm: HTMLFormElement;
+  readonly boomerangSettingsContent: HTMLElement;
+  readonly boomerangSettingsClose: HTMLButtonElement;
+  readonly boomerangSettingsCancel: HTMLButtonElement;
+  readonly boomerangSettingsSave: HTMLButtonElement;
   readonly confirmModal: HTMLElement;
   readonly confirmTitle: HTMLElement;
   readonly confirmMessage: HTMLElement;
@@ -171,6 +178,13 @@ export class PlanningDom {
       "planTemplateIndicatorPicker",
     );
     this.motionPreview = requiredElement(document, "planMotionPreview");
+    this.boomerangSettingsButton = requiredElement(document, "btnPlanBoomerangSettings");
+    this.boomerangSettingsModal = requiredElement(document, "planBoomerangSettingsModal");
+    this.boomerangSettingsForm = requiredElement(document, "planBoomerangSettingsForm");
+    this.boomerangSettingsContent = requiredElement(document, "planBoomerangSettingsContent");
+    this.boomerangSettingsClose = requiredElement(document, "btnPlanBoomerangSettingsClose");
+    this.boomerangSettingsCancel = requiredElement(document, "btnPlanBoomerangSettingsCancel");
+    this.boomerangSettingsSave = requiredElement(document, "btnPlanBoomerangSettingsSave");
     this.confirmModal = requiredElement(document, "planObjectDeleteModal");
     this.confirmTitle = requiredElement(document, "planObjectDeleteTitle");
     this.confirmMessage = requiredElement(document, "planObjectDeleteMessage");

@@ -5,6 +5,7 @@ export * from "./planningDocument";
 export * from "./planningObjects";
 export * from "./planningTemplate";
 export * from "./planningMotions";
+export * from "./planningBoomerangConfiguration";
 export * from "./planningTimelineDomain";
 export * from "./PlanningFeature";
 export * from "./PlanningPaths";

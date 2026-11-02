@@ -5,30 +5,49 @@ import { createWaypointIndicatorIcon, getWaypointIndicatorTooltip } from "../pla
 import { createDefaultMotionTemplates, MAX_WAYPOINT_MOTIONS, PLANNING_MOTION_TYPES } from "../planningMotions";
 import { PlanningMotionSelection } from "../planningMotionSelection";
 import { PlanningMotionCodeEditor } from "./PlanningMotionCodeEditor";
+import { PlanningBoomerangSettingsView } from "./PlanningBoomerangSettingsView";
+import {
+  normalizeBoomerangPreviewConfiguration,
+  type BoomerangPreviewConfiguration,
+} from "../planningBoomerangConfiguration";
 
-export interface PlanningMotionEditorOptions {
-  readonly mode: "waypoint" | "templates";
+interface PlanningMotionEditorBaseOptions {
   readonly templates: Readonly<PlanMotionTemplates>;
-  readonly motions?: readonly Readonly<PlanWaypointMotion>[];
 }
+
+export type PlanningMotionEditorOptions = PlanningMotionEditorBaseOptions & ({
+  readonly mode: "waypoint";
+  readonly motions?: readonly Readonly<PlanWaypointMotion>[];
+  readonly forwards: boolean;
+} | {
+  readonly mode: "templates";
+  readonly boomerangConfiguration: BoomerangPreviewConfiguration;
+  readonly saveBoomerangConfiguration: (configuration: BoomerangPreviewConfiguration) => void;
+});
 
 export interface PlanningMotionEditorResult {
   readonly motions?: PlanWaypointMotion[];
+  readonly forwards?: boolean;
   readonly motionTemplates?: PlanMotionTemplates;
 }
 
 const MOTIONS = PLANNING_MOTION_TYPES;
 
-/** Owns modal-local drafts; only Confirm returns content to the Planning domain. */
+/** Owns code drafts; Boomerang settings save independently from template Confirm. */
 export class PlanningMotionEditorView {
   #mode: PlanningMotionEditorOptions["mode"] | null = null;
   #templates = createDefaultMotionTemplates("");
   #selection: PlanningMotionSelection | null = null;
   #selectedId: string | null = null;
+  #forwards = true;
   #selectedTemplate: PlanWaypointIndicatorIcon = "forward";
   readonly #codePreview: PlanningMotionCodeEditor;
+  readonly #boomerangSettings: PlanningBoomerangSettingsView;
+  #boomerangConfiguration = normalizeBoomerangPreviewConfiguration(undefined);
+  #saveBoomerangConfiguration: ((configuration: BoomerangPreviewConfiguration) => void) | null = null;
 
   constructor(private readonly dom: PlanningDom) {
+    this.#boomerangSettings = new PlanningBoomerangSettingsView(dom);
     this.#codePreview = new PlanningMotionCodeEditor(
       dom.templateCode,
       (id, code) => this.#selection?.updateCode(id, code),
@@ -41,8 +60,10 @@ export class PlanningMotionEditorView {
   }
 
   get result(): PlanningMotionEditorResult {
-    if (this.#mode === "templates") return { motionTemplates: { ...this.#templates } };
-    return { motions: this.#selection?.result ?? [] };
+    if (this.#mode === "templates") return {
+      motionTemplates: { ...this.#templates },
+    };
+    return { motions: this.#selection?.result ?? [], forwards: this.#forwards };
   }
 
   get focusTarget(): HTMLElement {
@@ -50,6 +71,15 @@ export class PlanningMotionEditorView {
   }
 
   bind(): void {
+    this.#boomerangSettings.bind();
+    this.dom.boomerangSettingsButton.addEventListener("click", async () => {
+      if (this.#mode !== "templates" || this.#selectedTemplate !== "boomerang") return;
+      const save = this.#saveBoomerangConfiguration;
+      const result = await this.#boomerangSettings.open(this.#boomerangConfiguration);
+      if (!result) return;
+      if (this.#mode === "templates") this.#boomerangConfiguration = result;
+      save?.(result);
+    });
     this.dom.templateCode.addEventListener("input", () => {
       if (this.#mode === "templates") this.#templates[this.#selectedTemplate] = this.dom.templateCode.value;
     });
@@ -58,7 +88,10 @@ export class PlanningMotionEditorView {
   open(options: PlanningMotionEditorOptions): void {
     this.#mode = options.mode;
     this.#templates = { ...options.templates };
+    this.#boomerangConfiguration = normalizeBoomerangPreviewConfiguration(options.mode === "templates" ? options.boomerangConfiguration : undefined);
+    this.#saveBoomerangConfiguration = options.mode === "templates" ? options.saveBoomerangConfiguration : null;
     this.#selection = options.mode === "waypoint" ? new PlanningMotionSelection(options.motions, this.#templates) : null;
+    this.#forwards = options.mode === "waypoint" ? options.forwards : true;
     this.#selectedId = this.#selection?.motions[0]?.id ?? null;
     this.#selectedTemplate = "forward";
     this.dom.templateModal.classList.add("hasMotionPreview");
@@ -69,15 +102,22 @@ export class PlanningMotionEditorView {
   }
 
   close(): void {
+    this.#boomerangSettings.cancel();
     this.#mode = null;
+    this.#saveBoomerangConfiguration = null;
     this.#selection = null;
     this.dom.motionPreview.replaceChildren();
     this.dom.motionPreview.hidden = true;
     this.dom.templateModal.classList.remove("hasMotionPreview");
+    this.dom.boomerangSettingsButton.hidden = true;
     this.dom.templateCode.disabled = false;
     this.dom.templateCode.hidden = false;
     this.dom.templateDescription.setAttribute("for", "planTemplateInput");
     this.#codePreview.hide();
+  }
+
+  cancelSettings(): boolean {
+    return this.#boomerangSettings.cancel();
   }
 
   private render(): void {
@@ -169,15 +209,42 @@ export class PlanningMotionEditorView {
       this.dom.motionPreview.querySelector<HTMLElement>(".planMotionSwap")?.focus();
     });
     row.append(summary, swap);
-    this.dom.motionPreview.append(picker, row);
+    this.dom.motionPreview.append(picker, row, this.createDirectionToggle());
+  }
+
+  private createDirectionToggle(): HTMLElement {
+    const direction = document.createElement("div");
+    direction.className = "planWaypointDirection";
+    direction.setAttribute("role", "group");
+    direction.setAttribute("aria-label", "Travel direction");
+    direction.title = "Travel direction from this waypoint to the next; used by @fwd and ${forwards}.";
+    const label = document.createElement("span");
+    label.className = "planWaypointDirectionLabel";
+    label.textContent = "Direction";
+    direction.appendChild(label);
+    for (const forwards of [true, false]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "planMotionChoice";
+      button.textContent = forwards ? "Forwards" : "Backwards";
+      button.setAttribute("aria-pressed", String(this.#forwards === forwards));
+      button.addEventListener("click", () => {
+        this.#forwards = forwards;
+        for (const choice of direction.querySelectorAll("button"))
+          choice.setAttribute("aria-pressed", String(choice === button));
+      });
+      direction.appendChild(button);
+    }
+    return direction;
   }
 
   private renderCode(): void {
+    this.dom.boomerangSettingsButton.hidden = this.#mode !== "templates" || this.#selectedTemplate !== "boomerang";
     if (this.#mode === "waypoint") {
       const motions = this.#selection!.motions;
       if (!motions.some((motion) => motion.id === this.#selectedId)) this.#selectedId = motions[0]!.id;
       this.dom.templateGroupTitle.textContent = "Waypoint Code";
-      this.dom.templateDescription.textContent = "Motions run in the order shown above. Code edits stay attached to their motion when swapped.";
+      this.dom.templateDescription.textContent = "Motions run in the order shown above. Code edits stay attached to their motion when swapped. Boomerang lead: @ld or ${lead}. Field curves are approximate; robot tuning affects the actual path.";
       this.dom.templateCode.hidden = true;
       this.dom.templateDescription.setAttribute("for", "planMotionCodeInput");
       this.#codePreview.show(motions.map((motion) => ({
@@ -191,7 +258,7 @@ export class PlanningMotionEditorView {
     this.dom.templateDescription.setAttribute("for", "planTemplateInput");
     const name = MOTIONS.find((entry) => entry.type === this.#selectedTemplate)!.name;
     this.dom.templateGroupTitle.textContent = `${name} template`;
-    this.dom.templateDescription.textContent = "Starting code for this motion type. Both @x and ${x} placeholders are supported.";
+    this.dom.templateDescription.textContent = "Starting code for this motion type. Both @x and ${x} placeholders are supported. Boomerang lead: @ld or ${lead}.";
     this.dom.templateCode.value = this.#templates[this.#selectedTemplate];
   }
 }
