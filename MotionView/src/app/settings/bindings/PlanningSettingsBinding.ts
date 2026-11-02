@@ -1,3 +1,4 @@
+import { PlanningSimulationSettingsView } from "../../../planning/render/PlanningSimulationSettingsView";
 import type { FieldRenderer } from "../../../render/field";
 import type { PlanningFeature } from "../../../planning/PlanningFeature";
 import type { PlanningView } from "../../../planning/PlanningView";
@@ -9,6 +10,7 @@ import type { MotionViewSettings } from "../settingsTypes";
 
 export class PlanningSettingsBinding {
   #bound = false;
+  #simulation: PlanningSimulationSettingsView | null = null;
   constructor(
     private readonly settings: SettingsFeature,
     private readonly planning: PlanningFeature,
@@ -21,6 +23,8 @@ export class PlanningSettingsBinding {
   bind(): void {
     if (this.#bound) return;
     this.#bound = true;
+    this.#simulation = new PlanningSimulationSettingsView(this.planning, this.dom.planSimulation);
+    this.#simulation.bind();
     this.settings.changed.subscribe(({ settings, keys }) =>
       this.apply(settings, keys),
     );
@@ -91,6 +95,7 @@ export class PlanningSettingsBinding {
         this.dom.planMoveStepLabel.textContent = `Arrow move step (${unit})`;
       }
       this.configureProjection();
+      this.#simulation?.render();
     }
     if (changed("planShowFieldNodes")) {
       const visible = values.planShowFieldNodes !== false;

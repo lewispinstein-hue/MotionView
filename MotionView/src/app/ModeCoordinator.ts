@@ -26,8 +26,8 @@ export class ModeCoordinator {
       }
       this.app.planning.selection.clear();
       this.field.updateFieldLayout(true);
-      this.app.planning.playback.setDistance(
-        this.app.planning.playback.distance,
+      this.app.planning.playback.setTime(
+        this.app.planning.playback.time,
       );
       void appTelemetry.modeChanged({ mode });
     });

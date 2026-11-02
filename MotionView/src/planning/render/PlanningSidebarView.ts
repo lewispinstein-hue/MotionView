@@ -133,7 +133,7 @@ export class PlanningSidebarView {
       number.className = "muted";
       number.textContent = `#${index + 1}`;
       const details = document.createElement("div");
-      details.textContent = `X: ${formatDistanceFromInches(point.x, 2)}  Y: ${formatDistanceFromInches(point.y, 2)}  θ: ${format(point.theta, 1)}°  S: ${format(point.speed, 0)}`;
+      details.textContent = this.waypointDetails(point);
       const indicators = document.createElement("div");
       indicators.className =
         "waypointIndicatorStrip waypointIndicatorStripSmall";
@@ -154,6 +154,32 @@ export class PlanningSidebarView {
       });
       this.dom.list.appendChild(row);
     });
+  }
+
+  updateSelection(): void {
+    for (const row of this.dom.list.querySelectorAll<HTMLElement>(".planItem"))
+      row.classList.toggle("selected", this.planning.selection.isWaypointSelected(Number(row.dataset.idx)));
+    this.renderObjects();
+    this.renderSelection();
+  }
+
+  /** Position-only previews keep list rows, objects, and method DOM intact. */
+  updateWaypointPositions(): void {
+    const rows = this.dom.list.querySelectorAll<HTMLElement>(".planItem");
+    if (rows.length !== this.planning.route.length) {
+      this.renderWaypoints();
+    } else {
+      rows.forEach((row, index) => {
+        const details = row.children[1]!;
+        const text = this.waypointDetails(this.planning.route.waypoints[index]!);
+        if (details.textContent !== text) details.textContent = text;
+      });
+    }
+    this.renderSelection();
+  }
+
+  private waypointDetails(point: PlanningWaypointView): string {
+    return `X: ${formatDistanceFromInches(point.x, 2)}  Y: ${formatDistanceFromInches(point.y, 2)}  θ: ${format(point.theta, 1)}°  S: ${format(point.speed, 0)}`;
   }
 
   renderSelection(): void {
@@ -715,8 +741,6 @@ export class PlanningSidebarView {
       motionEditor: {
         mode: "templates",
         templates: previous,
-        boomerangConfiguration: this.planning.boomerangConfiguration,
-        saveBoomerangConfiguration: (configuration) => this.planning.setBoomerangConfiguration(configuration),
       },
     });
     if (!result?.motionTemplates) return;

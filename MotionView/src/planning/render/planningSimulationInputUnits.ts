@@ -1,9 +1,9 @@
 import type { MotionViewUnit } from "../../shared/units";
 
-export type BoomerangInputDimension = "distance" | "speed" | "weight";
+export type SimulationInputDimension = "distance" | "speed" | "weight";
 
 /** Display conversion only; simulation/document values remain inches and pounds. */
-export function boomerangInputUnit(dimension: BoomerangInputDimension, units: MotionViewUnit) {
+export function simulationInputUnit(dimension: SimulationInputDimension, units: MotionViewUnit) {
   if (dimension === "weight") return units === "cm"
     ? { suffix: "kg", factor: 1 / 0.45359237 }
     : { suffix: "lb", factor: 1 };
@@ -12,6 +12,6 @@ export function boomerangInputUnit(dimension: BoomerangInputDimension, units: Mo
 }
 
 /** Avoid exposing conversion noise while retaining the original unedited value. */
-export function boomerangInputNumber(value: number): string {
+export function simulationInputNumber(value: number): string {
   return String(Number(value.toPrecision(12)));
 }

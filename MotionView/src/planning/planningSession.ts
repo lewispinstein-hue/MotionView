@@ -21,9 +21,9 @@ import { normalizePlanObjects } from "./planningState";
 import type { PlanMotionTemplates } from "../state/models";
 import { createDefaultMotionTemplates, normalizeMotionTemplates } from "./planningMotions";
 import {
-  normalizeBoomerangPreviewConfiguration,
-  type BoomerangPreviewConfiguration,
-} from "./planningBoomerangConfiguration";
+  normalizePlanningSimulationConfiguration,
+  type PlanningSimulationConfiguration,
+} from "./planningSimulationConfiguration";
 import type {
   PlanningCodeExportSettings,
   PlanningNode,
@@ -44,9 +44,9 @@ interface PlanningHistorySnapshot {
   selectedIndex: number;
   selectedNodeId: string | null;
   selectedMethod: PlanningMethodSelection | null;
-  playDist: number;
+  playTime: number;
   motionTemplates: PlanMotionTemplates;
-  boomerangConfiguration: BoomerangPreviewConfiguration;
+  simulationConfiguration: PlanningSimulationConfiguration;
 }
 
 /**
@@ -61,9 +61,9 @@ export class PlanningSession {
   selectedNodeId: string | null = null;
   selectedMethod: PlanningMethodSelection | null = null;
   motionTemplates: PlanMotionTemplates;
-  boomerangConfiguration = normalizeBoomerangPreviewConfiguration(undefined);
+  simulationConfiguration = normalizePlanningSimulationConfiguration(undefined);
   overlayVisible = false;
-  playbackDistance = 0;
+  playbackTime = 0;
   routeRevision = 0;
   readonly #history: PlanningSessionHistory<PlanningHistorySnapshot>;
 
@@ -110,6 +110,9 @@ export class PlanningSession {
   }
   get canRedo(): boolean {
     return this.#history.redoStack.length > 0;
+  }
+  get isRouteEditing(): boolean {
+    return this.#history.transactionKind === "route";
   }
 
   /** Seeds defaults when opening a legacy route with global export settings. */
@@ -242,13 +245,18 @@ export class PlanningSession {
   }
 
   beginTransaction(kind: PlanningDocumentChangeKind): void {
+    const wasEditing = this.isRouteEditing;
     this.#history.begin(this.snapshot(), kind);
+    if (!wasEditing && this.isRouteEditing)
+      this.events.routeEditChanged.emit({ active: true });
   }
 
   commitTransaction(): void {
+    const wasEditing = this.isRouteEditing;
     const kind = this.#history.commit(this.activePathId, (snapshot) =>
       this.matchesCurrent(snapshot),
     );
+    if (wasEditing) this.events.routeEditChanged.emit({ active: false });
     if (!kind) return;
     if (this.affectsRouteProjection(kind)) {
       this.events.projectionChanged.emit({ kind: "route" });
@@ -257,9 +265,11 @@ export class PlanningSession {
   }
 
   cancelTransaction(): void {
+    const wasEditing = this.isRouteEditing;
     const snapshot = this.#history.cancel();
+    if (snapshot) this.applySnapshot(snapshot);
+    if (wasEditing) this.events.routeEditChanged.emit({ active: false });
     if (!snapshot) return;
-    this.applySnapshot(snapshot);
     this.events.projectionChanged.emit({ kind: "route" });
     this.events.selectionChanged.emit({ kind: "waypoint" });
   }
@@ -308,7 +318,7 @@ export class PlanningSession {
       createDefaultMotionTemplates(this.exportTemplate),
       true,
     );
-    this.boomerangConfiguration = normalizeBoomerangPreviewConfiguration(data["planned-boomerang-configuration"]);
+    this.simulationConfiguration = normalizePlanningSimulationConfiguration(data["planned-simulation-configuration"] ?? data["planned-boomerang-configuration"]);
     this.maintainDocumentInvariants();
     this.routeRevision += 1;
     this.resetTransientDomainState();
@@ -321,7 +331,7 @@ export class PlanningSession {
     this.#pathStore.reset();
     this.objects.length = 0;
     this.motionTemplates = createDefaultMotionTemplates(this.defaultExportTemplate);
-    this.boomerangConfiguration = normalizeBoomerangPreviewConfiguration(undefined);
+    this.simulationConfiguration = normalizePlanningSimulationConfiguration(undefined);
     this.overlayVisible = false;
     this.routeRevision += 1;
     this.resetTransientDomainState();
@@ -340,9 +350,9 @@ export class PlanningSession {
       selectedIndex: this.selectedWaypoint,
       selectedNodeId: this.selectedNodeId,
       selectedMethod: this.selectedMethod ? { ...this.selectedMethod } : null,
-      playDist: this.playbackDistance,
+      playTime: this.playbackTime,
       motionTemplates: { ...this.motionTemplates },
-      boomerangConfiguration: normalizeBoomerangPreviewConfiguration(this.boomerangConfiguration),
+      simulationConfiguration: normalizePlanningSimulationConfiguration(this.simulationConfiguration),
     };
   }
 
@@ -359,9 +369,9 @@ export class PlanningSession {
     this.selectedMethod = snapshot.selectedMethod
       ? { ...snapshot.selectedMethod }
       : null;
-    this.playbackDistance = snapshot.playDist;
+    this.playbackTime = snapshot.playTime;
     this.motionTemplates = { ...snapshot.motionTemplates };
-    this.boomerangConfiguration = normalizeBoomerangPreviewConfiguration(snapshot.boomerangConfiguration);
+    this.simulationConfiguration = normalizePlanningSimulationConfiguration(snapshot.simulationConfiguration);
     this.maintainDocumentInvariants();
     this.routeRevision += 1;
   }
@@ -373,9 +383,9 @@ export class PlanningSession {
       snapshot.selectedNodeId === this.selectedNodeId &&
       snapshot.selectedMethod?.objectId === this.selectedMethod?.objectId &&
       snapshot.selectedMethod?.methodId === this.selectedMethod?.methodId &&
-      snapshot.playDist === this.playbackDistance &&
+      snapshot.playTime === this.playbackTime &&
       JSON.stringify(snapshot.motionTemplates) === JSON.stringify(this.motionTemplates) &&
-      JSON.stringify(snapshot.boomerangConfiguration) === JSON.stringify(this.boomerangConfiguration) &&
+      JSON.stringify(snapshot.simulationConfiguration) === JSON.stringify(this.simulationConfiguration) &&
       snapshot.selected.length === this.selectedWaypoints.size &&
       snapshot.selected.every((index) => this.selectedWaypoints.has(index)) &&
       JSON.stringify(snapshot.paths) === JSON.stringify(this.pathEntries) &&
@@ -388,7 +398,7 @@ export class PlanningSession {
     this.selectedWaypoint = -1;
     this.selectedNodeId = null;
     this.selectedMethod = null;
-    this.playbackDistance = 0;
+    this.playbackTime = 0;
   }
 
   private resetTransientDomainState(): void {
@@ -416,7 +426,7 @@ export class PlanningSession {
       kind === "imported" ||
       kind === "cleared" ||
       kind === "history" ||
-      kind === "boomerang-configuration"
+      kind === "simulation-configuration"
     );
   }
 

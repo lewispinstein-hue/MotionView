@@ -57,6 +57,7 @@ export function normalizeWaypointMotions(value: unknown): PlanWaypointMotion[] {
     ids.add(id);
     types.add(raw.type);
     const motion: PlanWaypointMotion = { id, type: raw.type };
+    if (raw.type === "swing") motion.lockedDriveSide = raw.lockedDriveSide === "right" ? "right" : "left";
     if (typeof raw.overrideCode === "string") motion.overrideCode = raw.overrideCode;
     motions.push(motion);
     if (motions.length === MAX_WAYPOINT_MOTIONS) break;

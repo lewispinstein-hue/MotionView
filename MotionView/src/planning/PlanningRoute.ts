@@ -24,6 +24,9 @@ export class PlanningRoute {
   get revision(): number {
     return this.session.routeRevision;
   }
+  get isEditing(): boolean {
+    return this.session.isRouteEditing;
+  }
   get hasData(): boolean {
     return this.session.waypoints.length > 0;
   }
@@ -196,6 +199,9 @@ export class PlanningRoute {
         waypoint.x = next.x;
         waypoint.y = next.y;
         waypoint.theta = ((next.theta ?? 0) % 360 + 360) % 360;
+        for (const motion of waypoint.motions ?? []) {
+          if (motion.type === "swing") motion.lockedDriveSide = motion.lockedDriveSide === "right" ? "left" : "right";
+        }
       }
     });
     return true;

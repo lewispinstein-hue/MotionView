@@ -6,7 +6,6 @@ import type {
 import type { PlanningRenderLayer } from "../render/renderScheduler";
 import { requestDrawAll } from "../render/renderScheduler";
 import { subscribeMode } from "../app/modeController";
-import { formatDistanceFromInches, getCurrentUnits } from "../shared/units";
 import type { PlanningDialogs } from "./PlanningDialogs";
 import type { PlanningDom } from "./PlanningDom";
 import type { PlanningFeature } from "./PlanningFeature";
@@ -26,6 +25,7 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
   readonly #sidebar: PlanningSidebarView;
   readonly #timeline: PlanningTimelineView;
   readonly #nodeTooltip: PlanningNodeTooltip;
+  #routePreviewFrame: number | null = null;
   #bound = false;
 
   constructor(
@@ -79,15 +79,34 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
     });
     window.addEventListener("blur", () => this.#nodeTooltip.hide(true));
     this.planning.events.documentChanged.subscribe(() => this.render());
-    this.planning.events.documentPreviewChanged.subscribe(() => this.render());
-    this.planning.events.selectionChanged.subscribe(() => this.render());
-    this.planning.events.projectionChanged.subscribe(() => {
-      this.#timeline.render();
+    this.planning.events.documentPreviewChanged.subscribe(({ kind }) => {
+      if (kind !== "route") { this.render(); return; }
+      if (this.#routePreviewFrame !== null) return;
+      this.#routePreviewFrame = requestAnimationFrame(() => {
+        this.#routePreviewFrame = null;
+        this.#sidebar.updateWaypointPositions();
+        requestDrawAll();
+      });
+    });
+    this.planning.events.selectionChanged.subscribe(() => {
+      this.#sidebar.updateSelection();
+      this.#timeline.updateSelection();
       this.updateLatestPill();
       requestDrawAll();
     });
-    this.planning.events.playbackChanged.subscribe((event) => {
-      this.dom.timePill.textContent = `Plan: ${formatDistanceFromInches(event.distance, 2)} / ${formatDistanceFromInches(this.planning.projection.totalLength, 2)} ${getCurrentUnits()}`;
+    this.planning.events.projectionChanged.subscribe(({ kind }) => {
+      if (kind === "preview-ready" || kind === "preview-pending") {
+        this.updateTimePill();
+        requestDrawAll();
+        return;
+      }
+      this.#timeline.render();
+      this.updateTimePill();
+      this.updateLatestPill();
+      requestDrawAll();
+    });
+    this.planning.events.playbackChanged.subscribe(() => {
+      this.updateTimePill();
       this.dom.pointPill.textContent = `Points: ${this.planning.route.length}`;
       this.#sidebar.updatePlayback();
       this.#timeline.draw();
@@ -97,9 +116,12 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
   }
 
   render(): void {
+    if (this.#routePreviewFrame !== null) cancelAnimationFrame(this.#routePreviewFrame);
+    this.#routePreviewFrame = null;
     this.#pathManager.render();
     this.#sidebar.render();
     this.#timeline.render();
+    this.updateTimePill();
     this.updateLatestPill();
     requestDrawAll();
   }
@@ -119,7 +141,14 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
   }
 
   currentPose(): FieldPose | null {
-    return this.planning.projection.sample(this.planning.playback.distance);
+    return this.planning.playback.pose;
+  }
+
+  private updateTimePill(): void {
+    const projection = this.planning.projection;
+    const status = projection.pending ? " · Updating preview…" : projection.error ? ` · ${projection.error}` :
+      !projection.simulation.complete ? " · Preview incomplete" : "";
+    this.dom.timePill.textContent = `Plan: ${this.planning.playback.time.toFixed(1)} / ${projection.duration.toFixed(1)} s${status}`;
   }
 
   private updateLatestPill(): void {

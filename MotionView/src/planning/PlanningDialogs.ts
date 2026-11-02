@@ -169,7 +169,6 @@ export class PlanningDialogs {
   }
 
   cancelOpen(): boolean {
-    if (this.#motionEditor.cancelSettings()) return true;
     if (this.#editorResolver) {
       this.closeEditor(null);
       return true;

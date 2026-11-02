@@ -6,6 +6,7 @@ export interface PlanningMotionDraft {
   readonly id: string;
   readonly type: PlanWaypointIndicatorIcon;
   code: string;
+  lockedDriveSide?: "left" | "right";
 }
 
 /** Modal-local selection; deselected drafts are retained until Confirm or Cancel. */
@@ -17,7 +18,7 @@ export class PlanningMotionSelection {
   constructor(motions: readonly Readonly<PlanWaypointMotion>[] | undefined, templates: Readonly<PlanMotionTemplates>) {
     this.#templates = { ...templates };
     this.#motions = normalizeWaypointMotions(motions)
-      .map((motion) => ({ id: motion.id, type: motion.type, code: getMotionCode(motion, templates) }));
+      .map((motion) => ({ ...motion, code: getMotionCode(motion, templates) }));
     for (const motion of this.#motions) this.#drafts.set(motion.type, motion);
   }
 
@@ -26,8 +27,10 @@ export class PlanningMotionSelection {
   }
 
   get result(): PlanWaypointMotion[] {
-    return this.#motions.map(({ id, type, code }) => code === this.#templates[type]
-      ? { id, type } : { id, type, overrideCode: code });
+    return this.#motions.map(({ id, type, code, lockedDriveSide }) => ({
+      id, type, ...(type === "swing" ? { lockedDriveSide: lockedDriveSide ?? "left" } : {}),
+      ...(code === this.#templates[type] ? {} : { overrideCode: code }),
+    }));
   }
 
   isSelected(type: PlanWaypointIndicatorIcon): boolean {
@@ -55,6 +58,11 @@ export class PlanningMotionSelection {
     if (this.#motions.length !== 2) return false;
     this.#motions.reverse();
     return true;
+  }
+
+  setLockedDriveSide(id: string, side: "left" | "right"): void {
+    const motion = this.#motions.find(entry => entry.id === id && entry.type === "swing");
+    if (motion) motion.lockedDriveSide = side;
   }
 
   updateCode(id: string, code: string): void {

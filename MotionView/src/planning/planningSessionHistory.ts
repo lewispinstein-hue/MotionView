@@ -20,6 +20,10 @@ export class PlanningSessionHistory<
     return !!this.#transaction;
   }
 
+  get transactionKind(): PlanningDocumentChangeKind | undefined {
+    return this.#transaction?.kind;
+  }
+
   begin(snapshot: TSnapshot, kind: PlanningDocumentChangeKind): void {
     if (!this.#transaction) {
       this.#transaction = { snapshot, kind, changed: false };

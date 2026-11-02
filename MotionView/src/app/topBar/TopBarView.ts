@@ -85,6 +85,7 @@ export class TopBarView {
     });
     this.app.planning.events.playbackChanged.subscribe(() => this.renderPlayback());
     this.app.planning.events.documentChanged.subscribe(() => this.renderPlayback());
+    this.app.planning.events.projectionChanged.subscribe(() => this.renderPlayback());
     this.app.viewing.events.playbackChanged.subscribe(() => this.renderPlayback());
     this.app.viewing.events.dataChanged.subscribe(() => this.renderPlayback());
     this.app.live.events.connectionChanged.subscribe(() => this.renderPlayback());
@@ -204,7 +205,7 @@ export class TopBarView {
     const planning = this.app.core.mode.getMode() === "planning";
     const playing = planning ? this.app.planning.playback.isPlaying : this.app.viewing.playback.isPlaying;
     const hasPlayableData = planning
-      ? this.app.planning.route.length >= 2
+      ? this.app.planning.route.length >= 2 && !this.app.planning.route.isEditing && !this.app.planning.projection.pending && this.app.planning.playback.duration > 0
       : this.app.viewing.data.poses.length >= 2;
     this.dom.playButton.disabled = streaming || !hasPlayableData;
     this.dom.playButton.textContent = playing ? "⏸" : "▶";

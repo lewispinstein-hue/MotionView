@@ -99,6 +99,8 @@ export interface PlanWaypoint {
 }
 
 export interface PlanWaypointMotion {
+  /** Preview only; exported code remains user-authored. */
+  lockedDriveSide?: "left" | "right";
   id: string;
   type: PlanWaypointIndicatorIcon;
   overrideCode?: string;

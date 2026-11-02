@@ -7,7 +7,7 @@ export interface PathSegmentHit extends SegmentPoint {
   readonly index: number;
 }
 
-/** Drawing and hit testing share the same cached geometry as route playback. */
+/** Drawing and hit testing use the live preview; playback commits on release. */
 export class PlanningSegmentsView {
   constructor(private readonly planning: PlanningFeature, private readonly field: FieldRenderer) {}
 
@@ -19,7 +19,7 @@ export class PlanningSegmentsView {
       const selected = this.planning.selection.isWaypointSelected(index);
       context.lineWidth = this.field.sizes.screen({ width: selected ? 4 : 2, height: 2 }).width;
       context.strokeStyle = selected ? "rgba(190,225,255,0.98)" : "rgb(120,180,255)";
-      const start = this.screen(segment.start);
+      const start = this.screen(segment.samples[0]!);
       context.beginPath();
       context.moveTo(start.x, start.y);
       for (const sample of segment.samples.slice(1)) {
@@ -27,16 +27,12 @@ export class PlanningSegmentsView {
         context.lineTo(screen.x, screen.y);
       }
       context.stroke();
-      if (!segment.previewConverged || segment.previewTargetError > 0.25) {
-        // Editing guide only: never feed this invented connection to playback.
-        const end = this.screen(segment.end);
-        context.lineWidth = this.field.sizes.screen({ width: 1, height: 1 }).width;
-        context.strokeStyle = "rgba(235,190,115,0.6)";
-        context.beginPath();
+      if (editing && selected && !this.planning.projection.pending && segment.outcome !== "reached") {
         const last = this.screen(segment.samples.at(-1)!);
-        context.moveTo(last.x, last.y);
-        context.lineTo(end.x, end.y);
-        context.stroke();
+        context.font = "11px system-ui, sans-serif";
+        context.fillStyle = "rgba(235,200,145,0.95)";
+        const error = segment.translates ? `${formatDistanceFromInches(segment.previewTargetError, 2)} ${getCurrentUnits()} from position target` : `${segment.previewAngularError.toFixed(1)}° from heading target`;
+        context.fillText(`${segment.outcome === "incomplete" ? "Preview incomplete" : segment.outcome === "stalled" ? "Stalled" : "Missed target"} · ${error}`, last.x + 10, last.y - 10);
       }
       if (editing && selected && segment.curved && segment.chordLength > 0) this.drawLeadHandle(segment);
     });
@@ -48,8 +44,7 @@ export class PlanningSegmentsView {
     let bestDistance = threshold ** 2;
     this.planning.projection.segments.forEach((segment, index) => {
       let previous = this.screen(segment.samples[0]!);
-      const samples = segment.previewConverged && segment.previewTargetError <= 0.25
-        ? segment.samples.slice(1) : [...segment.samples.slice(1), segment.end];
+      const samples = segment.samples.slice(1);
       for (const sample of samples) {
         const current = this.screen(sample);
         const dx = current.x - previous.x;
@@ -120,7 +115,7 @@ export class PlanningSegmentsView {
     context.stroke();
     context.font = "11px system-ui, sans-serif";
     context.fillStyle = "rgba(210,230,255,0.95)";
-    const label = `Lead ${Number(segment.lead.toFixed(3))} · ${segment.previewConverged ? "Approx. preview" : "Preview incomplete"}`;
+    const label = `Lead ${Number(segment.lead.toFixed(3))} · ${this.planning.projection.pending ? "Updating preview…" : "Approx. preview"}`;
     context.fillText(label, handle.x + handle.radius + 6, handle.y - 6);
     if (segment.previewConverged && segment.previewTargetError > 0.25)
       context.fillText(`Predicted end offset: ${formatDistanceFromInches(segment.previewTargetError, 2)} ${getCurrentUnits()}`, handle.x + handle.radius + 6, handle.y + 8);

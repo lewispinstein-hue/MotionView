@@ -4,8 +4,8 @@ export async function runBoomerangConfigurationTests(server) {
   const { PlanningFeature } = await server.ssrLoadModule("/planning/PlanningFeature.ts");
   const { MotionViewDocumentSerializer } = await server.ssrLoadModule("/app/persistence/MotionViewDocumentSerializer.ts");
   const { generatePlanningCode } = await server.ssrLoadModule("/planning/planningCode.ts");
-  const { normalizeBoomerangPreviewConfiguration: normalize, normalizeBoomerangMotorWatts, applyBoomerangLibraryPreset: preset } = await server.ssrLoadModule("/planning/planningBoomerangConfiguration.ts");
-  const { boomerangInputUnit, boomerangInputNumber } = await server.ssrLoadModule("/planning/render/planningBoomerangInputUnits.ts");
+  const { normalizePlanningSimulationConfiguration: normalize, normalizePlanningMotorWatts, applyPlanningLibraryPreset: preset } = await server.ssrLoadModule("/planning/planningSimulationConfiguration.ts");
+  const { simulationInputUnit, simulationInputNumber } = await server.ssrLoadModule("/planning/render/planningSimulationInputUnits.ts");
   const { inferPlanningDriveMotors, PlanningPreviewDrivetrain } = await server.ssrLoadModule("/planning/planningPreviewDrivetrain.ts");
   const { PlanningSegment } = await server.ssrLoadModule("/planning/planningSegments.ts");
   assert.deepEqual(inferPlanningDriveMotors(66), { elevenWatt: 6, fivePointFiveWatt: 0 });
@@ -13,29 +13,29 @@ export async function runBoomerangConfigurationTests(server) {
   assert.deepEqual(inferPlanningDriveMotors(27.5), { elevenWatt: 2, fivePointFiveWatt: 1 });
   for (let watts = 22; watts <= 88; watts += 5.5) {
     const motors = inferPlanningDriveMotors(watts);
-    assert.equal(normalizeBoomerangMotorWatts(watts), watts);
+    assert.equal(normalizePlanningMotorWatts(watts), watts);
     assert.equal(motors.elevenWatt * 11 + motors.fivePointFiveWatt * 5.5, watts);
     assert.equal(normalize({ motorWatts: watts }).motorWatts, watts);
   }
-  assert.equal(normalizeBoomerangMotorWatts(-10), 22);
-  assert.equal(normalizeBoomerangMotorWatts(0), 22);
-  assert.equal(normalizeBoomerangMotorWatts(880), 88);
-  assert.equal(normalizeBoomerangMotorWatts(29), 27.5);
-  assert.equal(normalizeBoomerangMotorWatts(NaN), 66);
+  assert.equal(normalizePlanningMotorWatts(-10), 22);
+  assert.equal(normalizePlanningMotorWatts(0), 22);
+  assert.equal(normalizePlanningMotorWatts(880), 88);
+  assert.equal(normalizePlanningMotorWatts(29), 27.5);
+  assert.equal(normalizePlanningMotorWatts(NaN), 66);
   for (const [units, factor, speed, width] of [
     ["in", 1, "60", "12"],
     ["cm", 1 / 2.54, "152.4", "30.48"],
     ["ft", 12, "5", "1"],
     ["tiles", 24, "2.5", "0.5"],
   ]) {
-    const distance = boomerangInputUnit("distance", units);
-    const velocity = boomerangInputUnit("speed", units);
+    const distance = simulationInputUnit("distance", units);
+    const velocity = simulationInputUnit("speed", units);
     assert.equal(distance.suffix, units);
     assert.equal(velocity.suffix, `${units}/s`);
     assert.equal(distance.factor, factor);
-    assert.equal(boomerangInputNumber(60 / velocity.factor), speed);
-    assert.equal(boomerangInputNumber(12 / distance.factor), width);
-    const mass = boomerangInputUnit("weight", units);
+    assert.equal(simulationInputNumber(60 / velocity.factor), speed);
+    assert.equal(simulationInputNumber(12 / distance.factor), width);
+    const mass = simulationInputUnit("weight", units);
     assert.equal(mass.suffix, units === "cm" ? "kg" : "lb");
     assert.ok(Math.abs(15 / mass.factor - (units === "cm" ? 6.80388555 : 15)) < 1e-10);
   }
@@ -52,15 +52,11 @@ export async function runBoomerangConfigurationTests(server) {
   assert.equal(ez.library, "ez-template");
   for (const key of ["motorWatts", "robotWeightPounds", "maxSpeedInchesPerSecond", "lateralPID", "angularPID"])
     assert.deepEqual(ez[key], tuned[key], `presets preserve robot field ${key}`);
-  assert.equal(ez.maxCarrotDistance, 12);
+  assert.equal(ez.maxCarrotDistance, 16);
   assert.equal(ez.lookAheadDistance, 7);
-  assert.equal(ez.turnBias, 1.375);
-  assert.equal(ez.settlingDistance, ez.lookAheadDistance / 2);
-  assert.equal(ez.settlingMinSpeed, 0, "EZ has no LemLib settling power floor");
+  assert.equal(ez.turnBias, 0.9);
   assert.equal(ez.horizontalDrift, 0, "EZ has no LemLib curvature/drift restriction");
   const lemlib = preset("lemlib", ez);
-  assert.equal(lemlib.settlingDistance, 7.5);
-  assert.equal(lemlib.settlingMinSpeed, 60);
   assert.equal(lemlib.maxCarrotDistance, 0, "LemLib does not cap the carrot distance");
   assert.equal(lemlib.turnBias, 1, "LemLib does not use EZ turn bias");
   assert.notDeepEqual(lemlib, ez, "presets differ in constants, not just their model/name");
@@ -76,7 +72,6 @@ export async function runBoomerangConfigurationTests(server) {
   assert.equal(normalize({ library: "ez-template" }).previewModel, "ez-template", "older presets retain their model when no previewModel was saved");
   assert.equal(normalize({ ...custom, previewModel: "invalid" }).previewModel, "lemlib", "malformed custom models normalize safely");
   assert.equal(preset("lemlib", custom).previewModel, "lemlib");
-  assert.equal(preset("lemlib", custom).settlingDistance, defaults.settlingDistance);
 
   // Each physical input has an observable effect; none are decoration.
   const firstTravel = (values) => new PlanningPreviewDrivetrain(normalize(values)).step(10, 10).travel;
@@ -103,38 +98,38 @@ export async function runBoomerangConfigurationTests(server) {
   const originalTemplates = structuredClone(planning.motionTemplates);
   const originalCode = generatePlanningCode(planning);
   const originalGeometry = planning.projection.segments[0];
-  planning.setBoomerangConfiguration(ez);
-  assert.equal(planning.boomerangConfiguration.library, "ez-template");
-  assert.equal(planning.projection.configuration.boomerang, planning.boomerangConfiguration);
+  planning.setSimulationConfiguration(ez);
+  assert.equal(planning.simulationConfiguration.library, "ez-template");
+  assert.equal(planning.projection.configuration.simulation, planning.simulationConfiguration);
   assert.notEqual(planning.projection.segments[0], originalGeometry);
   assert.equal(generatePlanningCode(planning), originalCode, "preview tuning never rewrites export code");
   assert.deepEqual(planning.motionTemplates, originalTemplates, "settings save independently from template text");
   planning.setMotionTemplates({ ...originalTemplates, rotate: "newTurn(@th);" });
   assert.equal(planning.history.undo(), true);
-  assert.deepEqual(planning.boomerangConfiguration, ez, "undoing a later template edit does not discard saved settings");
+  assert.deepEqual(planning.simulationConfiguration, ez, "undoing a later template edit does not discard saved settings");
   assert.deepEqual(planning.motionTemplates, originalTemplates);
   assert.equal(planning.history.undo(), true);
-  assert.deepEqual(planning.boomerangConfiguration, defaults);
+  assert.deepEqual(planning.simulationConfiguration, defaults);
   assert.equal(planning.history.canUndo, false);
   assert.equal(planning.history.redo(), true);
   const path = planning.paths.activeId;
   planning.paths.add();
-  assert.deepEqual(planning.boomerangConfiguration, ez, "settings are shared across paths");
+  assert.deepEqual(planning.simulationConfiguration, ez, "settings are shared across paths");
   planning.paths.select(path);
 
   const serializer = new MotionViewDocumentSerializer({ planning, viewing: { data: { poses: [], watches: [], logs: [], waypoints: [] } }, version: "test" });
   const exported = serializer.exportPayload("planning", "Config round trip", {});
-  assert.deepEqual(exported["planned-boomerang-configuration"], ez);
+  assert.deepEqual(exported["planned-simulation-configuration"], ez);
   for (const data of [JSON.parse(JSON.stringify(exported)), JSON.parse(serializer.savedPaths())]) {
     const restored = new PlanningFeature();
     restored.load(data);
-    assert.deepEqual(restored.boomerangConfiguration, ez, "JSON exports and restart autosaves restore settings");
+    assert.deepEqual(restored.simulationConfiguration, ez, "JSON exports and restart autosaves restore settings");
     assert.deepEqual(restored.projection.segments[0].samples, planning.projection.segments[0].samples);
     assert.equal(generatePlanningCode(restored), originalCode);
   }
   for (const previewModel of ["lemlib", "ez-template"]) {
     const profile = normalize({ ...custom, previewModel });
-    planning.setBoomerangConfiguration(profile);
+    planning.setSimulationConfiguration(profile);
     const modelOnly = normalize({ ...profile, library: previewModel });
     const segment = new PlanningSegment(planning.route.waypoints[0], planning.route.waypoints[1], modelOnly);
     assert.deepEqual(planning.projection.segments[0].samples, segment.samples, "Custom follows its explicit model, not a library-name fallthrough");
@@ -142,20 +137,20 @@ export async function runBoomerangConfigurationTests(server) {
     for (const data of [JSON.parse(JSON.stringify(customExport)), JSON.parse(serializer.savedPaths())]) {
       const restored = new PlanningFeature();
       restored.load(data);
-      assert.deepEqual(restored.boomerangConfiguration, profile, "Custom and its model survive JSON export and restart autosave");
+      assert.deepEqual(restored.simulationConfiguration, profile, "Custom and its model survive JSON export and restart autosave");
       assert.equal(generatePlanningCode(restored), originalCode);
     }
     assert.equal(planning.history.undo(), true);
-    assert.equal(planning.boomerangConfiguration.library, "ez-template");
+    assert.equal(planning.simulationConfiguration.library, "ez-template");
     assert.equal(planning.history.redo(), true);
-    assert.deepEqual(planning.boomerangConfiguration, profile);
-    planning.setBoomerangConfiguration(ez);
+    assert.deepEqual(planning.simulationConfiguration, profile);
+    planning.setSimulationConfiguration(ez);
   }
   planning.load({});
-  assert.deepEqual(planning.boomerangConfiguration, defaults, "legacy import does not inherit another document's settings");
-  planning.setBoomerangConfiguration(ez);
+  assert.deepEqual(planning.simulationConfiguration, defaults, "legacy import does not inherit another document's settings");
+  planning.setSimulationConfiguration(ez);
   planning.clear();
-  assert.deepEqual(planning.boomerangConfiguration, defaults);
-  planning.load({ "planned-boomerang-configuration": { motorWatts: 60.5 } });
-  assert.equal(planning.boomerangConfiguration.motorWatts, 60.5, "half-step watts survive imports");
+  assert.deepEqual(planning.simulationConfiguration, defaults);
+  planning.load({ "planned-simulation-configuration": { motorWatts: 60.5 } });
+  assert.equal(planning.simulationConfiguration.motorWatts, 60.5, "half-step watts survive imports");
 }

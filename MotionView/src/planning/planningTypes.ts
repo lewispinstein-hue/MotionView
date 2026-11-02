@@ -5,7 +5,7 @@ import type {
   PlanWaypoint,
   PlanMotionTemplates,
 } from "../state/models";
-import type { BoomerangPreviewConfiguration } from "./planningBoomerangConfiguration";
+import type { PlanningSimulationConfiguration } from "./planningSimulationConfiguration";
 
 export interface PlanningMethod extends PlanMethod {
   code: string;
@@ -77,5 +77,5 @@ export interface PlanningExportView {
   readonly nodes: readonly PlanningNodeView[];
   readonly template: string;
   readonly motionTemplates: Readonly<PlanMotionTemplates>;
-  readonly boomerangConfiguration: BoomerangPreviewConfiguration;
+  readonly simulationConfiguration: PlanningSimulationConfiguration;
 }

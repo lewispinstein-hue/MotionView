@@ -55,9 +55,9 @@ export async function runPlanningWaypointDirectionTests(server) {
   assert.notDeepEqual(forwards.leadAxis, backwards.leadAxis, "reverse changes the carrot side");
   assert.notDeepEqual(forwards.samples, backwards.samples, "direction reaches the controller preview");
   const mutable = { ...points[0], lead: 0.6, forwards: true };
-  const segment = new PlanningSegment(mutable, points[1], planning.boomerangConfiguration);
+  const segment = new PlanningSegment(mutable, points[1], planning.simulationConfiguration);
   mutable.forwards = false;
-  assert.equal(segment.matches(mutable, points[1], planning.boomerangConfiguration), false);
+  assert.equal(segment.matches(mutable, points[1], planning.simulationConfiguration), false);
 
   planning.route.updateMotions(0, [{ id: "straight", type: "forward" }], false);
   planning.route.toggleBoomerang(0);

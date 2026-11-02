@@ -354,9 +354,19 @@ export class PlanningTimelineView {
     this.draw();
   }
 
+  updateSelection(): void {
+    this.dom.timelineWaypointLayer.querySelectorAll("button").forEach((marker, index) =>
+      marker.classList.toggle("isSelected", this.planning.selection.isWaypointSelected(index)));
+    this.dom.timelineNodeLayer.querySelectorAll<HTMLElement>("[data-node-id]").forEach(element => {
+      const node = this.planning.timeline.get(element.dataset.nodeId!);
+      element.classList.toggle("isSelected", !!node && this.planning.selection.isNodeHighlighted(node));
+    });
+    this.draw();
+  }
+
   draw(): void {
     if (getMode() !== "planning") return;
-    if (this.#renderedRouteRevision !== this.planning.route.revision) {
+    if (this.#renderedRouteRevision !== this.planning.route.revision && !this.planning.route.isEditing) {
       this.render();
       return;
     }
@@ -375,7 +385,7 @@ export class PlanningTimelineView {
       this.#context.setTransform(ratio, 0, 0, ratio, 0, 0);
     }
     this.#context.clearRect(0, 0, rect.width, rect.height);
-    if (this.planning.projection.totalLength <= 0) return;
+    if (this.planning.route.length < 2) return;
     const y = rect.height / 2;
     this.#context.strokeStyle = "rgba(255,255,255,0.12)";
     this.#context.lineWidth = 2;
@@ -385,7 +395,7 @@ export class PlanningTimelineView {
     this.#context.moveTo(startX, y);
     this.#context.lineTo(endX, y);
     this.#context.stroke();
-    const progress = this.xForDistance(this.planning.playback.distance, layout);
+    const progress = this.xForTime(this.planning.playback.time, layout);
     this.#context.strokeStyle = "rgba(120,180,255,0.9)";
     this.#context.beginPath();
     this.#context.moveTo(PAD, y);
@@ -407,14 +417,15 @@ export class PlanningTimelineView {
       this.#layout ?? this.buildLayout([...this.planning.timeline.nodes]);
     return latestTimelineNodeAtProgress(
       this.nodeProgressPositions(layout),
-      this.xForDistance(this.planning.playback.distance, layout),
+      this.xForTime(this.planning.playback.time, layout),
     );
   }
 
   private scrub(clientX: number): void {
     const rect = this.dom.timelineCanvas.getBoundingClientRect();
-    this.planning.playback.setDistance(
-      this.distanceForX(
+    this.planning.playback.pause();
+    this.planning.playback.setTime(
+      this.timeForX(
         clientX - rect.left,
         this.#layout ?? this.buildLayout([...this.planning.timeline.nodes]),
       ),
@@ -424,9 +435,6 @@ export class PlanningTimelineView {
   /** Selects a timeline waypoint and moves the field playback robot to it. */
   private selectWaypoint(index: number): void {
     this.planning.selection.selectWaypoint(index);
-    this.planning.playback.setDistance(
-      this.planning.projection.distances[index] ?? 0,
-    );
   }
 
   private beginDrag(event: Readonly<PlanningMethodDrag>): void {
@@ -727,7 +735,7 @@ export class PlanningTimelineView {
       : [];
     const widths = baseWidths.map((width, beforeWaypoint) => {
       const count = buckets[beforeWaypoint]?.nodes.length ?? 0;
-      if (!count || !waypointCount) return width;
+      if (!count || !waypointCount) return beforeWaypoint > 0 ? Math.max(width, WAYPOINT_MIN_GAP) : width;
       const needed =
         NODE_START_OFFSET +
         NODE_WIDTH +
@@ -825,13 +833,13 @@ export class PlanningTimelineView {
     return bucket.nodeStart + ((previous.index + next.index) * NODE_SLOT) / 2;
   }
 
-  private xForDistance(distance: number, layout: TimelineLayout): number {
-    const distances = this.planning.projection.distances;
+  private xForTime(time: number, layout: TimelineLayout): number {
+    const distances = this.planning.projection.times;
     if (!layout.waypointX.length) return PAD + EDGE_INSET;
-    const total = this.planning.projection.totalLength;
-    const clamped = Math.max(0, Math.min(total, distance));
+    const total = this.planning.projection.duration;
+    const clamped = Math.max(0, Math.min(total, time));
     if (clamped <= 0) return layout.waypointX[0]!;
-    if (clamped >= total) return layout.waypointX.at(-1)!;
+    if (clamped >= total) return layout.waypointX[Math.max(0, distances.length - 1)] ?? layout.waypointX[0]!;
     for (let index = 1; index < distances.length; index += 1) {
       const end = distances[index] ?? 0;
       if (clamped > end) continue;
@@ -846,20 +854,20 @@ export class PlanningTimelineView {
     return layout.waypointX.at(-1)!;
   }
 
-  private distanceForX(x: number, layout: TimelineLayout): number {
+  private timeForX(x: number, layout: TimelineLayout): number {
     const waypointX = layout.waypointX;
-    const distances = this.planning.projection.distances;
+    const distances = this.planning.projection.times;
     if (!waypointX.length || x <= waypointX[0]!) return 0;
-    if (x >= waypointX.at(-1)!) return this.planning.projection.totalLength;
+    if (x >= waypointX.at(-1)!) return this.planning.projection.duration;
     for (let index = 1; index < waypointX.length; index += 1) {
       const endX = waypointX[index] ?? 0;
       if (x > endX) continue;
       const startX = waypointX[index - 1] ?? 0;
       const ratio = endX > startX ? (x - startX) / (endX - startX) : 1;
-      const start = distances[index - 1] ?? 0;
-      return start + ((distances[index] ?? start) - start) * ratio;
+      const start = distances[index - 1] ?? this.planning.projection.duration;
+      return start + ((distances[index] ?? this.planning.projection.duration) - start) * ratio;
     }
-    return this.planning.projection.totalLength;
+    return this.planning.projection.duration;
   }
 
   private async editNode(nodeId: string): Promise<void> {

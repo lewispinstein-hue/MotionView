@@ -130,7 +130,7 @@ export class MotionViewDocumentSerializer {
       "planned-segment-export": true,
       "planned-export-template": planning.template,
       "planned-motion-templates": { ...planning.motionTemplates },
-      "planned-boomerang-configuration": structuredClone(planning.boomerangConfiguration),
+      "planned-simulation-configuration": structuredClone(planning.simulationConfiguration),
       "planned-objects": planning.objects.map((object) => ({
         id: object.id,
         name: object.name,

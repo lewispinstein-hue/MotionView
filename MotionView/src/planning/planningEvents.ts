@@ -10,7 +10,7 @@ export type PlanningDocumentChangeKind =
   | "path"
   | "path-export"
   | "template"
-  | "boomerang-configuration"
+  | "simulation-configuration"
   | "overlay"
   | "history";
 
@@ -23,15 +23,17 @@ export interface PlanningSelectionChangedEvent {
 }
 
 export interface PlanningPlaybackChangedEvent {
-  readonly kind: "started" | "paused" | "distance" | "rate";
+  readonly kind: "started" | "paused" | "time" | "rate";
+  readonly time: number;
   readonly distance: number;
 }
 
 export interface PlanningProjectionChangedEvent {
-  readonly kind: "route" | "configuration";
+  readonly kind: "route" | "configuration" | "route-edit" | "preview-pending" | "preview-ready" | "simulation-pending" | "simulation-ready";
 }
 
 export class PlanningEvents {
+  readonly routeEditChanged = new TypedEvent<{ readonly active: boolean }>();
   readonly documentChanged = new TypedEvent<PlanningDocumentChangedEvent>();
   readonly documentPreviewChanged =
     new TypedEvent<PlanningDocumentChangedEvent>();

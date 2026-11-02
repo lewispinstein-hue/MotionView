@@ -1,6 +1,7 @@
 import { optionalElement, requiredElement } from "../../dom/elements";
 
 export class SettingsDom {
+  readonly planSimulation: HTMLElement;
   readonly modal: HTMLElement;
   readonly closeButton: HTMLButtonElement;
   readonly telemetryEnabled: HTMLInputElement;
@@ -66,6 +67,7 @@ export class SettingsDom {
     this.offsetTheta = requiredElement("settingsOffTheta", HTMLInputElement, document);
     this.minimumSpeed = requiredElement("settingsMinSpeed", HTMLInputElement, document);
     this.maximumSpeed = requiredElement("settingsMaxSpeed", HTMLInputElement, document);
+    this.planSimulation = requiredElement("settingsPlanSimulation", HTMLElement, document);
     this.planMoveStep = requiredElement("settingsPlanMoveStep", HTMLInputElement, document);
     this.planSnapStep = requiredElement("settingsPlanSnapStep", HTMLSelectElement, document);
     this.planThetaSnapStep = requiredElement("settingsPlanThetaSnapStep", HTMLSelectElement, document);

@@ -5,11 +5,7 @@ import { createWaypointIndicatorIcon, getWaypointIndicatorTooltip } from "../pla
 import { createDefaultMotionTemplates, MAX_WAYPOINT_MOTIONS, PLANNING_MOTION_TYPES } from "../planningMotions";
 import { PlanningMotionSelection } from "../planningMotionSelection";
 import { PlanningMotionCodeEditor } from "./PlanningMotionCodeEditor";
-import { PlanningBoomerangSettingsView } from "./PlanningBoomerangSettingsView";
-import {
-  normalizeBoomerangPreviewConfiguration,
-  type BoomerangPreviewConfiguration,
-} from "../planningBoomerangConfiguration";
+
 
 interface PlanningMotionEditorBaseOptions {
   readonly templates: Readonly<PlanMotionTemplates>;
@@ -21,8 +17,6 @@ export type PlanningMotionEditorOptions = PlanningMotionEditorBaseOptions & ({
   readonly forwards: boolean;
 } | {
   readonly mode: "templates";
-  readonly boomerangConfiguration: BoomerangPreviewConfiguration;
-  readonly saveBoomerangConfiguration: (configuration: BoomerangPreviewConfiguration) => void;
 });
 
 export interface PlanningMotionEditorResult {
@@ -33,7 +27,7 @@ export interface PlanningMotionEditorResult {
 
 const MOTIONS = PLANNING_MOTION_TYPES;
 
-/** Owns code drafts; Boomerang settings save independently from template Confirm. */
+/** Owns motion selection and code drafts until Confirm. */
 export class PlanningMotionEditorView {
   #mode: PlanningMotionEditorOptions["mode"] | null = null;
   #templates = createDefaultMotionTemplates("");
@@ -42,12 +36,9 @@ export class PlanningMotionEditorView {
   #forwards = true;
   #selectedTemplate: PlanWaypointIndicatorIcon = "forward";
   readonly #codePreview: PlanningMotionCodeEditor;
-  readonly #boomerangSettings: PlanningBoomerangSettingsView;
-  #boomerangConfiguration = normalizeBoomerangPreviewConfiguration(undefined);
-  #saveBoomerangConfiguration: ((configuration: BoomerangPreviewConfiguration) => void) | null = null;
+
 
   constructor(private readonly dom: PlanningDom) {
-    this.#boomerangSettings = new PlanningBoomerangSettingsView(dom);
     this.#codePreview = new PlanningMotionCodeEditor(
       dom.templateCode,
       (id, code) => this.#selection?.updateCode(id, code),
@@ -71,15 +62,6 @@ export class PlanningMotionEditorView {
   }
 
   bind(): void {
-    this.#boomerangSettings.bind();
-    this.dom.boomerangSettingsButton.addEventListener("click", async () => {
-      if (this.#mode !== "templates" || this.#selectedTemplate !== "boomerang") return;
-      const save = this.#saveBoomerangConfiguration;
-      const result = await this.#boomerangSettings.open(this.#boomerangConfiguration);
-      if (!result) return;
-      if (this.#mode === "templates") this.#boomerangConfiguration = result;
-      save?.(result);
-    });
     this.dom.templateCode.addEventListener("input", () => {
       if (this.#mode === "templates") this.#templates[this.#selectedTemplate] = this.dom.templateCode.value;
     });
@@ -88,8 +70,6 @@ export class PlanningMotionEditorView {
   open(options: PlanningMotionEditorOptions): void {
     this.#mode = options.mode;
     this.#templates = { ...options.templates };
-    this.#boomerangConfiguration = normalizeBoomerangPreviewConfiguration(options.mode === "templates" ? options.boomerangConfiguration : undefined);
-    this.#saveBoomerangConfiguration = options.mode === "templates" ? options.saveBoomerangConfiguration : null;
     this.#selection = options.mode === "waypoint" ? new PlanningMotionSelection(options.motions, this.#templates) : null;
     this.#forwards = options.mode === "waypoint" ? options.forwards : true;
     this.#selectedId = this.#selection?.motions[0]?.id ?? null;
@@ -102,22 +82,15 @@ export class PlanningMotionEditorView {
   }
 
   close(): void {
-    this.#boomerangSettings.cancel();
     this.#mode = null;
-    this.#saveBoomerangConfiguration = null;
     this.#selection = null;
     this.dom.motionPreview.replaceChildren();
     this.dom.motionPreview.hidden = true;
     this.dom.templateModal.classList.remove("hasMotionPreview");
-    this.dom.boomerangSettingsButton.hidden = true;
     this.dom.templateCode.disabled = false;
     this.dom.templateCode.hidden = false;
     this.dom.templateDescription.setAttribute("for", "planTemplateInput");
     this.#codePreview.hide();
-  }
-
-  cancelSettings(): boolean {
-    return this.#boomerangSettings.cancel();
   }
 
   private render(): void {
@@ -210,6 +183,24 @@ export class PlanningMotionEditorView {
     });
     row.append(summary, swap);
     this.dom.motionPreview.append(picker, row, this.createDirectionToggle());
+    const swing = selection.motions.find(motion => motion.type === "swing");
+    if (swing) {
+      const side = document.createElement("div"); side.className = "planWaypointDirection";
+      const label = document.createElement("span"); label.className = "planWaypointDirectionLabel";
+      label.textContent = "Locked drive side"; side.appendChild(label);
+      side.title = "Preview only. Match the locked side used in your Swing code.";
+      for (const value of ["left", "right"] as const) {
+        const button = document.createElement("button"); button.type = "button"; button.className = "planMotionChoice";
+        button.textContent = value === "left" ? "Left" : "Right";
+        button.setAttribute("aria-pressed", String((swing.lockedDriveSide ?? "left") === value));
+        button.addEventListener("click", () => {
+          selection.setLockedDriveSide(swing.id, value);
+          for (const option of side.querySelectorAll("button")) option.setAttribute("aria-pressed", String(option === button));
+        });
+        side.appendChild(button);
+      }
+      this.dom.motionPreview.appendChild(side);
+    }
   }
 
   private createDirectionToggle(): HTMLElement {
@@ -239,7 +230,6 @@ export class PlanningMotionEditorView {
   }
 
   private renderCode(): void {
-    this.dom.boomerangSettingsButton.hidden = this.#mode !== "templates" || this.#selectedTemplate !== "boomerang";
     if (this.#mode === "waypoint") {
       const motions = this.#selection!.motions;
       if (!motions.some((motion) => motion.id === this.#selectedId)) this.#selectedId = motions[0]!.id;

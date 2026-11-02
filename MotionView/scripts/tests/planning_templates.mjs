@@ -1,3 +1,4 @@
+import { runPlanningSimulationTests } from "./planning_simulation_cases.mjs";
 import assert from "node:assert/strict";
 import { createServer } from "vite";
 import { runPlanningMotionTests } from "./planning_motion_cases.mjs";
@@ -392,6 +393,7 @@ try {
   assert.equal(Object.hasOwn(migratedWaypoints[1] ?? {}, "overrideCode"), false);
   assert.equal(Object.hasOwn(migratedWaypoints[1] ?? {}, "indicatorIcons"), false);
 
+  await runPlanningSimulationTests(server);
   await runPlanningMotionTests(server);
   await runPlanningMotionSelectionTests(server);
   await runPlanningBoomerangTests(server);

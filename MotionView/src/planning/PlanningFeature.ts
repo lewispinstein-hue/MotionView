@@ -11,10 +11,10 @@ import { PlanningSession } from "./planningSession";
 import type { PlanMotionTemplates } from "../state/models";
 import { normalizeMotionTemplates } from "./planningMotions";
 import {
-  normalizeBoomerangPreviewConfiguration,
-  type BoomerangPreviewConfiguration,
-  type BoomerangPreviewConfigurationUpdate,
-} from "./planningBoomerangConfiguration";
+  normalizePlanningSimulationConfiguration,
+  type PlanningSimulationConfiguration,
+  type PlanningSimulationConfigurationUpdate,
+} from "./planningSimulationConfiguration";
 import type {
   PlanningExportView,
   PlanningNodeView,
@@ -59,7 +59,8 @@ export class PlanningFeature {
     this.events.projectionChanged.subscribe((change) => {
       if (change.kind !== "route" && change.kind !== "configuration") return;
       if (this.route.length < 2) this.playback.pause();
-      this.playback.setDistance(this.playback.distance);
+      this.playback.pause();
+      this.playback.refresh();
     });
   }
 
@@ -69,8 +70,8 @@ export class PlanningFeature {
   get motionTemplates(): Readonly<PlanMotionTemplates> {
     return this.#session.motionTemplates;
   }
-  get boomerangConfiguration(): BoomerangPreviewConfiguration {
-    return this.#session.boomerangConfiguration;
+  get simulationConfiguration(): PlanningSimulationConfiguration {
+    return this.#session.simulationConfiguration;
   }
   get overlayVisible(): boolean {
     return this.#session.overlayVisible;
@@ -98,11 +99,11 @@ export class PlanningFeature {
     });
   }
 
-  setBoomerangConfiguration(values: BoomerangPreviewConfigurationUpdate): void {
-    const next = normalizeBoomerangPreviewConfiguration(values, this.#session.boomerangConfiguration);
-    if (JSON.stringify(next) === JSON.stringify(this.#session.boomerangConfiguration)) return;
-    this.#session.mutate("boomerang-configuration", () => {
-      this.#session.boomerangConfiguration = next;
+  setSimulationConfiguration(values: PlanningSimulationConfigurationUpdate): void {
+    const next = normalizePlanningSimulationConfiguration(values, this.#session.simulationConfiguration);
+    if (JSON.stringify(next) === JSON.stringify(this.#session.simulationConfiguration)) return;
+    this.#session.mutate("simulation-configuration", () => {
+      this.#session.simulationConfiguration = next;
     });
   }
 
@@ -138,7 +139,7 @@ export class PlanningFeature {
       nodes: this.#session.nodes,
       template: this.#session.exportTemplate,
       motionTemplates: this.#session.motionTemplates,
-      boomerangConfiguration: this.#session.boomerangConfiguration,
+      simulationConfiguration: this.#session.simulationConfiguration,
     };
   }
 
