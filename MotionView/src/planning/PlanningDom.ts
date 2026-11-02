@@ -57,6 +57,7 @@ export class PlanningDom {
   readonly templateName: HTMLInputElement;
   readonly templateValidation: HTMLElement;
   readonly templateClose: HTMLButtonElement;
+  readonly templateLibrary: HTMLSelectElement;
   readonly templateCancel: HTMLButtonElement;
   readonly templateConfirm: HTMLButtonElement;
   readonly templateCode: HTMLTextAreaElement;
@@ -163,6 +164,7 @@ export class PlanningDom {
       "planTemplateValidation",
     );
     this.templateClose = requiredElement(document, "btnPlanTemplateClose");
+    this.templateLibrary = requiredElement(document, "planTemplateLibrary");
     this.templateCancel = requiredElement(document, "btnPlanTemplateCancel");
     this.templateConfirm = requiredElement(document, "btnPlanTemplateConfirm");
     this.templateCode = requiredElement(document, "planTemplateInput");

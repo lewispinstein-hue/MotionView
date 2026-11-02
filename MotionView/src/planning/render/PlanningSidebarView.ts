@@ -743,10 +743,11 @@ export class PlanningSidebarView {
       motionEditor: {
         mode: "templates",
         templates: previous,
+        templateConfiguration: this.planning.templateConfiguration,
       },
     });
-    if (!result?.motionTemplates) return;
-    this.planning.setMotionTemplates(result.motionTemplates);
+    if (!result?.templateConfiguration) return;
+    this.planning.setTemplateConfiguration(result.templateConfiguration);
     if (JSON.stringify(previous) !== JSON.stringify(this.planning.motionTemplates))
       void planningTelemetry.templateUpdated(
         this.planning.telemetryProperties(),

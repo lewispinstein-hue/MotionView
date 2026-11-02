@@ -5,6 +5,12 @@ import { createWaypointIndicatorIcon, getWaypointIndicatorTooltip } from "../pla
 import { createDefaultMotionTemplates, MAX_WAYPOINT_MOTIONS, PLANNING_MOTION_TYPES } from "../planningMotions";
 import { PlanningMotionSelection } from "../planningMotionSelection";
 import { PlanningMotionCodeEditor } from "./PlanningMotionCodeEditor";
+import {
+  editPlanningMotionTemplate,
+  isPlanningTemplateLibrary,
+  normalizePlanningTemplateConfiguration,
+  type PlanningTemplateConfiguration,
+} from "../planningTemplatePresets";
 
 
 interface PlanningMotionEditorBaseOptions {
@@ -17,12 +23,14 @@ export type PlanningMotionEditorOptions = PlanningMotionEditorBaseOptions & ({
   readonly forwards: boolean;
 } | {
   readonly mode: "templates";
+  readonly templateConfiguration: Readonly<PlanningTemplateConfiguration>;
 });
 
 export interface PlanningMotionEditorResult {
   readonly motions?: PlanWaypointMotion[];
   readonly forwards?: boolean;
   readonly motionTemplates?: PlanMotionTemplates;
+  readonly templateConfiguration?: PlanningTemplateConfiguration;
 }
 
 const MOTIONS = PLANNING_MOTION_TYPES;
@@ -31,6 +39,7 @@ const MOTIONS = PLANNING_MOTION_TYPES;
 export class PlanningMotionEditorView {
   #mode: PlanningMotionEditorOptions["mode"] | null = null;
   #templates = createDefaultMotionTemplates("");
+  #templateConfiguration: PlanningTemplateConfiguration | null = null;
   #selection: PlanningMotionSelection | null = null;
   #selectedId: string | null = null;
   #forwards = true;
@@ -53,6 +62,7 @@ export class PlanningMotionEditorView {
   get result(): PlanningMotionEditorResult {
     if (this.#mode === "templates") return {
       motionTemplates: { ...this.#templates },
+      templateConfiguration: normalizePlanningTemplateConfiguration(this.#templateConfiguration),
     };
     return { motions: this.#selection?.result ?? [], forwards: this.#forwards };
   }
@@ -63,13 +73,28 @@ export class PlanningMotionEditorView {
 
   bind(): void {
     this.dom.templateCode.addEventListener("input", () => {
-      if (this.#mode === "templates") this.#templates[this.#selectedTemplate] = this.dom.templateCode.value;
+      if (this.#mode !== "templates" || !this.#templateConfiguration) return;
+      editPlanningMotionTemplate(this.#templateConfiguration, this.#selectedTemplate, this.dom.templateCode.value);
+      this.#templates = this.#templateConfiguration.templates[this.#templateConfiguration.library];
+      this.dom.templateLibrary.value = this.#templateConfiguration.library;
+    });
+    this.dom.templateLibrary.addEventListener("change", () => {
+      const library = this.dom.templateLibrary.value;
+      if (this.#mode !== "templates" || !this.#templateConfiguration || !isPlanningTemplateLibrary(library)) return;
+      this.#templateConfiguration.library = library;
+      this.#templates = this.#templateConfiguration.templates[library];
+      this.render();
     });
   }
 
   open(options: PlanningMotionEditorOptions): void {
     this.#mode = options.mode;
-    this.#templates = { ...options.templates };
+    this.#templateConfiguration = options.mode === "templates"
+      ? normalizePlanningTemplateConfiguration(options.templateConfiguration) : null;
+    this.#templates = this.#templateConfiguration
+      ? this.#templateConfiguration.templates[this.#templateConfiguration.library] : { ...options.templates };
+    this.dom.templateLibrary.hidden = options.mode !== "templates";
+    if (this.#templateConfiguration) this.dom.templateLibrary.value = this.#templateConfiguration.library;
     this.#selection = options.mode === "waypoint" ? new PlanningMotionSelection(options.motions, this.#templates) : null;
     this.#forwards = options.mode === "waypoint" ? options.forwards : true;
     this.#selectedId = this.#selection?.motions[0]?.id ?? null;
@@ -84,6 +109,8 @@ export class PlanningMotionEditorView {
   close(): void {
     this.#mode = null;
     this.#selection = null;
+    this.#templateConfiguration = null;
+    this.dom.templateLibrary.hidden = true;
     this.dom.motionPreview.replaceChildren();
     this.dom.motionPreview.hidden = true;
     this.dom.templateModal.classList.remove("hasMotionPreview");
@@ -135,7 +162,7 @@ export class PlanningMotionEditorView {
     const picker = document.createElement("div");
     picker.className = "planMotionPicker";
     picker.setAttribute("role", "group");
-    picker.setAttribute("aria-label", "Select one or two motion types");
+    picker.setAttribute("aria-label", "Select up to one movement type and one turn type");
     for (const motion of MOTIONS) {
       const button = document.createElement("button");
       button.type = "button";
@@ -248,7 +275,10 @@ export class PlanningMotionEditorView {
     this.dom.templateDescription.setAttribute("for", "planTemplateInput");
     const name = MOTIONS.find((entry) => entry.type === this.#selectedTemplate)!.name;
     this.dom.templateGroupTitle.textContent = `${name} template`;
-    this.dom.templateDescription.textContent = "Starting code for this motion type. Both @x and ${x} placeholders are supported. Boomerang lead: @ld or ${lead}.";
+    this.dom.templateCode.placeholder = "";
+    this.dom.templateDescription.textContent = "Starting code for this motion type. Both @x and ${x} placeholders are supported. Boomerang lead: @ld or ${lead}." +
+      (this.#templateConfiguration?.library === "jar-template" ? " JAR chooses travel direction automatically." : "") +
+      (this.#selectedTemplate === "swing" ? " Swing templates lock the left side by default; edit the code to match your chosen side." : "");
     this.dom.templateCode.value = this.#templates[this.#selectedTemplate];
   }
 }

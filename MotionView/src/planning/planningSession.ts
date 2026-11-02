@@ -19,7 +19,11 @@ import { PlanningPathStore } from "./PlanningPathStore";
 import { PlanningSessionHistory } from "./planningSessionHistory";
 import { normalizePlanObjects } from "./planningState";
 import type { PlanMotionTemplates } from "../state/models";
-import { createDefaultMotionTemplates, normalizeMotionTemplates } from "./planningMotions";
+import {
+  loadPlanningTemplateConfiguration,
+  normalizePlanningTemplateConfiguration,
+  type PlanningTemplateConfiguration,
+} from "./planningTemplatePresets";
 import {
   normalizePlanningSimulationConfiguration,
   type PlanningSimulationConfiguration,
@@ -45,7 +49,7 @@ interface PlanningHistorySnapshot {
   selectedNodeId: string | null;
   selectedMethod: PlanningMethodSelection | null;
   playTime: number;
-  motionTemplates: PlanMotionTemplates;
+  templateConfiguration: PlanningTemplateConfiguration;
   simulationConfiguration: PlanningSimulationConfiguration;
 }
 
@@ -60,7 +64,7 @@ export class PlanningSession {
   selectedWaypoint = -1;
   selectedNodeId: string | null = null;
   selectedMethod: PlanningMethodSelection | null = null;
-  motionTemplates: PlanMotionTemplates;
+  templateConfiguration: PlanningTemplateConfiguration;
   simulationConfiguration = normalizePlanningSimulationConfiguration(undefined);
   overlayVisible = false;
   playbackTime = 0;
@@ -72,16 +76,18 @@ export class PlanningSession {
     readonly defaultExportTemplate: string,
     maxUndoSteps: number,
   ) {
-    this.motionTemplates = createDefaultMotionTemplates(defaultExportTemplate);
+    this.templateConfiguration = loadPlanningTemplateConfiguration({}, defaultExportTemplate);
     this.#history = new PlanningSessionHistory(maxUndoSteps);
+  }
+
+  /** Export and waypoint editors use the currently selected template bank. */
+  get motionTemplates(): PlanMotionTemplates {
+    return this.templateConfiguration.templates[this.templateConfiguration.library];
   }
 
   /** Compatibility alias for the old single-template API. */
   get exportTemplate(): string {
     return this.motionTemplates.forward;
-  }
-  set exportTemplate(template: string) {
-    this.motionTemplates.forward = template;
   }
 
   get activePathId(): string {
@@ -307,17 +313,7 @@ export class PlanningSession {
     );
     this.#pathStore.replace(paths, String(data["planned-active-path-id"] ?? ""));
     this.replace(this.objects, normalizePlanObjects(data["planned-objects"]));
-    if (data["planned-export-template"] !== undefined) {
-      const template = String(data["planned-export-template"] || "");
-      this.exportTemplate = template.trim()
-        ? template
-        : this.defaultExportTemplate;
-    }
-    this.motionTemplates = normalizeMotionTemplates(
-      data["planned-motion-templates"],
-      createDefaultMotionTemplates(this.exportTemplate),
-      true,
-    );
+    this.templateConfiguration = loadPlanningTemplateConfiguration(data, this.defaultExportTemplate);
     this.simulationConfiguration = normalizePlanningSimulationConfiguration(data["planned-simulation-configuration"] ?? data["planned-boomerang-configuration"]);
     this.maintainDocumentInvariants();
     this.routeRevision += 1;
@@ -330,7 +326,7 @@ export class PlanningSession {
   clear(): void {
     this.#pathStore.reset();
     this.objects.length = 0;
-    this.motionTemplates = createDefaultMotionTemplates(this.defaultExportTemplate);
+    this.templateConfiguration = loadPlanningTemplateConfiguration({}, this.defaultExportTemplate);
     this.simulationConfiguration = normalizePlanningSimulationConfiguration(undefined);
     this.overlayVisible = false;
     this.routeRevision += 1;
@@ -351,7 +347,7 @@ export class PlanningSession {
       selectedNodeId: this.selectedNodeId,
       selectedMethod: this.selectedMethod ? { ...this.selectedMethod } : null,
       playTime: this.playbackTime,
-      motionTemplates: { ...this.motionTemplates },
+      templateConfiguration: normalizePlanningTemplateConfiguration(this.templateConfiguration),
       simulationConfiguration: normalizePlanningSimulationConfiguration(this.simulationConfiguration),
     };
   }
@@ -370,7 +366,7 @@ export class PlanningSession {
       ? { ...snapshot.selectedMethod }
       : null;
     this.playbackTime = snapshot.playTime;
-    this.motionTemplates = { ...snapshot.motionTemplates };
+    this.templateConfiguration = normalizePlanningTemplateConfiguration(snapshot.templateConfiguration);
     this.simulationConfiguration = normalizePlanningSimulationConfiguration(snapshot.simulationConfiguration);
     this.maintainDocumentInvariants();
     this.routeRevision += 1;
@@ -384,7 +380,7 @@ export class PlanningSession {
       snapshot.selectedMethod?.objectId === this.selectedMethod?.objectId &&
       snapshot.selectedMethod?.methodId === this.selectedMethod?.methodId &&
       snapshot.playTime === this.playbackTime &&
-      JSON.stringify(snapshot.motionTemplates) === JSON.stringify(this.motionTemplates) &&
+      JSON.stringify(snapshot.templateConfiguration) === JSON.stringify(this.templateConfiguration) &&
       JSON.stringify(snapshot.simulationConfiguration) === JSON.stringify(this.simulationConfiguration) &&
       snapshot.selected.length === this.selectedWaypoints.size &&
       snapshot.selected.every((index) => this.selectedWaypoints.has(index)) &&

@@ -10,6 +10,7 @@ import { PlanningTimeline } from "./planningTimelineDomain";
 import { PlanningSession } from "./planningSession";
 import type { PlanMotionTemplates } from "../state/models";
 import { normalizeMotionTemplates } from "./planningMotions";
+import { normalizePlanningTemplateConfiguration, type PlanningTemplateConfiguration } from "./planningTemplatePresets";
 import {
   normalizePlanningSimulationConfiguration,
   type PlanningSimulationConfiguration,
@@ -21,7 +22,7 @@ import type {
   PlanningTelemetrySnapshot,
 } from "./planningTypes";
 
-const DEFAULT_EXPORT_TEMPLATE = "moveToPoint(${x}, ${y}, ${theta});";
+const DEFAULT_EXPORT_TEMPLATE = "";
 
 export class PlanningFeature {
   readonly events = new PlanningEvents();
@@ -70,6 +71,9 @@ export class PlanningFeature {
   get motionTemplates(): Readonly<PlanMotionTemplates> {
     return this.#session.motionTemplates;
   }
+  get templateConfiguration(): Readonly<PlanningTemplateConfiguration> {
+    return this.#session.templateConfiguration;
+  }
   get simulationConfiguration(): PlanningSimulationConfiguration {
     return this.#session.simulationConfiguration;
   }
@@ -87,16 +91,23 @@ export class PlanningFeature {
   }
 
   setExportTemplate(template: string): void {
-    this.#session.mutate("template", () => {
-      this.#session.exportTemplate =
-        String(template || "").trim() || this.#session.defaultExportTemplate;
-    });
+    if (template === this.exportTemplate) return;
+    this.setMotionTemplates({ ...this.motionTemplates, forward: String(template ?? "") });
   }
 
   setMotionTemplates(templates: Readonly<PlanMotionTemplates>): void {
-    this.#session.mutate("template", () => {
-      this.#session.motionTemplates = normalizeMotionTemplates(templates, this.#session.motionTemplates);
-    });
+    const next = normalizeMotionTemplates(templates, this.motionTemplates);
+    if (JSON.stringify(next) === JSON.stringify(this.motionTemplates)) return;
+    const configuration = normalizePlanningTemplateConfiguration(this.templateConfiguration);
+    configuration.library = "custom";
+    configuration.templates.custom = next;
+    this.setTemplateConfiguration(configuration);
+  }
+
+  setTemplateConfiguration(configuration: Readonly<PlanningTemplateConfiguration>): void {
+    const next = normalizePlanningTemplateConfiguration(configuration);
+    if (JSON.stringify(next) === JSON.stringify(this.templateConfiguration)) return;
+    this.#session.mutate("template", () => { this.#session.templateConfiguration = next; });
   }
 
   setSimulationConfiguration(values: PlanningSimulationConfigurationUpdate): void {
@@ -139,6 +150,7 @@ export class PlanningFeature {
       nodes: this.#session.nodes,
       template: this.#session.exportTemplate,
       motionTemplates: this.#session.motionTemplates,
+      templateConfiguration: this.#session.templateConfiguration,
       simulationConfiguration: this.#session.simulationConfiguration,
     };
   }

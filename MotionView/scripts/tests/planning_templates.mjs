@@ -7,6 +7,7 @@ import { runPlanningBoomerangTests } from "./planning_boomerang_cases.mjs";
 import { runBoomerangConfigurationTests } from "./planning_boomerang_configuration_cases.mjs";
 import { runPlanningWaypointDirectionTests } from "./planning_waypoint_direction_cases.mjs";
 import { runPlanningInputTests } from "./planning_input_cases.mjs";
+import { runPlanningTemplatePresetTests } from "./planning_template_presets_cases.mjs";
 
 function format(value, decimals = 3) {
   const fixed = Number(value).toFixed(decimals);
@@ -401,6 +402,7 @@ try {
   await runBoomerangConfigurationTests(server);
   await runPlanningWaypointDirectionTests(server);
   await runPlanningInputTests(server);
+  await runPlanningTemplatePresetTests(server);
   console.log("Planning template and motion regression tests passed.");
 } finally {
   await server.close();

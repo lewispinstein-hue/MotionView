@@ -1,6 +1,6 @@
 import type { PlanMotionTemplates, PlanWaypointIndicatorIcon, PlanWaypointMotion } from "../state/models";
 import { createPlanMotionId } from "./planningState";
-import { getMotionCode, MAX_WAYPOINT_MOTIONS, normalizeWaypointMotions } from "./planningMotions";
+import { getMotionCode, getWaypointMotionGroup, MAX_WAYPOINT_MOTIONS, normalizeWaypointMotions } from "./planningMotions";
 
 export interface PlanningMotionDraft {
   readonly id: string;
@@ -44,12 +44,15 @@ export class PlanningMotionSelection {
       this.#motions.splice(index, 1);
     } else {
       if (this.#motions.length >= MAX_WAYPOINT_MOTIONS) return false;
+      const replacement = this.#motions.findIndex((motion) =>
+        getWaypointMotionGroup(motion.type) === getWaypointMotionGroup(type));
       let draft = this.#drafts.get(type);
       if (!draft) {
         draft = { id: createPlanMotionId(), type, code: this.#templates[type] };
         this.#drafts.set(type, draft);
       }
-      this.#motions.push(draft);
+      if (replacement >= 0) this.#motions.splice(replacement, 1, draft);
+      else this.#motions.push(draft);
     }
     return true;
   }

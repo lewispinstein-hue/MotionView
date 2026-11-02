@@ -1,6 +1,7 @@
 import type {
   PlanMotionTemplates,
   PlanWaypoint,
+  PlanWaypointIndicatorIcon,
   PlanWaypointMotion,
 } from "../state/models";
 import { isWaypointIndicatorIcon } from "./planningIndicators";
@@ -16,6 +17,10 @@ export const PLANNING_MOTION_TYPES = [
   { type: "swing", name: "Swing" },
   { type: "boomerang", name: "Boomerang" },
 ] as const;
+
+export function getWaypointMotionGroup(type: PlanWaypointIndicatorIcon): "turn" | "movement" {
+  return type === "rotate" || type === "swing" ? "turn" : "movement";
+}
 
 export function createDefaultMotionTemplates(forward: string): PlanMotionTemplates {
   return {
@@ -44,18 +49,19 @@ export function normalizeMotionTemplates(
   return result;
 }
 
-/** Retains order and empty overrides, with one or two distinct motion types. */
+/** Retains order and empty overrides, with at most one motion from each group. */
 export function normalizeWaypointMotions(value: unknown): PlanWaypointMotion[] {
   const motions: PlanWaypointMotion[] = [];
   const ids = new Set<string>();
-  const types = new Set<PlanWaypointMotion["type"]>();
+  const groups = new Set<ReturnType<typeof getWaypointMotionGroup>>();
   for (const raw of Array.isArray(value) ? value : []) {
     if (!raw || typeof raw !== "object" || !isWaypointIndicatorIcon(raw.type)) continue;
-    if (types.has(raw.type)) continue;
+    const group = getWaypointMotionGroup(raw.type);
+    if (groups.has(group)) continue;
     let id = typeof raw.id === "string" ? raw.id.trim() : "";
     if (!id || ids.has(id)) id = createPlanMotionId();
     ids.add(id);
-    types.add(raw.type);
+    groups.add(group);
     const motion: PlanWaypointMotion = { id, type: raw.type };
     if (raw.type === "swing") motion.lockedDriveSide = raw.lockedDriveSide === "right" ? "right" : "left";
     if (typeof raw.overrideCode === "string") motion.overrideCode = raw.overrideCode;

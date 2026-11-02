@@ -16,11 +16,17 @@ export async function runPlanningMotionSelectionTests(server) {
   assert.equal(selection.isSelected("rotate"), false);
   const customMove = "customMove(@x,@y);\nwait(@spd);";
   selection.updateCode(straightId, customMove);
+  assert.equal(selection.toggle("boomerang"), true, "Boomerang replaces Straight when one motion is selected");
+  assert.deepEqual(selection.motions.map(motion => motion.type), ["boomerang"]);
+  assert.equal(selection.motions[0].code, templates.boomerang);
+  assert.equal(selection.toggle("forward"), true);
+  assert.deepEqual(selection.result, [{ id: straightId, type: "forward", overrideCode: customMove }],
+    "switching back restores the original draft code and ID");
   assert.equal(selection.toggle("rotate"), true);
   const turnId = selection.motions[1].id;
   const customTurn = "customTurn(@th);";
   selection.updateCode(turnId, customTurn);
-  assert.equal(selection.toggle("swing"), false, "a third motion is rejected");
+  assert.equal(selection.toggle("swing"), false, "unselected types are disabled while two motions are selected");
   assert.equal(selection.toggle("boomerang"), false);
   assert.equal(selection.swap(), true);
   assert.deepEqual(selection.result, [
@@ -50,6 +56,22 @@ export async function runPlanningMotionSelectionTests(server) {
   assert.equal(normalized[0].overrideCode, "first(@th);");
   assert.equal(normalized[1].overrideCode, "");
   assert.notEqual(normalized[0].id, normalized[1].id, "IDs are still repaired across distinct types");
+  for (const types of [["rotate", "swing", "forward"], ["swing", "rotate", "boomerang"], ["forward", "boomerang", "rotate"], ["boomerang", "forward", "swing"]]) {
+    assert.deepEqual(normalizeWaypointMotions(types.map((type, index) => ({ id: String(index), type }))).map(motion => motion.type),
+      [types[0], types[2]], "normalization keeps the first motion in each group and preserves order");
+  }
+  const single = new PlanningMotionSelection([{ id: "only-turn", type: "rotate" }], templates);
+  single.updateCode("only-turn", "customTurn(@th);");
+  assert.equal(single.toggle("swing"), true);
+  assert.deepEqual(single.motions.map(motion => motion.type), ["swing"]);
+  const swingId = single.motions[0].id;
+  single.updateCode(swingId, "customSwing(@th);");
+  single.setLockedDriveSide(swingId, "right");
+  assert.equal(single.toggle("rotate"), true);
+  assert.deepEqual(single.result, [{ id: "only-turn", type: "rotate", overrideCode: "customTurn(@th);" }]);
+  assert.equal(single.toggle("swing"), true);
+  assert.deepEqual(single.result, [{ id: swingId, type: "swing", overrideCode: "customSwing(@th);", lockedDriveSide: "right" }]);
+  assert.equal(single.toggle("swing"), false, "replacing the only motion does not permit an empty selection");
 
   // Reopening/Cancel never mutates the supplied data, and Swap preserves IDs.
   const saved = [{ id: "saved-turn", type: "rotate", overrideCode: "saved(@th);" }, { id: "saved-move", type: "forward" }];

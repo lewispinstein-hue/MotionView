@@ -12,7 +12,7 @@ import { planningTelemetry } from "../telemetry/createTelemetry";
 import type { PlanningDialogs } from "./PlanningDialogs";
 import type { PlanningFeature } from "./PlanningFeature";
 
-/** Translates Planning keyboard intent into domain commands. */
+/** Translates Planning keyboard and background-click intent into domain commands. */
 export class PlanningInput {
   #bound = false;
 
@@ -28,6 +28,17 @@ export class PlanningInput {
     document.addEventListener("keydown", (event) => {
       if (this.handleKeydown(event)) event.stopImmediatePropagation();
     });
+    document.addEventListener("click", (event) => this.handleClick(event));
+  }
+
+  handleClick(event: MouseEvent): void {
+    if (getMode() !== "planning" || event.button !== 0 || hasOpenModal()) return;
+    if (!this.planning.selection.waypointIndices.size || !(event.target instanceof Element)) return;
+    if (!event.target.closest("#rightPlanning, #planningTimelineBar")) return;
+    // Waypoint rows/markers and their editing controls retain their selection.
+    if (event.target.closest(".planItem, .planningTimelineWaypointConnector")) return;
+    if (event.target.closest(".planSelectedPanel") && event.target.closest("input, button, label")) return;
+    this.planning.selection.selectWaypoint(-1);
   }
 
   handleKeydown(event: KeyboardEvent): boolean {

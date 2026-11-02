@@ -75,7 +75,7 @@ export const DEFAULT_SETTINGS: Readonly<MotionViewSettings> = {
   planThetaSnapStep: "0",
   planLimitBounds: true,
   planShowFieldNodes: true,
-  planExportTemplate: "moveToPoint(${x}, ${y}, ${theta});",
+  planExportTemplate: "",
   planningCodeExport: { header: "", footer: "", target: "downloads", path: "" },
   refreshIntervalMs: "500",
   showPreviousYearFields: true,

@@ -375,6 +375,8 @@ export class PlanningFieldView {
       world.y > bounds.maxY
     ) {
       this.#pendingAdd = null;
+      if (this.planning.selection.waypointIndices.size)
+        this.planning.selection.selectWaypoint(-1);
       this.field.beginPan(event.pointerId, point.x, point.y);
       return;
     }

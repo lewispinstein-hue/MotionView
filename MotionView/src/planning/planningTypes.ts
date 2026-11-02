@@ -6,6 +6,7 @@ import type {
   PlanMotionTemplates,
 } from "../state/models";
 import type { PlanningSimulationConfiguration } from "./planningSimulationConfiguration";
+import type { PlanningTemplateConfiguration } from "./planningTemplatePresets";
 
 export interface PlanningMethod extends PlanMethod {
   code: string;
@@ -77,5 +78,6 @@ export interface PlanningExportView {
   readonly nodes: readonly PlanningNodeView[];
   readonly template: string;
   readonly motionTemplates: Readonly<PlanMotionTemplates>;
+  readonly templateConfiguration: Readonly<PlanningTemplateConfiguration>;
   readonly simulationConfiguration: PlanningSimulationConfiguration;
 }
