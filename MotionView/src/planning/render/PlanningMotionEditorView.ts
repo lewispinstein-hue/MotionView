@@ -7,6 +7,7 @@ import { PlanningMotionSelection } from "../planningMotionSelection";
 import { PlanningMotionCodeEditor } from "./PlanningMotionCodeEditor";
 import {
   editPlanningMotionTemplate,
+  editPlanningSwingDriveSide,
   isPlanningTemplateLibrary,
   normalizePlanningTemplateConfiguration,
   type PlanningTemplateConfiguration,
@@ -85,6 +86,14 @@ export class PlanningMotionEditorView {
       this.#templates = this.#templateConfiguration.templates[library];
       this.render();
     });
+    for (const [side, input] of [["left", this.dom.swingLeftDriveSide], ["right", this.dom.swingRightDriveSide]] as const) {
+      input.addEventListener("input", () => {
+        if (this.#mode !== "templates" || !this.#templateConfiguration) return;
+        editPlanningSwingDriveSide(this.#templateConfiguration, side, input.value);
+        this.#templates = this.#templateConfiguration.templates[this.#templateConfiguration.library];
+        this.dom.templateLibrary.value = this.#templateConfiguration.library;
+      });
+    }
   }
 
   open(options: PlanningMotionEditorOptions): void {
@@ -111,6 +120,7 @@ export class PlanningMotionEditorView {
     this.#selection = null;
     this.#templateConfiguration = null;
     this.dom.templateLibrary.hidden = true;
+    this.dom.swingDriveSideFields.hidden = true;
     this.dom.motionPreview.replaceChildren();
     this.dom.motionPreview.hidden = true;
     this.dom.templateModal.classList.remove("hasMotionPreview");
@@ -215,7 +225,7 @@ export class PlanningMotionEditorView {
       const side = document.createElement("div"); side.className = "planWaypointDirection";
       const label = document.createElement("span"); label.className = "planWaypointDirectionLabel";
       label.textContent = "Locked drive side"; side.appendChild(label);
-      side.title = "Preview only. Match the locked side used in your Swing code.";
+      side.title = "Used by the preview and ${lockedDriveSide} / @side in exported code.";
       for (const value of ["left", "right"] as const) {
         const button = document.createElement("button"); button.type = "button"; button.className = "planMotionChoice";
         button.textContent = value === "left" ? "Left" : "Right";
@@ -257,11 +267,12 @@ export class PlanningMotionEditorView {
   }
 
   private renderCode(): void {
+    this.dom.swingDriveSideFields.hidden = this.#mode !== "templates" || this.#selectedTemplate !== "swing";
     if (this.#mode === "waypoint") {
       const motions = this.#selection!.motions;
       if (!motions.some((motion) => motion.id === this.#selectedId)) this.#selectedId = motions[0]!.id;
       this.dom.templateGroupTitle.textContent = "Waypoint Code";
-      this.dom.templateDescription.textContent = "Motions run in the order shown above. Code edits stay attached to their motion when swapped. Boomerang lead: @ld or ${lead}. Field curves are approximate; robot tuning affects the actual path.";
+      this.dom.templateDescription.textContent = "Motions run in the order shown above. Code edits stay attached to their motion when swapped. Boomerang lead: @ld or ${lead}. Locked Swing side: @side or ${lockedDriveSide}. Field curves are approximate; robot tuning affects the actual path.";
       this.dom.templateCode.hidden = true;
       this.dom.templateDescription.setAttribute("for", "planMotionCodeInput");
       this.#codePreview.show(motions.map((motion) => ({
@@ -278,7 +289,12 @@ export class PlanningMotionEditorView {
     this.dom.templateCode.placeholder = "";
     this.dom.templateDescription.textContent = "Starting code for this motion type. Both @x and ${x} placeholders are supported. Boomerang lead: @ld or ${lead}." +
       (this.#templateConfiguration?.library === "jar-template" ? " JAR chooses travel direction automatically." : "") +
-      (this.#selectedTemplate === "swing" ? " Swing templates lock the left side by default; edit the code to match your chosen side." : "");
+      (this.#selectedTemplate === "swing" ? " ${lockedDriveSide} or @side inserts the Locked Left or Locked Right value chosen for each waypoint." : "");
+    if (this.#selectedTemplate === "swing" && this.#templateConfiguration) {
+      const sides = this.#templateConfiguration.swingDriveSides[this.#templateConfiguration.library];
+      this.dom.swingLeftDriveSide.value = sides.left;
+      this.dom.swingRightDriveSide.value = sides.right;
+    }
     this.dom.templateCode.value = this.#templates[this.#selectedTemplate];
   }
 }

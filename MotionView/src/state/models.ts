@@ -99,7 +99,7 @@ export interface PlanWaypoint {
 }
 
 export interface PlanWaypointMotion {
-  /** Preview only; exported code remains user-authored. */
+  /** Locked Swing side, used by simulation and the lockedDriveSide placeholder. */
   lockedDriveSide?: "left" | "right";
   id: string;
   type: PlanWaypointIndicatorIcon;

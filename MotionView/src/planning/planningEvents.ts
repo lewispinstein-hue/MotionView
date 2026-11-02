@@ -29,7 +29,14 @@ export interface PlanningPlaybackChangedEvent {
 }
 
 export interface PlanningProjectionChangedEvent {
-  readonly kind: "route" | "configuration" | "route-edit" | "preview-pending" | "preview-ready" | "simulation-pending" | "simulation-ready";
+  readonly kind:
+    | "route"
+    | "configuration"
+    | "route-edit"
+    | "preview-pending"
+    | "preview-ready"
+    | "simulation-pending"
+    | "simulation-ready";
 }
 
 export class PlanningEvents {

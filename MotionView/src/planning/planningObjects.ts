@@ -1,7 +1,6 @@
 import {
   createPlanMethodId,
   createPlanObjectId,
-  getDefaultPlanObjectColor,
   getDefaultPlanObjectName,
   normalizePlanObjectColor,
 } from "./planningState";
@@ -72,7 +71,11 @@ export class PlanningObjects {
     this.session.mutate("object", () => {
       this.session.objects.splice(index, 1);
       for (const path of this.session.pathEntries) {
-        for (let nodeIndex = path.nodes.length - 1; nodeIndex >= 0; nodeIndex -= 1) {
+        for (
+          let nodeIndex = path.nodes.length - 1;
+          nodeIndex >= 0;
+          nodeIndex -= 1
+        ) {
           if (path.nodes[nodeIndex]?.objectId === id)
             path.nodes.splice(nodeIndex, 1);
         }
@@ -159,7 +162,11 @@ export class PlanningObjects {
     this.session.mutate("method", () => {
       object.methods.splice(index, 1);
       for (const path of this.session.pathEntries) {
-        for (let nodeIndex = path.nodes.length - 1; nodeIndex >= 0; nodeIndex -= 1) {
+        for (
+          let nodeIndex = path.nodes.length - 1;
+          nodeIndex >= 0;
+          nodeIndex -= 1
+        ) {
           const node = path.nodes[nodeIndex];
           if (node?.objectId === objectId && node.methodId === methodId)
             path.nodes.splice(nodeIndex, 1);

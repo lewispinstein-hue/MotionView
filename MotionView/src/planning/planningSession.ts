@@ -76,13 +76,18 @@ export class PlanningSession {
     readonly defaultExportTemplate: string,
     maxUndoSteps: number,
   ) {
-    this.templateConfiguration = loadPlanningTemplateConfiguration({}, defaultExportTemplate);
+    this.templateConfiguration = loadPlanningTemplateConfiguration(
+      {},
+      defaultExportTemplate,
+    );
     this.#history = new PlanningSessionHistory(maxUndoSteps);
   }
 
   /** Export and waypoint editors use the currently selected template bank. */
   get motionTemplates(): PlanMotionTemplates {
-    return this.templateConfiguration.templates[this.templateConfiguration.library];
+    return this.templateConfiguration.templates[
+      this.templateConfiguration.library
+    ];
   }
 
   /** Compatibility alias for the old single-template API. */
@@ -311,10 +316,19 @@ export class PlanningSession {
       data,
       this.#pathStore.legacyCodeExportSettings,
     );
-    this.#pathStore.replace(paths, String(data["planned-active-path-id"] ?? ""));
+    this.#pathStore.replace(
+      paths,
+      String(data["planned-active-path-id"] ?? ""),
+    );
     this.replace(this.objects, normalizePlanObjects(data["planned-objects"]));
-    this.templateConfiguration = loadPlanningTemplateConfiguration(data, this.defaultExportTemplate);
-    this.simulationConfiguration = normalizePlanningSimulationConfiguration(data["planned-simulation-configuration"] ?? data["planned-boomerang-configuration"]);
+    this.templateConfiguration = loadPlanningTemplateConfiguration(
+      data,
+      this.defaultExportTemplate,
+    );
+    this.simulationConfiguration = normalizePlanningSimulationConfiguration(
+      data["planned-simulation-configuration"] ??
+        data["planned-boomerang-configuration"],
+    );
     this.maintainDocumentInvariants();
     this.routeRevision += 1;
     this.resetTransientDomainState();
@@ -326,8 +340,12 @@ export class PlanningSession {
   clear(): void {
     this.#pathStore.reset();
     this.objects.length = 0;
-    this.templateConfiguration = loadPlanningTemplateConfiguration({}, this.defaultExportTemplate);
-    this.simulationConfiguration = normalizePlanningSimulationConfiguration(undefined);
+    this.templateConfiguration = loadPlanningTemplateConfiguration(
+      {},
+      this.defaultExportTemplate,
+    );
+    this.simulationConfiguration =
+      normalizePlanningSimulationConfiguration(undefined);
     this.overlayVisible = false;
     this.routeRevision += 1;
     this.resetTransientDomainState();
@@ -347,8 +365,12 @@ export class PlanningSession {
       selectedNodeId: this.selectedNodeId,
       selectedMethod: this.selectedMethod ? { ...this.selectedMethod } : null,
       playTime: this.playbackTime,
-      templateConfiguration: normalizePlanningTemplateConfiguration(this.templateConfiguration),
-      simulationConfiguration: normalizePlanningSimulationConfiguration(this.simulationConfiguration),
+      templateConfiguration: normalizePlanningTemplateConfiguration(
+        this.templateConfiguration,
+      ),
+      simulationConfiguration: normalizePlanningSimulationConfiguration(
+        this.simulationConfiguration,
+      ),
     };
   }
 
@@ -366,8 +388,12 @@ export class PlanningSession {
       ? { ...snapshot.selectedMethod }
       : null;
     this.playbackTime = snapshot.playTime;
-    this.templateConfiguration = normalizePlanningTemplateConfiguration(snapshot.templateConfiguration);
-    this.simulationConfiguration = normalizePlanningSimulationConfiguration(snapshot.simulationConfiguration);
+    this.templateConfiguration = normalizePlanningTemplateConfiguration(
+      snapshot.templateConfiguration,
+    );
+    this.simulationConfiguration = normalizePlanningSimulationConfiguration(
+      snapshot.simulationConfiguration,
+    );
     this.maintainDocumentInvariants();
     this.routeRevision += 1;
   }
@@ -380,8 +406,10 @@ export class PlanningSession {
       snapshot.selectedMethod?.objectId === this.selectedMethod?.objectId &&
       snapshot.selectedMethod?.methodId === this.selectedMethod?.methodId &&
       snapshot.playTime === this.playbackTime &&
-      JSON.stringify(snapshot.templateConfiguration) === JSON.stringify(this.templateConfiguration) &&
-      JSON.stringify(snapshot.simulationConfiguration) === JSON.stringify(this.simulationConfiguration) &&
+      JSON.stringify(snapshot.templateConfiguration) ===
+        JSON.stringify(this.templateConfiguration) &&
+      JSON.stringify(snapshot.simulationConfiguration) ===
+        JSON.stringify(this.simulationConfiguration) &&
       snapshot.selected.length === this.selectedWaypoints.size &&
       snapshot.selected.every((index) => this.selectedWaypoints.has(index)) &&
       JSON.stringify(snapshot.paths) === JSON.stringify(this.pathEntries) &&

@@ -41,7 +41,7 @@ const NODE_ENTER_MS = 240;
 const NODE_EXIT_MS = 220;
 const NODE_MOVE_EPSILON = 0.5;
 const NODE_TEMPLATE_DESCRIPTION =
-  "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, ${forwards}, and ${lead} (@ld)";
+  "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, ${forwards}, ${lead} (@ld), and ${lockedDriveSide} (@side)";
 
 interface TimelineBucketLayout {
   readonly beforeWaypoint: number;

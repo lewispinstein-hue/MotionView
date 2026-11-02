@@ -1,10 +1,7 @@
 import { normalizeWaypointIndicatorIcons } from "./planningIndicators";
 import { normalizeWaypointMotions } from "./planningMotions";
 import { normalizePlanningLead } from "./planningSegments";
-import {
-  createPlanPathId,
-  normalizePlanNodes,
-} from "./planningState";
+import { createPlanPathId, normalizePlanNodes } from "./planningState";
 import type {
   PlanningCodeExportSettings,
   PlanningCodeExportTarget,
@@ -14,12 +11,13 @@ import type {
   PlanningWaypoint,
 } from "./planningTypes";
 
-export const DEFAULT_PLANNING_CODE_EXPORT_SETTINGS: PlanningCodeExportSettings = {
-  header: "",
-  footer: "",
-  target: "downloads",
-  path: "",
-};
+export const DEFAULT_PLANNING_CODE_EXPORT_SETTINGS: PlanningCodeExportSettings =
+  {
+    header: "",
+    footer: "",
+    target: "downloads",
+    path: "",
+  };
 
 export function clonePlanningWaypoint(
   point: Readonly<PlanningWaypoint>,
@@ -32,7 +30,8 @@ export function clonePlanningWaypoint(
   };
   if (typeof point.forwards === "boolean") cloned.forwards = point.forwards;
   const indicatorIcons = normalizeWaypointIndicatorIcons(point.indicatorIcons);
-  if (typeof point.lead === "number" && Number.isFinite(point.lead)) cloned.lead = normalizePlanningLead(point.lead);
+  if (typeof point.lead === "number" && Number.isFinite(point.lead))
+    cloned.lead = normalizePlanningLead(point.lead);
   if (
     indicatorIcons.length ||
     Object.prototype.hasOwnProperty.call(point, "indicatorIcons")
@@ -42,7 +41,8 @@ export function clonePlanningWaypoint(
   if (Object.prototype.hasOwnProperty.call(point, "overrideCode")) {
     cloned.overrideCode = String(point.overrideCode ?? "");
   }
-  if (Array.isArray(point.motions)) cloned.motions = normalizeWaypointMotions(point.motions);
+  if (Array.isArray(point.motions))
+    cloned.motions = normalizeWaypointMotions(point.motions);
   return cloned;
 }
 
@@ -89,10 +89,8 @@ export function normalizePlanningCodeExportSettings(
       ? (value as Record<string, unknown>)
       : {};
   return {
-    header:
-      typeof source.header === "string" ? source.header : fallback.header,
-    footer:
-      typeof source.footer === "string" ? source.footer : fallback.footer,
+    header: typeof source.header === "string" ? source.header : fallback.header,
+    footer: typeof source.footer === "string" ? source.footer : fallback.footer,
     target: isCodeExportTarget(source.target) ? source.target : fallback.target,
     path: typeof source.path === "string" ? source.path : fallback.path,
   };
@@ -194,7 +192,8 @@ function migrateLegacyWaypointExport(waypoints: PlanningWaypoint[]): void {
     } else {
       delete source.indicatorIcons;
     }
-    if (Array.isArray(destination.motions)) source.motions = normalizeWaypointMotions(destination.motions);
+    if (Array.isArray(destination.motions))
+      source.motions = normalizeWaypointMotions(destination.motions);
     else delete source.motions;
   }
   const finalWaypoint = waypoints.at(-1)!;
@@ -242,13 +241,16 @@ function normalizeWaypoints(value: unknown): PlanningWaypoint[] {
         ? Math.max(1, Math.min(127, Number(point?.speed)))
         : 127,
     };
-    if (typeof point?.forwards === "boolean") waypoint.forwards = point.forwards;
+    if (typeof point?.forwards === "boolean")
+      waypoint.forwards = point.forwards;
     const indicatorIcons = normalizeWaypointIndicatorIcons(
       point?.indicatorIcons,
     );
-    if (typeof point?.lead === "number" && Number.isFinite(point.lead)) waypoint.lead = normalizePlanningLead(point.lead);
+    if (typeof point?.lead === "number" && Number.isFinite(point.lead))
+      waypoint.lead = normalizePlanningLead(point.lead);
     if (indicatorIcons.length) waypoint.indicatorIcons = indicatorIcons;
-    if (Array.isArray(point?.motions)) waypoint.motions = normalizeWaypointMotions(point.motions);
+    if (Array.isArray(point?.motions))
+      waypoint.motions = normalizeWaypointMotions(point.motions);
     if (
       Object.prototype.hasOwnProperty.call(point || {}, "overrideCode") &&
       typeof point?.overrideCode === "string"

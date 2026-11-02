@@ -80,7 +80,10 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
     window.addEventListener("blur", () => this.#nodeTooltip.hide(true));
     this.planning.events.documentChanged.subscribe(() => this.render());
     this.planning.events.documentPreviewChanged.subscribe(({ kind }) => {
-      if (kind !== "route") { this.render(); return; }
+      if (kind !== "route") {
+        this.render();
+        return;
+      }
       if (this.#routePreviewFrame !== null) return;
       this.#routePreviewFrame = requestAnimationFrame(() => {
         this.#routePreviewFrame = null;
@@ -116,7 +119,8 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
   }
 
   render(): void {
-    if (this.#routePreviewFrame !== null) cancelAnimationFrame(this.#routePreviewFrame);
+    if (this.#routePreviewFrame !== null)
+      cancelAnimationFrame(this.#routePreviewFrame);
     this.#routePreviewFrame = null;
     this.#pathManager.render();
     this.#sidebar.render();
@@ -146,8 +150,13 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
 
   private updateTimePill(): void {
     const projection = this.planning.projection;
-    const status = projection.pending ? " · Updating preview…" : projection.error ? ` · ${projection.error}` :
-      !projection.simulation.complete ? " · Preview incomplete" : "";
+    const status = projection.pending
+      ? " · Updating preview…"
+      : projection.error
+        ? ` · ${projection.error}`
+        : !projection.simulation.complete
+          ? " · Preview incomplete"
+          : "";
     this.dom.timePill.textContent = `Plan: ${this.planning.playback.time.toFixed(1)} / ${projection.duration.toFixed(1)} s${status}`;
   }
 

@@ -65,10 +65,7 @@ export class PlanningSessionHistory<
     this.redoStack.length = 0;
   }
 
-  undo(
-    current: TSnapshot,
-    apply: (snapshot: TSnapshot) => void,
-  ): boolean {
+  undo(current: TSnapshot, apply: (snapshot: TSnapshot) => void): boolean {
     const snapshot = this.undoStack.pop();
     if (!snapshot) return false;
     current.historyPathId = snapshot.activePathId;
@@ -78,10 +75,7 @@ export class PlanningSessionHistory<
     return true;
   }
 
-  redo(
-    current: TSnapshot,
-    apply: (snapshot: TSnapshot) => void,
-  ): boolean {
+  redo(current: TSnapshot, apply: (snapshot: TSnapshot) => void): boolean {
     const snapshot = this.redoStack.pop();
     if (!snapshot) return false;
     current.historyPathId = snapshot.activePathId;

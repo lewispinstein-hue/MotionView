@@ -5,7 +5,7 @@ import { getWaypointCode, waypointMotionsForEditing } from "./planningMotions";
 import { isSegmentForwards } from "./planningSegments";
 
 const WAYPOINT_PLACEHOLDERS =
-  "The code that this waypoint will generate. ${x}, ${y}, and ${theta} use the destination; ${speed}, ${forwards}, and ${lead} (@ld) use this waypoint. Lead is 0 for straight segments.";
+  "The code that this waypoint will generate. ${x}, ${y}, and ${theta} use the destination; ${speed}, ${forwards}, ${lead}, and ${lockedDriveSide} use this waypoint. Lead is 0 for straight segments.";
 
 /** Opens the shared code editor for a single waypoint and applies its content atomically. */
 export class PlanningWaypointEditor {
@@ -31,7 +31,9 @@ export class PlanningWaypointEditor {
       return;
     }
     const target = this.planning.route.waypoints[index + 1]!;
-    const theta = Number.isFinite(target.theta) ? Number(target.theta!.toFixed(1)) : 0;
+    const theta = Number.isFinite(target.theta)
+      ? Number(target.theta!.toFixed(1))
+      : 0;
     const targetPose = `${formatDistanceFromInches(target.x)}, ${formatDistanceFromInches(target.y)}, ${theta}°`;
     const result = await this.dialogs.edit({
       title: "Edit Waypoint",

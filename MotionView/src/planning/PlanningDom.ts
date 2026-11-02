@@ -58,6 +58,9 @@ export class PlanningDom {
   readonly templateValidation: HTMLElement;
   readonly templateClose: HTMLButtonElement;
   readonly templateLibrary: HTMLSelectElement;
+  readonly swingDriveSideFields: HTMLElement;
+  readonly swingLeftDriveSide: HTMLInputElement;
+  readonly swingRightDriveSide: HTMLInputElement;
   readonly templateCancel: HTMLButtonElement;
   readonly templateConfirm: HTMLButtonElement;
   readonly templateCode: HTMLTextAreaElement;
@@ -165,6 +168,9 @@ export class PlanningDom {
     );
     this.templateClose = requiredElement(document, "btnPlanTemplateClose");
     this.templateLibrary = requiredElement(document, "planTemplateLibrary");
+    this.swingDriveSideFields = requiredElement(document, "planSwingDriveSideFields");
+    this.swingLeftDriveSide = requiredElement(document, "planSwingLeftDriveSide");
+    this.swingRightDriveSide = requiredElement(document, "planSwingRightDriveSide");
     this.templateCancel = requiredElement(document, "btnPlanTemplateCancel");
     this.templateConfirm = requiredElement(document, "btnPlanTemplateConfirm");
     this.templateCode = requiredElement(document, "planTemplateInput");

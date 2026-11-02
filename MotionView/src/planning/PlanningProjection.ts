@@ -2,8 +2,14 @@ import type { PlanningEvents } from "./planningEvents";
 import type { PlanningSession } from "./planningSession";
 import type { PlanningNodeView, PlanningWaypoint } from "./planningTypes";
 import { PlanningSegment } from "./planningSegments";
-import { simulatePlanningRoute, simulationSectionKey } from "./planningSimulation";
-import { PlanningSimulationWorker, type PlanningSimulationJob } from "./PlanningSimulationWorker";
+import {
+  simulatePlanningRoute,
+  simulationSectionKey,
+} from "./planningSimulation";
+import {
+  PlanningSimulationWorker,
+  type PlanningSimulationJob,
+} from "./PlanningSimulationWorker";
 import type { PlanningSimulationResult } from "./planningSimulationTypes";
 import {
   DEFAULT_PLANNING_SIMULATION_CONFIGURATION,
@@ -53,7 +59,11 @@ export class PlanningProjection {
   readonly #nodePlacements: PlanningNodePlacement[] = [];
   #nodePlacementsDirty = true;
   #nodePlacementRouteRevision = -1;
-  #result: PlanningSimulationResult = { sections: [], duration: 0, complete: true };
+  #result: PlanningSimulationResult = {
+    sections: [],
+    duration: 0,
+    complete: true,
+  };
   #visualResult: PlanningSimulationResult = this.#result;
   #visualSignature = "";
   #inputSignature = "";
@@ -78,7 +88,11 @@ export class PlanningProjection {
           this.#result = { sections: [], duration: 0, complete: false };
           this.#completedSignature = "";
         }
-        this.events.projectionChanged.emit({ kind: this.session.isRouteEditing ? "preview-ready" : "simulation-ready" });
+        this.events.projectionChanged.emit({
+          kind: this.session.isRouteEditing
+            ? "preview-ready"
+            : "simulation-ready",
+        });
       },
     );
     events.routeEditChanged.subscribe(() => {
@@ -109,7 +123,10 @@ export class PlanningProjection {
     });
   }
   get configuration(): Readonly<PlanningProjectionConfiguration> {
-    return { ...this.#configuration, simulation: this.session.simulationConfiguration };
+    return {
+      ...this.#configuration,
+      simulation: this.session.simulationConfiguration,
+    };
   }
 
   configure(values: Partial<PlanningProjectionConfiguration>): void {
@@ -124,19 +141,41 @@ export class PlanningProjection {
 
   configureSimulation(values: PlanningSimulationConfigurationUpdate): void {
     this.session.mutate("simulation-configuration", () => {
-      this.session.simulationConfiguration = normalizePlanningSimulationConfiguration(values, this.session.simulationConfiguration);
+      this.session.simulationConfiguration =
+        normalizePlanningSimulationConfiguration(
+          values,
+          this.session.simulationConfiguration,
+        );
     });
   }
 
-  get pending(): boolean { this.ensureSimulation(); return this.#pending; }
+  get pending(): boolean {
+    this.ensureSimulation();
+    return this.#pending;
+  }
   /** Committed trajectory used for robot playback and time sampling. */
-  get simulation(): PlanningSimulationResult { this.ensureSimulation(); return this.#result; }
+  get simulation(): PlanningSimulationResult {
+    this.ensureSimulation();
+    return this.#result;
+  }
   /** Live trajectory used for drawing and hit testing, including during drags. */
-  get visualSimulation(): PlanningSimulationResult { this.ensureSimulation(); return this.#visualResult; }
-  get error(): string | null { return this.#error; }
-  get duration(): number { return this.simulation.duration; }
+  get visualSimulation(): PlanningSimulationResult {
+    this.ensureSimulation();
+    return this.#visualResult;
+  }
+  get error(): string | null {
+    return this.#error;
+  }
+  get duration(): number {
+    return this.simulation.duration;
+  }
   get times(): readonly number[] {
-    return [0, ...this.simulation.sections.map(section => section.samples.at(-1)?.time ?? 0)];
+    return [
+      0,
+      ...this.simulation.sections.map(
+        (section) => section.samples.at(-1)?.time ?? 0,
+      ),
+    ];
   }
 
   private invalidateGeometry(): void {
@@ -144,11 +183,20 @@ export class PlanningProjection {
     this.#nodePlacementsDirty = true;
   }
 
-  private acceptSimulation(job: PlanningSimulationJob, result: PlanningSimulationResult): void {
+  private acceptSimulation(
+    job: PlanningSimulationJob,
+    result: PlanningSimulationResult,
+  ): void {
     const current = job.signature === this.#inputSignature;
     // During an active drag, show successive completed previews while a newer
     // request is being coalesced. Cancelled drags and other paths cannot leak in.
-    if (!current && (!this.session.isRouteEditing || job.generation !== this.#generation || job.pathId !== this.session.activePathId)) return;
+    if (
+      !current &&
+      (!this.session.isRouteEditing ||
+        job.generation !== this.#generation ||
+        job.pathId !== this.session.activePathId)
+    )
+      return;
     this.#visualResult = result;
     this.#visualSignature = job.signature;
     this.invalidateGeometry();
@@ -168,16 +216,31 @@ export class PlanningProjection {
   private ensureSimulation(): void {
     if (this.#inputRevision === this.session.routeRevision) return;
     this.#inputRevision = this.session.routeRevision;
-    const live = { waypoints: this.session.waypoints, configuration: this.session.simulationConfiguration };
-    const signature = JSON.stringify([this.session.activePathId, live.waypoints.length,
-      live.waypoints[0] ? [live.waypoints[0].x, live.waypoints[0].y, live.waypoints[0].theta ?? 0] : null,
-      live.waypoints.slice(1).map((_, index) => simulationSectionKey(live, index))]);
+    const live = {
+      waypoints: this.session.waypoints,
+      configuration: this.session.simulationConfiguration,
+    };
+    const signature = JSON.stringify([
+      this.session.activePathId,
+      live.waypoints.length,
+      live.waypoints[0]
+        ? [
+            live.waypoints[0].x,
+            live.waypoints[0].y,
+            live.waypoints[0].theta ?? 0,
+          ]
+        : null,
+      live.waypoints
+        .slice(1)
+        .map((_, index) => simulationSectionKey(live, index)),
+    ]);
     if (signature === this.#completedSignature) {
       const changed = this.#visualResult !== this.#result;
       this.#inputSignature = signature;
       this.#visualResult = this.#result;
       this.#visualSignature = signature;
-      this.#pending = false; this.#error = null;
+      this.#pending = false;
+      this.#error = null;
       this.#worker.clearQueued();
       if (changed) {
         this.invalidateGeometry();
@@ -187,7 +250,8 @@ export class PlanningProjection {
     }
     if (signature === this.#visualSignature) {
       this.#inputSignature = signature;
-      this.#pending = false; this.#error = null;
+      this.#pending = false;
+      this.#error = null;
       this.#worker.clearQueued();
       if (!this.session.isRouteEditing) {
         this.#result = this.#visualResult;
@@ -198,14 +262,27 @@ export class PlanningProjection {
     }
     if (signature === this.#inputSignature && !this.#error) return;
     this.#inputSignature = signature;
-    this.#pending = true; this.#error = null;
-    this.events.projectionChanged.emit({ kind: this.session.isRouteEditing ? "preview-pending" : "simulation-pending" });
+    this.#pending = true;
+    this.#error = null;
+    this.events.projectionChanged.emit({
+      kind: this.session.isRouteEditing
+        ? "preview-pending"
+        : "simulation-pending",
+    });
     const job: PlanningSimulationJob = {
-      signature, pathId: this.session.activePathId, generation: this.#generation,
-      request: { waypoints: structuredClone(live.waypoints), configuration: live.configuration },
+      signature,
+      pathId: this.session.activePathId,
+      generation: this.#generation,
+      request: {
+        waypoints: structuredClone(live.waypoints),
+        configuration: live.configuration,
+      },
     };
     if (typeof Worker === "undefined" || live.waypoints.length < 2) {
-      this.acceptSimulation(job, simulatePlanningRoute(job.request, this.#visualResult));
+      this.acceptSimulation(
+        job,
+        simulatePlanningRoute(job.request, this.#visualResult),
+      );
     } else {
       // Start immediately. The worker reuses its cached prefix and keeps only
       // the latest queued edit instead of restarting or building a long queue.
@@ -218,14 +295,25 @@ export class PlanningProjection {
     if (this.#distanceRevision !== this.session.routeRevision) {
       const cached = [...this.#segments];
       this.#segments.length = 0;
-      this.#distances.length = 1; this.#distances[0] = 0;
+      this.#distances.length = 1;
+      this.#distances[0] = 0;
       for (let index = 1; index < this.session.waypoints.length; index++) {
-        const start = this.session.waypoints[index - 1]!, end = this.session.waypoints[index]!;
+        const start = this.session.waypoints[index - 1]!,
+          end = this.session.waypoints[index]!;
         const section = this.#visualResult.sections[index - 1] ?? null;
         const previous = cached[index - 1];
-        const segment = previous?.start === start && previous.end === end &&
-          previous.matches(start, end, this.session.simulationConfiguration) && previous.section === section
-          ? previous : new PlanningSegment(start, end, this.session.simulationConfiguration, section);
+        const segment =
+          previous?.start === start &&
+          previous.end === end &&
+          previous.matches(start, end, this.session.simulationConfiguration) &&
+          previous.section === section
+            ? previous
+            : new PlanningSegment(
+                start,
+                end,
+                this.session.simulationConfiguration,
+                section,
+              );
         this.#segments.push(segment);
         this.#distances.push(this.#distances[index - 1]! + segment.length);
       }
@@ -325,13 +413,25 @@ export class PlanningProjection {
     const total = simulation.sections.at(-1)?.samples.at(-1)?.distance ?? 0;
     const along = Math.max(0, Math.min(total, distance));
     if (distance > 0 && along >= total) return simulation.duration;
-    const section = simulation.sections.find(s => along <= s.samples.at(-1)!.distance);
+    const section = simulation.sections.find(
+      (s) => along <= s.samples.at(-1)!.distance,
+    );
     if (!section) return 0;
     const samples = section.samples;
-    let low = 0, high = samples.length - 1;
-    while (high - low > 1) { const mid = (low + high) >> 1; if (samples[mid]!.distance < along) low = mid; else high = mid; }
-    const before = samples[low]!, after = samples[high]!;
-    return before.time + (after.time - before.time) * (along - before.distance) / (after.distance - before.distance || 1);
+    let low = 0,
+      high = samples.length - 1;
+    while (high - low > 1) {
+      const mid = (low + high) >> 1;
+      if (samples[mid]!.distance < along) low = mid;
+      else high = mid;
+    }
+    const before = samples[low]!,
+      after = samples[high]!;
+    return (
+      before.time +
+      ((after.time - before.time) * (along - before.distance)) /
+        (after.distance - before.distance || 1)
+    );
   }
 
   distanceAtTime(time: number): number {
@@ -343,22 +443,53 @@ export class PlanningProjection {
 
   sampleTime(time: number): PlanningWaypoint | null {
     const section = this.sectionAtTime(time);
-    if (!section) return this.session.waypoints[0] ? { ...this.session.waypoints[0] } : null;
+    if (!section)
+      return this.session.waypoints[0]
+        ? { ...this.session.waypoints[0] }
+        : null;
     const { before, after, amount } = this.samplesAtTime(time, section);
-    return { x: before.x + (after.x - before.x) * amount, y: before.y + (after.y - before.y) * amount,
-      theta: ((before.theta + (after.theta - before.theta) * amount) * 180 / Math.PI % 360 + 360) % 360 };
+    return {
+      x: before.x + (after.x - before.x) * amount,
+      y: before.y + (after.y - before.y) * amount,
+      theta:
+        (((((before.theta + (after.theta - before.theta) * amount) * 180) /
+          Math.PI) %
+          360) +
+          360) %
+        360,
+    };
   }
 
   private sectionAtTime(time: number) {
-    return this.simulation.sections.find(section => time <= (section.samples.at(-1)?.time ?? 0)) ?? this.simulation.sections.at(-1);
+    return (
+      this.simulation.sections.find(
+        (section) => time <= (section.samples.at(-1)?.time ?? 0),
+      ) ?? this.simulation.sections.at(-1)
+    );
   }
-  private samplesAtTime(time: number, section: PlanningSimulationResult["sections"][number]) {
+  private samplesAtTime(
+    time: number,
+    section: PlanningSimulationResult["sections"][number],
+  ) {
     const samples = section.samples;
-    const clamped = Math.max(samples[0]!.time, Math.min(samples.at(-1)!.time, time));
-    let low = 0, high = samples.length - 1;
-    while (high - low > 1) { const mid = (low + high) >> 1; if (samples[mid]!.time < clamped) low = mid; else high = mid; }
-    const before = samples[low]!, after = samples[high]!;
-    return { before, after, amount: (clamped - before.time) / (after.time - before.time || 1) };
+    const clamped = Math.max(
+      samples[0]!.time,
+      Math.min(samples.at(-1)!.time, time),
+    );
+    let low = 0,
+      high = samples.length - 1;
+    while (high - low > 1) {
+      const mid = (low + high) >> 1;
+      if (samples[mid]!.time < clamped) low = mid;
+      else high = mid;
+    }
+    const before = samples[low]!,
+      after = samples[high]!;
+    return {
+      before,
+      after,
+      amount: (clamped - before.time) / (after.time - before.time || 1),
+    };
   }
 
   constrain(point: Readonly<PlanningWaypoint>): PlanningWaypoint {

@@ -13,6 +13,10 @@ export function generatePlanningCode(planning: PlanningFeature): string {
   return buildPlanExportCode({
     template: data.template,
     motionTemplates: data.motionTemplates,
+    swingDriveSides:
+      data.templateConfiguration.swingDriveSides[
+        data.templateConfiguration.library
+      ],
     waypoints: data.waypoints,
     nodes: data.nodes,
     objects: data.objects,

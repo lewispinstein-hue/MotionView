@@ -1,6 +1,15 @@
-import type { PlanMotionTemplates, PlanWaypointIndicatorIcon, PlanWaypointMotion } from "../state/models";
+import type {
+  PlanMotionTemplates,
+  PlanWaypointIndicatorIcon,
+  PlanWaypointMotion,
+} from "../state/models";
 import { createPlanMotionId } from "./planningState";
-import { getMotionCode, getWaypointMotionGroup, MAX_WAYPOINT_MOTIONS, normalizeWaypointMotions } from "./planningMotions";
+import {
+  getMotionCode,
+  getWaypointMotionGroup,
+  MAX_WAYPOINT_MOTIONS,
+  normalizeWaypointMotions,
+} from "./planningMotions";
 
 export interface PlanningMotionDraft {
   readonly id: string;
@@ -15,10 +24,15 @@ export class PlanningMotionSelection {
   readonly #drafts = new Map<PlanWaypointIndicatorIcon, PlanningMotionDraft>();
   readonly #motions: PlanningMotionDraft[];
 
-  constructor(motions: readonly Readonly<PlanWaypointMotion>[] | undefined, templates: Readonly<PlanMotionTemplates>) {
+  constructor(
+    motions: readonly Readonly<PlanWaypointMotion>[] | undefined,
+    templates: Readonly<PlanMotionTemplates>,
+  ) {
     this.#templates = { ...templates };
-    this.#motions = normalizeWaypointMotions(motions)
-      .map((motion) => ({ ...motion, code: getMotionCode(motion, templates) }));
+    this.#motions = normalizeWaypointMotions(motions).map((motion) => ({
+      ...motion,
+      code: getMotionCode(motion, templates),
+    }));
     for (const motion of this.#motions) this.#drafts.set(motion.type, motion);
   }
 
@@ -28,7 +42,11 @@ export class PlanningMotionSelection {
 
   get result(): PlanWaypointMotion[] {
     return this.#motions.map(({ id, type, code, lockedDriveSide }) => ({
-      id, type, ...(type === "swing" ? { lockedDriveSide: lockedDriveSide ?? "left" } : {}),
+      id,
+      type,
+      ...(type === "swing"
+        ? { lockedDriveSide: lockedDriveSide ?? "left" }
+        : {}),
       ...(code === this.#templates[type] ? {} : { overrideCode: code }),
     }));
   }
@@ -44,8 +62,10 @@ export class PlanningMotionSelection {
       this.#motions.splice(index, 1);
     } else {
       if (this.#motions.length >= MAX_WAYPOINT_MOTIONS) return false;
-      const replacement = this.#motions.findIndex((motion) =>
-        getWaypointMotionGroup(motion.type) === getWaypointMotionGroup(type));
+      const replacement = this.#motions.findIndex(
+        (motion) =>
+          getWaypointMotionGroup(motion.type) === getWaypointMotionGroup(type),
+      );
       let draft = this.#drafts.get(type);
       if (!draft) {
         draft = { id: createPlanMotionId(), type, code: this.#templates[type] };
@@ -64,7 +84,9 @@ export class PlanningMotionSelection {
   }
 
   setLockedDriveSide(id: string, side: "left" | "right"): void {
-    const motion = this.#motions.find(entry => entry.id === id && entry.type === "swing");
+    const motion = this.#motions.find(
+      (entry) => entry.id === id && entry.type === "swing",
+    );
     if (motion) motion.lockedDriveSide = side;
   }
 

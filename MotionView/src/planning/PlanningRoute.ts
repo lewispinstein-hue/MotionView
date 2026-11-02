@@ -1,5 +1,11 @@
-import type { PlanWaypointIndicatorIcon, PlanWaypointMotion } from "../state/models";
-import { normalizeWaypointMotions, waypointMotionsForEditing } from "./planningMotions";
+import type {
+  PlanWaypointIndicatorIcon,
+  PlanWaypointMotion,
+} from "../state/models";
+import {
+  normalizeWaypointMotions,
+  waypointMotionsForEditing,
+} from "./planningMotions";
 import {
   DEFAULT_BOOMERANG_LEAD,
   isBoomerangWaypoint,
@@ -85,7 +91,11 @@ export class PlanningRoute {
     });
   }
 
-  updateMotions(index: number, motions: readonly Readonly<PlanWaypointMotion>[], forwards?: boolean): void {
+  updateMotions(
+    index: number,
+    motions: readonly Readonly<PlanWaypointMotion>[],
+    forwards?: boolean,
+  ): void {
     const waypoint = this.session.waypoints[index];
     if (!waypoint) return;
     this.session.mutate("route", () => {
@@ -95,7 +105,8 @@ export class PlanningRoute {
         waypoint.lead = normalizePlanningLead(waypoint.lead);
       else delete waypoint.lead;
       for (const motion of waypoint.motions) {
-        if (motion.overrideCode === this.session.motionTemplates[motion.type]) delete motion.overrideCode;
+        if (motion.overrideCode === this.session.motionTemplates[motion.type])
+          delete motion.overrideCode;
       }
       delete waypoint.overrideCode;
       delete waypoint.indicatorIcons;
@@ -111,7 +122,9 @@ export class PlanningRoute {
     const type = enabled ? "boomerang" : "forward";
     const previousType = enabled ? "forward" : "boomerang";
     const existing = motions.find((motion) => motion.type === type);
-    const replaceIndex = motions.findIndex((motion) => motion.type === previousType);
+    const replaceIndex = motions.findIndex(
+      (motion) => motion.type === previousType,
+    );
     if (existing && replaceIndex >= 0) motions.splice(replaceIndex, 1);
     else if (!existing && replaceIndex >= 0)
       motions[replaceIndex] = { ...motions[replaceIndex]!, type };
@@ -133,8 +146,15 @@ export class PlanningRoute {
 
   updateLead(index: number, lead: number): void {
     const waypoint = this.session.waypoints[index];
-    if (!waypoint || !this.session.waypoints[index + 1] || !isBoomerangWaypoint(waypoint)) return;
-    this.session.mutate("route", () => { waypoint.lead = normalizePlanningLead(lead); });
+    if (
+      !waypoint ||
+      !this.session.waypoints[index + 1] ||
+      !isBoomerangWaypoint(waypoint)
+    )
+      return;
+    this.session.mutate("route", () => {
+      waypoint.lead = normalizePlanningLead(lead);
+    });
   }
 
   updateField(
@@ -198,9 +218,11 @@ export class PlanningRoute {
         const next = constrain?.(mirrored) ?? mirrored;
         waypoint.x = next.x;
         waypoint.y = next.y;
-        waypoint.theta = ((next.theta ?? 0) % 360 + 360) % 360;
+        waypoint.theta = (((next.theta ?? 0) % 360) + 360) % 360;
         for (const motion of waypoint.motions ?? []) {
-          if (motion.type === "swing") motion.lockedDriveSide = motion.lockedDriveSide === "right" ? "left" : "right";
+          if (motion.type === "swing")
+            motion.lockedDriveSide =
+              motion.lockedDriveSide === "right" ? "left" : "right";
         }
       }
     });

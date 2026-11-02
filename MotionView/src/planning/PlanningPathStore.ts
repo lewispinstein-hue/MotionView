@@ -70,7 +70,8 @@ export class PlanningPathStore {
     }
     for (const node of path.nodes) node.id = createPlanNodeId();
     for (const waypoint of path.waypoints) {
-      for (const motion of waypoint.motions ?? []) motion.id = createPlanMotionId();
+      for (const motion of waypoint.motions ?? [])
+        motion.id = createPlanMotionId();
     }
     this.entries.splice(index + 1, 0, path);
     this.#activePathId = path.id;
@@ -89,9 +90,8 @@ export class PlanningPathStore {
     const wasActive = this.#activePathId === id;
     this.entries.splice(index, 1);
     if (wasActive) {
-      this.#activePathId = this.entries[
-        Math.min(index, this.entries.length - 1)
-      ]!.id;
+      this.#activePathId =
+        this.entries[Math.min(index, this.entries.length - 1)]!.id;
     }
     return true;
   }

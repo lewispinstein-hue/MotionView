@@ -32,12 +32,22 @@ export class PlanningInput {
   }
 
   handleClick(event: MouseEvent): void {
-    if (getMode() !== "planning" || event.button !== 0 || hasOpenModal()) return;
-    if (!this.planning.selection.waypointIndices.size || !(event.target instanceof Element)) return;
+    if (getMode() !== "planning" || event.button !== 0 || hasOpenModal())
+      return;
+    if (
+      !this.planning.selection.waypointIndices.size ||
+      !(event.target instanceof Element)
+    )
+      return;
     if (!event.target.closest("#rightPlanning, #planningTimelineBar")) return;
     // Waypoint rows/markers and their editing controls retain their selection.
-    if (event.target.closest(".planItem, .planningTimelineWaypointConnector")) return;
-    if (event.target.closest(".planSelectedPanel") && event.target.closest("input, button, label")) return;
+    if (event.target.closest(".planItem, .planningTimelineWaypointConnector"))
+      return;
+    if (
+      event.target.closest(".planSelectedPanel") &&
+      event.target.closest("input, button, label")
+    )
+      return;
     this.planning.selection.selectWaypoint(-1);
   }
 

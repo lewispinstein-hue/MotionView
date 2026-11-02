@@ -3868,6 +3868,19 @@ body:not(.mode-planning) #rightPlanning {
   white-space: pre;
 }
 
+.planSwingDriveSideFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.planSwingDriveSideFields[hidden] { display: none; }
+
+.planSwingDriveSideFields input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
 .waypointIndicatorPicker {
   display: flex;
   align-items: center;

@@ -10,7 +10,10 @@ import { PlanningTimeline } from "./planningTimelineDomain";
 import { PlanningSession } from "./planningSession";
 import type { PlanMotionTemplates } from "../state/models";
 import { normalizeMotionTemplates } from "./planningMotions";
-import { normalizePlanningTemplateConfiguration, type PlanningTemplateConfiguration } from "./planningTemplatePresets";
+import {
+  normalizePlanningTemplateConfiguration,
+  type PlanningTemplateConfiguration,
+} from "./planningTemplatePresets";
 import {
   normalizePlanningSimulationConfiguration,
   type PlanningSimulationConfiguration,
@@ -92,27 +95,49 @@ export class PlanningFeature {
 
   setExportTemplate(template: string): void {
     if (template === this.exportTemplate) return;
-    this.setMotionTemplates({ ...this.motionTemplates, forward: String(template ?? "") });
+    this.setMotionTemplates({
+      ...this.motionTemplates,
+      forward: String(template ?? ""),
+    });
   }
 
   setMotionTemplates(templates: Readonly<PlanMotionTemplates>): void {
     const next = normalizeMotionTemplates(templates, this.motionTemplates);
     if (JSON.stringify(next) === JSON.stringify(this.motionTemplates)) return;
-    const configuration = normalizePlanningTemplateConfiguration(this.templateConfiguration);
+    const configuration = normalizePlanningTemplateConfiguration(
+      this.templateConfiguration,
+    );
+    configuration.swingDriveSides.custom = {
+      ...configuration.swingDriveSides[configuration.library],
+    };
     configuration.library = "custom";
     configuration.templates.custom = next;
     this.setTemplateConfiguration(configuration);
   }
 
-  setTemplateConfiguration(configuration: Readonly<PlanningTemplateConfiguration>): void {
+  setTemplateConfiguration(
+    configuration: Readonly<PlanningTemplateConfiguration>,
+  ): void {
     const next = normalizePlanningTemplateConfiguration(configuration);
-    if (JSON.stringify(next) === JSON.stringify(this.templateConfiguration)) return;
-    this.#session.mutate("template", () => { this.#session.templateConfiguration = next; });
+    if (JSON.stringify(next) === JSON.stringify(this.templateConfiguration))
+      return;
+    this.#session.mutate("template", () => {
+      this.#session.templateConfiguration = next;
+    });
   }
 
-  setSimulationConfiguration(values: PlanningSimulationConfigurationUpdate): void {
-    const next = normalizePlanningSimulationConfiguration(values, this.#session.simulationConfiguration);
-    if (JSON.stringify(next) === JSON.stringify(this.#session.simulationConfiguration)) return;
+  setSimulationConfiguration(
+    values: PlanningSimulationConfigurationUpdate,
+  ): void {
+    const next = normalizePlanningSimulationConfiguration(
+      values,
+      this.#session.simulationConfiguration,
+    );
+    if (
+      JSON.stringify(next) ===
+      JSON.stringify(this.#session.simulationConfiguration)
+    )
+      return;
     this.#session.mutate("simulation-configuration", () => {
       this.#session.simulationConfiguration = next;
     });

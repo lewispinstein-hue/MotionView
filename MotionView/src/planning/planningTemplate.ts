@@ -9,6 +9,7 @@ import { getPlanNodeEffectiveMethod } from "./planningObjects";
 import type { PlanMotionTemplates } from "../state/models";
 import { createDefaultMotionTemplates, getWaypointCode, normalizeMotionTemplates } from "./planningMotions";
 import { isSegmentForwards, waypointLead } from "./planningSegments";
+import type { PlanningSwingDriveSides } from "./planningTemplatePresets";
 
 const TEMPLATE_SHORTHAND_TOKENS: Readonly<Record<string, string>> = {
   x: "x",
@@ -19,11 +20,13 @@ const TEMPLATE_SHORTHAND_TOKENS: Readonly<Record<string, string>> = {
   iter: "iteration",
   fwd: "forwards",
   ld: "lead",
+  side: "lockedDriveSide",
 };
 
 export interface BuildPlanExportCodeOptions {
   template: string;
   motionTemplates?: Readonly<PlanMotionTemplates>;
+  swingDriveSides?: Readonly<PlanningSwingDriveSides>;
   waypoints: readonly PlanningWaypointView[];
   nodes: readonly PlanningNodeView[];
   objects: readonly PlanningObjectView[];
@@ -36,6 +39,11 @@ export interface BuildPlanExportCodeOptions {
 export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
   const rawTemplate = String(options.template ?? "");
   const motionTemplates = normalizeMotionTemplates(options.motionTemplates, createDefaultMotionTemplates(rawTemplate));
+  const swingDriveSides = options.swingDriveSides ?? { left: "left", right: "right" };
+  const lockedDriveSide = (point?: Readonly<PlanningWaypoint>) => {
+    const swing = point?.motions?.find(motion => motion.type === "swing");
+    return swingDriveSides[swing?.lockedDriveSide === "right" ? "right" : "left"];
+  };
   const defaultReplacements: Record<string, string> = {
     x: "0",
     y: "0",
@@ -45,6 +53,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     speed: "0",
     forwards: "true",
     lead: "0",
+    lockedDriveSide: lockedDriveSide(),
   };
 
   const replacementsForNodeWaypoint = (
@@ -68,6 +77,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
         isSegmentForwards({ ...point, theta }, options.waypoints[index + 1]),
       ),
       lead: options.formatTemplateNumber(waypointLead(point)),
+      lockedDriveSide: lockedDriveSide(point),
     };
   };
 
@@ -93,6 +103,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
         isSegmentForwards({ ...start, theta: options.planThetaDegAt(index) }, end),
       ),
       lead: options.formatTemplateNumber(waypointLead(start)),
+      lockedDriveSide: lockedDriveSide(start),
     };
   };
 
@@ -100,16 +111,13 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     template: string,
     replacements: Readonly<Record<string, string>>,
   ) => {
-    return String(template || "")
-      .replace(
-        /\$\{(x|y|theta|distance|iteration|speed|forwards|lead)\}/g,
-        (_, token) => replacements[token] ?? "",
-      )
-      .replace(
-        /(^|[^A-Za-z0-9_])@(x|y|dist|spd|th|iter|fwd|ld)(?![A-Za-z0-9_])/g,
-        (_, prefix: string, token: string) =>
-          `${prefix}${replacements[TEMPLATE_SHORTHAND_TOKENS[token]] ?? ""}`,
-      );
+    // One pass keeps inserted side values literal, including any @ or ${} text.
+    return String(template || "").replace(
+      /\$\{(x|y|theta|distance|iteration|speed|forwards|lead|lockedDriveSide)\}|(^|[^A-Za-z0-9_])@(x|y|dist|spd|th|iter|fwd|ld|side)(?![A-Za-z0-9_])/g,
+      (_, full: string | undefined, prefix: string, short: string) => full
+        ? replacements[full] ?? ""
+        : `${prefix}${replacements[TEMPLATE_SHORTHAND_TOKENS[short]] ?? ""}`,
+    );
   };
 
   const renderSegmentTemplate = (

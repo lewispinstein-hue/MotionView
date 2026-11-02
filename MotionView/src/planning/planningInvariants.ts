@@ -19,8 +19,7 @@ export function maintainPlanningDocumentInvariants(
   objects: readonly PlanningObject[],
   selection: PlanningSelectionState,
 ): void {
-  const activePath =
-    paths.find((path) => path.id === activePathId) ?? paths[0];
+  const activePath = paths.find((path) => path.id === activePathId) ?? paths[0];
   if (!activePath) return;
   const objectsById = new Map(objects.map((object) => [object.id, object]));
   for (const path of paths) {
@@ -66,7 +65,9 @@ export function maintainPlanningDocumentInvariants(
     selection.selectedMethod &&
     !objectsById
       .get(selection.selectedMethod.objectId)
-      ?.methods.some((method) => method.id === selection.selectedMethod?.methodId)
+      ?.methods.some(
+        (method) => method.id === selection.selectedMethod?.methodId,
+      )
   ) {
     selection.selectedMethod = null;
   }

@@ -145,22 +145,24 @@ export class PlanningCodeExportDialog {
     }
     try {
       const projectSourcePath =
-        target === "project"
-          ? this.joinPath(projectPath, "src")
-          : undefined;
-      const directory = await resolveExportDirectory(
-        target,
-        projectSourcePath,
-      );
+        target === "project" ? this.joinPath(projectPath, "src") : undefined;
+      const directory = await resolveExportDirectory(target, projectSourcePath);
       if (
-        revision !== this.#pathRevision || target !== this.target ||
+        revision !== this.#pathRevision ||
+        target !== this.target ||
         projectPath !== this.#projectPath
-      ) return;
+      )
+        return;
       const separator =
         directory.includes("\\") && !directory.includes("/") ? "\\" : "/";
       this.dom.codeExportPath.value = `${directory.replace(/[\\/]+$/, "")}${separator}${DEFAULT_FILENAME}`;
     } catch (error) {
-      if (revision !== this.#pathRevision || target !== this.target || projectPath !== this.#projectPath) return;
+      if (
+        revision !== this.#pathRevision ||
+        target !== this.target ||
+        projectPath !== this.#projectPath
+      )
+        return;
       this.dom.codeExportValidation.textContent =
         error instanceof Error ? error.message : String(error);
     }
@@ -172,7 +174,12 @@ export class PlanningCodeExportDialog {
     this.syncProjectPath();
     const code = generatePlanningCode(this.planning);
     const path = this.dom.codeExportPath.value.trim();
-    if (!code || !path || !isTauriRuntime() || (this.target === "project" && !this.#projectPath)) {
+    if (
+      !code ||
+      !path ||
+      !isTauriRuntime() ||
+      (this.target === "project" && !this.#projectPath)
+    ) {
       this.updateValidation();
       return;
     }
@@ -259,7 +266,9 @@ export class PlanningCodeExportDialog {
 
   private syncProjectPath(): void {
     if (this.target !== "project") return;
-    const filename = this.dom.codeExportPath.value.trim().split(/[\\/]/).pop() || DEFAULT_FILENAME;
+    const filename =
+      this.dom.codeExportPath.value.trim().split(/[\\/]/).pop() ||
+      DEFAULT_FILENAME;
     this.dom.codeExportPath.value = this.#projectPath
       ? this.joinPath(this.joinPath(this.#projectPath, "src"), filename)
       : "";

@@ -6,7 +6,11 @@ import {
   normalizeWaypointIndicatorIcons,
 } from "./planningIndicators";
 import type { PlanWaypointIndicatorIcon } from "../state/models";
-import { PlanningMotionEditorView, type PlanningMotionEditorOptions, type PlanningMotionEditorResult } from "./render/PlanningMotionEditorView";
+import {
+  PlanningMotionEditorView,
+  type PlanningMotionEditorOptions,
+  type PlanningMotionEditorResult,
+} from "./render/PlanningMotionEditorView";
 
 export interface PlanningConfirmOptions {
   readonly title?: string;
@@ -157,7 +161,11 @@ export class PlanningDialogs {
     if (options.motionEditor) this.#motionEditor.open(options.motionEditor);
     this.show(
       this.dom.templateModal,
-      this.#editorUsesName ? this.dom.templateName : options.motionEditor ? this.#motionEditor.focusTarget : this.dom.templateCode,
+      this.#editorUsesName
+        ? this.dom.templateName
+        : options.motionEditor
+          ? this.#motionEditor.focusTarget
+          : this.dom.templateCode,
     );
     return new Promise((resolve) => {
       this.#editorResolver = resolve;
@@ -183,7 +191,12 @@ export class PlanningDialogs {
   private confirmEditor(): void {
     if (!this.#editorResolver) return;
     if (this.#motionEditor.active) {
-      this.closeEditor({ name: "", code: "", indicatorIcons: [], ...this.#motionEditor.result });
+      this.closeEditor({
+        name: "",
+        code: "",
+        indicatorIcons: [],
+        ...this.#motionEditor.result,
+      });
       return;
     }
     const name = this.dom.templateName.value.trim().slice(0, 25);

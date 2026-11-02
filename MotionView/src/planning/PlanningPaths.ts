@@ -2,10 +2,7 @@ import type {
   PlanningCodeExportSettings,
   PlanningPathView,
 } from "./planningTypes";
-import {
-  type PlanningMirrorDirection,
-  PlanningRoute,
-} from "./PlanningRoute";
+import { type PlanningMirrorDirection, PlanningRoute } from "./PlanningRoute";
 import type { PlanningSession } from "./planningSession";
 
 /** Coordinates the independently editable routes in a Planning document. */
