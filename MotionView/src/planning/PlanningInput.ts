@@ -91,11 +91,12 @@ export class PlanningInput {
     const angle = (this.field.getFieldRotationDeg() * Math.PI) / 180;
     const rotatedX = dx * Math.cos(angle) - dy * Math.sin(angle);
     const rotatedY = dx * Math.sin(angle) + dy * Math.cos(angle);
+    // Keyboard steps are explicit; grid snapping can round smaller nudges away.
     this.planning.route.move(
       this.planning.selection.waypointIndices,
       rotatedX,
       rotatedY,
-      (point) => this.planning.projection.constrain(point),
+      (point) => this.planning.projection.constrainToBounds(point),
     );
     requestDrawAll();
     return true;

@@ -368,15 +368,24 @@ export class PlanningProjection {
     const x = snap(point.x, config.positionSnap);
     const y = snap(point.y, config.positionSnap);
     const theta = snap(point.theta ?? 0, config.thetaSnap);
+    return this.constrainToBounds({
+      ...point,
+      x,
+      y,
+      theta: ((theta % 360) + 360) % 360,
+    });
+  }
+
+  constrainToBounds(point: Readonly<PlanningWaypoint>): PlanningWaypoint {
+    const config = this.#configuration;
     return {
       ...point,
       x: config.limitBounds
-        ? Math.max(config.minX, Math.min(config.maxX, x))
-        : x,
+        ? Math.max(config.minX, Math.min(config.maxX, point.x))
+        : point.x,
       y: config.limitBounds
-        ? Math.max(config.minY, Math.min(config.maxY, y))
-        : y,
-      theta: ((theta % 360) + 360) % 360,
+        ? Math.max(config.minY, Math.min(config.maxY, point.y))
+        : point.y,
     };
   }
 
