@@ -74,16 +74,16 @@ const LIBRARY_DEFAULTS: Record<PlanningControllerModel, LibraryTuning> = {
   },
 };
 const linear = Object.freeze({
-  kP: 6,
+  kP: 10,
   kI: 0,
-  kD: 0,
+  kD: 3,
   windupRange: 0,
   signFlipReset: true,
 });
 const angular = Object.freeze({
-  kP: 2.5,
+  kP: 2,
   kI: 0,
-  kD: 0,
+  kD: 10,
   windupRange: 0,
   signFlipReset: true,
 });

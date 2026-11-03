@@ -4,6 +4,8 @@ import type {
   PlanWaypointMotion,
 } from "../state/models";
 import { createPlanMotionId } from "./planningState";
+import { planningMotionsForLibrary, supportsPlanningMotion } from "./planningTemplateCapabilities";
+import type { PlanningTemplateLibrary } from "./planningTemplatePresets";
 import {
   getMotionCode,
   getWaypointMotionGroup,
@@ -27,9 +29,10 @@ export class PlanningMotionSelection {
   constructor(
     motions: readonly Readonly<PlanWaypointMotion>[] | undefined,
     templates: Readonly<PlanMotionTemplates>,
+    private readonly library: PlanningTemplateLibrary = "custom",
   ) {
     this.#templates = { ...templates };
-    this.#motions = normalizeWaypointMotions(motions).map((motion) => ({
+    this.#motions = planningMotionsForLibrary(normalizeWaypointMotions(motions), library).map((motion) => ({
       ...motion,
       code: getMotionCode(motion, templates),
     }));
@@ -56,6 +59,7 @@ export class PlanningMotionSelection {
   }
 
   toggle(type: PlanWaypointIndicatorIcon): boolean {
+    if (!supportsPlanningMotion(this.library, type)) return false;
     const index = this.#motions.findIndex((motion) => motion.type === type);
     if (index >= 0) {
       if (this.#motions.length === 1) return false;

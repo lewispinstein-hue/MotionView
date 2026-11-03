@@ -450,6 +450,7 @@ export class PlanningSession {
       kind === "imported" ||
       kind === "cleared" ||
       kind === "history" ||
+      kind === "template" ||
       kind === "simulation-configuration"
     );
   }

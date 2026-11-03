@@ -13,6 +13,7 @@ import type { PlanningFeature } from "../PlanningFeature";
 import type { PlanningWaypointView } from "../planningTypes";
 import { getPlanNodeEffectiveMethod } from "../planningObjects";
 import { isBoomerangWaypoint } from "../planningMotionContext";
+import { planningMotionTypeForLibrary } from "../planningTemplateCapabilities";
 import {
   createWaypointIndicatorIcon,
   orderWaypointIndicatorIcons,
@@ -223,7 +224,7 @@ export class PlanningSidebarView {
       ?? orderWaypointIndicatorIcons(point.indicatorIcons ?? []);
     if (!icons.length) icons.push(isBoomerangWaypoint(point) ? "boomerang" : "forward");
     for (const indicator of icons)
-      target.appendChild(createWaypointIndicatorIcon(indicator, className));
+      target.appendChild(createWaypointIndicatorIcon(planningMotionTypeForLibrary(indicator, this.planning.templateConfiguration.library), className));
   }
 
   renderObjects(): void {

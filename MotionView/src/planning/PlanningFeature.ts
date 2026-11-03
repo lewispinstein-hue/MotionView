@@ -8,12 +8,14 @@ import { PlanningRoute } from "./PlanningRoute";
 import { PlanningSelection } from "./PlanningSelection";
 import { PlanningTimeline } from "./planningTimelineDomain";
 import { PlanningSession } from "./planningSession";
-import type { PlanMotionTemplates } from "../state/models";
+import type { PlanMotionTemplates, PlanWaypointIndicatorIcon } from "../state/models";
 import { normalizeMotionTemplates } from "./planningMotions";
 import {
   normalizePlanningTemplateConfiguration,
+  planningTemplateLanguage,
   type PlanningTemplateConfiguration,
 } from "./planningTemplatePresets";
+import { supportsPlanningMotion } from "./planningTemplateCapabilities";
 import {
   normalizePlanningSimulationConfiguration,
   type PlanningSimulationConfiguration,
@@ -77,6 +79,9 @@ export class PlanningFeature {
   get templateConfiguration(): Readonly<PlanningTemplateConfiguration> {
     return this.#session.templateConfiguration;
   }
+  supportsMotion(type: PlanWaypointIndicatorIcon): boolean {
+    return supportsPlanningMotion(this.templateConfiguration.library, type);
+  }
   get simulationConfiguration(): PlanningSimulationConfiguration {
     return this.#session.simulationConfiguration;
   }
@@ -110,6 +115,7 @@ export class PlanningFeature {
     configuration.swingDriveSides.custom = {
       ...configuration.swingDriveSides[configuration.library],
     };
+    configuration.customLanguage = planningTemplateLanguage(configuration);
     configuration.library = "custom";
     configuration.templates.custom = next;
     this.setTemplateConfiguration(configuration);

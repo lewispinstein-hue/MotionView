@@ -2,10 +2,13 @@ import type { PlanWaypoint, PlanWaypointMotion } from "../state/models";
 import {
   isBoomerangWaypoint,
   isSegmentForwards,
+  segmentDriveHeading,
   waypointLead,
 } from "./planningMotionContext";
 import { PlanningMotionController } from "./planningSimulationControllers";
 import { PlanningPreviewDrivetrain } from "./planningPreviewDrivetrain";
+import { planningMotionsForLibrary, isVexcodePlanningLibrary } from "./planningTemplateCapabilities";
+import type { PlanningTemplateLibrary } from "./planningTemplatePresets";
 import type {
   PlanningSimulationRequest,
   PlanningSimulationResult,
@@ -28,15 +31,16 @@ const poseOf = (p: Readonly<PlanWaypoint>): PreviewPose => ({
 function motionsOf(
   point: Readonly<PlanWaypoint>,
   index: number,
+  library: PlanningTemplateLibrary = "custom",
 ): readonly Readonly<PlanWaypointMotion>[] {
-  return point.motions?.length
+  return planningMotionsForLibrary(point.motions?.length
     ? point.motions
     : [
         {
           id: `legacy-${index}`,
           type: isBoomerangWaypoint(point) ? "boomerang" : "forward",
         },
-      ];
+      ], library);
 }
 export function simulationSectionKey(
   request: PlanningSimulationRequest,
@@ -50,19 +54,20 @@ export function simulationSectionKey(
     start.theta ?? 0,
     start.speed ?? 127,
     isSegmentForwards(start, end),
-    motionsOf(start, index).some((m) => m.type === "boomerang")
+    motionsOf(start, index, request.templateLibrary).some((m) => m.type === "boomerang")
       ? waypointLead(start)
       : 0,
     end.x,
     end.y,
     end.theta ?? 0,
     index === request.waypoints.length - 2,
-    motionsOf(start, index).map((m) => [
+    motionsOf(start, index, request.templateLibrary).map((m) => [
       m.id,
       m.type,
       m.lockedDriveSide ?? "left",
     ]),
     request.configuration,
+    isVexcodePlanningLibrary(request.templateLibrary ?? "custom") ? "turn-then-drive" : false,
   ]);
 }
 /** Pure deterministic engine, used in a worker in the app and directly by tests. */
@@ -101,92 +106,99 @@ export function simulatePlanningRoute(
     linearVelocity: drivetrain.linearVelocity,
     angularVelocity: drivetrain.angularVelocity,
   });
+  const runMotion = (
+    motion: Readonly<PlanWaypointMotion>,
+    target: PreviewPose,
+    lead: number,
+    forwards: boolean,
+    speed: number,
+    samples: SimulationSample[],
+  ): SimulationOutcome => {
+    const controller = new PlanningMotionController(
+      motion, target, lead, forwards, speed, request.configuration, pose, drivetrain,
+    );
+    let outcome: SimulationOutcome = "incomplete", dwell = 0;
+    const movement: number[] = [], rotation: number[] = [];
+    let moved = 0, turned = 0;
+    for (let step = 0; step < MAX_MOTION_STEPS; step++) {
+      const output = controller.update(pose, drivetrain);
+      if (![output.left, output.right, pose.x, pose.y, pose.theta].every(Number.isFinite)) break;
+      // A fast crossing is not a settled arrival: ending the controller there
+      // creates an exaggerated coast even for an otherwise well-tuned PID.
+      const angularMotion = motion.type === "rotate" || motion.type === "swing";
+      const settledVelocity = angularMotion
+        ? Math.abs(drivetrain.angularVelocity) < 0.15
+        : Math.abs(drivetrain.linearVelocity) < 3 &&
+          (motion.type !== "boomerang" || Math.abs(drivetrain.angularVelocity) < 0.15);
+      dwell = output.arrived && settledVelocity ? dwell + 1 : 0;
+      const finished = dwell >= ARRIVAL_DWELL_STEPS;
+      const delta = drivetrain.step(
+        finished ? 0 : output.left,
+        finished ? 0 : output.right,
+        finished ? undefined : output.heldSide,
+      );
+      const mid = pose.theta + delta.turn / 2;
+      pose = {
+        x: pose.x + Math.sin(mid) * delta.travel,
+        y: pose.y + Math.cos(mid) * delta.travel,
+        theta: pose.theta + delta.turn,
+      };
+      if (![pose.x, pose.y, pose.theta].every(Number.isFinite)) break;
+      distance += Math.abs(delta.travel);
+      time += SIMULATION_TIME_STEP;
+      moved += Math.abs(delta.travel);
+      turned += Math.abs(delta.turn);
+      movement.push(Math.abs(delta.travel));
+      rotation.push(Math.abs(delta.turn));
+      if (movement.length > STANDSTILL_WINDOW) {
+        moved -= movement.shift()!;
+        turned -= rotation.shift()!;
+      }
+      if (step % 3 === 0) samples.push(sample());
+      if (finished) {
+        outcome = angularMotion || Math.hypot(target.x - pose.x, target.y - pose.y) <= 1
+          ? "reached" : "missed";
+        break;
+      }
+      if (movement.length === STANDSTILL_WINDOW && moved < 0.05 && turned < Math.PI / 720) {
+        outcome = "stalled";
+        break;
+      }
+    }
+    // Include stage boundaries too, so the VEXcode alignment turn consumes time.
+    if (samples.at(-1)!.time !== time) samples.push(sample());
+    return outcome;
+  };
   for (; index < request.waypoints.length - 1; index++) {
     const start = request.waypoints[index]!,
       target = poseOf(request.waypoints[index + 1]!);
     const samples: SimulationSample[] = [sample()];
     const motions: SimulatedMotion[] = [];
     let sectionOutcome: SimulationOutcome = "reached";
-    for (const motion of motionsOf(start, index)) {
-      const controller = new PlanningMotionController(
-        motion,
-        target,
-        waypointLead(start),
-        isSegmentForwards(start, request.waypoints[index + 1]),
-        start.speed ?? 127,
-        request.configuration,
-        pose,
-        drivetrain,
-      );
+    for (const motion of motionsOf(start, index, request.templateLibrary)) {
+      const forwards = isSegmentForwards(start, request.waypoints[index + 1]);
       const startTime = time;
-      let outcome: SimulationOutcome = "incomplete",
-        dwell = 0;
-      const movement: number[] = [],
-        rotation: number[] = [];
-      let moved = 0,
-        turned = 0;
-      for (let step = 0; step < MAX_MOTION_STEPS; step++) {
-        const output = controller.update(pose, drivetrain);
-        if (
-          ![output.left, output.right, pose.x, pose.y, pose.theta].every(
-            Number.isFinite,
-          )
-        )
-          break;
-        // A fast crossing is not a settled arrival: ending the controller there
-        // creates an exaggerated coast even for an otherwise well-tuned PID.
-        const angularMotion =
-          motion.type === "rotate" || motion.type === "swing";
-        const settledVelocity = angularMotion
-          ? Math.abs(drivetrain.angularVelocity) < 0.15
-          : Math.abs(drivetrain.linearVelocity) < 3 &&
-            (motion.type !== "boomerang" ||
-              Math.abs(drivetrain.angularVelocity) < 0.15);
-        dwell = output.arrived && settledVelocity ? dwell + 1 : 0;
-        const finished = dwell >= ARRIVAL_DWELL_STEPS;
-        const delta = drivetrain.step(
-          finished ? 0 : output.left,
-          finished ? 0 : output.right,
-          finished ? undefined : output.heldSide,
+      const vexcodeStraight = isVexcodePlanningLibrary(request.templateLibrary ?? "custom") && motion.type === "forward";
+      const driveDistance = Math.hypot(target.x - start.x, target.y - start.y) * (forwards ? 1 : -1);
+      let outcome: SimulationOutcome = "reached";
+      if (vexcodeStraight && Math.abs(driveDistance) > 1e-10) {
+        outcome = runMotion(
+          { id: motion.id, type: "rotate" },
+          { ...target, theta: segmentDriveHeading(start, request.waypoints[index + 1]) * Math.PI / 180 },
+          0, forwards, start.speed ?? 127, samples,
         );
-        const mid = pose.theta + delta.turn / 2;
-        pose = {
-          x: pose.x + Math.sin(mid) * delta.travel,
-          y: pose.y + Math.cos(mid) * delta.travel,
-          theta: pose.theta + delta.turn,
-        };
-        if (![pose.x, pose.y, pose.theta].every(Number.isFinite)) break;
-        distance += Math.abs(delta.travel);
-        time += SIMULATION_TIME_STEP;
-        moved += Math.abs(delta.travel);
-        turned += Math.abs(delta.turn);
-        movement.push(Math.abs(delta.travel));
-        rotation.push(Math.abs(delta.turn));
-        if (movement.length > STANDSTILL_WINDOW) {
-          moved -= movement.shift()!;
-          turned -= rotation.shift()!;
-        }
-        if (step % 3 === 0) samples.push(sample());
-        if (finished) {
-          outcome =
-            motion.type === "rotate" ||
-            motion.type === "swing" ||
-            Math.hypot(target.x - pose.x, target.y - pose.y) <= 1
-              ? "reached"
-              : "missed";
-          break;
-        }
-        if (
-          movement.length === STANDSTILL_WINDOW &&
-          moved < 0.05 &&
-          turned < Math.PI / 720
-        ) {
-          outcome = "stalled";
-          break;
-        }
       }
-      // Motion boundaries always have exact timestamps, including standstill.
-      if (samples.at(-1)!.time !== time) samples.push(sample());
+      if (outcome !== "incomplete") {
+        // Match turnToHeading + driveFor: keep the actual pose after alignment,
+        // then drive the exported distance along its heading without snapping.
+        const motionTarget = vexcodeStraight
+          ? { x: pose.x + Math.sin(pose.theta) * driveDistance, y: pose.y + Math.cos(pose.theta) * driveDistance, theta: pose.theta }
+          : target;
+        const driveOutcome = runMotion(motion, motionTarget, waypointLead(start), forwards, start.speed ?? 127, samples);
+        if (outcome === "reached" || driveOutcome === "incomplete") outcome = driveOutcome;
+        if (outcome === "reached" && motion.type === "forward" && Math.hypot(target.x - pose.x, target.y - pose.y) > 1)
+          outcome = "missed";
+      }
       const targetError =
         motion.type === "rotate" || motion.type === "swing"
           ? (Math.abs(

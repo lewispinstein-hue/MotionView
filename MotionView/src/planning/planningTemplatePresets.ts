@@ -5,10 +5,13 @@ export const PLANNING_TEMPLATE_LIBRARIES = [
   { id: "lemlib", name: "LemLib" },
   { id: "ez-template", name: "EZ-Template" },
   { id: "jar-template", name: "JAR-Template" },
+  { id: "vexcode-cpp", name: "VEXcode C++" },
+  { id: "vexcode-python", name: "VEXcode Python" },
   { id: "custom", name: "Custom" },
 ] as const;
 
 export type PlanningTemplateLibrary = typeof PLANNING_TEMPLATE_LIBRARIES[number]["id"];
+export type PlanningTemplateLanguage = "cpp" | "python";
 
 export interface PlanningSwingDriveSides {
   left: string;
@@ -20,6 +23,7 @@ export interface PlanningTemplateConfiguration {
   library: PlanningTemplateLibrary;
   templates: Record<PlanningTemplateLibrary, PlanMotionTemplates>;
   swingDriveSides: Record<PlanningTemplateLibrary, PlanningSwingDriveSides>;
+  customLanguage: PlanningTemplateLanguage;
 }
 
 export function isPlanningTemplateLibrary(value: unknown): value is PlanningTemplateLibrary {
@@ -29,6 +33,7 @@ export function isPlanningTemplateLibrary(value: unknown): value is PlanningTemp
 export function createPlanningTemplateConfiguration(): PlanningTemplateConfiguration {
   const configuration: PlanningTemplateConfiguration = {
     library: "custom",
+    customLanguage: "cpp",
     templates: {
       // Use blocking LemLib calls and explicit EZ waits so ordered motions and
       // timeline nodes do not overtake a movement still running on the robot.
@@ -55,12 +60,28 @@ export function createPlanningTemplateConfiguration(): PlanningTemplateConfigura
         swing: "chassis.@side(@th);",
         boomerang: "chassis.drive_to_pose(@x, @y, @th, @ld, chassis.boomerang_setback, chassis.drive_min_voltage, @spd * 12.0 / 127.0, chassis.heading_max_voltage);",
       },
+      // https://api.vex.com/v5/home/cpp/Drivetrain/index.html
+      "vexcode-cpp": {
+        forward: "Drivetrain.turnToHeading(@bearing, degrees);\nDrivetrain.driveFor((@fwd ? forward : reverse), @dist, inches);",
+        rotate: "Drivetrain.turnToHeading(@th, degrees);",
+        swing: "",
+        boomerang: "",
+      },
+      // https://api.vex.com/v5/home/python/Drivetrain.html
+      "vexcode-python": {
+        forward: "drivetrain.turn_to_heading(@bearing, DEGREES)\ndrivetrain.drive_for(FORWARD if @fwd else REVERSE, @dist, INCHES)",
+        rotate: "drivetrain.turn_to_heading(@th, DEGREES)",
+        swing: "",
+        boomerang: "",
+      },
       custom: { forward: "", rotate: "", swing: "", boomerang: "" },
     },
     swingDriveSides: {
       lemlib: { left: "lemlib::DriveSide::LEFT", right: "lemlib::DriveSide::RIGHT" },
       "ez-template": { left: "ez::RIGHT_SWING", right: "ez::LEFT_SWING" },
       "jar-template": { left: "right_swing_to_angle", right: "left_swing_to_angle" },
+      "vexcode-cpp": { left: "left", right: "right" },
+      "vexcode-python": { left: "left", right: "right" },
       custom: { left: "left", right: "right" },
     },
   };
@@ -76,6 +97,7 @@ export function normalizePlanningTemplateConfiguration(value: unknown): Planning
   const result = createPlanningTemplateConfiguration();
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
   if (isPlanningTemplateLibrary(source.library)) result.library = source.library;
+  if (source.customLanguage === "python") result.customLanguage = "python";
   const banks = source.templates && typeof source.templates === "object"
     ? source.templates as Record<string, unknown> : {};
   const sides = source.swingDriveSides && typeof source.swingDriveSides === "object"
@@ -87,18 +109,29 @@ export function normalizePlanningTemplateConfiguration(value: unknown): Planning
     // allowing persisted text to replace the built-in preset itself.
     const saved = normalizeMotionTemplates(banks[result.library], result.templates[result.library]);
     // Upgrade our exact former fixed-left presets; custom code remains opaque.
-    const previousSwing = {
+    const previousSwing: Partial<Record<PlanningTemplateLibrary, string>> = {
       lemlib: "chassis.swingToHeading(@th, lemlib::DriveSide::LEFT, 2000, {.maxSpeed = @spd}, false);",
       "ez-template": "chassis.pid_swing_set(ez::RIGHT_SWING, @th, @spd, ez::shortest);\nchassis.pid_wait();",
       "jar-template": "chassis.right_swing_to_angle(@th);",
     };
     if (!source.swingDriveSides && saved.swing === previousSwing[result.library])
       saved.swing = result.templates[result.library].swing;
+    // Upgrade the distance-only VEXcode defaults saved before alignment was added.
+    const previousForward: Partial<Record<PlanningTemplateLibrary, readonly string[]>> = {
+      "vexcode-cpp": [
+        "Drivetrain.driveFor((@fwd ? forward : reverse), @dist, inches);",
+        "Drivetrain.driveFor((@fwd ? forward : backward), @dist, inches);",
+      ],
+      "vexcode-python": ["drivetrain.drive_for(FORWARD if @fwd else REVERSE, @dist, INCHES)"],
+    };
+    if (previousForward[result.library]?.includes(saved.forward))
+      saved.forward = result.templates[result.library].forward;
     const savedSides = normalizeSwingDriveSides(sides[result.library], result.swingDriveSides[result.library]);
     if (JSON.stringify(saved) !== JSON.stringify(result.templates[result.library]) ||
         JSON.stringify(savedSides) !== JSON.stringify(result.swingDriveSides[result.library])) {
       result.templates.custom = saved;
       result.swingDriveSides.custom = savedSides;
+      result.customLanguage = planningTemplateLanguage(result);
       result.library = "custom";
     }
   }
@@ -131,8 +164,14 @@ function deriveCustomTemplates(configuration: PlanningTemplateConfiguration): vo
   if (configuration.library !== "custom") {
     configuration.templates.custom = { ...configuration.templates[configuration.library] };
     configuration.swingDriveSides.custom = { ...configuration.swingDriveSides[configuration.library] };
+    configuration.customLanguage = planningTemplateLanguage(configuration);
     configuration.library = "custom";
   }
+}
+
+export function planningTemplateLanguage(configuration: Readonly<PlanningTemplateConfiguration>): PlanningTemplateLanguage {
+  return configuration.library === "custom" ? configuration.customLanguage
+    : configuration.library === "vexcode-python" ? "python" : "cpp";
 }
 
 function normalizeSwingDriveSides(value: unknown, fallback: PlanningSwingDriveSides): PlanningSwingDriveSides {

@@ -42,4 +42,5 @@ export interface PlanningFieldLayer {
   readonly overlayVisible: boolean;
   currentPose(): FieldPose | null;
   drawOverlay(force?: boolean): void;
+  drawSelection(): void;
 }

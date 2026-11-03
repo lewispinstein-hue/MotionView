@@ -404,6 +404,7 @@ export class FieldRenderer {
         planningLayer?.drawOverlay();
         const pose = planningLayer?.currentPose() ?? null;
         if (pose) drawRobot(pose, 1.0);
+        planningLayer?.drawSelection();
       }
     }
 

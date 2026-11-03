@@ -4,6 +4,8 @@ import {
   type PlanningSimulationConfiguration,
 } from "./planningSimulationConfiguration";
 import { simulatePlanningRoute } from "./planningSimulation";
+import { supportsPlanningMotion } from "./planningTemplateCapabilities";
+import type { PlanningTemplateLibrary } from "./planningTemplatePresets";
 import type {
   SimulatedSection,
   SimulationOutcome,
@@ -65,11 +67,12 @@ export class PlanningSegment {
     readonly end: PlanningWaypointView,
     private readonly configuration = DEFAULT_PLANNING_SIMULATION_CONFIGURATION,
     readonly section?: SimulatedSection | null,
+    private readonly templateLibrary: PlanningTemplateLibrary = "custom",
   ) {
     this.#inputs = inputs(start, end);
-    this.curved = isBoomerangWaypoint(start);
+    this.curved = supportsPlanningMotion(templateLibrary, "boomerang") && isBoomerangWaypoint(start);
     this.forwards = isSegmentForwards(start, end);
-    this.lead = waypointLead(start);
+    this.lead = this.curved ? waypointLead(start) : 0;
     this.chordLength = Math.hypot(end.x - start.x, end.y - start.y);
     const angle = ((end.theta ?? 0) * Math.PI) / 180,
       direction = this.forwards ? 1 : -1;
@@ -83,7 +86,7 @@ export class PlanningSegment {
     };
     const preview =
       section === undefined
-        ? simulatePlanningRoute({ waypoints: [start, end], configuration })
+        ? simulatePlanningRoute({ waypoints: [start, end], configuration, templateLibrary })
             .sections[0]
         : section;
     const first = preview?.samples[0];
@@ -140,8 +143,9 @@ export class PlanningSegment {
     start: PlanningWaypointView,
     end: PlanningWaypointView,
     config: PlanningSimulationConfiguration,
+    templateLibrary = this.templateLibrary,
   ): boolean {
-    return this.configuration === config && this.#inputs === inputs(start, end);
+    return this.configuration === config && this.templateLibrary === templateLibrary && this.#inputs === inputs(start, end);
   }
   pointAt(t: number): SegmentPoint {
     const { before, after, amount } = this.surroundingSamples(t);

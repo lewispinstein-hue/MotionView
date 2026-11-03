@@ -26,3 +26,15 @@ export function isSegmentForwards(
     Math.abs(((pathTheta - (Number(start.theta) || 0) + 540) % 360) - 180) <= 90
   );
 }
+
+/** Facing heading for a distance drive, clockwise from +Y, including reverse. */
+export function segmentDriveHeading(
+  start: Readonly<PlanWaypoint>,
+  end?: Readonly<PlanWaypoint>,
+): number {
+  const heading = !end || (start.x === end.x && start.y === end.y)
+    ? Number(start.theta) || 0
+    : Math.atan2(end.x - start.x, end.y - start.y) * 180 / Math.PI +
+      (isSegmentForwards(start, end) ? 0 : 180);
+  return ((heading % 360) + 360) % 360;
+}

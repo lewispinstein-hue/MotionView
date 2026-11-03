@@ -127,6 +127,8 @@ export class PlanningFieldView {
     this.dom.canvas.addEventListener("dblclick", (event) => {
       if (getMode() !== "planning") return;
       const point = this.canvasPoint(event as PointerEvent);
+      if (this.#segments.hitLeadHandle(point.x, point.y) >= 0 ||
+          this.hitThetaHandle(point.x, point.y) >= 0) return;
       const waypointIndex = this.hitWaypoint(point.x, point.y);
       if (waypointIndex >= 0) {
         event.preventDefault();
@@ -154,32 +156,9 @@ export class PlanningFieldView {
     context.lineCap = "butt";
     context.lineWidth = this.field.sizes.screen({ width: 2, height: 2 }).width;
 
-    waypoints.forEach((point, index) => {
-      const screen = this.field.worldToScreen(point.x, point.y);
-      const selected = this.planning.selection.isWaypointSelected(index);
-      const radius = this.waypointRadius(getMode() !== "planning");
-      context.beginPath();
-      context.arc(screen.x, screen.y, radius, 0, Math.PI * 2);
-      context.fillStyle =
-        index === this.planning.selection.primaryWaypointIndex
-          ? "rgba(180,220,255,1)"
-          : selected
-            ? "rgba(150,200,255,0.95)"
-            : "rgba(120,180,255,0.9)";
-      context.fill();
-      context.strokeStyle = "rgba(15,25,35,0.8)";
-      context.stroke();
-      const angle = (this.screenHeading(index) * Math.PI) / 180;
-      context.beginPath();
-      context.moveTo(screen.x, screen.y);
-      context.lineTo(
-        screen.x + Math.sin(angle) * radius,
-        screen.y - Math.cos(angle) * radius,
-      );
-      context.strokeStyle = "rgba(0,0,0,0.9)";
-      context.stroke();
-      if (selected && getMode() === "planning")
-        this.drawThetaHandle(index, radius, angle);
+    waypoints.forEach((_, index) => {
+      if (getMode() !== "planning" || !this.planning.selection.isWaypointSelected(index))
+        this.drawWaypoint(index);
     });
 
     for (const marker of this.nodeMarkers()) {
@@ -254,9 +233,63 @@ export class PlanningFieldView {
     context.restore();
   }
 
+  /** Drawn after the robot and all ordinary field geometry. */
+  drawSelection(): void {
+    if (getMode() !== "planning") return;
+    const indices = this.selectedWaypointDrawOrder();
+    const context = this.field.ctx;
+    context.save();
+    this.#segments.drawSelectedPaths(indices);
+    context.lineCap = "butt";
+    context.lineWidth = this.field.sizes.screen({ width: 2, height: 2 }).width;
+    for (const index of indices) this.drawWaypoint(index);
+    context.strokeStyle = "rgba(0,0,0,0.9)";
+    for (const index of indices)
+      this.drawThetaHandle(index, this.waypointRadius(false), this.screenHeading(index) * Math.PI / 180);
+    this.#segments.drawSelectionHandles(indices);
+    this.#segments.drawSelectionLabels(indices);
+    context.restore();
+  }
+
+  private selectedWaypointDrawOrder(): number[] {
+    const primary = this.planning.selection.primaryWaypointIndex;
+    return [...this.planning.selection.waypointIndices].filter(index => index !== primary)
+      .concat(primary >= 0 ? [primary] : []);
+  }
+
+  private drawWaypoint(index: number): void {
+    const point = this.planning.route.waypoints[index];
+    if (!point) return;
+    const context = this.field.ctx;
+    const screen = this.field.worldToScreen(point.x, point.y);
+    const radius = this.waypointRadius(getMode() !== "planning");
+    context.beginPath();
+    context.arc(screen.x, screen.y, radius, 0, Math.PI * 2);
+    context.fillStyle = index === this.planning.selection.primaryWaypointIndex
+      ? "rgba(180,220,255,1)"
+      : this.planning.selection.isWaypointSelected(index)
+        ? "rgba(150,200,255,0.95)" : "rgba(120,180,255,0.9)";
+    context.fill();
+    context.strokeStyle = "rgba(15,25,35,0.8)";
+    context.stroke();
+    const angle = this.screenHeading(index) * Math.PI / 180;
+    context.beginPath();
+    context.moveTo(screen.x, screen.y);
+    context.lineTo(screen.x + Math.sin(angle) * radius, screen.y - Math.cos(angle) * radius);
+    context.strokeStyle = "rgba(0,0,0,0.9)";
+    context.stroke();
+  }
+
   hitWaypoint(x: number, y: number): number {
+    const radiusSquared = this.waypointRadius(false) ** 2;
+    for (const index of this.selectedWaypointDrawOrder().reverse()) {
+      const point = this.planning.route.waypoints[index];
+      if (!point) continue;
+      const screen = this.field.worldToScreen(point.x, point.y);
+      if ((screen.x - x) ** 2 + (screen.y - y) ** 2 <= radiusSquared) return index;
+    }
     let index = -1;
-    let distance = this.waypointRadius(false) ** 2;
+    let distance = radiusSquared;
     this.planning.route.waypoints.forEach((point, candidate) => {
       const screen = this.field.worldToScreen(point.x, point.y);
       const next = (screen.x - x) ** 2 + (screen.y - y) ** 2;
@@ -356,7 +389,8 @@ export class PlanningFieldView {
     }
     const segment = this.hitPathSegment(point.x, point.y);
     if (segment) {
-      this.#pendingSegmentToggle = { ...segment, startX: point.x, startY: point.y };
+      if (this.planning.supportsMotion("boomerang"))
+        this.#pendingSegmentToggle = { ...segment, startX: point.x, startY: point.y };
       this.field.beginPan(event.pointerId, point.x, point.y);
       return;
     }
@@ -395,7 +429,10 @@ export class PlanningFieldView {
     const world = this.field.screenToWorld(point.x, point.y);
     this.dom.cursorPill.textContent = `Cursor: X ${formatDistanceFromInches(world.x, 2)} Y ${formatDistanceFromInches(world.y, 2)}`;
     if (this.#pointerId !== event.pointerId) {
-      const node = this.hitNode(point.x, point.y);
+      const editingWaypoint = this.hitWaypoint(point.x, point.y) >= 0 ||
+        this.hitThetaHandle(point.x, point.y) >= 0 ||
+        this.#segments.hitLeadHandle(point.x, point.y) >= 0;
+      const node = editingWaypoint ? null : this.hitNode(point.x, point.y);
       const nextId = node?.id ?? null;
       if (nextId !== this.#hoverNodeId) {
         this.#hoverNodeId = nextId;
@@ -581,7 +618,7 @@ export class PlanningFieldView {
   }
 
   private hitThetaHandle(x: number, y: number): number {
-    for (const index of this.planning.selection.waypointIndices) {
+    for (const index of this.selectedWaypointDrawOrder().reverse()) {
       const point = this.planning.route.waypoints[index];
       if (!point) continue;
       const screen = this.field.worldToScreen(point.x, point.y);

@@ -3,6 +3,7 @@ import type { PlanningFeature } from "./PlanningFeature";
 import { formatDistanceFromInches } from "../shared/units";
 import { getWaypointCode, waypointMotionsForEditing } from "./planningMotions";
 import { isSegmentForwards } from "./planningSegments";
+import { restorePlanningMotionEdits } from "./planningTemplateCapabilities";
 
 const WAYPOINT_PLACEHOLDERS =
   "The code that this waypoint will generate. ${x}, ${y}, and ${theta} use the destination; ${speed}, ${forwards}, ${lead}, and ${lockedDriveSide} use this waypoint. Lead is 0 for straight segments.";
@@ -35,20 +36,23 @@ export class PlanningWaypointEditor {
       ? Number(target.theta!.toFixed(1))
       : 0;
     const targetPose = `${formatDistanceFromInches(target.x)}, ${formatDistanceFromInches(target.y)}, ${theta}°`;
+    const library = this.planning.templateConfiguration.library;
+    const motions = waypointMotionsForEditing(waypoint);
     const result = await this.dialogs.edit({
       title: "Edit Waypoint",
       subtitle: `Waypoint #${index + 1} → #${index + 2} (${targetPose})`,
       groupTitle: "Waypoint Code",
       description: WAYPOINT_PLACEHOLDERS,
-      code: getWaypointCode(waypoint, this.planning.motionTemplates),
+      code: getWaypointCode(waypoint, this.planning.motionTemplates, this.planning.templateConfiguration.library),
       motionEditor: {
         mode: "waypoint",
         templates: this.planning.motionTemplates,
-        motions: waypointMotionsForEditing(waypoint),
+        templateLibrary: this.planning.templateConfiguration.library,
+        motions,
         forwards: isSegmentForwards(waypoint, target),
       },
     });
     if (!result?.motions) return;
-    this.planning.route.updateMotions(index, result.motions, result.forwards);
+    this.planning.route.updateMotions(index, restorePlanningMotionEdits(motions, result.motions, library), result.forwards);
   }
 }

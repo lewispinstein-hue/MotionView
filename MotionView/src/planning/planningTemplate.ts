@@ -9,7 +9,8 @@ import { getPlanNodeEffectiveMethod } from "./planningObjects";
 import type { PlanMotionTemplates } from "../state/models";
 import { createDefaultMotionTemplates, getWaypointCode, normalizeMotionTemplates } from "./planningMotions";
 import { isSegmentForwards, waypointLead } from "./planningSegments";
-import type { PlanningSwingDriveSides } from "./planningTemplatePresets";
+import { segmentDriveHeading } from "./planningMotionContext";
+import type { PlanningSwingDriveSides, PlanningTemplateLanguage, PlanningTemplateLibrary } from "./planningTemplatePresets";
 
 const TEMPLATE_SHORTHAND_TOKENS: Readonly<Record<string, string>> = {
   x: "x",
@@ -21,11 +22,14 @@ const TEMPLATE_SHORTHAND_TOKENS: Readonly<Record<string, string>> = {
   fwd: "forwards",
   ld: "lead",
   side: "lockedDriveSide",
+  bearing: "bearing",
 };
 
 export interface BuildPlanExportCodeOptions {
   template: string;
   motionTemplates?: Readonly<PlanMotionTemplates>;
+  templateLibrary?: PlanningTemplateLibrary;
+  language?: PlanningTemplateLanguage;
   swingDriveSides?: Readonly<PlanningSwingDriveSides>;
   waypoints: readonly PlanningWaypointView[];
   nodes: readonly PlanningNodeView[];
@@ -40,6 +44,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
   const rawTemplate = String(options.template ?? "");
   const motionTemplates = normalizeMotionTemplates(options.motionTemplates, createDefaultMotionTemplates(rawTemplate));
   const swingDriveSides = options.swingDriveSides ?? { left: "left", right: "right" };
+  const booleanCode = (value: boolean) => options.language === "python" ? (value ? "True" : "False") : String(value);
   const lockedDriveSide = (point?: Readonly<PlanningWaypoint>) => {
     const swing = point?.motions?.find(motion => motion.type === "swing");
     return swingDriveSides[swing?.lockedDriveSide === "right" ? "right" : "left"];
@@ -51,9 +56,10 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     distance: "0",
     iteration: "0",
     speed: "0",
-    forwards: "true",
+    forwards: booleanCode(true),
     lead: "0",
     lockedDriveSide: lockedDriveSide(),
+    bearing: "0",
   };
 
   const replacementsForNodeWaypoint = (
@@ -73,11 +79,14 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
         options.readPlanSpeed(point.speed, 127),
         0,
       ),
-      forwards: String(
+      forwards: booleanCode(
         isSegmentForwards({ ...point, theta }, options.waypoints[index + 1]),
       ),
       lead: options.formatTemplateNumber(waypointLead(point)),
       lockedDriveSide: lockedDriveSide(point),
+      bearing: options.formatTemplateNumber(segmentDriveHeading(
+        { ...point, theta }, options.waypoints[index + 1],
+      )),
     };
   };
 
@@ -99,11 +108,14 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
         options.readPlanSpeed(start.speed, 127),
         0,
       ),
-      forwards: String(
+      forwards: booleanCode(
         isSegmentForwards({ ...start, theta: options.planThetaDegAt(index) }, end),
       ),
       lead: options.formatTemplateNumber(waypointLead(start)),
       lockedDriveSide: lockedDriveSide(start),
+      bearing: options.formatTemplateNumber(segmentDriveHeading(
+        { ...start, theta: options.planThetaDegAt(index) }, end,
+      )),
     };
   };
 
@@ -113,7 +125,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
   ) => {
     // One pass keeps inserted side values literal, including any @ or ${} text.
     return String(template || "").replace(
-      /\$\{(x|y|theta|distance|iteration|speed|forwards|lead|lockedDriveSide)\}|(^|[^A-Za-z0-9_])@(x|y|dist|spd|th|iter|fwd|ld|side)(?![A-Za-z0-9_])/g,
+      /\$\{(x|y|theta|distance|iteration|speed|forwards|lead|lockedDriveSide|bearing)\}|(^|[^A-Za-z0-9_])@(x|y|dist|spd|th|iter|fwd|ld|side|bearing)(?![A-Za-z0-9_])/g,
       (_, full: string | undefined, prefix: string, short: string) => full
         ? replacements[full] ?? ""
         : `${prefix}${replacements[TEMPLATE_SHORTHAND_TOKENS[short]] ?? ""}`,
@@ -160,7 +172,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     const start = options.waypoints[i];
     const end = options.waypoints[i + 1];
     if (!start || !end) continue;
-    const template = getWaypointCode(start, motionTemplates);
+    const template = getWaypointCode(start, motionTemplates, options.templateLibrary);
     blocks.push(renderSegmentTemplate(template, start, end, i));
     appendBucketMethods(i + 1);
   }

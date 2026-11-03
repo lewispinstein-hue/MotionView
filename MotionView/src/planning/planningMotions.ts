@@ -7,6 +7,8 @@ import type {
 import { isWaypointIndicatorIcon } from "./planningIndicators";
 import { createPlanMotionId } from "./planningState";
 import { isBoomerangWaypoint } from "./planningSegments";
+import { planningMotionsForLibrary, supportsPlanningMotion } from "./planningTemplateCapabilities";
+import type { PlanningTemplateLibrary } from "./planningTemplatePresets";
 
 export const MAX_WAYPOINT_MOTIONS = 2;
 const PREVIOUS_BOOMERANG_DEFAULT =
@@ -116,12 +118,14 @@ export function waypointMotionsForEditing(
 export function getWaypointCode(
   point: Readonly<PlanWaypoint>,
   templates: Readonly<PlanMotionTemplates>,
+  library: PlanningTemplateLibrary = "custom",
 ): string {
   if (Array.isArray(point.motions)) {
-    return point.motions
+    return planningMotionsForLibrary(point.motions, library)
       .map((motion) => getMotionCode(motion, templates))
       .join("\n");
   }
+  if (isBoomerangWaypoint(point) && !supportsPlanningMotion(library, "boomerang")) return templates.forward;
   return Object.prototype.hasOwnProperty.call(point, "overrideCode")
     ? (point.overrideCode ?? "")
     : templates[isBoomerangWaypoint(point) ? "boomerang" : "forward"];

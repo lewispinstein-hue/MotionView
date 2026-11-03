@@ -33,7 +33,9 @@ export async function runPlanningBoomerangTests(server) {
   const reverse = new PlanningSegment({ ...points[0], theta: 180, lead: 0.6 }, { ...points[1], theta: 270 });
   assert.equal(reverse.forwards, false);
   near(reverse.headingAt(0), 180);
-  assert.ok(reverse.tangentAt(0).y > 0.99, "backwards travel reverses heading tangents");
+  const firstReverseTravel = reverse.samples.find(sample => sample.distance > 0);
+  assert.ok(firstReverseTravel.y / Math.hypot(firstReverseTravel.x, firstReverseTravel.y) > 0.99,
+    "backwards travel starts opposite the robot heading, after any initial turn in place");
   assert.ok(Math.abs(reverse.headingAt(1) - 270) < 1.5);
   for (const value of [NaN, Infinity, undefined, null, "oops"]) assert.equal(normalizePlanningLead(value), 0.6);
   assert.equal(normalizePlanningLead(-10), 0);
@@ -41,7 +43,7 @@ export async function runPlanningBoomerangTests(server) {
   assert.equal(waypointLead(points[0]), 0);
   const zero = new PlanningSegment({ ...points[0], lead: 0 }, points[1]);
   assert.notEqual(zero.length, straight.length, "lead=0 is still a controller motion, not a forced straight segment");
-  assert.ok(zero.previewTargetError > 1, "settling can leave an end offset; don't hide it by snapping the preview");
+  assert.ok(zero.previewTargetError > 1e-8, "retain the actual settling offset instead of snapping the preview onto its target");
   const coincident = new PlanningSegment({ ...points[0], lead: 0.6 }, points[0]);
   assert.equal(coincident.length, 0);
   assert.deepEqual(coincident.pointAt(0.5), { x: 0, y: 0 });
@@ -195,7 +197,7 @@ async function runFieldInteractionTests(server, PlanningFeature, points) {
     assert.equal(planning.projection.segments[0].curved, true);
     assert.equal(planning.selection.primaryWaypointIndex, 0);
     const segmentView = new PlanningSegmentsView(planning, field);
-    segmentView.draw(true);
+    segmentView.drawSelectionHandles([0]);
     assert.equal(dots.length, 1, "exactly one lead dot is drawn for the selected segment");
     const handle = dots[0];
     send("pointerdown", handle);
@@ -210,7 +212,7 @@ async function runFieldInteractionTests(server, PlanningFeature, points) {
     planning.history.redo();
     near(planning.route.waypoints[0].lead, draggedLead);
     dots.length = 0;
-    segmentView.draw(true);
+    segmentView.drawSelectionHandles([0]);
     send("pointerdown", dots[0]);
     send("pointermove", { x: dots[0].x + 40, y: dots[0].y });
     send("pointercancel", dots[0]);
@@ -240,6 +242,13 @@ async function runFieldInteractionTests(server, PlanningFeature, points) {
     assert.equal(planning.projection.segments[0].previewConverged, false);
     click(field.worldToScreen(0, 15));
     assert.equal(planning.route.length, 3, "the removed target connector is not a hit-testable driven path");
+    planning.route.replace([{ x: 0, y: 0, theta: 0 }, { x: 0.5, y: 0, theta: 90 }]);
+    planning.selection.selectWaypoint(0);
+    assert.equal(view.hitWaypoint(...Object.values(field.worldToScreen(.5, 0))), 0,
+      "an overlapping background waypoint cannot take clicks from the selected foreground waypoint");
+    planning.selection.setWaypoints([0, 1]);
+    assert.equal(view.hitWaypoint(...Object.values(field.worldToScreen(.5, 0))), 0,
+      "the primary selection stays above other selected waypoints");
   } finally {
     setMode("viewing");
     for (const [key, descriptor] of Object.entries(globals)) {

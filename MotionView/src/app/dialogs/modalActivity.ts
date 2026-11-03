@@ -82,6 +82,11 @@ export function bindModalActivity(modal: HTMLElement, dismiss: () => void): void
       if (current && !current.modal.contains(event.target as Node)) focusModal(current);
       if (document.activeElement instanceof HTMLElement) lastFocus = document.activeElement;
     });
+    document.addEventListener("focusout", (event) => {
+      // An explicit blur back to the field/body ends the return target. A later
+      // modal must not revive a sidebar input that no longer had focus.
+      if (event.relatedTarget === null && !hasOpenModal()) lastFocus = null;
+    });
     window.addEventListener("keydown", (event) => {
       syncModals();
       const current = active.at(-1);

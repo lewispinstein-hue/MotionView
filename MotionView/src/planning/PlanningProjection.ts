@@ -219,6 +219,7 @@ export class PlanningProjection {
     const live = {
       waypoints: this.session.waypoints,
       configuration: this.session.simulationConfiguration,
+      templateLibrary: this.session.templateConfiguration.library,
     };
     const signature = JSON.stringify([
       this.session.activePathId,
@@ -276,6 +277,7 @@ export class PlanningProjection {
       request: {
         waypoints: structuredClone(live.waypoints),
         configuration: live.configuration,
+        templateLibrary: live.templateLibrary,
       },
     };
     if (typeof Worker === "undefined" || live.waypoints.length < 2) {
@@ -305,7 +307,7 @@ export class PlanningProjection {
         const segment =
           previous?.start === start &&
           previous.end === end &&
-          previous.matches(start, end, this.session.simulationConfiguration) &&
+          previous.matches(start, end, this.session.simulationConfiguration, this.session.templateConfiguration.library) &&
           previous.section === section
             ? previous
             : new PlanningSegment(
@@ -313,6 +315,7 @@ export class PlanningProjection {
                 end,
                 this.session.simulationConfiguration,
                 section,
+                this.session.templateConfiguration.library,
               );
         this.#segments.push(segment);
         this.#distances.push(this.#distances[index - 1]! + segment.length);

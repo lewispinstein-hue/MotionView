@@ -1,6 +1,7 @@
 import type { PreviewDrivetrainState } from "./planningPreviewDrivetrain";
 import type { PlanWaypoint, PlanWaypointMotion } from "../state/models";
 import type { PlanningSimulationConfiguration } from "./planningSimulationConfiguration";
+import type { PlanningTemplateLibrary } from "./planningTemplatePresets";
 
 export interface PreviewPose {
   readonly x: number;
@@ -38,4 +39,5 @@ export interface PlanningSimulationResult {
 export interface PlanningSimulationRequest {
   readonly waypoints: readonly PlanWaypoint[];
   readonly configuration: PlanningSimulationConfiguration;
+  readonly templateLibrary?: PlanningTemplateLibrary;
 }

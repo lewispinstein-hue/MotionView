@@ -11,7 +11,9 @@ import {
   isPlanningTemplateLibrary,
   normalizePlanningTemplateConfiguration,
   type PlanningTemplateConfiguration,
+  type PlanningTemplateLibrary,
 } from "../planningTemplatePresets";
+import { supportsPlanningMotion, isVexcodePlanningLibrary } from "../planningTemplateCapabilities";
 
 
 interface PlanningMotionEditorBaseOptions {
@@ -20,6 +22,7 @@ interface PlanningMotionEditorBaseOptions {
 
 export type PlanningMotionEditorOptions = PlanningMotionEditorBaseOptions & ({
   readonly mode: "waypoint";
+  readonly templateLibrary?: PlanningTemplateLibrary;
   readonly motions?: readonly Readonly<PlanWaypointMotion>[];
   readonly forwards: boolean;
 } | {
@@ -41,6 +44,7 @@ export class PlanningMotionEditorView {
   #mode: PlanningMotionEditorOptions["mode"] | null = null;
   #templates = createDefaultMotionTemplates("");
   #templateConfiguration: PlanningTemplateConfiguration | null = null;
+  #waypointLibrary: PlanningTemplateLibrary = "custom";
   #selection: PlanningMotionSelection | null = null;
   #selectedId: string | null = null;
   #forwards = true;
@@ -76,35 +80,35 @@ export class PlanningMotionEditorView {
     this.dom.templateCode.addEventListener("input", () => {
       if (this.#mode !== "templates" || !this.#templateConfiguration) return;
       editPlanningMotionTemplate(this.#templateConfiguration, this.#selectedTemplate, this.dom.templateCode.value);
-      this.#templates = this.#templateConfiguration.templates[this.#templateConfiguration.library];
-      this.dom.templateLibrary.value = this.#templateConfiguration.library;
+      this.updateTemplateLibraryControls();
     });
     this.dom.templateLibrary.addEventListener("change", () => {
       const library = this.dom.templateLibrary.value;
       if (this.#mode !== "templates" || !this.#templateConfiguration || !isPlanningTemplateLibrary(library)) return;
       this.#templateConfiguration.library = library;
       this.#templates = this.#templateConfiguration.templates[library];
+      if (!supportsPlanningMotion(library, this.#selectedTemplate)) this.#selectedTemplate = "forward";
       this.render();
     });
     for (const [side, input] of [["left", this.dom.swingLeftDriveSide], ["right", this.dom.swingRightDriveSide]] as const) {
       input.addEventListener("input", () => {
         if (this.#mode !== "templates" || !this.#templateConfiguration) return;
         editPlanningSwingDriveSide(this.#templateConfiguration, side, input.value);
-        this.#templates = this.#templateConfiguration.templates[this.#templateConfiguration.library];
-        this.dom.templateLibrary.value = this.#templateConfiguration.library;
+        this.updateTemplateLibraryControls();
       });
     }
   }
 
   open(options: PlanningMotionEditorOptions): void {
     this.#mode = options.mode;
+    this.#waypointLibrary = options.mode === "waypoint" ? options.templateLibrary ?? "custom" : "custom";
     this.#templateConfiguration = options.mode === "templates"
       ? normalizePlanningTemplateConfiguration(options.templateConfiguration) : null;
     this.#templates = this.#templateConfiguration
       ? this.#templateConfiguration.templates[this.#templateConfiguration.library] : { ...options.templates };
     this.dom.templateLibrary.hidden = options.mode !== "templates";
     if (this.#templateConfiguration) this.dom.templateLibrary.value = this.#templateConfiguration.library;
-    this.#selection = options.mode === "waypoint" ? new PlanningMotionSelection(options.motions, this.#templates) : null;
+    this.#selection = options.mode === "waypoint" ? new PlanningMotionSelection(options.motions, this.#templates, this.#waypointLibrary) : null;
     this.#forwards = options.mode === "waypoint" ? options.forwards : true;
     this.#selectedId = this.#selection?.motions[0]?.id ?? null;
     this.#selectedTemplate = "forward";
@@ -154,8 +158,11 @@ export class PlanningMotionEditorView {
       const tab = document.createElement("button");
       tab.type = "button";
       tab.className = "planMotionTemplateTab";
+      tab.dataset.motionTemplate = motion.type;
       tab.setAttribute("role", "tab");
       tab.setAttribute("aria-selected", String(this.#selectedTemplate === motion.type));
+      tab.disabled = !supportsPlanningMotion(this.#templateConfiguration!.library, motion.type);
+      if (tab.disabled) tab.title = "Unavailable in this template preset";
       tab.appendChild(this.motionContent(motion.type));
       tab.addEventListener("click", () => {
         this.#selectedTemplate = motion.type;
@@ -181,7 +188,9 @@ export class PlanningMotionEditorView {
       button.title = getWaypointIndicatorTooltip(motion.type);
       button.setAttribute("aria-label", motion.name);
       button.setAttribute("aria-pressed", String(selection.isSelected(motion.type)));
-      button.disabled = !selection.isSelected(motion.type) && selection.motions.length >= MAX_WAYPOINT_MOTIONS;
+      button.disabled = !supportsPlanningMotion(this.#waypointLibrary, motion.type) ||
+        (!selection.isSelected(motion.type) && selection.motions.length >= MAX_WAYPOINT_MOTIONS);
+      if (!supportsPlanningMotion(this.#waypointLibrary, motion.type)) button.title = "Unavailable in this template preset";
       button.appendChild(this.motionContent(motion.type));
       button.addEventListener("click", () => {
         if (!selection.toggle(motion.type)) return;
@@ -272,7 +281,9 @@ export class PlanningMotionEditorView {
       const motions = this.#selection!.motions;
       if (!motions.some((motion) => motion.id === this.#selectedId)) this.#selectedId = motions[0]!.id;
       this.dom.templateGroupTitle.textContent = "Waypoint Code";
-      this.dom.templateDescription.textContent = "Motions run in the order shown above. Code edits stay attached to their motion when swapped. Boomerang lead: @ld or ${lead}. Locked Swing side: @side or ${lockedDriveSide}. Field curves are approximate; robot tuning affects the actual path.";
+      this.dom.templateDescription.textContent = isVexcodePlanningLibrary(this.#waypointLibrary)
+        ? "Motions run in the order shown above. VEXcode Straight faces the next waypoint, then drives @dist. @bearing is the facing heading, including backwards travel. Preview is approximate."
+        : "Motions run in the order shown above. Code edits stay attached to their motion when swapped. Field curves are approximate; robot tuning affects the actual path.";
       this.dom.templateCode.hidden = true;
       this.dom.templateDescription.setAttribute("for", "planMotionCodeInput");
       this.#codePreview.show(motions.map((motion) => ({
@@ -287,14 +298,33 @@ export class PlanningMotionEditorView {
     const name = MOTIONS.find((entry) => entry.type === this.#selectedTemplate)!.name;
     this.dom.templateGroupTitle.textContent = `${name} template`;
     this.dom.templateCode.placeholder = "";
-    this.dom.templateDescription.textContent = "Starting code for this motion type. Both @x and ${x} placeholders are supported. Boomerang lead: @ld or ${lead}." +
-      (this.#templateConfiguration?.library === "jar-template" ? " JAR chooses travel direction automatically." : "") +
-      (this.#selectedTemplate === "swing" ? " ${lockedDriveSide} or @side inserts the Locked Left or Locked Right value chosen for each waypoint." : "");
+    this.dom.templateDescription.textContent = this.templateDescription();
     if (this.#selectedTemplate === "swing" && this.#templateConfiguration) {
       const sides = this.#templateConfiguration.swingDriveSides[this.#templateConfiguration.library];
       this.dom.swingLeftDriveSide.value = sides.left;
       this.dom.swingRightDriveSide.value = sides.right;
     }
     this.dom.templateCode.value = this.#templates[this.#selectedTemplate];
+  }
+
+  private templateDescription(): string {
+    return isVexcodePlanningLibrary(this.#templateConfiguration!.library)
+      ? "VEXcode Straight turns toward the next waypoint before driving. @bearing or ${bearing} is its facing heading, including backwards travel; @dist or ${distance} is the segment distance. Turn uses @th for the destination heading."
+      : "Starting code for this motion type." +
+      (this.#templateConfiguration?.library === "jar-template" ? " JAR chooses travel direction automatically." : "") +
+      (this.#selectedTemplate === "swing" ? " ${lockedDriveSide} or @side inserts the Locked Left or Locked Right value chosen for each waypoint." : "");
+  }
+
+  private updateTemplateLibraryControls(): void {
+    const configuration = this.#templateConfiguration!;
+    this.#templates = configuration.templates[configuration.library];
+    this.dom.templateLibrary.value = configuration.library;
+    for (const { type } of MOTIONS) {
+      const tab = this.dom.motionPreview.querySelector<HTMLButtonElement>(`[data-motion-template="${type}"]`);
+      if (!tab) continue;
+      tab.disabled = !supportsPlanningMotion(configuration.library, type);
+      tab.title = tab.disabled ? "Unavailable in this template preset" : "";
+    }
+    this.dom.templateDescription.textContent = this.templateDescription();
   }
 }

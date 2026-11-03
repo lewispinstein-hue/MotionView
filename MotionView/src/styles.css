@@ -4087,6 +4087,7 @@ body:not(.mode-planning) #rightPlanning {
 }
 
 .planMotionChoice:disabled,
+.planMotionTemplateTab:disabled,
 .planMotionSwap:disabled {
   opacity: 0.35;
   cursor: not-allowed;

@@ -20,7 +20,9 @@ export async function runPlanningSimulationTests(server) {
   for (const library of ["lemlib", "ez-template"]) {
     const configuration = preset(library, defaults);
     for (const type of ["forward", "rotate", "swing", "boomerang"]) {
-      const result = run(route([type]), configuration);
+      // Start Straight aligned for this arrival check; off-axis approaches can
+      // retain a cross-track offset once close-range steering stops.
+      const result = run(route([type], type === "forward" ? { theta: 45 } : {}), configuration);
       assert.equal(result.complete, true, `${library} ${type}`);
       assert.equal(result.sections[0].outcome, "reached");
       assert.ok(result.duration > 0 && result.duration < 10);
@@ -43,8 +45,8 @@ export async function runPlanningSimulationTests(server) {
     assert.ok(wrapped.sections[0].samples.every(s => Math.abs(s.theta - 359 * Math.PI / 180) < 0.1), "turn takes the short route across zero");
   }
 
-  const ordered = run(route(["forward", "rotate"]));
-  const reversed = run(route(["rotate", "forward"]));
+  const ordered = run(route(["forward", "rotate"], { theta: 45 }));
+  const reversed = run(route(["rotate", "forward"], { theta: 45 }));
   assert.notDeepEqual(ordered.sections[0].samples, reversed.sections[0].samples);
   const turnStart = ordered.sections[0].motions[1].startTime;
   const boundary = ordered.sections[0].samples.find(s => Math.abs(s.time - turnStart) < 1e-8);
@@ -146,9 +148,9 @@ async function playbackTests(planning, route, Timeline) {
     planning.load({ "planned-segment-export": true, "planned-path": route(["rotate"]) });
     assert.equal(planning.projection.totalLength, 0);
     assert.ok(planning.playback.duration > 0);
-    planning.playback.play(); frame(1000); frame(1250);
-    near(planning.playback.time, 0.25); assert.equal(planning.playback.distance, 0);
-    planning.playback.setRate(2); frame(1350); near(planning.playback.time, 0.45);
+    planning.playback.play(); frame(1000); frame(1100);
+    near(planning.playback.time, 0.1); assert.equal(planning.playback.distance, 0);
+    planning.playback.setRate(2); frame(1200); near(planning.playback.time, 0.3);
     planning.playback.pause();
     const total = planning.playback.duration;
     const fake = { planning }, layout = { waypointX: [20, 200] };

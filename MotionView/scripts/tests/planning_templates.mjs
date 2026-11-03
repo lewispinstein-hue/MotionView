@@ -9,6 +9,7 @@ import { runPlanningWaypointDirectionTests } from "./planning_waypoint_direction
 import { runPlanningInputTests } from "./planning_input_cases.mjs";
 import { runPlanningTemplatePresetTests } from "./planning_template_presets_cases.mjs";
 import { runPlanningSwingTemplateTests } from "./planning_swing_template_cases.mjs";
+import { runPlanningVexcodeTests } from "./planning_vexcode_cases.mjs";
 
 function format(value, decimals = 3) {
   const fixed = Number(value).toFixed(decimals);
@@ -405,6 +406,7 @@ try {
   await runPlanningInputTests(server);
   await runPlanningTemplatePresetTests(server);
   await runPlanningSwingTemplateTests(server);
+  await runPlanningVexcodeTests(server);
   console.log("Planning template and motion regression tests passed.");
 } finally {
   await server.close();

@@ -139,6 +139,9 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
   drawOverlay(force = false): void {
     this.#fieldView.draw(force);
   }
+  drawSelection(): void {
+    this.#fieldView.drawSelection();
+  }
 
   setFieldNodesVisible(visible: boolean): void {
     this.#fieldView.setNodesVisible(visible);

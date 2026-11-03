@@ -1,5 +1,6 @@
 import type { PlanningFeature } from "./PlanningFeature";
 import { buildPlanExportCode } from "./planningTemplate";
+import { planningTemplateLanguage } from "./planningTemplatePresets";
 
 function format(value: unknown, decimals = 2): string {
   const number = Number(value);
@@ -13,6 +14,8 @@ export function generatePlanningCode(planning: PlanningFeature): string {
   return buildPlanExportCode({
     template: data.template,
     motionTemplates: data.motionTemplates,
+    templateLibrary: data.templateConfiguration.library,
+    language: planningTemplateLanguage(data.templateConfiguration),
     swingDriveSides:
       data.templateConfiguration.swingDriveSides[
         data.templateConfiguration.library

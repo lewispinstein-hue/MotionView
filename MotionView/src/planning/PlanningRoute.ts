@@ -14,6 +14,7 @@ import {
 import { createPlanMotionId } from "./planningState";
 import { clonePlanningWaypoint } from "./planningDocument";
 import { normalizeWaypointIndicatorIcons } from "./planningIndicators";
+import { supportsPlanningMotion } from "./planningTemplateCapabilities";
 import type { PlanningSession } from "./planningSession";
 import type { PlanningWaypoint, PlanningWaypointView } from "./planningTypes";
 
@@ -115,6 +116,7 @@ export class PlanningRoute {
 
   /** Switch the departing translation without rewriting user-authored code. */
   toggleBoomerang(index: number): boolean {
+    if (!supportsPlanningMotion(this.session.templateConfiguration.library, "boomerang")) return false;
     const waypoint = this.session.waypoints[index];
     if (!waypoint || !this.session.waypoints[index + 1]) return false;
     const enabled = !isBoomerangWaypoint(waypoint);
@@ -145,6 +147,7 @@ export class PlanningRoute {
   }
 
   updateLead(index: number, lead: number): void {
+    if (!supportsPlanningMotion(this.session.templateConfiguration.library, "boomerang")) return;
     const waypoint = this.session.waypoints[index];
     if (
       !waypoint ||
