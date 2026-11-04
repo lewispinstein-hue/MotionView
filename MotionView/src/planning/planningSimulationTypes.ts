@@ -15,7 +15,8 @@ export interface SimulationSample extends PreviewPose {
   readonly linearVelocity: number;
   readonly angularVelocity: number;
 }
-export type SimulationOutcome = "reached" | "missed" | "stalled" | "incomplete";
+/** Completed means the controller settled, with a remaining target offset. */
+export type SimulationOutcome = "reached" | "completed" | "missed" | "stalled" | "incomplete";
 export interface SimulatedMotion {
   readonly motionId: string;
   readonly type: PlanWaypointMotion["type"];

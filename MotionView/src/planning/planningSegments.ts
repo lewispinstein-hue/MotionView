@@ -93,7 +93,7 @@ export class PlanningSegment {
     const last = preview?.samples.at(-1);
     this.duration = first && last ? last.time - first.time : 0;
     this.outcome = preview?.outcome ?? "incomplete";
-    this.previewConverged = this.outcome === "reached";
+    this.previewConverged = this.outcome === "reached" || this.outcome === "completed";
     this.translates = !!preview?.motions.some(
       (m) => m.type === "forward" || m.type === "boomerang",
     );

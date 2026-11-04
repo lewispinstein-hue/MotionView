@@ -52,9 +52,9 @@ export class PlanningSegmentsView {
       if (!this.planning.projection.pending && segment.outcome !== "reached") {
         const last = this.screen(segment.samples.at(-1)!);
         context.font = "11px system-ui, sans-serif";
-        context.fillStyle = "rgba(235,200,145,0.95)";
+        context.fillStyle = segment.outcome === "completed" ? "rgba(210,230,255,0.95)" : "rgba(235,200,145,0.95)";
         const error = segment.translates ? `${formatDistanceFromInches(segment.previewTargetError, 2)} ${getCurrentUnits()} from position target` : `${segment.previewAngularError.toFixed(1)}° from heading target`;
-        context.fillText(`${segment.outcome === "incomplete" ? "Preview incomplete" : segment.outcome === "stalled" ? "Stalled" : "Missed target"} · ${error}`, last.x + 10, last.y - 10);
+        context.fillText(`${segment.outcome === "incomplete" ? "Preview incomplete" : segment.outcome === "stalled" ? "Stalled" : segment.outcome === "completed" ? "Completed with offset" : "Missed target"} · ${error}`, last.x + 10, last.y - 10);
       }
       if (this.hasLeadHandle(segment)) this.drawLeadLabel(segment);
     }

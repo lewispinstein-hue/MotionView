@@ -1,0 +1,126 @@
+{
+  "planned-segment-export": true,
+  "planned-path": [
+    {
+      "x": 61.5,
+      "y": 5.75,
+      "theta": 90,
+      "speed": 127,
+      "overrideCode": "chassis.moveToPoint(${x}, ${y}, 4000, {.forwards = ${forwards}, .minSpeed = ${speed}});\nchassis.turnToHeading(${theta}, 1000);"
+    },
+    {
+      "x": 65,
+      "y": 5.75,
+      "theta": 90,
+      "speed": 127,
+      "overrideCode": "chassis.moveToPoint(${x}, ${y}, 4000, {.forwards = ${forwards}, .minSpeed = ${speed}});\nchassis.turnToHeading(${theta}, 1000);"
+    },
+    {
+      "x": 61.5,
+      "y": 5.75,
+      "theta": 90,
+      "speed": 127,
+      "overrideCode": "chassis.moveToPoint(${x}, ${y}, 4000, {.forwards = ${forwards}, .minSpeed = ${speed}});\nchassis.turnToHeading(${theta}, 1000);"
+    },
+    {
+      "x": 65,
+      "y": 5.75,
+      "theta": 90,
+      "speed": 127,
+      "overrideCode": "chassis.moveToPoint(${x}, ${y}, 4000, {.forwards = ${forwards}, .minSpeed = ${speed}});\nchassis.turnToHeading(${theta}, 1000);"
+    },
+    {
+      "x": 61.5,
+      "y": 5.75,
+      "theta": 90,
+      "speed": 127
+    },
+    {
+      "x": 46.75,
+      "y": 12.5,
+      "theta": 180,
+      "speed": 127,
+      "overrideCode": "chassis.turnToPoint(${x}, ${y}, 4000, {.forwards = ${forwards}, .maxSpeed = ${speed}});\nchassis.moveToPoint(${x}, ${y}, 4000, {.forwards = ${forwards}, .maxSpeed = ${speed}});\nchassis.turnToHeading(${theta}, 1000);"
+    },
+    {
+      "x": 46.75,
+      "y": 17.5,
+      "theta": 180,
+      "speed": 127
+    },
+    {
+      "x": 46.75,
+      "y": 11,
+      "theta": 180,
+      "speed": 127
+    },
+    {
+      "x": 40.75,
+      "y": 14.25,
+      "theta": 120,
+      "speed": 127
+    },
+    {
+      "x": 29.5,
+      "y": 19.75,
+      "theta": 120,
+      "speed": 127
+    },
+    {
+      "x": 35.5,
+      "y": 23.25,
+      "theta": 270,
+      "speed": 127
+    },
+    {
+      "x": 41,
+      "y": 23.25,
+      "theta": 270,
+      "speed": 127
+    },
+    {
+      "x": 35.5,
+      "y": 23.25,
+      "theta": 270,
+      "speed": 127
+    },
+    {
+      "x": 38.25,
+      "y": 38.5,
+      "theta": 225,
+      "speed": 127
+    },
+    {
+      "x": 41.5,
+      "y": 41.5,
+      "theta": 225,
+      "speed": 127
+    },
+    {
+      "x": 46.5,
+      "y": 35.25,
+      "theta": 0,
+      "speed": 127
+    },
+    {
+      "x": 46.5,
+      "y": 29,
+      "theta": 0,
+      "speed": 127
+    },
+    {
+      "x": 46.5,
+      "y": 35.25,
+      "theta": 0,
+      "speed": 127
+    },
+    {
+      "x": 55.5,
+      "y": 35.25,
+      "theta": 90,
+      "speed": 127,
+      "overrideCode": "chassis.turnToPoint(${x}, ${y}, 4000, {.forwards = ${forwards}, .minSpeed = ${speed}});\nchassis.moveToPoint(${x}, ${y}, 4000, {.forwards = ${forwards}, .minSpeed = ${speed}});"
+    }
+  ],
+  "planned-export-template": "chassis.moveToPoint(${x}, ${y}, 4000, {.forwards = ${forwards}, .maxSpeed = ${speed}});\nchassis.turnToHeading(${theta}, 1000);"
+}

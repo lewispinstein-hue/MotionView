@@ -90,7 +90,7 @@ export async function runBoomerangPreviewTests(server) {
   // heading combinations, but their final XY may differ from the target.
   for (const theta of [0, 90, 180, 270]) for (const endTheta of [0, 90, 180, 270]) {
     const segment = new PlanningSegment({ x: 0, y: 0, theta, lead: 0.6, speed: 90 }, { x: 30, y: 30, theta: endTheta });
-    assert.ok(["reached", "missed", "stalled", "incomplete"].includes(segment.outcome));
+    assert.ok(["reached", "completed", "missed", "stalled", "incomplete"].includes(segment.outcome));
     assert.ok(Number.isFinite(segment.length));
     assert.ok(segment.samples.every((sample) => Number.isFinite(sample.x) && Number.isFinite(sample.y)));
   }

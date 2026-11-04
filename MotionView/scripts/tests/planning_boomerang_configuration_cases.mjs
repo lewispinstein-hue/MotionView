@@ -127,7 +127,7 @@ export async function runBoomerangConfigurationTests(server) {
     assert.deepEqual(restored.projection.segments[0].samples, planning.projection.segments[0].samples);
     assert.equal(generatePlanningCode(restored), originalCode);
   }
-  for (const previewModel of ["lemlib", "ez-template"]) {
+  for (const previewModel of ["lemlib", "ez-template", "custom"]) {
     const profile = normalize({ ...custom, previewModel });
     planning.setSimulationConfiguration(profile);
     const modelOnly = normalize({ ...profile, library: previewModel });

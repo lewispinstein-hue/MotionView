@@ -3950,6 +3950,7 @@ body:not(.mode-planning) #rightPlanning {
 .planSimulationSettingsContent .settingsGroup { padding: 14px; }
 .planSimulationSettingsContent h3 { margin: 0 0 6px; font-size: 15px; }
 .planSimulationSettingsContent .settingsDescription { font-size: 12px; }
+.planSimulationSettingsContent .settingsDescription[hidden] { display: none; }
 
 .planSimulationFields {
   display: grid;

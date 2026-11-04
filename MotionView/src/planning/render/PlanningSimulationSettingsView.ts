@@ -38,6 +38,7 @@ export class PlanningSimulationSettingsView {
   #units = getCurrentUnits();
   #preset!: HTMLSelectElement;
   #model!: HTMLSelectElement;
+  #customDescription!: HTMLParagraphElement;
   constructor(private readonly planning: PlanningFeature, private readonly content: HTMLElement) {}
   bind(): void {
     this.build(); this.render(true);
@@ -52,11 +53,12 @@ export class PlanningSimulationSettingsView {
     this.#units = units;
     this.#preset.value = config.library; this.#model.value = config.previewModel;
     this.#model.disabled = config.library !== "custom";
+    this.#customDescription.hidden = config.previewModel !== "custom";
     for (const [key, input] of this.#inputs) {
       const field = this.#numericFields.get(key);
       const row = PID_ROWS.find(([role]) => key.startsWith(`${role}.`));
       const model = field?.model ?? row?.[2];
-      const unused = !!model && config.previewModel !== model;
+      const unused = !!model && config.previewModel !== model && config.previewModel !== "custom";
       input.disabled = unused;
       const label = input.closest("label")!;
       label.title = unused ? "Not used by the selected controller model." : "";
@@ -70,22 +72,26 @@ export class PlanningSimulationSettingsView {
       }
       if (field) { input.min = simulationInputNumber(field.min / unit.factor); input.max = simulationInputNumber(field.max / unit.factor); }
     }
-    for (const row of this.content.querySelectorAll<HTMLElement>("[data-pid-model]")) row.hidden = row.dataset.pidModel !== config.previewModel;
+    for (const row of this.content.querySelectorAll<HTMLElement>("[data-pid-model]")) row.hidden = config.previewModel !== "custom" && row.dataset.pidModel !== config.previewModel;
   }
   private build(): void {
     this.content.replaceChildren();
     const heading = document.createElement("h3"); heading.textContent = "Simulation";
     const description = document.createElement("p"); description.className = "settingsDescription";
-    description.textContent = "Approximate preview and playback for all motions. Shared across paths and saved with this document. Valid edits save on Enter or when you leave a field. Preview follows selected motions; custom C++ and Methods are not executed.";
+    description.textContent = "Approximate preview and playback for all motions. Shared across paths and saved with this document. Valid edits save on Enter or when you leave a field. Preview follows selected motions; custom code and Methods are not executed.";
     this.content.append(heading, description);
     const selectors = this.grid();
     this.#preset = this.select(selectors, "Library preset", [["lemlib", "LemLib"], ["ez-template", "EZ-Template"], ["custom", "Custom"]]);
     this.#preset.id = "settingsPlanSimulationLibrary";
-    this.#model = this.select(selectors, "Custom base model", [["lemlib", "LemLib"], ["ez-template", "EZ-Template"]]);
+    this.#model = this.select(selectors, "Custom base model", [["lemlib", "LemLib"], ["ez-template", "EZ-Template"], ["custom", "Custom"]]);
     this.#model.id = "settingsPlanSimulationModel";
     this.#preset.addEventListener("change", () => this.planning.setSimulationConfiguration(applyPlanningLibraryPreset(this.#preset.value as PlanningSimulationLibrary, this.planning.simulationConfiguration)));
     this.#model.addEventListener("change", () => this.planning.setSimulationConfiguration({ library: "custom", previewModel: this.#model.value as PlanningControllerModel }));
     this.content.appendChild(selectors);
+    this.#customDescription = document.createElement("p");
+    this.#customDescription.className = "settingsDescription";
+    this.#customDescription.textContent = "Custom uses every tuning control. Angular PID is blended equally with the controller for each motion. Both slew limits, horizontal drift, lookahead, carrot cap and turn bias apply.";
+    this.content.appendChild(this.#customDescription);
     this.group("Robot");
     const robot = this.grid(); this.content.appendChild(robot);
     for (const field of ROBOT_FIELDS) this.addField(robot, field);
@@ -104,7 +110,7 @@ export class PlanningSimulationSettingsView {
     const library = this.grid(); this.content.appendChild(library);
     for (const field of LIBRARY_FIELDS) this.addField(library, field);
     const note = document.createElement("p"); note.className = "settingsDescription";
-    note.textContent = "Presets reset library tuning while preserving robot specifications and every PID value. Physical assumptions and stopping rules use built-in defaults. These settings do not change exported C++.";
+    note.textContent = "Presets reset library tuning while preserving robot specifications and every PID value. Physical assumptions and stopping rules use built-in defaults. These settings do not change exported code.";
     this.content.appendChild(note);
   }
   private commit(key: string, input: HTMLInputElement): void {

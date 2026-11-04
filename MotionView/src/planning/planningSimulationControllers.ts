@@ -3,6 +3,7 @@ import type { PlanningSimulationConfiguration } from "./planningSimulationConfig
 import type { PreviewPose } from "./planningSimulationTypes";
 import type { PlanningPreviewDrivetrain } from "./planningPreviewDrivetrain";
 import { PlanningPreviewPID } from "./planningPreviewPID";
+import { PlanningLemLibSettling } from "./planningLemLibSettling";
 
 export const angleError = (target: number, current: number): number =>
   Math.atan2(Math.sin(target - current), Math.cos(target - current));
@@ -56,6 +57,8 @@ export interface ControllerOutput {
 export class PlanningMotionController {
   readonly #linear: PlanningPreviewPID;
   readonly #angular: PlanningPreviewPID;
+  readonly #baseAngular: PlanningPreviewPID | null;
+  readonly #lemlibSettling = new PlanningLemLibSettling();
   readonly #hold: PlanningPreviewPID;
   readonly #heldDistance: number;
   readonly #activeDistance: number;
@@ -84,7 +87,8 @@ export class PlanningMotionController {
       Math.min(127, Number.isFinite(speed) ? speed : 127),
     );
     const ez = config.previewModel === "ez-template";
-    const angular = !ez
+    const custom = config.previewModel === "custom";
+    const angular = !ez && !custom
       ? config.angularPID
       : motion.type === "rotate"
         ? config.turnPID
@@ -93,14 +97,15 @@ export class PlanningMotionController {
           : motion.type === "boomerang"
             ? config.boomerangSteeringPID
             : config.pointSteeringPID;
-    this.#linear = new PlanningPreviewPID(config.lateralPID, ez);
+    this.#linear = new PlanningPreviewPID(config.lateralPID, ez || custom);
     this.#angular = new PlanningPreviewPID(
       ez && motion.type === "rotate"
         ? { ...angular, windupRange: 15 }
         : angular,
-      ez,
+      ez || custom,
     );
-    this.#hold = new PlanningPreviewPID(config.lateralPID, ez);
+    this.#baseAngular = custom ? new PlanningPreviewPID(config.angularPID, true) : null;
+    this.#hold = new PlanningPreviewPID(config.lateralPID, ez || custom);
     this.#activeDistance =
       motion.lockedDriveSide === "right"
         ? drivetrain.leftDistance
@@ -117,6 +122,8 @@ export class PlanningMotionController {
   ): ControllerOutput {
     const { motion, target, config } = this;
     const ez = config.previewModel === "ez-template";
+    const lemlib = config.previewModel === "lemlib";
+    const custom = config.previewModel === "custom";
     const dx = target.x - pose.x,
       dy = target.y - pose.y;
     const remaining = Math.hypot(dx, dy);
@@ -142,7 +149,7 @@ export class PlanningMotionController {
           )
         : this.#maxPower;
       let power = clamp(
-        this.#angular.update(error, degrees(pose.theta)),
+        this.angularOutput(error, degrees(pose.theta)),
         limit,
       );
       if (
@@ -151,7 +158,9 @@ export class PlanningMotionController {
         Math.abs(error) < 15
       )
         power = clamp(power, 30);
-      const arrived = Math.abs(error) <= 1;
+      const arrived = lemlib
+        ? this.#lemlibSettling.update(motion.type, 0, error, true)
+        : Math.abs(error) <= 1;
       if (motion.type === "rotate")
         return { left: power, right: -power, arrived };
       const heldSide = motion.lockedDriveSide ?? "left";
@@ -159,7 +168,7 @@ export class PlanningMotionController {
         heldSide === "left"
           ? drivetrain.leftDistance
           : drivetrain.rightDistance;
-      const hold = ez
+      const hold = ez || custom
         ? clamp(
             this.#hold.update(this.#heldDistance - position, position),
             this.#maxPower,
@@ -168,7 +177,7 @@ export class PlanningMotionController {
       return {
         left: heldSide === "left" ? hold : power,
         right: heldSide === "right" ? hold : -power,
-        heldSide: ez ? undefined : heldSide,
+        heldSide: ez || custom ? undefined : heldSide,
         arrived,
       };
     }
@@ -180,8 +189,8 @@ export class PlanningMotionController {
       this.forwards,
       this.#settling,
     );
-    if (ez) {
-      const close = remaining < config.lookAheadDistance / 2;
+    if (ez || custom) {
+      const close = (custom && this.#settling) || remaining < config.lookAheadDistance / 2;
       const offset =
         motion.type === "boomerang" && !close
           ? Math.min(this.lead * remaining, config.maxCarrotDistance)
@@ -195,13 +204,14 @@ export class PlanningMotionController {
         cy = carrot.y - pose.y;
       const distance = Math.hypot(cx, cy);
       if (
-        !this.#previousCarrot ||
+        custom || !this.#previousCarrot ||
         carrot.x !== this.#previousCarrot.x ||
         carrot.y !== this.#previousCarrot.y
       ) {
         const bearing = distance > 1e-10 ? Math.atan2(cx, cy) : pose.theta;
         // EZ extends the line from the current position through its target. The
         // robot's reverse heading is applied to steering, not this projection.
+        // Custom refreshes that line continuously to correct cross-track drift.
         this.#pointToFace = {
           x: pose.x + Math.sin(bearing) * (distance + config.lookAheadDistance),
           y: pose.y + Math.cos(bearing) * (distance + config.lookAheadDistance),
@@ -217,11 +227,14 @@ export class PlanningMotionController {
         carrot,
         remaining,
         settling: close,
-        angularError: angleError(
+        angularError: custom && motion.type === "boomerang" && close
+          ? angleError(target.theta, pose.theta) : angleError(
           bearing + (this.forwards ? 0 : Math.PI),
           pose.theta,
         ),
-        lateralError: projected * (this.forwards ? 1 : -1),
+        lateralError: custom && motion.type === "boomerang" && close
+          ? remaining * Math.cos(angleError(Math.atan2(dx, dy), pose.theta))
+          : projected * (this.forwards ? 1 : -1),
       };
     } else if (motion.type === "forward") {
       // LemLib moveToPoint uses projected lateral error and disables steering
@@ -232,9 +245,7 @@ export class PlanningMotionController {
         carrot: target,
         remaining,
         settling: close,
-        angularError: close
-          ? 0
-          : angleError(bearing + (this.forwards ? 0 : Math.PI), pose.theta),
+        angularError: angleError(bearing + (this.forwards ? 0 : Math.PI), pose.theta),
         lateralError: remaining * Math.cos(angleError(bearing, pose.theta)),
       };
     }
@@ -246,8 +257,11 @@ export class PlanningMotionController {
     )
       this.#maxPower = Math.max(Math.abs(this.#previousLinear), 60);
     this.#settling = guidance.settling;
-    const angular = clamp(
-      this.#angular.update(degrees(guidance.angularError), degrees(pose.theta)),
+    // Keep the PID's real error history. LemLib gates OUTPUT when settling;
+    // zeroing its error instead creates a derivative kick on entry to close.
+    const angularOutput = this.angularOutput(degrees(guidance.angularError), degrees(pose.theta));
+    const angular = lemlib && motion.type === "forward" && guidance.settling ? 0 : clamp(
+      angularOutput,
       this.#maxPower,
     );
     // EZ differentiates measured displacement rather than changes of moving carrot.
@@ -283,15 +297,18 @@ export class PlanningMotionController {
       }
       if (!this.#settling)
         linear = this.forwards ? Math.max(0, linear) : Math.min(0, linear);
-    } else
-      linear *= 1 - (1 - Math.cos(guidance.angularError)) / config.turnBias;
+    }
+    if (ez || custom) {
+      const bias = 1 - (1 - Math.cos(guidance.angularError)) / config.turnBias;
+      linear *= custom ? Math.max(0, bias) : bias;
+    }
     this.#previousLinear = linear;
     const slewDistance = Math.hypot(
       pose.x - this.#initialPose.x,
       pose.y - this.#initialPose.y,
     );
     const limit =
-      ez && config.ezSlewDistance > 0
+      (ez || custom) && config.ezSlewDistance > 0
         ? Math.min(
             this.#maxPower,
             70 +
@@ -300,8 +317,9 @@ export class PlanningMotionController {
           )
         : this.#maxPower;
     const ratio = Math.max(1, (Math.abs(linear) + Math.abs(angular)) / limit);
-    const arrived =
-      motion.type === "forward"
+    const arrived = lemlib
+      ? this.#lemlibSettling.update(motion.type, guidance.lateralError, degrees(guidance.angularError), guidance.settling)
+      : motion.type === "forward"
         ? remaining <= 0.5
         : guidance.settling &&
           Math.abs(guidance.lateralError) <= 0.5 &&
@@ -311,5 +329,13 @@ export class PlanningMotionController {
       right: (linear - angular) / ratio,
       arrived,
     };
+  }
+
+  private angularOutput(error: number, measurement: number): number {
+    const output = this.#angular.update(error, measurement);
+    // Custom uses the common angular tuning and the selected motion's tuning.
+    // Averaging keeps equal gains equivalent to one controller, rather than
+    // doubling their power merely because every PID row is available.
+    return this.#baseAngular ? (output + this.#baseAngular.update(error, measurement)) / 2 : output;
   }
 }

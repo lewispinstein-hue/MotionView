@@ -33,6 +33,6 @@ export function previewBoomerangMotion(
   const section = result.sections[0]!;
   return {
     poses: section.samples.map(({ x, y, theta }) => ({ x, y, theta })),
-    converged: section.outcome === "reached",
+    converged: section.outcome === "reached" || section.outcome === "completed",
   };
 }

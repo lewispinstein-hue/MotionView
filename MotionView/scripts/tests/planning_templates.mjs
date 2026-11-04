@@ -10,6 +10,7 @@ import { runPlanningInputTests } from "./planning_input_cases.mjs";
 import { runPlanningTemplatePresetTests } from "./planning_template_presets_cases.mjs";
 import { runPlanningSwingTemplateTests } from "./planning_swing_template_cases.mjs";
 import { runPlanningVexcodeTests } from "./planning_vexcode_cases.mjs";
+import { runPlanningSimulationModelTests } from "./planning_simulation_model_cases.mjs";
 
 function format(value, decimals = 3) {
   const fixed = Number(value).toFixed(decimals);
@@ -398,6 +399,7 @@ try {
   assert.equal(Object.hasOwn(migratedWaypoints[1] ?? {}, "indicatorIcons"), false);
 
   await runPlanningSimulationTests(server);
+  await runPlanningSimulationModelTests(server);
   await runPlanningMotionTests(server);
   await runPlanningMotionSelectionTests(server);
   await runPlanningBoomerangTests(server);

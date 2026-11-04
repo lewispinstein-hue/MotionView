@@ -5,7 +5,7 @@ export interface PreviewPIDConfiguration {
   readonly windupRange: number;
   readonly signFlipReset: boolean;
 }
-export type PlanningControllerModel = "lemlib" | "ez-template";
+export type PlanningControllerModel = "lemlib" | "ez-template" | "custom";
 export type PlanningSimulationLibrary = PlanningControllerModel | "custom";
 export const PLANNING_MOTOR_WATTS = { min: 22, max: 88, step: 5.5 } as const;
 export const PLANNING_PID_ROLES = [
@@ -66,6 +66,14 @@ const LIBRARY_DEFAULTS: Record<PlanningControllerModel, LibraryTuning> = {
   },
   "ez-template": {
     horizontalDrift: 0,
+    lateralSlew: 0,
+    ezSlewDistance: 3,
+    maxCarrotDistance: 16,
+    lookAheadDistance: 7,
+    turnBias: 0.9,
+  },
+  custom: {
+    horizontalDrift: 8,
     lateralSlew: 0,
     ezSlewDistance: 3,
     maxCarrotDistance: 16,
@@ -158,7 +166,7 @@ export function normalizePlanningSimulationConfiguration(
   const previewModel =
     library !== "custom"
       ? library
-      : value.previewModel === "lemlib" || value.previewModel === "ez-template"
+      : value.previewModel === "lemlib" || value.previewModel === "ez-template" || value.previewModel === "custom"
         ? value.previewModel
         : fallback.previewModel;
   const defaults =
@@ -171,7 +179,7 @@ export function normalizePlanningSimulationConfiguration(
       ? value.separatePIDsInitialized
       : PLANNING_PID_ROLES.slice(2).some((key) => Object.hasOwn(value, key)) ||
         fallback.separatePIDsInitialized;
-  const seedSeparate = !initialized && previewModel === "ez-template";
+  const seedSeparate = !initialized && previewModel !== "lemlib";
   const gains = Object.fromEntries(
     PLANNING_PID_ROLES.map((key) => [
       key,

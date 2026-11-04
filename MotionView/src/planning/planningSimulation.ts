@@ -5,7 +5,7 @@ import {
   segmentDriveHeading,
   waypointLead,
 } from "./planningMotionContext";
-import { PlanningMotionController } from "./planningSimulationControllers";
+import { angleError, PlanningMotionController } from "./planningSimulationControllers";
 import { PlanningPreviewDrivetrain } from "./planningPreviewDrivetrain";
 import { planningMotionsForLibrary, isVexcodePlanningLibrary } from "./planningTemplateCapabilities";
 import type { PlanningTemplateLibrary } from "./planningTemplatePresets";
@@ -28,6 +28,10 @@ const poseOf = (p: Readonly<PlanWaypoint>): PreviewPose => ({
   y: p.y,
   theta: ((p.theta ?? 0) * Math.PI) / 180,
 });
+const targetErrorFor = (type: PlanWaypointMotion["type"], target: PreviewPose, pose: PreviewPose): number =>
+  type === "rotate" || type === "swing"
+    ? Math.abs(angleError(target.theta, pose.theta)) * 180 / Math.PI
+    : Math.hypot(target.x - pose.x, target.y - pose.y);
 function motionsOf(
   point: Readonly<PlanWaypoint>,
   index: number,
@@ -131,7 +135,10 @@ export function simulatePlanningRoute(
         : Math.abs(drivetrain.linearVelocity) < 3 &&
           (motion.type !== "boomerang" || Math.abs(drivetrain.angularVelocity) < 0.15);
       dwell = output.arrived && settledVelocity ? dwell + 1 : 0;
-      const finished = dwell >= ARRIVAL_DWELL_STEPS;
+      // LemLib's controller has already applied its timed exit windows. Its
+      // completion does not additionally require our generic velocity/XY gate.
+      const lemlib = request.configuration.previewModel === "lemlib";
+      const finished = lemlib ? output.arrived : dwell >= ARRIVAL_DWELL_STEPS;
       const delta = drivetrain.step(
         finished ? 0 : output.left,
         finished ? 0 : output.right,
@@ -156,8 +163,9 @@ export function simulatePlanningRoute(
       }
       if (step % 3 === 0) samples.push(sample());
       if (finished) {
-        outcome = angularMotion || Math.hypot(target.x - pose.x, target.y - pose.y) <= 1
-          ? "reached" : "missed";
+        outcome = lemlib
+          ? targetErrorFor(motion.type, target, pose) <= 1 ? "reached" : "completed"
+          : angularMotion || Math.hypot(target.x - pose.x, target.y - pose.y) <= 1 ? "reached" : "missed";
         break;
       }
       if (movement.length === STANDSTILL_WINDOW && moved < 0.05 && turned < Math.PI / 720) {
@@ -195,21 +203,11 @@ export function simulatePlanningRoute(
           ? { x: pose.x + Math.sin(pose.theta) * driveDistance, y: pose.y + Math.cos(pose.theta) * driveDistance, theta: pose.theta }
           : target;
         const driveOutcome = runMotion(motion, motionTarget, waypointLead(start), forwards, start.speed ?? 127, samples);
-        if (outcome === "reached" || driveOutcome === "incomplete") outcome = driveOutcome;
+        if (outcome === "reached" || (outcome === "completed" && driveOutcome !== "reached") || driveOutcome === "incomplete") outcome = driveOutcome;
         if (outcome === "reached" && motion.type === "forward" && Math.hypot(target.x - pose.x, target.y - pose.y) > 1)
-          outcome = "missed";
+          outcome = request.configuration.previewModel === "lemlib" ? "completed" : "missed";
       }
-      const targetError =
-        motion.type === "rotate" || motion.type === "swing"
-          ? (Math.abs(
-              Math.atan2(
-                Math.sin(target.theta - pose.theta),
-                Math.cos(target.theta - pose.theta),
-              ),
-            ) *
-              180) /
-            Math.PI
-          : Math.hypot(target.x - pose.x, target.y - pose.y);
+      const targetError = targetErrorFor(motion.type, target, pose);
       motions.push({
         motionId: motion.id,
         type: motion.type,
@@ -218,7 +216,7 @@ export function simulatePlanningRoute(
         outcome,
         targetError,
       });
-      if (outcome !== "reached") sectionOutcome = outcome;
+      if (outcome !== "reached" && (outcome !== "completed" || sectionOutcome === "reached")) sectionOutcome = outcome;
       if (outcome === "incomplete") break;
     }
     // Once the final command ends, show the nominal coast to rest too. Earlier
@@ -251,6 +249,10 @@ export function simulatePlanningRoute(
         Math.abs(drivetrain.angularVelocity) > 0.001
       )
         sectionOutcome = "incomplete";
+      const finalMotion = motions.at(-1);
+      if (request.configuration.previewModel === "lemlib" && sectionOutcome === "reached" &&
+          finalMotion && targetErrorFor(finalMotion.type, target, pose) > 1)
+        sectionOutcome = "completed";
     }
     sections.push({
       key: simulationSectionKey(request, index),
