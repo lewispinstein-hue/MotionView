@@ -119,8 +119,8 @@ export async function runPlanningVexcodeTests(server) {
     assert.equal(planning.supportsMotion("rotate"), true);
     const expectedCode =
       library === "vexcode-cpp"
-        ? "Drivetrain.turnToHeading(225, degrees);\nDrivetrain.driveFor((false ? forward : reverse), 42.426, inches);\nDrivetrain.turnToHeading(90, degrees);"
-        : "drivetrain.turn_to_heading(225, DEGREES)\ndrivetrain.drive_for(FORWARD if False else REVERSE, 42.426, INCHES)\ndrivetrain.turn_to_heading(90, DEGREES)";
+        ? "Drivetrain.setTurnVelocity(90 * 100.0 / 127.0, percent);\nDrivetrain.turnToHeading(225, degrees);\nDrivetrain.setDriveVelocity(90 * 100.0 / 127.0, percent);\nDrivetrain.driveFor((false ? forward : reverse), 42.426, inches);\nDrivetrain.setTurnVelocity(90 * 100.0 / 127.0, percent);\nDrivetrain.turnToHeading(90, degrees);"
+        : "drivetrain.set_turn_velocity(90 * 100.0 / 127.0, PERCENT)\ndrivetrain.turn_to_heading(225, DEGREES)\ndrivetrain.set_drive_velocity(90 * 100.0 / 127.0, PERCENT)\ndrivetrain.drive_for(FORWARD if False else REVERSE, 42.426, INCHES)\ndrivetrain.set_turn_velocity(90 * 100.0 / 127.0, PERCENT)\ndrivetrain.turn_to_heading(90, DEGREES)";
     assert.equal(
       generatePlanningCode(planning),
       expectedCode,

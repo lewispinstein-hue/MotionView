@@ -1,5 +1,10 @@
 import type { PlanWaypoint } from "../state/models";
 export const DEFAULT_BOOMERANG_LEAD = 0.6;
+export function normalizePlanningMinSpeed(value: unknown, speed: unknown = 127): number {
+  const minimum = Number(value), maximum = Number(speed);
+  const limit = Number.isFinite(maximum) ? Math.max(1, Math.min(127, Math.abs(maximum))) : 127;
+  return Number.isFinite(minimum) ? Math.max(0, Math.min(limit, minimum)) : 0;
+}
 export function normalizePlanningLead(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.max(0, Math.min(1, value))

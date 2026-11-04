@@ -33,8 +33,8 @@ export async function runPlanningSwingTemplateTests(server) {
       right: "chassis.pid_swing_set(ez::LEFT_SWING, 90",
     },
     "jar-template": {
-      left: "chassis.right_swing_to_angle(90);",
-      right: "chassis.left_swing_to_angle(90);",
+      left: "chassis.right_swing_to_angle(90,",
+      right: "chassis.left_swing_to_angle(90,",
     },
   };
   for (const [library, sides] of Object.entries(expected)) {
@@ -44,7 +44,8 @@ export async function runPlanningSwingTemplateTests(server) {
         { id: "swing", type: "swing", lockedDriveSide: side },
       ]);
       assert.ok(
-        generatePlanningCode(planning).startsWith(sides[side]),
+        library === "jar-template" ? generatePlanningCode(planning).includes(sides[side])
+          : generatePlanningCode(planning).startsWith(sides[side]),
         `${library} exports the correct locked ${side} side`,
       );
     }

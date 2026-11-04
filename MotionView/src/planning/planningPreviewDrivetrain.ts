@@ -22,6 +22,7 @@ export function inferPlanningDriveMotors(watts: number) {
     fivePointFiveWatt: Math.round((total - elevenWatt * 11) / 5.5),
   };
 }
+
 function motorForce(
   torque: number,
   ratedRPM: number,
@@ -49,9 +50,7 @@ function motorForce(
     (torque *
       torqueFraction *
       (mechanicalPower > watts ? watts / mechanicalPower : 1) *
-      angularSpeed) /
-    maxSpeed
-  );
+      angularSpeed) / maxSpeed);
 }
 
 export interface PreviewDrivetrainState {
@@ -116,9 +115,17 @@ export class PlanningPreviewDrivetrain {
     rightPower: number,
     heldSide?: "left" | "right",
   ): { travel: number; turn: number } {
-    // PROS move() receives integers. Fractional PID outputs cannot creep forever.
+    // PROS move() receives integers; VEX voltage/native velocity loops use the
+    // motor's millivolt resolution. Physics stays common to every controller.
+    const resolution =
+      this.config.previewModel === "jar-template" ||
+      this.config.previewModel === "vexcode"
+        ? 12000 / 127
+        : 1;
     const command = (power: number) =>
-      Math.sign(power) * Math.floor(Math.min(127, Math.abs(power)) + 1e-9);
+      (Math.sign(power) *
+        Math.floor(Math.min(127, Math.abs(power)) * resolution + 1e-9)) /
+      resolution;
     leftPower = command(leftPower);
     rightPower = command(rightPower);
     const mass = this.config.robotWeightPounds * KG_PER_POUND;

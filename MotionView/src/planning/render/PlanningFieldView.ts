@@ -47,7 +47,7 @@ const NODE_THICK = 3.75;
 const NODE_TICK = 10;
 const NODE_BORDER = 1.5;
 const NODE_TEMPLATE_DESCRIPTION =
-  "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, ${forwards}, ${lead} (@ld), and ${lockedDriveSide} (@side)";
+  "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, ${minSpeed} (@minspd), ${forwards}, ${lead} (@ld), and ${lockedDriveSide} (@side)";
 
 function normalizeDegrees(value: number): number {
   return ((value % 360) + 360) % 360;
@@ -576,6 +576,7 @@ export class PlanningFieldView {
               y: this.#pendingAdd.y,
               theta: 0,
               speed: Number(previous?.speed) || 127,
+              minSpeed: previous?.minSpeed ?? 0,
             }),
           );
           this.planning.selection.selectWaypoint(index);

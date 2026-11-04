@@ -12,6 +12,7 @@ import {
   type PlanningTemplateConfiguration,
 } from "../../planning/planningTemplatePresets";
 import { supportsPlanningMotion } from "../../planning/planningTemplateCapabilities";
+import { normalizePlanningMinSpeed } from "../../planning/planningMotionContext";
 
 export type MotionViewExportType = "viewing" | "planning" | "both";
 
@@ -185,6 +186,8 @@ export class MotionViewDocumentSerializer {
         theta: point.theta ?? 0,
         speed: Math.max(1, Math.min(127, Number(point.speed) || 127)),
       };
+      const minSpeed = normalizePlanningMinSpeed(point.minSpeed, point.speed);
+      if (minSpeed > 0) serialized.minSpeed = minSpeed;
       if (typeof point.forwards === "boolean") serialized.forwards = point.forwards;
       if (indicatorIcons.length) serialized.indicatorIcons = indicatorIcons;
       if (isBoomerangWaypoint(point)) serialized.lead = waypointLead(point);

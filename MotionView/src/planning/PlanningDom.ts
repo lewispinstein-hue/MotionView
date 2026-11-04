@@ -39,6 +39,7 @@ export class PlanningDom {
   readonly selectedX: HTMLInputElement;
   readonly selectedY: HTMLInputElement;
   readonly selectedTheta: HTMLInputElement;
+  readonly selectedMinSpeed: HTMLInputElement;
   readonly selectedSpeed: HTMLInputElement;
   readonly selectedIndicators: HTMLElement;
   readonly editWaypoint: HTMLButtonElement;
@@ -137,6 +138,7 @@ export class PlanningDom {
     this.selectedX = requiredElement(document, "planSelX");
     this.selectedY = requiredElement(document, "planSelY");
     this.selectedTheta = requiredElement(document, "planSelTheta");
+    this.selectedMinSpeed = requiredElement(document, "planSelMinSpeed");
     this.selectedSpeed = requiredElement(document, "planSelSpeed");
     this.selectedIndicators = requiredElement(document, "planSelIndicators");
     this.editWaypoint = requiredElement(document, "btnPlanEditWaypoint");

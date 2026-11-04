@@ -3244,6 +3244,43 @@ body:not(.mode-planning) #rightPlanning {
   align-items: center;
 }
 
+.planSelectedFields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 2.3fr);
+  gap: 8px;
+}
+
+.planSelectedFields > div {
+  min-width: 0;
+}
+
+.planSelectedFields label {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.planSelectedSpeedRange {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.planSelectedSpeedRange input {
+  min-width: 0;
+}
+
+.planSelectedSpeedRange input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+#rightPlanning .planSelectedFields input[type="text"] {
+  padding: 8px 5px;
+  font-size: 12px;
+}
+
 #rightPlanning .planSelectedPanel .waypointIndicatorStrip {
   margin-left: auto;
 }

@@ -1,6 +1,7 @@
 import { normalizeWaypointIndicatorIcons } from "./planningIndicators";
 import { normalizeWaypointMotions } from "./planningMotions";
 import { normalizePlanningLead } from "./planningSegments";
+import { normalizePlanningMinSpeed } from "./planningMotionContext";
 import { createPlanPathId, normalizePlanNodes } from "./planningState";
 import type {
   PlanningCodeExportSettings,
@@ -28,6 +29,8 @@ export function clonePlanningWaypoint(
     theta: point.theta ?? 0,
     speed: point.speed ?? 127,
   };
+  if (point.minSpeed !== undefined)
+    cloned.minSpeed = normalizePlanningMinSpeed(point.minSpeed, cloned.speed);
   if (typeof point.forwards === "boolean") cloned.forwards = point.forwards;
   const indicatorIcons = normalizeWaypointIndicatorIcons(point.indicatorIcons);
   if (typeof point.lead === "number" && Number.isFinite(point.lead))
@@ -180,6 +183,8 @@ function migrateLegacyWaypointExport(waypoints: PlanningWaypoint[]): void {
     const source = waypoints[index]!;
     const destination = legacyWaypoints[index + 1]!;
     source.speed = destination.speed;
+    if (destination.minSpeed !== undefined) source.minSpeed = destination.minSpeed;
+    else delete source.minSpeed;
     if (Object.prototype.hasOwnProperty.call(destination, "overrideCode")) {
       source.overrideCode = destination.overrideCode ?? "";
     } else {
@@ -241,6 +246,8 @@ function normalizeWaypoints(value: unknown): PlanningWaypoint[] {
         ? Math.max(1, Math.min(127, Number(point?.speed)))
         : 127,
     };
+    if (point?.minSpeed !== undefined)
+      waypoint.minSpeed = normalizePlanningMinSpeed(point.minSpeed, waypoint.speed);
     if (typeof point?.forwards === "boolean")
       waypoint.forwards = point.forwards;
     const indicatorIcons = normalizeWaypointIndicatorIcons(

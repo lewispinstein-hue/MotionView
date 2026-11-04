@@ -9,6 +9,12 @@ export function supportsPlanningMotion(library: PlanningTemplateLibrary, type: P
   return !isVexcodePlanningLibrary(library) || type === "forward" || type === "rotate";
 }
 
+/** A true minimum-power floor, rather than a slew start or settling output cap. */
+export function supportsPlanningMinSpeed(library: PlanningTemplateLibrary, type: PlanWaypointIndicatorIcon): boolean {
+  if (isVexcodePlanningLibrary(library) || library === "ez-template") return false;
+  return library !== "jar-template" || type === "forward" || type === "boomerang";
+}
+
 /** Basic counterparts are temporary; the document retains the original motions. */
 export function planningMotionTypeForLibrary(
   type: PlanWaypointIndicatorIcon,

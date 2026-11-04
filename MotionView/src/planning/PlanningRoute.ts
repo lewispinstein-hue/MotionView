@@ -15,6 +15,7 @@ import { createPlanMotionId } from "./planningState";
 import { clonePlanningWaypoint } from "./planningDocument";
 import { normalizeWaypointIndicatorIcons } from "./planningIndicators";
 import { supportsPlanningMotion } from "./planningTemplateCapabilities";
+import { normalizePlanningMinSpeed } from "./planningMotionContext";
 import type { PlanningSession } from "./planningSession";
 import type { PlanningWaypoint, PlanningWaypointView } from "./planningTypes";
 
@@ -162,13 +163,15 @@ export class PlanningRoute {
 
   updateField(
     index: number,
-    field: "x" | "y" | "theta" | "speed",
+    field: "x" | "y" | "theta" | "minSpeed" | "speed",
     value: number,
   ): void {
     const waypoint = this.session.waypoints[index];
     if (!waypoint) return;
     this.session.mutate("route", () => {
-      waypoint[field] = value;
+      waypoint[field] = field === "minSpeed" ? normalizePlanningMinSpeed(value, waypoint.speed) : value;
+      if (field === "speed" && waypoint.minSpeed !== undefined)
+        waypoint.minSpeed = normalizePlanningMinSpeed(waypoint.minSpeed, value);
     });
   }
 

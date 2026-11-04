@@ -9,7 +9,7 @@ import { getPlanNodeEffectiveMethod } from "./planningObjects";
 import type { PlanMotionTemplates } from "../state/models";
 import { createDefaultMotionTemplates, getWaypointCode, normalizeMotionTemplates } from "./planningMotions";
 import { isSegmentForwards, waypointLead } from "./planningSegments";
-import { segmentDriveHeading } from "./planningMotionContext";
+import { normalizePlanningMinSpeed, segmentDriveHeading } from "./planningMotionContext";
 import type { PlanningSwingDriveSides, PlanningTemplateLanguage, PlanningTemplateLibrary } from "./planningTemplatePresets";
 
 const TEMPLATE_SHORTHAND_TOKENS: Readonly<Record<string, string>> = {
@@ -17,6 +17,7 @@ const TEMPLATE_SHORTHAND_TOKENS: Readonly<Record<string, string>> = {
   y: "y",
   dist: "distance",
   spd: "speed",
+  minspd: "minSpeed",
   th: "theta",
   iter: "iteration",
   fwd: "forwards",
@@ -56,6 +57,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
     distance: "0",
     iteration: "0",
     speed: "0",
+    minSpeed: "0",
     forwards: booleanCode(true),
     lead: "0",
     lockedDriveSide: lockedDriveSide(),
@@ -79,6 +81,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
         options.readPlanSpeed(point.speed, 127),
         0,
       ),
+      minSpeed: options.formatTemplateNumber(normalizePlanningMinSpeed(point.minSpeed, point.speed), 0),
       forwards: booleanCode(
         isSegmentForwards({ ...point, theta }, options.waypoints[index + 1]),
       ),
@@ -108,6 +111,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
         options.readPlanSpeed(start.speed, 127),
         0,
       ),
+      minSpeed: options.formatTemplateNumber(normalizePlanningMinSpeed(start.minSpeed, start.speed), 0),
       forwards: booleanCode(
         isSegmentForwards({ ...start, theta: options.planThetaDegAt(index) }, end),
       ),
@@ -125,7 +129,7 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
   ) => {
     // One pass keeps inserted side values literal, including any @ or ${} text.
     return String(template || "").replace(
-      /\$\{(x|y|theta|distance|iteration|speed|forwards|lead|lockedDriveSide|bearing)\}|(^|[^A-Za-z0-9_])@(x|y|dist|spd|th|iter|fwd|ld|side|bearing)(?![A-Za-z0-9_])/g,
+      /\$\{(x|y|theta|distance|iteration|speed|minSpeed|forwards|lead|lockedDriveSide|bearing)\}|(^|[^A-Za-z0-9_])@(x|y|dist|spd|minspd|th|iter|fwd|ld|side|bearing)(?![A-Za-z0-9_])/g,
       (_, full: string | undefined, prefix: string, short: string) => full
         ? replacements[full] ?? ""
         : `${prefix}${replacements[TEMPLATE_SHORTHAND_TOKENS[short]] ?? ""}`,

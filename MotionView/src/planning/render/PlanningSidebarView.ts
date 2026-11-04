@@ -13,7 +13,7 @@ import type { PlanningFeature } from "../PlanningFeature";
 import type { PlanningWaypointView } from "../planningTypes";
 import { getPlanNodeEffectiveMethod } from "../planningObjects";
 import { isBoomerangWaypoint } from "../planningMotionContext";
-import { planningMotionTypeForLibrary } from "../planningTemplateCapabilities";
+import { planningMotionTypeForLibrary, supportsPlanningMinSpeed } from "../planningTemplateCapabilities";
 import {
   createWaypointIndicatorIcon,
   orderWaypointIndicatorIcons,
@@ -42,7 +42,7 @@ function format(value: unknown, decimals = 2): string {
 }
 
 const METHOD_TEMPLATE_DESCRIPTION =
-  "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, ${forwards}, ${lead} (@ld), and ${lockedDriveSide} (@side)";
+  "Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, ${minSpeed} (@minspd), ${forwards}, ${lead} (@ld), and ${lockedDriveSide} (@side)";
 
 interface ActiveMethodReorder {
   readonly objectId: string;
@@ -94,6 +94,7 @@ export class PlanningSidebarView {
     this.bindSelectionField(this.dom.selectedX, "x");
     this.bindSelectionField(this.dom.selectedY, "y");
     this.bindSelectionField(this.dom.selectedTheta, "theta");
+    this.bindSelectionField(this.dom.selectedMinSpeed, "minSpeed");
     this.bindSelectionField(this.dom.selectedSpeed, "speed");
     document.addEventListener(
       "mousedown",
@@ -190,6 +191,7 @@ export class PlanningSidebarView {
       this.dom.selectedX,
       this.dom.selectedY,
       this.dom.selectedTheta,
+      this.dom.selectedMinSpeed,
       this.dom.selectedSpeed,
     ];
     if (!point) {
@@ -208,11 +210,23 @@ export class PlanningSidebarView {
     );
     this.dom.editWaypoint.disabled = false;
     for (const input of inputs) input.disabled = false;
-    if (inputs.includes(document.activeElement as HTMLInputElement)) return;
-    this.dom.selectedX.value = formatDistanceFromInches(point.x, 2);
-    this.dom.selectedY.value = formatDistanceFromInches(point.y, 2);
-    this.dom.selectedTheta.value = format(point.theta, 1);
-    this.dom.selectedSpeed.value = format(point.speed, 0);
+    const minSpeedSupported = !["ez-template", "vexcode"].includes(this.planning.simulationConfiguration.previewModel) &&
+      (point.motions?.map(motion => motion.type) ??
+      [isBoomerangWaypoint(point) ? "boomerang" as const : "forward" as const])
+      .some(type => supportsPlanningMinSpeed(this.planning.templateConfiguration.library, type));
+    this.dom.selectedMinSpeed.disabled = !minSpeedSupported;
+    this.dom.selectedMinSpeed.title = minSpeedSupported
+      ? "Minimum motion power (0–127). Use ${minSpeed} or @minspd in templates."
+      : this.planning.simulationConfiguration.previewModel === "ez-template"
+        ? "Minimum speed is not supported by the EZ-Template simulation model."
+        : this.planning.simulationConfiguration.previewModel === "vexcode"
+          ? "Minimum speed is not supported by the VEXcode simulation model."
+        : "Minimum speed is not supported by this template preset's selected motions.";
+    const values = [formatDistanceFromInches(point.x, 2), formatDistanceFromInches(point.y, 2),
+      format(point.theta, 1), format(point.minSpeed ?? 0, 0), format(point.speed, 0)];
+    inputs.forEach((input, index) => {
+      if (input !== document.activeElement) input.value = values[index]!;
+    });
   }
 
   private appendWaypointIndicators(
@@ -563,7 +577,7 @@ export class PlanningSidebarView {
 
   private bindSelectionField(
     input: HTMLInputElement,
-    field: "x" | "y" | "theta" | "speed",
+    field: "x" | "y" | "theta" | "minSpeed" | "speed",
   ): void {
     // Tracks whether the transaction currently open was the one this field's
     // own focus began, so blur only ever commits/cancels its own transaction
@@ -593,6 +607,10 @@ export class PlanningSidebarView {
           field,
           this.planning.projection.constrainTheta(value),
         );
+      else if (field === "speed")
+        // Don't lower the minimum for intermediate characters while typing a
+        // new maximum (e.g. the initial "8" in "80"). Validate the pair on blur.
+        this.planning.route.update(index, { speed: Math.max(-127, Math.min(127, value)) });
       else
         this.planning.route.updateField(
           index,
@@ -604,7 +622,13 @@ export class PlanningSidebarView {
     input.addEventListener("blur", () => {
       if (!ownsTransaction) return;
       ownsTransaction = false;
+      if (field === "speed") {
+        const index = this.planning.selection.primaryWaypointIndex;
+        const point = this.planning.selection.selectedWaypoint;
+        if (point && index >= 0) this.planning.route.updateField(index, "speed", point.speed ?? 127);
+      }
       this.planning.history.commit();
+      this.renderSelection();
     });
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
@@ -615,6 +639,7 @@ export class PlanningSidebarView {
         ownsTransaction = false;
         this.planning.history.cancel();
         input.blur();
+        this.renderSelection();
       }
     });
   }
@@ -738,7 +763,7 @@ export class PlanningSidebarView {
       description:
         "One block is generated from each waypoint to the next; " +
         "the final waypoint emits none. Available placeholders: " +
-        "${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, ${forwards}, ${lead} (@ld), and ${lockedDriveSide} (@side)",
+        "${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, ${minSpeed} (@minspd), ${forwards}, ${lead} (@ld), and ${lockedDriveSide} (@side)",
       code: previous.forward,
       placeholder: "moveToPoint(${x}, ${y}, ${theta});",
       motionEditor: {

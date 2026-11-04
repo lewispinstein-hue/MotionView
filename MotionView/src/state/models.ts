@@ -88,6 +88,8 @@ export interface PlanWaypoint {
   y: number;
   theta?: number;
   speed?: number;
+  /** Minimum departing motion power; absent values default to zero. */
+  minSpeed?: number;
   /** Explicit departing travel direction; absent legacy values use heading inference. */
   forwards?: boolean;
   /** Departing Boomerang tangent length as a fraction of the segment chord. */

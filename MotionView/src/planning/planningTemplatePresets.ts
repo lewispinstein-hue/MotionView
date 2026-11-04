@@ -1,5 +1,5 @@
 import type { PlanMotionTemplates, PlanWaypointIndicatorIcon } from "../state/models";
-import { createDefaultMotionTemplates, normalizeMotionTemplates } from "./planningMotions";
+import { createDefaultMotionTemplates, normalizeMotionTemplates, PLANNING_MOTION_TYPES } from "./planningMotions";
 
 export const PLANNING_TEMPLATE_LIBRARIES = [
   { id: "lemlib", name: "LemLib" },
@@ -61,10 +61,10 @@ export function createPlanningTemplateConfiguration(): PlanningTemplateConfigura
       // timeline nodes do not overtake a movement still running on the robot.
       // https://github.com/LemLib/LemLib/blob/stable/include/lemlib/chassis/chassis.hpp
       lemlib: {
-        forward: "chassis.moveToPoint(@x, @y, 4000, {.forwards = @fwd, .maxSpeed = @spd}, false);",
-        rotate: "chassis.turnToHeading(@th, 2000, {.maxSpeed = @spd}, false);",
-        swing: "chassis.swingToHeading(@th, @side, 2000, {.maxSpeed = @spd}, false);",
-        boomerang: "chassis.moveToPose(@x, @y, @th, 4000, {.forwards = @fwd, .lead = @ld, .maxSpeed = @spd}, false);",
+        forward: "chassis.moveToPoint(@x, @y, 4000, {.forwards = @fwd, .maxSpeed = @spd, .minSpeed = @minspd}, false);",
+        rotate: "chassis.turnToHeading(@th, 2000, {.maxSpeed = @spd, .minSpeed = @minspd}, false);",
+        swing: "chassis.swingToHeading(@th, @side, 2000, {.maxSpeed = @spd, .minSpeed = @minspd}, false);",
+        boomerang: "chassis.moveToPose(@x, @y, @th, 4000, {.forwards = @fwd, .lead = @ld, .maxSpeed = @spd, .minSpeed = @minspd}, false);",
       },
       // https://github.com/EZ-Robotics/EZ-Template/blob/main/include/EZ-Template/drive/drive.hpp
       "ez-template": {
@@ -77,22 +77,24 @@ export function createPlanningTemplateConfiguration(): PlanningTemplateConfigura
       // A right swing moves the right side, matching the default locked left side.
       // https://github.com/JacksonAreaRobotics/JAR-Template/blob/main/include/JAR-Template/drive.h
       "jar-template": {
-        forward: "chassis.drive_to_point(@x, @y, chassis.drive_min_voltage, @spd * 12.0 / 127.0, chassis.heading_max_voltage);",
+        forward: "chassis.drive_to_point(@x, @y, @minspd * 12.0 / 127.0, @spd * 12.0 / 127.0, chassis.heading_max_voltage);",
         rotate: "chassis.turn_to_angle(@th, @spd * 12.0 / 127.0);",
-        swing: "chassis.@side(@th);",
-        boomerang: "chassis.drive_to_pose(@x, @y, @th, @ld, chassis.boomerang_setback, chassis.drive_min_voltage, @spd * 12.0 / 127.0, chassis.heading_max_voltage);",
+        // Upstream currently clamps swings with turn_max_voltage. Scope and
+        // restore that limit, and pass the requested swing limit explicitly.
+        swing: "{\n  const auto savedTurnMaxVoltage = chassis.turn_max_voltage;\n  chassis.turn_max_voltage = @spd * 12.0 / 127.0;\n  chassis.@side(@th, @spd * 12.0 / 127.0, chassis.swing_settle_error, chassis.swing_settle_time, chassis.swing_timeout, chassis.swing_kp, chassis.swing_ki, chassis.swing_kd, chassis.swing_starti);\n  chassis.turn_max_voltage = savedTurnMaxVoltage;\n}",
+        boomerang: "chassis.drive_to_pose(@x, @y, @th, @ld, chassis.boomerang_setback, @minspd * 12.0 / 127.0, @spd * 12.0 / 127.0, chassis.heading_max_voltage);",
       },
       // https://api.vex.com/v5/home/cpp/Drivetrain/index.html
       "vexcode-cpp": {
-        forward: "Drivetrain.turnToHeading(@bearing, degrees);\nDrivetrain.driveFor((@fwd ? forward : reverse), @dist, inches);",
-        rotate: "Drivetrain.turnToHeading(@th, degrees);",
+        forward: "Drivetrain.setTurnVelocity(@spd * 100.0 / 127.0, percent);\nDrivetrain.turnToHeading(@bearing, degrees);\nDrivetrain.setDriveVelocity(@spd * 100.0 / 127.0, percent);\nDrivetrain.driveFor((@fwd ? forward : reverse), @dist, inches);",
+        rotate: "Drivetrain.setTurnVelocity(@spd * 100.0 / 127.0, percent);\nDrivetrain.turnToHeading(@th, degrees);",
         swing: "",
         boomerang: "",
       },
       // https://api.vex.com/v5/home/python/Drivetrain.html
       "vexcode-python": {
-        forward: "drivetrain.turn_to_heading(@bearing, DEGREES)\ndrivetrain.drive_for(FORWARD if @fwd else REVERSE, @dist, INCHES)",
-        rotate: "drivetrain.turn_to_heading(@th, DEGREES)",
+        forward: "drivetrain.set_turn_velocity(@spd * 100.0 / 127.0, PERCENT)\ndrivetrain.turn_to_heading(@bearing, DEGREES)\ndrivetrain.set_drive_velocity(@spd * 100.0 / 127.0, PERCENT)\ndrivetrain.drive_for(FORWARD if @fwd else REVERSE, @dist, INCHES)",
+        rotate: "drivetrain.set_turn_velocity(@spd * 100.0 / 127.0, PERCENT)\ndrivetrain.turn_to_heading(@th, DEGREES)",
         swing: "",
         boomerang: "",
       },
@@ -130,6 +132,17 @@ export function normalizePlanningTemplateConfiguration(value: unknown): Planning
     // Preserve edits saved by the earlier development build as Custom, without
     // allowing persisted text to replace the built-in preset itself.
     const saved = normalizeMotionTemplates(banks[result.library], result.templates[result.library]);
+    if (result.library === "lemlib" || result.library === "jar-template") {
+      for (const { type } of PLANNING_MOTION_TYPES) {
+        const current = result.templates[result.library][type];
+        const previous = result.library === "lemlib"
+          ? current.replace(", .minSpeed = @minspd", "")
+          : current.replace("@minspd * 12.0 / 127.0", "chassis.drive_min_voltage");
+        if (saved[type] === previous) saved[type] = current;
+      }
+      if (result.library === "jar-template" && saved.swing === "chassis.@side(@th);")
+        saved.swing = result.templates[result.library].swing;
+    }
     // Upgrade our exact former fixed-left presets; custom code remains opaque.
     const previousSwing: Partial<Record<PlanningTemplateLibrary, string>> = {
       lemlib: "chassis.swingToHeading(@th, lemlib::DriveSide::LEFT, 2000, {.maxSpeed = @spd}, false);",
@@ -141,13 +154,18 @@ export function normalizePlanningTemplateConfiguration(value: unknown): Planning
     // Upgrade the distance-only VEXcode defaults saved before alignment was added.
     const previousForward: Partial<Record<PlanningTemplateLibrary, readonly string[]>> = {
       "vexcode-cpp": [
+        "Drivetrain.turnToHeading(@bearing, degrees);\nDrivetrain.driveFor((@fwd ? forward : reverse), @dist, inches);",
         "Drivetrain.driveFor((@fwd ? forward : reverse), @dist, inches);",
         "Drivetrain.driveFor((@fwd ? forward : backward), @dist, inches);",
       ],
-      "vexcode-python": ["drivetrain.drive_for(FORWARD if @fwd else REVERSE, @dist, INCHES)"],
+      "vexcode-python": ["drivetrain.drive_for(FORWARD if @fwd else REVERSE, @dist, INCHES)",
+        "drivetrain.turn_to_heading(@bearing, DEGREES)\ndrivetrain.drive_for(FORWARD if @fwd else REVERSE, @dist, INCHES)"],
     };
     if (previousForward[result.library]?.includes(saved.forward))
       saved.forward = result.templates[result.library].forward;
+    if (result.library === "vexcode-cpp" && saved.rotate === "Drivetrain.turnToHeading(@th, degrees);" ||
+        result.library === "vexcode-python" && saved.rotate === "drivetrain.turn_to_heading(@th, DEGREES)")
+      saved.rotate = result.templates[result.library].rotate;
     const savedSides = normalizeSwingDriveSides(sides[result.library], result.swingDriveSides[result.library]);
     if (JSON.stringify(saved) !== JSON.stringify(result.templates[result.library]) ||
         JSON.stringify(savedSides) !== JSON.stringify(result.swingDriveSides[result.library])) {

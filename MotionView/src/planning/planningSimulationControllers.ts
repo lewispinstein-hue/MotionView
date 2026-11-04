@@ -4,6 +4,7 @@ import type { PreviewPose } from "./planningSimulationTypes";
 import type { PlanningPreviewDrivetrain } from "./planningPreviewDrivetrain";
 import { PlanningPreviewPID } from "./planningPreviewPID";
 import { PlanningLemLibSettling } from "./planningLemLibSettling";
+import { normalizePlanningMinSpeed } from "./planningMotionContext";
 
 export const angleError = (target: number, current: number): number =>
   Math.atan2(Math.sin(target - current), Math.cos(target - current));
@@ -51,6 +52,7 @@ export interface ControllerOutput {
   readonly right: number;
   readonly heldSide?: "left" | "right";
   readonly arrived: boolean;
+  readonly chained?: boolean;
 }
 
 /** A fresh controller per action; the drivetrain and world pose remain continuous. */
@@ -65,6 +67,9 @@ export class PlanningMotionController {
   #settling = false;
   #previousLinear = 0;
   #maxPower: number;
+  readonly #minPower: number;
+  #initialTurnError: number | null = null;
+  #previousTargetSide: boolean | null = null;
   #ezMeasured = 0;
   #previousPose: PreviewPose;
   #previousCarrot: { x: number; y: number } | null = null;
@@ -79,6 +84,7 @@ export class PlanningMotionController {
     private readonly config: PlanningSimulationConfiguration,
     start: PreviewPose,
     drivetrain: PlanningPreviewDrivetrain,
+    minSpeed = 0,
   ) {
     this.#initialPose = start;
     this.#previousPose = start;
@@ -88,6 +94,8 @@ export class PlanningMotionController {
     );
     const ez = config.previewModel === "ez-template";
     const custom = config.previewModel === "custom";
+    // EZ's preset has no per-motion minimum-power parameter.
+    this.#minPower = ez ? 0 : normalizePlanningMinSpeed(minSpeed, this.#maxPower);
     const angular = !ez && !custom
       ? config.angularPID
       : motion.type === "rotate"
@@ -129,6 +137,9 @@ export class PlanningMotionController {
     const remaining = Math.hypot(dx, dy);
     if (motion.type === "rotate" || motion.type === "swing") {
       const error = degrees(angleError(target.theta, pose.theta));
+      this.#initialTurnError ??= error;
+      const chained = this.#minPower > 0 &&
+        (Math.abs(error) < 1e-8 || Math.sign(error) !== Math.sign(this.#initialTurnError));
       const angularTravel = Math.abs(
         degrees(pose.theta - this.#initialPose.theta),
       );
@@ -158,11 +169,13 @@ export class PlanningMotionController {
         Math.abs(error) < 15
       )
         power = clamp(power, 30);
-      const arrived = lemlib
+      if (power !== 0 && Math.abs(power) < this.#minPower)
+        power = Math.sign(power) * this.#minPower;
+      const arrived = chained || (lemlib
         ? this.#lemlibSettling.update(motion.type, 0, error, true)
-        : Math.abs(error) <= 1;
+        : Math.abs(error) <= (custom ? config.vexTurnThreshold : 1));
       if (motion.type === "rotate")
-        return { left: power, right: -power, arrived };
+        return { left: power, right: -power, arrived, chained };
       const heldSide = motion.lockedDriveSide ?? "left";
       const position =
         heldSide === "left"
@@ -179,6 +192,7 @@ export class PlanningMotionController {
         right: heldSide === "right" ? hold : -power,
         heldSide: ez || custom ? undefined : heldSide,
         arrived,
+        chained,
       };
     }
 
@@ -193,7 +207,7 @@ export class PlanningMotionController {
       const close = (custom && this.#settling) || remaining < config.lookAheadDistance / 2;
       const offset =
         motion.type === "boomerang" && !close
-          ? Math.min(this.lead * remaining, config.maxCarrotDistance)
+          ? Math.min(this.lead * remaining + (custom ? config.jarSetback : 0), config.maxCarrotDistance)
           : 0;
       const heading = target.theta + (this.forwards ? 0 : Math.PI);
       const carrot = {
@@ -249,6 +263,23 @@ export class PlanningMotionController {
         lateralError: remaining * Math.cos(angleError(bearing, pose.theta)),
       };
     }
+    if (this.#minPower > 0) {
+      const heading = motion.type === "boomerang"
+        ? target.theta + (this.forwards ? 0 : Math.PI)
+        : Math.atan2(target.x - this.#initialPose.x, target.y - this.#initialPose.y);
+      const sideOf = (point: { x: number; y: number }) =>
+        (point.x - target.x) * Math.sin(heading) + (point.y - target.y) * Math.cos(heading) >= 0;
+      const side = sideOf(pose);
+      // Match LemLib's moving-carrot side test; Straight and Custom chain when
+      // crossing the target's approach plane. No pose/velocity reset is needed.
+      const sameSide = lemlib && motion.type === "boomerang" ? side === sideOf(guidance.carrot) : side;
+      const chained = this.#previousTargetSide !== null &&
+        (lemlib && motion.type === "boomerang"
+          ? guidance.settling && !sameSide && this.#previousTargetSide
+          : sameSide !== this.#previousTargetSide);
+      this.#previousTargetSide = sameSide;
+      if (chained) return { left: 0, right: 0, arrived: true, chained: true };
+    }
     if (
       !ez &&
       motion.type === "boomerang" &&
@@ -262,7 +293,7 @@ export class PlanningMotionController {
     const angularOutput = this.angularOutput(degrees(guidance.angularError), degrees(pose.theta));
     const angular = lemlib && motion.type === "forward" && guidance.settling ? 0 : clamp(
       angularOutput,
-      this.#maxPower,
+      custom ? Math.min(this.#maxPower, config.jarHeadingMaxVoltage * 127 / 12) : this.#maxPower,
     );
     // EZ differentiates measured displacement rather than changes of moving carrot.
     this.#ezMeasured +=
@@ -297,6 +328,8 @@ export class PlanningMotionController {
       }
       if (!this.#settling)
         linear = this.forwards ? Math.max(0, linear) : Math.min(0, linear);
+      if ((this.forwards && linear > 0) || (!this.forwards && linear < 0))
+        linear = Math.sign(linear) * Math.max(Math.abs(linear), this.#minPower);
     }
     if (ez || custom) {
       const bias = 1 - (1 - Math.cos(guidance.angularError)) / config.turnBias;
@@ -323,7 +356,7 @@ export class PlanningMotionController {
         ? remaining <= 0.5
         : guidance.settling &&
           Math.abs(guidance.lateralError) <= 0.5 &&
-          Math.abs(degrees(guidance.angularError)) <= 1;
+          Math.abs(degrees(guidance.angularError)) <= (custom ? config.vexTurnThreshold : 1);
     return {
       left: (linear + angular) / ratio,
       right: (linear - angular) / ratio,
@@ -336,6 +369,6 @@ export class PlanningMotionController {
     // Custom uses the common angular tuning and the selected motion's tuning.
     // Averaging keeps equal gains equivalent to one controller, rather than
     // doubling their power merely because every PID row is available.
-    return this.#baseAngular ? (output + this.#baseAngular.update(error, measurement)) / 2 : output;
+    return this.#baseAngular ? (output + this.#baseAngular.update(error, measurement)) / 2 * this.config.vexTurnConstant : output;
   }
 }

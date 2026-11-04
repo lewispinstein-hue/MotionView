@@ -1,6 +1,6 @@
 import type { PlanningFeature } from "../PlanningFeature";
 import { getCurrentUnits } from "../../shared/units";
-import { applyPlanningLibraryPreset, normalizePlanningMotorWatts, PLANNING_MOTOR_WATTS,
+import { applyPlanningLibraryPreset, normalizePlanningMotorWatts, PLANNING_MOTOR_WATTS, PLANNING_SIMULATION_MODELS,
   type PlanningControllerModel, type PlanningPIDRole, type PlanningSimulationConfiguration,
   type PlanningSimulationLibrary } from "../planningSimulationConfiguration";
 import { simulationInputNumber, simulationInputUnit, type SimulationInputDimension } from "./planningSimulationInputUnits";
@@ -23,11 +23,15 @@ const LIBRARY_FIELDS: readonly NumberField[] = [
   { key: "maxCarrotDistance", label: "Maximum carrot distance", min: 0, max: 1000, dimension: "distance", model: "ez-template" },
   { key: "lookAheadDistance", label: "Lookahead distance", min: 0.1, max: 1000, dimension: "distance", model: "ez-template" },
   { key: "turnBias", label: "Turn bias", min: 0.1, max: 10, model: "ez-template" },
+  { key: "jarSetback", label: "Boomerang setback", min: 0, max: 100, dimension: "distance", model: "jar-template" },
+  { key: "jarHeadingMaxVoltage", label: "Heading limit (V)", min: 0, max: 12, model: "jar-template" },
+  { key: "vexTurnConstant", label: "Turn constant", min: .01, max: 10, model: "vexcode" },
+  { key: "vexTurnThreshold", label: "Turn threshold (°)", min: .1, max: 15, model: "vexcode" },
 ];
-const PID_ROWS: readonly [PlanningPIDRole, string, PlanningControllerModel?][] = [
-  ["lateralPID", "Linear PID"], ["angularPID", "Angular PID", "lemlib"],
-  ["pointSteeringPID", "Point steering PID", "ez-template"], ["boomerangSteeringPID", "Boomerang steering PID", "ez-template"],
-  ["turnPID", "Turn PID", "ez-template"], ["swingPID", "Swing PID", "ez-template"],
+const PID_ROWS: readonly [PlanningPIDRole, string, readonly PlanningControllerModel[]][] = [
+  ["lateralPID", "Linear PID", ["lemlib", "ez-template", "jar-template"]], ["angularPID", "Angular PID", ["lemlib"]],
+  ["pointSteeringPID", "Point steering PID", ["ez-template", "jar-template"]], ["boomerangSteeringPID", "Boomerang steering PID", ["ez-template"]],
+  ["turnPID", "Turn PID", ["ez-template", "jar-template"]], ["swingPID", "Swing PID", ["ez-template", "jar-template"]],
 ];
 
 /** Live document settings: each completed field edit is one history transaction. */
@@ -53,26 +57,41 @@ export class PlanningSimulationSettingsView {
     this.#units = units;
     this.#preset.value = config.library; this.#model.value = config.previewModel;
     this.#model.disabled = config.library !== "custom";
-    this.#customDescription.hidden = config.previewModel !== "custom";
+    this.#customDescription.hidden = !["custom", "jar-template", "vexcode"].includes(config.previewModel);
+    this.#customDescription.textContent = config.previewModel === "jar-template"
+      ? "JAR uses voltage-based Linear, Heading, Turn and Swing PID gains. Travel direction is chosen automatically. Preview follows JAR's target-plane and settling rules."
+      : config.previewModel === "vexcode"
+        ? "Approximate VEXcode built-in motion control, shared by C++ and Python. Waypoint Speed sets drive and turn velocity. Uses the default BRAKE stopping mode; PID gains are not used. Straight aligns before driving; Swing and Boomerang preview as Turn and Straight."
+        : "Custom uses every tuning control. Angular PID is blended equally with the controller for each motion. Both slew limits, horizontal drift, lookahead, carrot cap, turn bias, setback, heading limit and turn controls apply.";
     for (const [key, input] of this.#inputs) {
       const field = this.#numericFields.get(key);
       const row = PID_ROWS.find(([role]) => key.startsWith(`${role}.`));
-      const model = field?.model ?? row?.[2];
-      const unused = !!model && config.previewModel !== model && config.previewModel !== "custom";
+      const models = field?.model ? [field.model] : row?.[2];
+      const unused = !!models && !models.includes(config.previewModel) && config.previewModel !== "custom";
       input.disabled = unused;
       const label = input.closest("label")!;
       label.title = unused ? "Not used by the selected controller model." : "";
-      const unit = field?.dimension ? simulationInputUnit(field.dimension, units) : { suffix: "", factor: 1 };
+      // Shared gains are retained in power units when switching presets. JAR's
+      // UI uses its native volts; committing converts back without losing edits.
+      const jarGain = !!row && config.previewModel === "jar-template";
+      const unit = field?.dimension ? simulationInputUnit(field.dimension, units) : { suffix: "", factor: jarGain ? 127 / 12 : 1 };
       if (field) label.querySelector("span")!.textContent = `${field.label}${unit.suffix ? ` (${unit.suffix})` : ""}${unused ? " · Not used" : ""}`;
       const value = field ? config[field.key] : config[key.split(".")[0] as PlanningPIDRole][key.split(".")[1] as "kP" | "kI" | "kD"];
-      if (force || document.activeElement !== input && input.dataset.invalid !== "true") {
-        input.value = simulationInputNumber(value / unit.factor);
+      const conversionChanged = this.#conversions.get(key)?.factor !== unit.factor;
+      if (force || conversionChanged || document.activeElement !== input && input.dataset.invalid !== "true") {
+        input.value = jarGain ? String(Number((value / unit.factor).toFixed(4))) : simulationInputNumber(value / unit.factor);
         input.removeAttribute("aria-invalid"); delete input.dataset.invalid;
         this.#conversions.set(key, { factor: unit.factor, display: input.value, original: value });
       }
-      if (field) { input.min = simulationInputNumber(field.min / unit.factor); input.max = simulationInputNumber(field.max / unit.factor); }
+      input.min = String((field?.min ?? -1000) / unit.factor);
+      input.max = String((field?.max ?? 1000) / unit.factor);
     }
-    for (const row of this.content.querySelectorAll<HTMLElement>("[data-pid-model]")) row.hidden = config.previewModel !== "custom" && row.dataset.pidModel !== config.previewModel;
+    for (const row of this.content.querySelectorAll<HTMLElement>("[data-pid-model]")) {
+      row.hidden = config.previewModel !== "custom" && !row.dataset.pidModel!.split(" ").includes(config.previewModel);
+      const entry = PID_ROWS.find(([role]) => role === row.dataset.pidRole)!;
+      row.querySelector<HTMLElement>(".planSimulationPIDTitle")!.textContent = config.previewModel === "jar-template"
+        ? `${entry[0] === "pointSteeringPID" ? "Heading PID" : entry[1]} (V)` : entry[1];
+    }
   }
   private build(): void {
     this.content.replaceChildren();
@@ -81,9 +100,9 @@ export class PlanningSimulationSettingsView {
     description.textContent = "Approximate preview and playback for all motions. Shared across paths and saved with this document. Valid edits save on Enter or when you leave a field. Preview follows selected motions; custom code and Methods are not executed.";
     this.content.append(heading, description);
     const selectors = this.grid();
-    this.#preset = this.select(selectors, "Library preset", [["lemlib", "LemLib"], ["ez-template", "EZ-Template"], ["custom", "Custom"]]);
+    this.#preset = this.select(selectors, "Library preset", PLANNING_SIMULATION_MODELS);
     this.#preset.id = "settingsPlanSimulationLibrary";
-    this.#model = this.select(selectors, "Custom base model", [["lemlib", "LemLib"], ["ez-template", "EZ-Template"], ["custom", "Custom"]]);
+    this.#model = this.select(selectors, "Custom base model", PLANNING_SIMULATION_MODELS);
     this.#model.id = "settingsPlanSimulationModel";
     this.#preset.addEventListener("change", () => this.planning.setSimulationConfiguration(applyPlanningLibraryPreset(this.#preset.value as PlanningSimulationLibrary, this.planning.simulationConfiguration)));
     this.#model.addEventListener("change", () => this.planning.setSimulationConfiguration({ library: "custom", previewModel: this.#model.value as PlanningControllerModel }));
@@ -98,9 +117,9 @@ export class PlanningSimulationSettingsView {
     const hint = document.createElement("p"); hint.className = "settingsDescription";
     hint.textContent = "Use theoretical speed at rated motor RPM. PID gains use the library’s native units and are not converted with app units. Defaults are preview assumptions, not recommended robot tuning.";
     this.content.appendChild(hint);
-    for (const [key, title, model] of PID_ROWS) {
+    for (const [key, title, models] of PID_ROWS) {
       const row = document.createElement("div"); row.className = "planSimulationPID";
-      if (model) row.dataset.pidModel = model;
+      row.dataset.pidModel = models.join(" "); row.dataset.pidRole = key;
       const label = document.createElement("span"); label.className = "planSimulationPIDTitle"; label.textContent = title;
       row.appendChild(label);
       for (const gain of ["kP", "kI", "kD"] as const) this.number(row, `${key}.${gain}`, gain, -1000, 1000);

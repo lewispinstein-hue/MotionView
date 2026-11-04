@@ -2,12 +2,14 @@ import type { PlanWaypoint, PlanWaypointMotion } from "../state/models";
 import {
   isBoomerangWaypoint,
   isSegmentForwards,
+  normalizePlanningMinSpeed,
   segmentDriveHeading,
   waypointLead,
 } from "./planningMotionContext";
-import { angleError, PlanningMotionController } from "./planningSimulationControllers";
+import { angleError } from "./planningSimulationControllers";
+import { createPlanningSimulationController } from "./planningSimulationController";
 import { PlanningPreviewDrivetrain } from "./planningPreviewDrivetrain";
-import { planningMotionsForLibrary, isVexcodePlanningLibrary } from "./planningTemplateCapabilities";
+import { planningMotionsForLibrary, isVexcodePlanningLibrary, supportsPlanningMinSpeed } from "./planningTemplateCapabilities";
 import type { PlanningTemplateLibrary } from "./planningTemplatePresets";
 import type {
   PlanningSimulationRequest,
@@ -36,6 +38,7 @@ function motionsOf(
   point: Readonly<PlanWaypoint>,
   index: number,
   library: PlanningTemplateLibrary = "custom",
+  model?: PlanningSimulationRequest["configuration"]["previewModel"],
 ): readonly Readonly<PlanWaypointMotion>[] {
   return planningMotionsForLibrary(point.motions?.length
     ? point.motions
@@ -44,7 +47,7 @@ function motionsOf(
           id: `legacy-${index}`,
           type: isBoomerangWaypoint(point) ? "boomerang" : "forward",
         },
-      ], library);
+      ], model === "vexcode" ? "vexcode-cpp" : library);
 }
 export function simulationSectionKey(
   request: PlanningSimulationRequest,
@@ -57,18 +60,20 @@ export function simulationSectionKey(
     start.y,
     start.theta ?? 0,
     start.speed ?? 127,
+    normalizePlanningMinSpeed(start.minSpeed, start.speed),
     isSegmentForwards(start, end),
-    motionsOf(start, index, request.templateLibrary).some((m) => m.type === "boomerang")
+    motionsOf(start, index, request.templateLibrary, request.configuration.previewModel).some((m) => m.type === "boomerang")
       ? waypointLead(start)
       : 0,
     end.x,
     end.y,
     end.theta ?? 0,
     index === request.waypoints.length - 2,
-    motionsOf(start, index, request.templateLibrary).map((m) => [
+    motionsOf(start, index, request.templateLibrary, request.configuration.previewModel).map((m) => [
       m.id,
       m.type,
       m.lockedDriveSide ?? "left",
+      supportsPlanningMinSpeed(request.templateLibrary ?? "custom", m.type),
     ]),
     request.configuration,
     isVexcodePlanningLibrary(request.templateLibrary ?? "custom") ? "turn-then-drive" : false,
@@ -117,9 +122,10 @@ export function simulatePlanningRoute(
     forwards: boolean,
     speed: number,
     samples: SimulationSample[],
+    minSpeed = 0,
   ): SimulationOutcome => {
-    const controller = new PlanningMotionController(
-      motion, target, lead, forwards, speed, request.configuration, pose, drivetrain,
+    const controller = createPlanningSimulationController(
+      motion, target, lead, forwards, speed, request.configuration, pose, drivetrain, minSpeed,
     );
     let outcome: SimulationOutcome = "incomplete", dwell = 0;
     const movement: number[] = [], rotation: number[] = [];
@@ -135,10 +141,10 @@ export function simulatePlanningRoute(
         : Math.abs(drivetrain.linearVelocity) < 3 &&
           (motion.type !== "boomerang" || Math.abs(drivetrain.angularVelocity) < 0.15);
       dwell = output.arrived && settledVelocity ? dwell + 1 : 0;
-      // LemLib's controller has already applied its timed exit windows. Its
-      // completion does not additionally require our generic velocity/XY gate.
-      const lemlib = request.configuration.previewModel === "lemlib";
-      const finished = lemlib ? output.arrived : dwell >= ARRIVAL_DWELL_STEPS;
+      // These controllers apply their own exit windows rather than the generic
+      // velocity/XY gate used by the EZ and combined Custom approximation.
+      const controllerSettles = ["lemlib", "jar-template", "vexcode"].includes(request.configuration.previewModel);
+      const finished = output.chained || (controllerSettles ? output.arrived : dwell >= ARRIVAL_DWELL_STEPS);
       const delta = drivetrain.step(
         finished ? 0 : output.left,
         finished ? 0 : output.right,
@@ -163,7 +169,7 @@ export function simulatePlanningRoute(
       }
       if (step % 3 === 0) samples.push(sample());
       if (finished) {
-        outcome = lemlib
+        outcome = controllerSettles
           ? targetErrorFor(motion.type, target, pose) <= 1 ? "reached" : "completed"
           : angularMotion || Math.hypot(target.x - pose.x, target.y - pose.y) <= 1 ? "reached" : "missed";
         break;
@@ -183,10 +189,11 @@ export function simulatePlanningRoute(
     const samples: SimulationSample[] = [sample()];
     const motions: SimulatedMotion[] = [];
     let sectionOutcome: SimulationOutcome = "reached";
-    for (const motion of motionsOf(start, index, request.templateLibrary)) {
+    for (const motion of motionsOf(start, index, request.templateLibrary, request.configuration.previewModel)) {
       const forwards = isSegmentForwards(start, request.waypoints[index + 1]);
       const startTime = time;
-      const vexcodeStraight = isVexcodePlanningLibrary(request.templateLibrary ?? "custom") && motion.type === "forward";
+      const vexcodeStraight = (isVexcodePlanningLibrary(request.templateLibrary ?? "custom") ||
+        request.configuration.previewModel === "vexcode") && motion.type === "forward";
       const driveDistance = Math.hypot(target.x - start.x, target.y - start.y) * (forwards ? 1 : -1);
       let outcome: SimulationOutcome = "reached";
       if (vexcodeStraight && Math.abs(driveDistance) > 1e-10) {
@@ -202,7 +209,9 @@ export function simulatePlanningRoute(
         const motionTarget = vexcodeStraight
           ? { x: pose.x + Math.sin(pose.theta) * driveDistance, y: pose.y + Math.cos(pose.theta) * driveDistance, theta: pose.theta }
           : target;
-        const driveOutcome = runMotion(motion, motionTarget, waypointLead(start), forwards, start.speed ?? 127, samples);
+        const driveOutcome = runMotion(motion, motionTarget, waypointLead(start), forwards, start.speed ?? 127, samples,
+          supportsPlanningMinSpeed(request.templateLibrary ?? "custom", motion.type)
+            ? normalizePlanningMinSpeed(start.minSpeed, start.speed) : 0);
         if (outcome === "reached" || (outcome === "completed" && driveOutcome !== "reached") || driveOutcome === "incomplete") outcome = driveOutcome;
         if (outcome === "reached" && motion.type === "forward" && Math.hypot(target.x - pose.x, target.y - pose.y) > 1)
           outcome = request.configuration.previewModel === "lemlib" ? "completed" : "missed";
@@ -250,7 +259,7 @@ export function simulatePlanningRoute(
       )
         sectionOutcome = "incomplete";
       const finalMotion = motions.at(-1);
-      if (request.configuration.previewModel === "lemlib" && sectionOutcome === "reached" &&
+      if (["lemlib", "jar-template", "vexcode"].includes(request.configuration.previewModel) && sectionOutcome === "reached" &&
           finalMotion && targetErrorFor(finalMotion.type, target, pose) > 1)
         sectionOutcome = "completed";
     }

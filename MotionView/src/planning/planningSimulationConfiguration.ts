@@ -1,12 +1,21 @@
 export interface PreviewPIDConfiguration {
+  /** Stored in motor-power units; JAR's settings editor displays the voltage equivalent. */
   readonly kP: number;
   readonly kI: number;
   readonly kD: number;
   readonly windupRange: number;
   readonly signFlipReset: boolean;
 }
-export type PlanningControllerModel = "lemlib" | "ez-template" | "custom";
-export type PlanningSimulationLibrary = PlanningControllerModel | "custom";
+export type PlanningControllerModel = "lemlib" | "ez-template" | "jar-template" | "vexcode" | "custom";
+export type PlanningSimulationLibrary = PlanningControllerModel;
+export const PLANNING_SIMULATION_MODELS = [
+  ["lemlib", "LemLib"], ["ez-template", "EZ-Template"], ["jar-template", "JAR-Template"],
+  ["vexcode", "VEXcode"], ["custom", "Custom"],
+] as const satisfies readonly (readonly [PlanningControllerModel, string])[];
+
+function isControllerModel(value: unknown): value is PlanningControllerModel {
+  return PLANNING_SIMULATION_MODELS.some(([id]) => id === value);
+}
 export const PLANNING_MOTOR_WATTS = { min: 22, max: 88, step: 5.5 } as const;
 export const PLANNING_PID_ROLES = [
   "lateralPID",
@@ -39,6 +48,10 @@ export interface PlanningSimulationConfiguration {
   readonly lookAheadDistance: number;
   readonly turnBias: number;
   readonly horizontalDrift: number;
+  readonly jarSetback: number;
+  readonly jarHeadingMaxVoltage: number;
+  readonly vexTurnConstant: number;
+  readonly vexTurnThreshold: number;
 }
 export type PlanningSimulationConfigurationUpdate = Partial<
   Omit<PlanningSimulationConfiguration, PlanningPIDRole>
@@ -52,11 +65,19 @@ type LibraryTuning = Pick<
   | "maxCarrotDistance"
   | "lookAheadDistance"
   | "turnBias"
+  | "jarSetback"
+  | "jarHeadingMaxVoltage"
+  | "vexTurnConstant"
+  | "vexTurnThreshold"
 >;
 // Reference: LemLib stable moveToPose.cpp; EZ drive_defaults_set(), not header initializers.
 // Drift and disabled slew are nominal robot assumptions, not recommended tuning.
+const COMMON_TUNING = {
+  jarSetback: 0, jarHeadingMaxVoltage: 12, vexTurnConstant: 1, vexTurnThreshold: 1,
+};
 const LIBRARY_DEFAULTS: Record<PlanningControllerModel, LibraryTuning> = {
   lemlib: {
+    ...COMMON_TUNING,
     horizontalDrift: 8,
     lateralSlew: 0,
     ezSlewDistance: 3,
@@ -65,6 +86,7 @@ const LIBRARY_DEFAULTS: Record<PlanningControllerModel, LibraryTuning> = {
     turnBias: 1,
   },
   "ez-template": {
+    ...COMMON_TUNING,
     horizontalDrift: 0,
     lateralSlew: 0,
     ezSlewDistance: 3,
@@ -73,12 +95,26 @@ const LIBRARY_DEFAULTS: Record<PlanningControllerModel, LibraryTuning> = {
     turnBias: 0.9,
   },
   custom: {
+    ...COMMON_TUNING,
     horizontalDrift: 8,
     lateralSlew: 0,
     ezSlewDistance: 3,
     maxCarrotDistance: 16,
     lookAheadDistance: 7,
     turnBias: 0.9,
+  },
+  "jar-template": {
+    ...COMMON_TUNING,
+    // JAR's odom_constants(): heading output is limited to 10 V; a global
+    // boomerang_setback left unset is zero. PID gains remain user-owned.
+    jarHeadingMaxVoltage: 10,
+    horizontalDrift: 0, lateralSlew: 0, ezSlewDistance: 3,
+    maxCarrotDistance: 0, lookAheadDistance: 7, turnBias: 1,
+  },
+  vexcode: {
+    ...COMMON_TUNING,
+    horizontalDrift: 0, lateralSlew: 0, ezSlewDistance: 3,
+    maxCarrotDistance: 0, lookAheadDistance: 7, turnBias: 1,
   },
 };
 const linear = Object.freeze({
@@ -157,16 +193,11 @@ export function normalizePlanningSimulationConfiguration(
   fallback = DEFAULT_PLANNING_SIMULATION_CONFIGURATION,
 ): PlanningSimulationConfiguration {
   const value = record(raw);
-  const library =
-    value.library === "lemlib" ||
-    value.library === "ez-template" ||
-    value.library === "custom"
-      ? value.library
-      : fallback.library;
+  const library = isControllerModel(value.library) ? value.library : fallback.library;
   const previewModel =
     library !== "custom"
       ? library
-      : value.previewModel === "lemlib" || value.previewModel === "ez-template" || value.previewModel === "custom"
+      : isControllerModel(value.previewModel)
         ? value.previewModel
         : fallback.previewModel;
   const defaults =
@@ -179,7 +210,7 @@ export function normalizePlanningSimulationConfiguration(
       ? value.separatePIDsInitialized
       : PLANNING_PID_ROLES.slice(2).some((key) => Object.hasOwn(value, key)) ||
         fallback.separatePIDsInitialized;
-  const seedSeparate = !initialized && previewModel !== "lemlib";
+  const seedSeparate = !initialized && previewModel !== "lemlib" && previewModel !== "vexcode";
   const gains = Object.fromEntries(
     PLANNING_PID_ROLES.map((key) => [
       key,
@@ -248,6 +279,10 @@ export function normalizePlanningSimulationConfiguration(
       0,
       100,
     ),
+    jarSetback: bounded(value.jarSetback, defaults.jarSetback, 0, 100),
+    jarHeadingMaxVoltage: bounded(value.jarHeadingMaxVoltage, defaults.jarHeadingMaxVoltage, 0, 12),
+    vexTurnConstant: bounded(value.vexTurnConstant, defaults.vexTurnConstant, 0.01, 10),
+    vexTurnThreshold: bounded(value.vexTurnThreshold, defaults.vexTurnThreshold, 0.1, 15),
   };
 }
 /** Presets never replace robot specifications, PID gains, waypoint data, or code. */

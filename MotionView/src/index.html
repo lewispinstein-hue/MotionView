@@ -731,7 +731,7 @@
                   <svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/editWaypoint.svg#icon-editWaypoint"></use></svg>
                 </button>
               </div>
-              <div class="grid4" style="margin-top:10px">
+              <div class="planSelectedFields" style="margin-top:10px">
                 <div>
                   <label id="planSelXLabel">X</label>
                   <input id="planSelX" type="text" inputmode="decimal" />
@@ -745,8 +745,12 @@
                   <input id="planSelTheta" type="text" inputmode="decimal" />
                 </div>
                 <div>
-                  <label>Speed</label>
-                  <input id="planSelSpeed" type="text" inputmode="numeric" />
+                  <label id="planSelSpeedLabel">Speed</label>
+                  <div class="planSelectedSpeedRange" role="group" aria-labelledby="planSelSpeedLabel">
+                    <input id="planSelMinSpeed" type="text" inputmode="numeric" aria-label="Minimum Speed" title="Minimum motion power (0–127). Use ${minSpeed} or @minspd in templates." />
+                    <span aria-hidden="true">-</span>
+                    <input id="planSelSpeed" type="text" inputmode="numeric" aria-label="Maximum Speed" />
+                  </div>
                 </div>
               </div>
             </div>

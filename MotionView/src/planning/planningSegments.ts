@@ -38,6 +38,7 @@ const inputs = (start: PlanningWaypointView, end: PlanningWaypointView) =>
     start.y,
     start.theta,
     start.speed,
+    start.minSpeed,
     start.forwards,
     waypointLead(start),
     start.motions?.map((m) => [m.id, m.type, m.lockedDriveSide]),
@@ -70,12 +71,12 @@ export class PlanningSegment {
     private readonly templateLibrary: PlanningTemplateLibrary = "custom",
   ) {
     this.#inputs = inputs(start, end);
-    this.curved = supportsPlanningMotion(templateLibrary, "boomerang") && isBoomerangWaypoint(start);
+    this.curved = configuration.previewModel !== "vexcode" && supportsPlanningMotion(templateLibrary, "boomerang") && isBoomerangWaypoint(start);
     this.forwards = isSegmentForwards(start, end);
     this.lead = this.curved ? waypointLead(start) : 0;
     this.chordLength = Math.hypot(end.x - start.x, end.y - start.y);
     const angle = ((end.theta ?? 0) * Math.PI) / 180,
-      direction = this.forwards ? 1 : -1;
+      direction = configuration.previewModel === "jar-template" ? 1 : this.forwards ? 1 : -1;
     this.leadAxis = {
       x: -Math.sin(angle) * direction,
       y: -Math.cos(angle) * direction,

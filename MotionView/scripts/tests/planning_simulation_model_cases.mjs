@@ -223,6 +223,10 @@ export async function runPlanningSimulationModelTests(server) {
     ["maxCarrotDistance", 4, "boomerang"],
     ["lookAheadDistance", 14, "boomerang"],
     ["turnBias", 1.5, "forward"],
+    ["jarSetback", 4, "boomerang"],
+    ["jarHeadingMaxVoltage", 3, "forward"],
+    ["vexTurnConstant", .5, "rotate"],
+    ["vexTurnThreshold", .1, "rotate"],
   ])
     assert.notDeepEqual(
       run(type, { [key]: value }).sections[0].samples,
