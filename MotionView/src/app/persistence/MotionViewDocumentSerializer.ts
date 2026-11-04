@@ -7,6 +7,11 @@ import {
 import { normalizeWaypointType, waypointEventCount } from "../../viewing";
 import type { MotionViewSettings } from "../settings";
 import { isBoomerangWaypoint, waypointLead } from "../../planning/planningSegments";
+import {
+  serializePlanningTemplateConfiguration,
+  type PlanningTemplateConfiguration,
+} from "../../planning/planningTemplatePresets";
+import { supportsPlanningMotion } from "../../planning/planningTemplateCapabilities";
 
 export type MotionViewExportType = "viewing" | "planning" | "both";
 
@@ -126,11 +131,9 @@ export class MotionViewDocumentSerializer {
     planning: ReturnType<MotionViewApp["planning"]["exportData"]>,
   ): Record<string, unknown> {
     return {
-      "planned-path": this.serializeWaypoints(planning.waypoints),
+      "planned-path": this.serializeWaypoints(planning.waypoints, planning.templateConfiguration),
       "planned-segment-export": true,
-      "planned-export-template": planning.template,
-      "planned-motion-templates": { ...planning.motionTemplates },
-      "planned-template-configuration": structuredClone(planning.templateConfiguration),
+      "planned-template-configuration": serializePlanningTemplateConfiguration(planning.templateConfiguration),
       "planned-simulation-configuration": structuredClone(planning.simulationConfiguration),
       "planned-objects": planning.objects.map((object) => ({
         id: object.id,
@@ -160,7 +163,7 @@ export class MotionViewDocumentSerializer {
       "planned-paths": this.app.planning.paths.items.map((path) => ({
         id: path.id,
         name: path.name,
-        "planned-path": this.serializeWaypoints(path.waypoints),
+        "planned-path": this.serializeWaypoints(path.waypoints, planning.templateConfiguration),
         "planned-nodes": path.nodes.map(serializePlanNode),
         "planned-code-export": { ...path.codeExport },
       })),
@@ -169,7 +172,9 @@ export class MotionViewDocumentSerializer {
 
   private serializeWaypoints(
     waypoints: ReturnType<MotionViewApp["planning"]["exportData"]>["waypoints"],
+    configuration: Readonly<PlanningTemplateConfiguration>,
   ): Record<string, unknown>[] {
+    const templates = configuration.templates[configuration.library];
     return waypoints.map((point) => {
       const indicatorIcons = normalizeWaypointIndicatorIcons(
         point.indicatorIcons,
@@ -183,9 +188,21 @@ export class MotionViewDocumentSerializer {
       if (typeof point.forwards === "boolean") serialized.forwards = point.forwards;
       if (indicatorIcons.length) serialized.indicatorIcons = indicatorIcons;
       if (isBoomerangWaypoint(point)) serialized.lead = waypointLead(point);
-      if (Array.isArray(point.motions)) serialized.motions = normalizeWaypointMotions(point.motions);
-      if (Object.prototype.hasOwnProperty.call(point, "overrideCode"))
-        serialized.overrideCode = point.overrideCode ?? "";
+      if (Array.isArray(point.motions)) {
+        serialized.motions = normalizeWaypointMotions(point.motions).map(motion => {
+          // Unsupported VEXcode motions retain their original code for switching
+          // back to another library; their temporary counterparts ignore it.
+          if (supportsPlanningMotion(configuration.library, motion.type) &&
+              motion.overrideCode === templates[motion.type])
+            delete motion.overrideCode;
+          return motion;
+        });
+      } else if (Object.prototype.hasOwnProperty.call(point, "overrideCode")) {
+        const code = point.overrideCode ?? "";
+        const type = isBoomerangWaypoint(point) ? "boomerang" : "forward";
+        if (!supportsPlanningMotion(configuration.library, type) || code !== templates[type])
+          serialized.overrideCode = code;
+      }
       return serialized;
     });
   }

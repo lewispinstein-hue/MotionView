@@ -26,6 +26,28 @@ export interface PlanningTemplateConfiguration {
   customLanguage: PlanningTemplateLanguage;
 }
 
+interface SavedPlanningTemplateConfiguration {
+  library: PlanningTemplateLibrary;
+  templates?: { custom: PlanMotionTemplates };
+  swingDriveSides?: { custom: PlanningSwingDriveSides };
+  customLanguage?: PlanningTemplateLanguage;
+}
+
+/** Built-in presets are restored by ID; only the editable Custom bank needs code. */
+export function serializePlanningTemplateConfiguration(
+  configuration: Readonly<PlanningTemplateConfiguration>,
+): SavedPlanningTemplateConfiguration {
+  const saved: SavedPlanningTemplateConfiguration = { library: configuration.library };
+  if (Object.values(configuration.templates.custom).some(code => code !== ""))
+    saved.templates = { custom: { ...configuration.templates.custom } };
+  const sides = configuration.swingDriveSides.custom;
+  if (sides.left !== "left" || sides.right !== "right")
+    saved.swingDriveSides = { custom: { ...sides } };
+  if (configuration.customLanguage !== "cpp")
+    saved.customLanguage = configuration.customLanguage;
+  return saved;
+}
+
 export function isPlanningTemplateLibrary(value: unknown): value is PlanningTemplateLibrary {
   return PLANNING_TEMPLATE_LIBRARIES.some(library => library.id === value);
 }

@@ -194,7 +194,7 @@ export async function runPlanningMotionTests(server) {
   const payload = serializer.exportPayload("planning", "Motion Routes", {});
   assert.equal(payload.meta.SchemaVersion, 5);
   assert.deepEqual(
-    payload["planned-motion-templates"],
+    payload["planned-template-configuration"].templates.custom,
     planning.motionTemplates,
   );
   assert.deepEqual(payload["planned-path"][0].motions, motions);

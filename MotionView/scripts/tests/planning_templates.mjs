@@ -11,6 +11,7 @@ import { runPlanningTemplatePresetTests } from "./planning_template_presets_case
 import { runPlanningSwingTemplateTests } from "./planning_swing_template_cases.mjs";
 import { runPlanningVexcodeTests } from "./planning_vexcode_cases.mjs";
 import { runPlanningSimulationModelTests } from "./planning_simulation_model_cases.mjs";
+import { runPlanningExportConfigurationTests } from "./planning_export_configuration_cases.mjs";
 
 function format(value, decimals = 3) {
   const fixed = Number(value).toFixed(decimals);
@@ -670,6 +671,7 @@ try {
   await runPlanningWaypointDirectionTests(server);
   await runPlanningInputTests(server);
   await runPlanningTemplatePresetTests(server);
+  await runPlanningExportConfigurationTests(server);
   await runPlanningSwingTemplateTests(server);
   await runPlanningVexcodeTests(server);
   console.log("Planning template and motion regression tests passed.");
