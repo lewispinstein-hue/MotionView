@@ -1,4 +1,4 @@
-import swapIconUrl from "../../assets/svg/planning/swapPlanningMotions.svg?url";
+import swapIconSvg from "../../assets/svg/planning/swapPlanningMotions.svg?raw";
 import type { PlanMotionTemplates, PlanWaypointIndicatorIcon, PlanWaypointMotion } from "../../state/models";
 import type { PlanningDom } from "../PlanningDom";
 import { createWaypointIndicatorIcon, getWaypointIndicatorTooltip } from "../planningIndicators";
@@ -221,7 +221,7 @@ export class PlanningMotionEditorView {
     swap.title = "Swap execution order";
     swap.setAttribute("aria-label", swap.title);
     swap.disabled = selection.motions.length !== 2;
-    swap.innerHTML = `<svg aria-hidden="true" focusable="false"><use href="${swapIconUrl}#icon-swapPlanningMotions"></use></svg>`;
+    swap.innerHTML = swapIconSvg.replace("<svg ", '<svg aria-hidden="true" focusable="false" ');
     swap.addEventListener("click", () => {
       if (!selection.swap()) return;
       this.render();

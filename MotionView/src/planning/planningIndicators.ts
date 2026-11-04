@@ -1,8 +1,8 @@
 import type { PlanWaypointIndicatorIcon } from "../state/models";
-import rotateIconUrl from "../assets/svg/planning/waypointRotate.svg?url";
-import swingIconUrl from "../assets/svg/planning/waypointSwing.svg?url";
-import forwardIconUrl from "../assets/svg/planning/waypointForward.svg?url";
-import boomerangIconUrl from "../assets/svg/planning/waypointBoomerang.svg?url";
+import rotateIconSvg from "../assets/svg/planning/waypointRotate.svg?raw";
+import swingIconSvg from "../assets/svg/planning/waypointSwing.svg?raw";
+import forwardIconSvg from "../assets/svg/planning/waypointForward.svg?raw";
+import boomerangIconSvg from "../assets/svg/planning/waypointBoomerang.svg?raw";
 
 export const WAYPOINT_INDICATOR_ICONS = [
   "rotate",
@@ -11,11 +11,11 @@ export const WAYPOINT_INDICATOR_ICONS = [
   "boomerang",
 ] as const satisfies readonly PlanWaypointIndicatorIcon[];
 
-const ICON_HREFS: Record<PlanWaypointIndicatorIcon, string> = {
-  rotate: `${rotateIconUrl}#icon-waypointRotate`,
-  swing: `${swingIconUrl}#icon-waypointSwing`,
-  forward: `${forwardIconUrl}#icon-waypointForward`,
-  boomerang: `${boomerangIconUrl}#icon-waypointBoomerang`,
+const ICON_SVGS: Record<PlanWaypointIndicatorIcon, string> = {
+  rotate: rotateIconSvg,
+  swing: swingIconSvg,
+  forward: forwardIconSvg,
+  boomerang: boomerangIconSvg,
 };
 
 const ICON_TOOLTIPS: Record<PlanWaypointIndicatorIcon, string> = {
@@ -70,15 +70,17 @@ export function createWaypointIndicatorIcon(
   icon: PlanWaypointIndicatorIcon,
   className = "",
 ): SVGSVGElement {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  // Embed the bundled SVG itself. Production URL imports can become data URLs,
+  // which WebViews may reject when referenced by an SVG <use> element.
+  const template = document.createElement("template");
+  template.innerHTML = ICON_SVGS[icon];
+  const svg = template.content.querySelector("svg")!;
+  svg.removeAttribute("id");
   svg.classList.add("waypointIndicatorIcon");
   if (className) svg.classList.add(className);
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("title", getWaypointIndicatorTooltip(icon));
   svg.setAttribute("aria-hidden", "true");
   svg.setAttribute("focusable", "false");
-  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", ICON_HREFS[icon]);
-  svg.appendChild(use);
   return svg;
 }
