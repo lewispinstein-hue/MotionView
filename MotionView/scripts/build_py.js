@@ -28,9 +28,7 @@ function getRustTargetTriple() {
   if (res.error || res.status !== 0) {
     throw new Error("rustc not found; needed to determine target triple");
   }
-  const line = res.stdout
-    .split("\n")
-    .find((l) => l.startsWith("host: "));
+  const line = res.stdout.split("\n").find((l) => l.startsWith("host: "));
   if (!line) throw new Error("could not determine Rust host triple");
   return line.replace("host: ", "").trim();
 }
@@ -70,7 +68,11 @@ const venvPython =
     : path.join(repoRoot, ".venv", "bin", "python");
 const python =
   process.env.PYTHON ||
-  (fs.existsSync(venvPython) ? venvPython : process.platform === "win32" ? "python" : "python3");
+  (fs.existsSync(venvPython)
+    ? venvPython
+    : process.platform === "win32"
+      ? "python"
+      : "python3");
 
 function installRequirements(requirementsPath, extraArgs = []) {
   if (fs.existsSync(requirementsPath)) {
@@ -96,24 +98,31 @@ function installProsRequirements() {
 function removeObsoletePyInstallerPackages() {
   // Some legacy dependencies pull in the obsolete `typing` backport on Python 3,
   // which PyInstaller rejects outright. Remove it if present.
-  const res = spawnSync(
-    python,
-    ["-m", "pip", "uninstall", "-y", "typing"],
-    { stdio: "inherit" },
-  );
+  const res = spawnSync(python, ["-m", "pip", "uninstall", "-y", "typing"], {
+    stdio: "inherit",
+  });
   if (res.error) throw res.error;
   if (res.status !== 0 && res.status !== 1) process.exit(res.status ?? 1);
 }
 
-function buildPyInstaller(name, entry, extraArgs = [], { noConsole = false } = {}) {
+function buildPyInstaller(
+  name,
+  entry,
+  extraArgs = [],
+  { noConsole = false } = {},
+) {
   const oneDir = extraArgs.includes("--onedir");
   const args = [
-    "-m", "PyInstaller",
+    "-m",
+    "PyInstaller",
     "--clean",
     "--noconfirm",
-    "--distpath", distDir,
-    "--workpath", path.join(pyInstallerWorkDir, name),
-    "--specpath", pyInstallerSpecDir,
+    "--distpath",
+    distDir,
+    "--workpath",
+    path.join(pyInstallerWorkDir, name),
+    "--specpath",
+    pyInstallerSpecDir,
     oneDir ? "--onedir" : "-F",
     ...extraArgs.filter((arg) => arg !== "--onedir"),
   ];
@@ -159,8 +168,13 @@ function copySidecar(baseName) {
 
 function copyRuntimeDir(baseName, destination = path.join(binDir, baseName)) {
   const distRuntimeDir = path.join(distDir, baseName);
-  if (!fs.existsSync(distRuntimeDir) || !fs.statSync(distRuntimeDir).isDirectory()) {
-    throw new Error(`PyInstaller runtime directory not found: ${distRuntimeDir}`);
+  if (
+    !fs.existsSync(distRuntimeDir) ||
+    !fs.statSync(distRuntimeDir).isDirectory()
+  ) {
+    throw new Error(
+      `PyInstaller runtime directory not found: ${distRuntimeDir}`,
+    );
   }
 
   fs.rmSync(destination, { recursive: true, force: true });
@@ -203,14 +217,22 @@ buildPyInstaller(
   [
     ...(bridgeUsesOneDir ? ["--onedir"] : []),
     // ensure all lazy-loaded modules get bundled
-    "--collect-all", "fastapi",
-    "--collect-all", "starlette",
-    "--collect-all", "pydantic",
-    "--collect-all", "anyio",
-    "--collect-all", "python_multipart",
-    "--collect-all", "email_validator",
-    "--collect-all", "jinja2",
-    "--collect-all", "orjson",
+    "--collect-all",
+    "fastapi",
+    "--collect-all",
+    "starlette",
+    "--collect-all",
+    "pydantic",
+    "--collect-all",
+    "anyio",
+    "--collect-all",
+    "python_multipart",
+    "--collect-all",
+    "email_validator",
+    "--collect-all",
+    "jinja2",
+    "--collect-all",
+    "orjson",
   ],
   { noConsole: true },
 );
@@ -220,17 +242,18 @@ if (bridgeUsesOneDir) {
   copySidecar("motionview-py");
 }
 
-buildPyInstaller(
-  "motionview-pros",
-  prosEntry,
-  [
-    "--onedir",
-    "--paths", prosRoot,
-    "--add-data", `${path.join(prosRoot, "pros", "autocomplete")}${path.delimiter}pros/autocomplete`,
-    "--collect-all", "pros",
-    "--collect-all", "requests",
-    "--collect-all", "charset_normalizer",
-  ],
-);
+buildPyInstaller("motionview-pros", prosEntry, [
+  "--onedir",
+  "--paths",
+  prosRoot,
+  "--add-data",
+  `${path.join(prosRoot, "pros", "autocomplete")}${path.delimiter}pros/autocomplete`,
+  "--collect-all",
+  "pros",
+  "--collect-all",
+  "requests",
+  "--collect-all",
+  "charset_normalizer",
+]);
 copyRuntimeDir("motionview-pros");
 copyRuntimeArchive("motionview-pros");

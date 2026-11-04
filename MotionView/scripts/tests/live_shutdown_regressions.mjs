@@ -1,14 +1,22 @@
 import assert from "node:assert/strict";
 
 export async function runLiveShutdownRegressions(server) {
-  const { LiveConnection } = await server.ssrLoadModule("/live/LiveConnection.ts");
+  const { LiveConnection } = await server.ssrLoadModule(
+    "/live/LiveConnection.ts",
+  );
   const { LiveEvents } = await server.ssrLoadModule("/live/LiveEvents.ts");
   const { LiveSession } = await server.ssrLoadModule("/live/LiveSession.ts");
   const { LiveStream } = await server.ssrLoadModule("/live/LiveStream.ts");
-  const { LiveLineParser } = await server.ssrLoadModule("/live/LiveLineParser.ts");
+  const { LiveLineParser } = await server.ssrLoadModule(
+    "/live/LiveLineParser.ts",
+  );
   const { LiveMetrics } = await server.ssrLoadModule("/live/LiveMetrics.ts");
-  const { ViewingFeature } = await server.ssrLoadModule("/viewing/ViewingFeature.ts");
-  const { AppShutdown } = await server.ssrLoadModule("/app/lifecycle/AppShutdown.ts");
+  const { ViewingFeature } = await server.ssrLoadModule(
+    "/viewing/ViewingFeature.ts",
+  );
+  const { AppShutdown } = await server.ssrLoadModule(
+    "/app/lifecycle/AppShutdown.ts",
+  );
 
   const originals = {
     WebSocket: globalThis.WebSocket,

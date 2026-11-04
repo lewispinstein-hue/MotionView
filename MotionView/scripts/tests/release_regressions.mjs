@@ -18,18 +18,38 @@ const field = (value = "") => ({
 });
 
 export async function runReleaseRegressions(server) {
-  const { ViewingFeature } = await server.ssrLoadModule("/viewing/ViewingFeature.ts");
-  const { formatNumber, watchGraphKey, watchKey } = await server.ssrLoadModule("/viewing/viewingPresentation.ts");
-  const { WatchGraphView } = await server.ssrLoadModule("/viewing/render/WatchGraphView.ts");
-  const { FieldRenderer } = await server.ssrLoadModule("/render/field/FieldRenderer.ts");
-  const { PlanningFeature } = await server.ssrLoadModule("/planning/PlanningFeature.ts");
-  const { PlanningCodeExportDialog } = await server.ssrLoadModule("/planning/PlanningCodeExportDialog.ts");
-  const { PlanningInput } = await server.ssrLoadModule("/planning/PlanningInput.ts");
+  const { ViewingFeature } = await server.ssrLoadModule(
+    "/viewing/ViewingFeature.ts",
+  );
+  const { formatNumber, watchGraphKey, watchKey } = await server.ssrLoadModule(
+    "/viewing/viewingPresentation.ts",
+  );
+  const { WatchGraphView } = await server.ssrLoadModule(
+    "/viewing/render/WatchGraphView.ts",
+  );
+  const { FieldRenderer } = await server.ssrLoadModule(
+    "/render/field/FieldRenderer.ts",
+  );
+  const { PlanningFeature } = await server.ssrLoadModule(
+    "/planning/PlanningFeature.ts",
+  );
+  const { PlanningCodeExportDialog } = await server.ssrLoadModule(
+    "/planning/PlanningCodeExportDialog.ts",
+  );
+  const { PlanningInput } = await server.ssrLoadModule(
+    "/planning/PlanningInput.ts",
+  );
   const { AppInput } = await server.ssrLoadModule("/app/input/AppInput.ts");
   const { LiveInput } = await server.ssrLoadModule("/live/LiveInput.ts");
-  const { ViewingInput } = await server.ssrLoadModule("/viewing/ViewingInput.ts");
-  const { WindowController } = await server.ssrLoadModule("/app/window/WindowController.ts");
-  const { getMode, setMode } = await server.ssrLoadModule("/app/modeController.ts");
+  const { ViewingInput } = await server.ssrLoadModule(
+    "/viewing/ViewingInput.ts",
+  );
+  const { WindowController } = await server.ssrLoadModule(
+    "/app/window/WindowController.ts",
+  );
+  const { getMode, setMode } = await server.ssrLoadModule(
+    "/app/modeController.ts",
+  );
 
   for (const value of [null, undefined, "", "  ", NaN, Infinity, -Infinity])
     assert.equal(formatNumber(value), "—");
@@ -157,24 +177,36 @@ export async function runReleaseRegressions(server) {
   }
 
   const originalWindow = globalThis.window;
-  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const originalNavigator = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "navigator",
+  );
   try {
     const commands = [];
     let fullscreen = true;
     let keydown;
     globalThis.window = {
-      addEventListener: (type, listener) => { if (type === "keydown") keydown = listener; },
+      addEventListener: (type, listener) => {
+        if (type === "keydown") keydown = listener;
+      },
       __TAURI_INTERNALS__: {
         invoke: async (command, args) => {
           commands.push(command);
           if (command === "get_window_fullscreen_state") return fullscreen;
-          if (command === "set_windows_fullscreen") return fullscreen = args.enable;
-          if (command === "reset_window_layout") { fullscreen = false; return; }
+          if (command === "set_windows_fullscreen")
+            return (fullscreen = args.enable);
+          if (command === "reset_window_layout") {
+            fullscreen = false;
+            return;
+          }
           throw new Error(`Unexpected window command: ${command}`);
         },
       },
     };
-    Object.defineProperty(globalThis, "navigator", { configurable: true, value: { userAgent: "Windows" } });
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { userAgent: "Windows" },
+    });
     const controller = new WindowController();
     controller.bind();
     await new Promise(setImmediate);
@@ -182,11 +214,16 @@ export async function runReleaseRegressions(server) {
     assert(commands.includes("reset_window_layout"));
     keydown({ key: "F11", preventDefault() {} });
     await new Promise(setImmediate);
-    assert.equal(fullscreen, true, "F11 must enter fullscreen after resetting a fullscreen window");
+    assert.equal(
+      fullscreen,
+      true,
+      "F11 must enter fullscreen after resetting a fullscreen window",
+    );
   } finally {
     if (originalWindow === undefined) delete globalThis.window;
     else globalThis.window = originalWindow;
-    if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
+    if (originalNavigator)
+      Object.defineProperty(globalThis, "navigator", originalNavigator);
     else delete globalThis.navigator;
   }
 

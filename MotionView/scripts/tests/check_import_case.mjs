@@ -24,7 +24,8 @@ for (const name of names) {
   if (
     !/^(MotionView\/src|MotionView\/scripts)\//.test(name) ||
     ![".ts", ".js", ".mjs"].includes(extname(name))
-  ) continue;
+  )
+    continue;
 
   const source = readFileSync(resolve(root, name), "utf8");
   const imports =

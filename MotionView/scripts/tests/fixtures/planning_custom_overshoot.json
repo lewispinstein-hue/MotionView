@@ -1,0 +1,268 @@
+{
+  "waypoints": [
+    {
+      "x": 62,
+      "y": 6,
+      "theta": 90,
+      "speed": 127,
+      "forwards": true,
+      "motions": [
+        {
+          "id": "plan-motion-1793670348162-xukjir",
+          "type": "forward"
+        },
+        {
+          "id": "plan-motion-1793670350846-39mhnm",
+          "type": "rotate"
+        }
+      ]
+    },
+    {
+      "x": 65,
+      "y": 5.75,
+      "theta": 90,
+      "speed": 127,
+      "forwards": false,
+      "motions": [
+        {
+          "id": "plan-motion-1793670352626-nq9d8s",
+          "type": "forward"
+        },
+        {
+          "id": "plan-motion-1793670354579-54kep9",
+          "type": "rotate"
+        }
+      ]
+    },
+    {
+      "x": 62,
+      "y": 6,
+      "theta": 90,
+      "speed": 127,
+      "forwards": true,
+      "motions": [
+        {
+          "id": "plan-motion-1793670356509-yi0yl6",
+          "type": "forward"
+        },
+        {
+          "id": "plan-motion-1793670357562-av5vtj",
+          "type": "rotate"
+        }
+      ]
+    },
+    {
+      "x": 65,
+      "y": 6,
+      "theta": 90,
+      "speed": 127,
+      "forwards": false,
+      "motions": [
+        {
+          "id": "plan-motion-1793670300788-zsru9e",
+          "type": "forward"
+        },
+        {
+          "id": "plan-motion-1793670306914-rctk2q",
+          "type": "rotate"
+        }
+      ]
+    },
+    {
+      "x": 62,
+      "y": 6,
+      "theta": 90,
+      "speed": 127,
+      "forwards": false,
+      "lead": 0.494,
+      "motions": [
+        {
+          "id": "plan-motion-1793670312888-n02kfq",
+          "type": "boomerang"
+        },
+        {
+          "id": "plan-motion-1793670321247-pjlyza",
+          "type": "rotate"
+        }
+      ]
+    },
+    {
+      "x": 46,
+      "y": 18,
+      "theta": 180,
+      "speed": 90,
+      "forwards": true,
+      "lead": 0,
+      "motions": [
+        {
+          "id": "plan-motion-1793670362625-syspha",
+          "type": "boomerang"
+        },
+        {
+          "id": "plan-motion-1793744373023-maao99",
+          "type": "rotate"
+        }
+      ]
+    },
+    {
+      "x": 43,
+      "y": 11,
+      "theta": 215,
+      "speed": 127,
+      "forwards": false,
+      "motions": [
+        {
+          "id": "plan-motion-1793670377713-bfcinu",
+          "type": "rotate"
+        },
+        {
+          "id": "plan-motion-1793670373309-mzkknn",
+          "type": "forward"
+        }
+      ]
+    },
+    {
+      "x": 27,
+      "y": 21,
+      "theta": 105,
+      "speed": 90,
+      "forwards": false,
+      "lead": 0.6,
+      "motions": [
+        {
+          "id": "plan-motion-1793670379875-jaxn23",
+          "type": "boomerang"
+        }
+      ]
+    },
+    {
+      "x": 41,
+      "y": 24,
+      "theta": 270,
+      "speed": 127,
+      "forwards": true,
+      "motions": [
+        {
+          "id": "plan-motion-1793670399740-bw9q2f",
+          "type": "forward"
+        },
+        {
+          "id": "plan-motion-1793670404079-oj1j3y",
+          "type": "rotate"
+        }
+      ]
+    },
+    {
+      "x": 33,
+      "y": 25,
+      "theta": 25,
+      "speed": 127,
+      "forwards": true,
+      "lead": 0.544,
+      "motions": [
+        {
+          "id": "plan-motion-1793670399740-bw9q2f",
+          "type": "boomerang"
+        },
+        {
+          "id": "plan-motion-1793752924183-i6cmjt",
+          "type": "rotate"
+        }
+      ]
+    },
+    {
+      "x": 43,
+      "y": 43,
+      "theta": 45,
+      "speed": 127,
+      "forwards": false,
+      "lead": 0.652,
+      "motions": [
+        {
+          "id": "plan-motion-1793670416578-guyoso",
+          "type": "boomerang"
+        },
+        {
+          "id": "plan-motion-1793670420929-5wbah2",
+          "type": "rotate"
+        }
+      ]
+    },
+    {
+      "x": 47,
+      "y": 29,
+      "theta": 0,
+      "speed": 127,
+      "forwards": true,
+      "lead": 0.587,
+      "motions": [
+        {
+          "id": "plan-motion-1793670428041-a79q0h",
+          "type": "boomerang"
+        },
+        {
+          "id": "plan-motion-1793670430480-u8dqqd",
+          "type": "rotate"
+        }
+      ]
+    }
+  ],
+  "configuration": {
+    "library": "custom",
+    "previewModel": "custom",
+    "separatePIDsInitialized": true,
+    "lateralPID": {
+      "kP": 11.75,
+      "kI": 0,
+      "kD": 8,
+      "windupRange": 0,
+      "signFlipReset": true
+    },
+    "angularPID": {
+      "kP": 3.5,
+      "kI": 0,
+      "kD": 20,
+      "windupRange": 0,
+      "signFlipReset": true
+    },
+    "pointSteeringPID": {
+      "kP": 3.5,
+      "kI": 0,
+      "kD": 20,
+      "windupRange": 0,
+      "signFlipReset": true
+    },
+    "boomerangSteeringPID": {
+      "kP": 3.5,
+      "kI": 0,
+      "kD": 20,
+      "windupRange": 0,
+      "signFlipReset": true
+    },
+    "turnPID": {
+      "kP": 3.5,
+      "kI": 0,
+      "kD": 20,
+      "windupRange": 0,
+      "signFlipReset": true
+    },
+    "swingPID": {
+      "kP": 3.5,
+      "kI": 0,
+      "kD": 20,
+      "windupRange": 0,
+      "signFlipReset": true
+    },
+    "lateralSlew": 0,
+    "ezSlewDistance": 3,
+    "trackWidth": 12,
+    "motorWatts": 44,
+    "maxSpeedInchesPerSecond": 57.7,
+    "robotWeightPounds": 10,
+    "maxCarrotDistance": 16,
+    "lookAheadDistance": 7,
+    "turnBias": 0.9,
+    "horizontalDrift": 8
+  },
+  "templateLibrary": "lemlib"
+}
