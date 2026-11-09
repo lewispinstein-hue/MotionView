@@ -18,7 +18,6 @@
     - [JSON Schema v2](docs/MotionView/MotionViewSchemaV2.md)
     - [Logging API](docs/MotionView/MotionViewAPI.md)
   - Changelog
-    - [v1.4.0](docs/MotionView/Changelog/v1.4.0.md)
     - [v1.3.1](docs/MotionView/Changelog/v1.3.1.md)
     - [v1.3.0](docs/MotionView/Changelog/v1.3.0.md)
     - [v1.2.0](docs/MotionView/Changelog/v1.2.0.md)
@@ -32,6 +31,5 @@
   - [SD Logging](docs/MVLib/SDLogging.md)
   - [Updating to v3.0.0](docs/MVLib/UpdatingTo-v3.0.0.md)
   - Changelog
-    - [v3.0.2](docs/MVLib/Changelog/v3.0.2.md)
     - [v3.0.0](docs/MVLib/Changelog/v3.0.0.md)
     - [v2.0.0](docs/MVLib/Changelog/v2.0.0.md)
