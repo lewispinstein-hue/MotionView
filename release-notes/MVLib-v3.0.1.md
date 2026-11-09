@@ -1,4 +1,4 @@
-# MVLib v3.0.1 Changelog
+# MVLib v3.0.2 Changelog
 
 Source range: `4b572c34d7431d23d9ac611bdc8ce5b4e1b69390..head`
 
@@ -10,6 +10,7 @@ Source range: `4b572c34d7431d23d9ac611bdc8ce5b4e1b69390..head`
 
 ## Improvements
 
+- The background telemetry writer now completes each COBS frame across partial serial writes and temporary backpressure. This preserves frame boundaries during bursts of long text logs. MotionView's updated wireless reader drains cached frames before making another controller request, reducing repeated radio polling and backlog.
 - Reworked terminal telemetry delivery with stronger packet prioritization, compact system diagnostics, and clearer session transitions between robot programs.
 - Improved public logger and handle operations to wait for a consistent logger-state snapshot instead of returning misleading default data during ordinary mutex contention.
 - Improved SD logging behavior by allowing a short bounded wait for an in-progress flush, reporting dropped records, and escaping free-text CSV fields safely.
@@ -19,6 +20,7 @@ Source range: `4b572c34d7431d23d9ac611bdc8ce5b4e1b69390..head`
 
 ## Bug Fixes
 
+- Fixed a retry limit that could abandon a partially written terminal packet, leaving adjacent text-watch or log frames merged and undecodable under heavy output.
 - Fixed periodic terminal roster replay so late-joining and reconnecting viewers can recover watch and active waypoint definitions.
 - Updated START telemetry with the full robot timestamp and startup metadata so MotionView can initialize timestamp reconstruction when that packet is received. Timestamp expansion and Stop/Start continuity are handled by the MotionView decoder.
 - Fixed drivetrain speed reporting when a motor returns `NaN` or infinity, and made fallback estimated speed preserve forward versus backward direction from the reported heading.

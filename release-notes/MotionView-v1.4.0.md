@@ -19,6 +19,8 @@ Source range: `4b572c34d7431d23d9ac611bdc8ce5b4e1b69390..head`
 
 ## Improvements
 
+- **Wireless streaming keeps up under heavy text telemetry:** the V5 terminal now drains all frames already returned by a controller read before making another radio request. In hardware testing, long text logs at the minimum `intervalMs` streamed without observable buffering or catch-up latency.
+- Live streaming now shows its Started banner as soon as the terminal is ready, before the first telemetry record. Startup failures show actionable PROS messages, and a controller upload in progress prevents a competing wireless stream from opening the same port.
 - Planning node tooltips now switch immediately between nearby nodes on the field and timeline after the initial hover delay, with a shared hover state that avoids flicker.
 - Planning's timeline now supports horizontal scrolling with a vertical mouse wheel, matching the top bar and Viewing sidebar tabs while preserving horizontal trackpad input.
 - Reworked live-stream telemetry around explicit session metadata, roster replay, compact system messages, and stronger error recovery so MotionView can distinguish normal terminal exits, received new-program markers, and recoverable stream failures.
@@ -34,6 +36,7 @@ Source range: `4b572c34d7431d23d9ac611bdc8ce5b4e1b69390..head`
 
 ## Bug Fixes
 
+- Suppressed the irrelevant LibreSSL/`urllib3` warning in the bundled terminal. Corrupted binary telemetry now produces a short diagnostic instead of a long hex dump, and decoding continues with the next valid frame.
 - Fixed saved-data loss risks with atomic writes, ordered autosaves, and one backup from the last clean shutdown. Damaged or missing current settings and recordings recover from a valid backup with a notification; defaults regenerate when no valid copy exists.
 - Fixed native close/quit handling so the final saved snapshot reflects the current UI after pending live records are processed. If the shutdown backup cannot be saved, MotionView stays open and offers a retry.
 - Fixed accidental replacement of existing JSON exports, repeated submissions while replacement confirmation is pending, and unclear export errors. JSON export success now shows the full destination.
