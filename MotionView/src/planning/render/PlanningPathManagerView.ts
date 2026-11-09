@@ -1,7 +1,16 @@
+import deriveIconSvg from "../../assets/svg/planning/copyCode.svg?raw";
+import removeIconSvg from "../../assets/svg/planning/removePlanningObject.svg?raw";
 import { setStatus } from "../../app/status";
 import type { PlanningDialogs } from "../PlanningDialogs";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningFeature } from "../PlanningFeature";
+import type { PlanningRotationDirection } from "../PlanningRoute";
+
+function pathActionIcon(svg: string): string {
+  return svg
+    .replace(/ id="[^"]+"/, "")
+    .replace("<svg ", '<svg aria-hidden="true" focusable="false" ');
+}
 
 /** Fixed field-corner control for switching and maintaining Planning paths. */
 export class PlanningPathManagerView {
@@ -31,6 +40,12 @@ export class PlanningPathManagerView {
     this.dom.mirrorTopBottom.addEventListener("click", () =>
       this.mirror("top-bottom"),
     );
+    this.dom.rotateLeft.addEventListener("click", () =>
+      this.rotate("counterclockwise"),
+    );
+    this.dom.rotateRight.addEventListener("click", () =>
+      this.rotate("clockwise"),
+    );
   }
 
   render(): void {
@@ -43,9 +58,11 @@ export class PlanningPathManagerView {
     this.dom.pathManagerBody.setAttribute("aria-hidden", String(!this.#open));
     this.dom.pathManagerBody.inert = !this.#open;
     this.dom.pathList.replaceChildren();
-    const canMirror = active.waypoints.length > 0;
-    this.dom.mirrorLeftRight.disabled = !canMirror;
-    this.dom.mirrorTopBottom.disabled = !canMirror;
+    const hasWaypoints = active.waypoints.length > 0;
+    this.dom.mirrorLeftRight.disabled = !hasWaypoints;
+    this.dom.mirrorTopBottom.disabled = !hasWaypoints;
+    this.dom.rotateLeft.disabled = !hasWaypoints;
+    this.dom.rotateRight.disabled = !hasWaypoints;
 
     const paths = this.planning.paths.items;
     this.dom.pathCount.textContent = `${paths.length} Path${paths.length === 1 ? "" : "s"}`;
@@ -103,7 +120,7 @@ export class PlanningPathManagerView {
       const derive = document.createElement("button");
       derive.type = "button";
       derive.className = "planningPathManagerDerive";
-      derive.innerHTML = `<svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/copyCode.svg#icon-copyCode"></use></svg>`;
+      derive.innerHTML = pathActionIcon(deriveIconSvg);
       derive.title = "Derive path";
       derive.setAttribute("aria-label", derive.title);
       derive.addEventListener("click", (event) => {
@@ -114,7 +131,7 @@ export class PlanningPathManagerView {
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "planningPathManagerDelete";
-      remove.innerHTML = `<svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/removePlanningObject.svg#icon-removePlanningObject"></use></svg>`;
+      remove.innerHTML = pathActionIcon(removeIconSvg);
       remove.title = paths.length <= 1 ? "At least one path is required" : "Delete path";
       remove.setAttribute("aria-label", remove.title);
       remove.disabled = paths.length <= 1;
@@ -141,6 +158,13 @@ export class PlanningPathManagerView {
     this.planning.paths.mirror(direction, (point) =>
       this.planning.projection.constrain(point),
     );
+  }
+
+  private rotate(direction: PlanningRotationDirection): void {
+    const rotated = this.planning.paths.rotate(direction, (point) =>
+      this.planning.projection.constrainToBounds(point),
+    );
+    if (!rotated) setStatus("The rotated path would extend beyond the field bounds.");
   }
 
   private async removePath(id: string): Promise<void> {

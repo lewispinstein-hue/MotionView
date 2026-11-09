@@ -81,6 +81,9 @@ export class PlanningMotionEditorView {
   }
 
   bind(): void {
+    this.dom.waypointCodeToggle.addEventListener("click", () =>
+      this.setCodeExpanded(this.dom.templateGroupBody.hasAttribute("hidden")),
+    );
     this.dom.templateCode.addEventListener("input", () => {
       if (this.#mode !== "templates" || !this.#templateConfiguration) return;
       editPlanningMotionTemplate(this.#templateConfiguration, this.#selectedTemplate, this.dom.templateCode.value);
@@ -119,6 +122,9 @@ export class PlanningMotionEditorView {
     this.dom.templateModal.classList.add("hasMotionPreview");
     this.dom.motionPreview.hidden = false;
     this.dom.templateIndicatorPicker.hidden = true;
+    this.dom.templateGroupTitle.hidden = this.editingWaypoint;
+    this.dom.waypointCodeToggle.hidden = !this.editingWaypoint;
+    this.setCodeExpanded(!this.editingWaypoint);
     this.dom.templateConfirm.textContent = "Confirm";
     this.render();
   }
@@ -132,10 +138,18 @@ export class PlanningMotionEditorView {
     this.dom.motionPreview.replaceChildren();
     this.dom.motionPreview.hidden = true;
     this.dom.templateModal.classList.remove("hasMotionPreview");
+    this.dom.templateGroupTitle.hidden = false;
+    this.dom.waypointCodeToggle.hidden = true;
+    this.setCodeExpanded(true);
     this.dom.templateCode.disabled = false;
     this.dom.templateCode.hidden = false;
     this.dom.templateDescription.setAttribute("for", "planTemplateInput");
     this.#codePreview.hide();
+  }
+
+  private setCodeExpanded(expanded: boolean): void {
+    this.dom.templateGroupBody.hidden = !expanded;
+    this.dom.waypointCodeToggle.setAttribute("aria-expanded", String(expanded));
   }
 
   private render(): void {
@@ -286,7 +300,6 @@ export class PlanningMotionEditorView {
     if (this.#mode === "waypoint") {
       const motions = this.#selection!.motions;
       if (!motions.some((motion) => motion.id === this.#selectedId)) this.#selectedId = motions[0]!.id;
-      this.dom.templateGroupTitle.textContent = "Waypoint Code";
       this.dom.templateDescription.textContent = isVexcodePlanningLibrary(this.#waypointLibrary)
         ? "Motions run in the order shown above. VEXcode Straight faces the next waypoint, then drives @dist. @bearing is the facing heading, including backwards travel. Preview is approximate."
         : "Motions run in the order shown above. Code edits stay attached to their motion when swapped. Field curves are approximate; robot tuning affects the actual path.";

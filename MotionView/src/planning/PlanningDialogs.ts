@@ -96,9 +96,11 @@ export class PlanningDialogs {
       const waypointOutsideCode = this.#motionEditor.editingWaypoint &&
         event.target !== this.#motionEditor.focusTarget;
       if (!confirmShortcut && !nameOnly && !waypointOutsideCode) return;
-      // Keep the explicit Cancel and close buttons keyboard operable.
+      // Let Enter activate the dismissal and disclosure buttons.
       if (!confirmShortcut &&
-          (event.target === this.dom.templateCancel || event.target === this.dom.templateClose))
+          (event.target === this.dom.templateCancel ||
+           event.target === this.dom.templateClose ||
+           event.target === this.dom.waypointCodeToggle))
         return;
       event.preventDefault();
       event.stopPropagation();
@@ -179,8 +181,8 @@ export class PlanningDialogs {
       this.dom.templateModal,
       this.#editorUsesName
         ? this.dom.templateName
-        : options.motionEditor
-          ? this.#motionEditor.focusTarget
+        : this.#motionEditor.editingWaypoint
+          ? this.dom.templateModal.querySelector<HTMLElement>(".modalCard")
           : this.dom.templateCode,
     );
     return new Promise((resolve) => {

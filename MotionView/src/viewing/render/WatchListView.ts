@@ -172,7 +172,7 @@ export class WatchListView {
     element.innerHTML = `<div class="watchItemContent"><div class="watchItemHeader">
       <div class="watchTitleGroup"><span class="pill level watchLevelPill" style="background:${style.fill};color:${style.text}">${style.name}</span><span class="watchLabel eventSelectableText">${escapeHtml(watch.label)}</span></div>
       <div class="watchMeta"><div class="watchTimestamp muted"><span class="eventSelectableText">${formatNumber(marker.t / 1000, 2)}s</span></div><div class="watchActions watchActionsPill watchActionsFull pill">
-        ${pinButton}${visibilityButton}${graphButton}</div></div></div><div class="bigValue${booleanClass}"><span class="eventSelectableText">${escapeHtml(watch.value ?? "")}</span></div></div>`;
+        ${pinButton}${visibilityButton}${graphButton}</div></div></div><div class="bigValue watchValue${booleanClass}"><span class="eventSelectableText">${escapeHtml(watch.value ?? "")}</span></div></div>`;
     this.syncItem(element, marker);
     this.constrainTextSelection(element);
     element.addEventListener("pointerenter", () => {

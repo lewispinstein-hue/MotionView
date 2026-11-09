@@ -20,6 +20,7 @@ import type { PlanningSession } from "./planningSession";
 import type { PlanningWaypoint, PlanningWaypointView } from "./planningTypes";
 
 export type PlanningMirrorDirection = "left-right" | "top-bottom";
+export type PlanningRotationDirection = "counterclockwise" | "clockwise";
 
 export class PlanningRoute {
   constructor(private readonly session: PlanningSession) {}
@@ -235,6 +236,30 @@ export class PlanningRoute {
         }
       }
     });
+    return true;
+  }
+
+  rotate(
+    direction: PlanningRotationDirection,
+    constrain?: (point: Readonly<PlanningWaypoint>) => PlanningWaypoint,
+  ): boolean {
+    if (!this.hasData) return false;
+    // Field Y points up and headings increase clockwise from +Y.
+    const sign = direction === "clockwise" ? 1 : -1;
+    const rotated = this.session.waypoints.map(({ x, y, theta }) => ({
+      x: sign * y || 0,
+      y: -sign * x || 0,
+      theta: ((((theta ?? 0) + sign * 90) % 360) + 360) % 360,
+    }));
+    // Reject rotations that would need clipping, which would distort the path.
+    if (
+      constrain &&
+      rotated.some((point) => {
+        const bounded = constrain(point);
+        return bounded.x !== point.x || bounded.y !== point.y;
+      })
+    ) return false;
+    this.updateMany(rotated.entries());
     return true;
   }
 

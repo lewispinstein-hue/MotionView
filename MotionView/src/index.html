@@ -104,18 +104,6 @@
             rel="noopener noreferrer">Docs</a>
         </p>
 
-        <div style="margin-top:10px">
-          <div style="font-weight:850;margin-bottom:6px">Main elements</div>
-          <ul style="margin:0;padding-left:18px">
-            <li><b>Field view</b>: robot path + pose, watches, hover/click to
-              preview/lock.</li>
-            <li><b>Timeline</b>: scrub through time; hover previews, click
-              jumps.</li>
-            <li><b>Sidebar</b>: watches list, poses list.</li>
-            <li><b>Floating info window</b>: shows details of hovered point,
-              including closest watch values.</li>
-          </ul>
-        </div>
         <div style="margin-top:10px" class="muted">
           <p>
             Field images courtesy of <a href="https://field-rendering.jerryio.com/" target="_blank"
@@ -619,6 +607,14 @@
                   title="Flip Horizontal" aria-label="Flip Horizontal">
                   <svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/flipHorizontal.svg#icon-flipHorizontal"></use></svg>
                 </button>
+                <button id="btnPlanRotateLeft" class="planningPathManagerAction" type="button"
+                  title="Rotate Left 90°" aria-label="Rotate Left 90°">
+                  <svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/rotatePath.svg#icon-rotatePath"></use></svg>
+                </button>
+                <button id="btnPlanRotateRight" class="planningPathManagerAction" type="button"
+                  title="Rotate Right 90°" aria-label="Rotate Right 90°">
+                  <svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/rotatePath.svg#icon-rotatePath"></use></svg>
+                </button>
               </div>
               <div id="planPathCount" class="planningPathManagerCount">1 Path</div>
               <div id="planPathList" class="planningPathManagerList" aria-label="Saved Planning paths"></div>
@@ -1060,9 +1056,15 @@
               <div class="settingsGroupIcon">&lt;/&gt;</div>
               <div id="planTemplateGroupTitle" class="settingsGroupTitle" style="font-size: 20px;">Planning Export
                 Template</div>
-
+              <button id="btnPlanWaypointCodeToggle" class="settingsGroupTitle planWaypointCodeToggle" type="button"
+                aria-expanded="false" aria-controls="planTemplateGroupBody" hidden>
+                Waypoint Code
+                <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                  <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+              </button>
             </div>
-            <div class="settingsGroupBody">
+            <div id="planTemplateGroupBody" class="settingsGroupBody">
               <div id="planTemplateNameField" hidden>
                 <label class="fieldLabel" for="planTemplateNameInput">Name</label>
                 <label id="planTemplateNameDescription" class="settingsDescription" for="planTemplateNameInput">Method

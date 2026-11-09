@@ -2,7 +2,11 @@ import type {
   PlanningCodeExportSettings,
   PlanningPathView,
 } from "./planningTypes";
-import { type PlanningMirrorDirection, PlanningRoute } from "./PlanningRoute";
+import type {
+  PlanningMirrorDirection,
+  PlanningRotationDirection,
+  PlanningRoute,
+} from "./PlanningRoute";
 import type { PlanningSession } from "./planningSession";
 
 /** Coordinates the independently editable routes in a Planning document. */
@@ -55,5 +59,11 @@ export class PlanningPaths {
     constrain: Parameters<PlanningRoute["mirror"]>[1],
   ): boolean {
     return this.route.mirror(direction, constrain);
+  }
+  rotate(
+    direction: PlanningRotationDirection,
+    constrain?: Parameters<PlanningRoute["rotate"]>[1],
+  ): boolean {
+    return this.route.rotate(direction, constrain);
   }
 }

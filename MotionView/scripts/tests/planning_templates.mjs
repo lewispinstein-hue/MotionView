@@ -335,6 +335,30 @@ try {
       [30, -20, 150],
     ],
   );
+  const pathBeforeRotation = structuredClone(multiPathPlanning.paths.active);
+  multiPathPlanning.projection.configure({
+    minY: -25,
+    maxY: 25,
+    limitBounds: true,
+  });
+  assert.equal(
+    multiPathPlanning.paths.rotate("clockwise", (point) =>
+      multiPathPlanning.projection.constrainToBounds(point),
+    ),
+    false,
+  );
+  assert.deepEqual(multiPathPlanning.paths.active, pathBeforeRotation);
+  assert.equal(multiPathPlanning.paths.rotate("clockwise"), true);
+  assert.deepEqual(
+    multiPathPlanning.route.waypoints.map(({ x, y, theta }) => [x, y, theta]),
+    [[-20, -11, 240], [-20, -30, 240]],
+  );
+  assert.deepEqual(multiPathPlanning.timeline.nodes, pathBeforeRotation.nodes);
+  assert.equal(multiPathPlanning.history.undo(), true);
+  assert.deepEqual(multiPathPlanning.paths.active, pathBeforeRotation);
+  assert.equal(multiPathPlanning.history.redo(), true);
+  assert.equal(multiPathPlanning.paths.rotate("counterclockwise"), true);
+  assert.deepEqual(multiPathPlanning.paths.active, pathBeforeRotation);
   multiPathPlanning.paths.select("path-b");
   assert.equal(multiPathPlanning.timeline.nodes.length, 0);
   const newPathId = multiPathPlanning.paths.add();

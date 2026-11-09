@@ -19,6 +19,8 @@ export class PlanningDom {
   readonly createPath: HTMLButtonElement;
   readonly mirrorLeftRight: HTMLButtonElement;
   readonly mirrorTopBottom: HTMLButtonElement;
+  readonly rotateLeft: HTMLButtonElement;
+  readonly rotateRight: HTMLButtonElement;
   readonly timelineCanvas: HTMLCanvasElement;
   readonly timelineViewport: HTMLElement;
   readonly timelineContent: HTMLElement;
@@ -52,6 +54,8 @@ export class PlanningDom {
   readonly templateTitle: HTMLElement;
   readonly templateSubtitle: HTMLElement;
   readonly templateGroupTitle: HTMLElement;
+  readonly templateGroupBody: HTMLElement;
+  readonly waypointCodeToggle: HTMLButtonElement;
   readonly templateDescription: HTMLElement;
   readonly templateNameField: HTMLElement;
   readonly templateNameDescription: HTMLElement;
@@ -100,6 +104,8 @@ export class PlanningDom {
     this.createPath = requiredElement(document, "btnPlanCreatePath");
     this.mirrorLeftRight = requiredElement(document, "btnPlanMirrorLeftRight");
     this.mirrorTopBottom = requiredElement(document, "btnPlanMirrorTopBottom");
+    this.rotateLeft = requiredElement(document, "btnPlanRotateLeft");
+    this.rotateRight = requiredElement(document, "btnPlanRotateRight");
     this.timelineCanvas = requiredElement(document, "planningTimelineCanvas");
     this.timelineViewport = requiredElement(
       document,
@@ -154,6 +160,8 @@ export class PlanningDom {
       document,
       "planTemplateGroupTitle",
     );
+    this.templateGroupBody = requiredElement(document, "planTemplateGroupBody");
+    this.waypointCodeToggle = requiredElement(document, "btnPlanWaypointCodeToggle");
     this.templateDescription = requiredElement(
       document,
       "planTemplateDescription",

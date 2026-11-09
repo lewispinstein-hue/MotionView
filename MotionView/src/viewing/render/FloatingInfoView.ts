@@ -100,7 +100,7 @@ export class FloatingInfoView {
     const reference = fieldPose?.t ?? null;
     const closest = this.closestWatch(reference);
     values.watchTime.textContent = closest
-      ? `${formatNumber(closest.t, 0)}ms`
+      ? `${(closest.t / 1000).toFixed(3)}s`
       : "—";
     values.watchLabel.textContent = closest?.label || "—";
     values.watchValue.textContent =
