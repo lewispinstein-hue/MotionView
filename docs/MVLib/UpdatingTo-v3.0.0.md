@@ -1,157 +1,94 @@
 # Updating MVLib to v3.0.0
 
-Full `v3.0.0` references:
+Use this guide to update a v2 robot project while keeping its logs, watches, and waypoint checks. Install the v3 package, update the calls below, then rebuild and verify the recording. [MVLib Setup](./Setup.md)
 
-- [Watches](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Watches)
-- [Waypoints](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Waypoints)
-- [Configuration](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Configuration)
-- [Setup](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Setup)
+## API changes
 
-## Quick Checklist
+| In v2 | In v3 |
+| --- | --- |
+| `watch()` took an interval or a boolean for on-change mode. | Pass `WatchMode::onInterval` or `WatchMode::onChange` followed by a timing value in milliseconds. For on-change watches, this is the debounce. |
+| `watch()` returned a `WatchId` and could take a format string. | It returns a `mvlib::WatchHandle`. Remove the format string. If you use `LevelOverride<T>`, keep it directly after the getter and match `T` to the getter's return type. |
+| Watch and waypoint names could be built with `std::string`. | Use fixed string literals of at most 23 characters for live display. |
+| `WaypointOffset::timedOut` was optional. | It is now a `bool` reporting whether the timeout actually occurred. To check whether a deadline was configured, inspect `getParams().timeoutMs`. |
+| `setLoggerMinLevel(...)` | Use `setMinLogLevel(...)` with the same severity. |
+| `setLoggingFolder(...)` | Use `setLoggingLocation(...)` with a slash-prefixed path relative to the card and a folder policy. |
+| `pause(bool)` | Use `pause()` with no arguments. |
+| Applications could include `mvlib/telemetry.hpp`. | Include `mvlib/api.hpp` for the supported APIs. |
 
-- replace old `watch(...)` overloads with `WatchMode::onInterval` or `WatchMode::onChange`
-- give every `WatchMode::onChange` watch a debounce interval
-- if you stored watch return values, change `WatchId` to `WatchHandle`
-- remove watch format strings; floating-point watch values now render with two decimal places
-- replace dynamic watch and waypoint labels with fixed string literals
-- shorten all watch and waypoint labels to 23 characters or fewer for exact live MotionView roster display
-- rename `setLoggerMinLevel(...)` to `setMinLogLevel(...)`
+## Examples
 
-## Watches
+The examples use `MVLIB_USE_SIMPLES` for the shorter names and time literals. [MVLib Setup](./Setup.md#choose-how-to-write-types-and-times)
 
-- Interval watches now use `WatchMode::onInterval`:
+### Convert an on-change watch
+
+A v2 call could use `true` to track changes and supply a format string.
 
 ```cpp
-logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval, 1_mvS,
-  [&]() { return flywheel.get_actual_velocity(); });
+logger.watch("Auton Stage", LogLevel::INFO, true,
+  []() { return static_cast<int>(autonStage); },
+  mvlib::LevelOverride<int>{}, "%d");
 ```
 
-- On-change watches now use `WatchMode::onChange` and require a debounce:
+In v3, choose the mode and debounce. With 250 ms here, a stage that starts and ends within the debounce window can be missing from the recording. Use `0_mvMs` to preserve the old behavior of reporting a change as soon as the watch observes it. If you need to record every stage transition, log it at the place where you change the stage.
 
 ```cpp
 logger.watch("Auton Stage", LogLevel::INFO, WatchMode::onChange, 250_mvMs,
-  [&]() { return static_cast<int>(autonStage); });
+  []() { return static_cast<int>(autonStage); });
 ```
 
-- Use `0_mvMs` for near-immediate on-change behavior.
-- If you stored the watch return value, change:
+### Convert an interval watch
+
+Keep the previous interval and add `WatchMode::onInterval`. Save the returned handle if your code needs to change the watch during a run. [WatchHandle](./Watches.md#watchhandle)
 
 ```cpp
-WatchId batteryWatch = logger.watch(...);
+logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval, 1_mvS,
+  []() { return flywheel.get_actual_velocity(); });
 ```
 
-to:
+If an old format string supplied units, put the units in the label as in **Flywheel RPM**. If the getter returns a value in a different unit than you want to graph, convert it in the getter.
+
+### Replace a dynamic waypoint name
+
+Keep the waypoint name stable and put changing context, such as the selected routine, in a log. Save the handle if your routine checks the timeout later.
 
 ```cpp
-WatchHandle batteryWatch = logger.watch(...);
+logger.info("Auton %s approaching goal pickup", selectedAutonName.c_str());
+auto goalPickup = logger.addWaypoint("Goal Pickup", params);
 ```
 
-- `WatchHandle` can now be used for runtime control:
+### Update a timeout check
+
+Replace calls such as `offset.timedOut.value_or(false)` with the boolean flag directly. In v2, a condition on the optional itself checked whether a value was present. In v3, the condition checks whether the waypoint expired. Here, `goalPickup` is the handle from the previous example.
 
 ```cpp
-batteryWatch.setActive(false);
-batteryWatch.setIntervalMs(500_mvMs);
-batteryWatch.evaluate(true);
-batteryWatch.resyncRoster();
+const auto offset = goalPickup.getOffset();
+if (offset.timedOut) {
+  logger.warn("Goal pickup timed out");
+}
 ```
 
-- If a watch uses `LevelOverride`, pass it directly after the getter:
+This reports an expiry after the logger observes it. To detect whether the waypoint has a deadline at all, use `goalPickup.getParams().timeoutMs.has_value()`. For a retriggerable waypoint, an expiry can follow one or more successful reaches. [Waypoint handles](./Waypoints.md#waypointhandle)
+
+### Update an SD destination
+
+The example keeps the behavior of a v2 `setLoggingFolder(..., true)` call. Use `useRoot` if logging should continue in the card root when the folder is missing. [SD Logging](./SDLogging.md#setlogginglocation)
 
 ```cpp
-logger.watch("Intake Current", LogLevel::INFO, WatchMode::onInterval, 750_mvMs,
-  getter, LevelOverride<int32_t>{
-    .elevatedLevel = LogLevel::WARN
-  });
+logger.setMinLogLevel(mvlib::LogLevel::INFO);
+logger.setBuildDate(__DATE__);
+logger.setLoggingLocation("/telemetry", mvlib::MissingFolderPolicy::disable);
 ```
 
-- Dynamic watch labels no longer work. Replace this:
+## Verify the upgrade
 
-```cpp
-std::string label = "Flywheel " + sideName + " RPM";
-logger.watch(label, LogLevel::INFO, 500_mvMs, getter);
-```
+Run the robot and check a live watch, a waypoint event if you use odometry, and the SD file if you record runs.
 
-with a fixed label:
+For an on-change watch, change the value once and leave it steady to check the debounce you chose. For a timed waypoint, test a successful approach and an approach that runs out of time. For an explicit SD filename, run twice to verify the behavior you chose when a file already exists.
 
-```cpp
-logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval,
-  500_mvMs, getter);
-```
+**A watch or waypoint call fails to compile.** Check for a dynamic label, an old watch signature, or a mismatched override type. When using designated initializers for a waypoint, place `.timeoutMs` before `.linearTol`. [Waypoint parameters](./Waypoints.md#waypointparams)
 
-- The C++ literal overload rejects labels longer than 24 characters, but the live roster packet stores a 23-character null-terminated display name. Use 23 characters or fewer if the label must appear untruncated in MotionView.
+**A watch looks sparse after the upgrade.** Use interval mode when you need a continuous graph. On-change watches report a sample only when the value changes after the initial reading. [Watches](./Watches.md)
 
-Full watch reference:
-[Watches](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Watches)
+**The SD file moved or is missing.** Check the startup message and the folder and file policies. [SD troubleshooting](./SDLogging.md#troubleshooting)
 
-## Waypoints
-
-- Dynamic waypoint names no longer work. Replace this:
-
-```cpp
-std::string wpName = selectedAutonName + " Goal Pickup";
-auto wp = logger.addWaypoint(wpName, params);
-```
-
-with a fixed name:
-
-```cpp
-auto wp = logger.addWaypoint("Goal Pickup", params);
-```
-
-- The C++ literal overload rejects waypoint names longer than 24 characters, but the live roster packet stores a 23-character null-terminated display name. Use 23 characters or fewer if the name must appear untruncated in MotionView.
-
-- If you need extra context, log it separately:
-
-```cpp
-logger.info("Auton %s created Goal Pickup waypoint", selectedAutonName.c_str());
-```
-
-Full waypoint reference:
-[Waypoints](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Waypoints)
-
-## Logger API Renames
-
-- Rename:
-
-```cpp
-logger.setLoggerMinLevel(LogLevel::INFO);
-```
-
-to:
-
-```cpp
-logger.setMinLogLevel(LogLevel::INFO);
-```
-
-Full configuration reference:
-[Configuration](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Configuration)
-
-## Before / After
-
-```cpp
-// v2.x.x
-logger.setLoggerMinLevel(LogLevel::INFO);
-
-logger.watch("Auton Stage:", LogLevel::INFO, true,
-  [&]() { return static_cast<int>(autonStage); },
-  LevelOverride<int>{}, "%d");
-
-auto goal = logger.addWaypoint("Blue left matchloader", {
-  .tarX = 70,
-  .tarY = -47,
-  .linearTol = 2.0f
-});
-
-// v3.0.0
-logger.setMinLogLevel(LogLevel::INFO);
-
-WatchHandle stageWatch = logger.watch("Auton Stage", LogLevel::INFO,
-  WatchMode::onChange, 250_mvMs,
-  [&]() { return autonStage; });
-
-auto goal = logger.addWaypoint("Blue Left ML", {
-  .tarX = 70,
-  .tarY = -47,
-  .linearTol = 2.0f
-});
-```
+See the release notes for the full list of changes. [MVLib v3.0.0 changelog](./Changelog/v3.0.0.md)

@@ -1,284 +1,124 @@
 # MVLib Configuration
 
-This page covers the configuration surface in MVLib.
+Configure MVLib to match the run you want to review. Use live output while tuning, SD output for untethered runs, or both to compare what you saw live with a saved recording. Tune the pose rate or disable categories you do not need if the live stream falls behind.
 
-There are 2 main groups:
+## API reference
 
-- `LoggerConfig`: output toggles
-- `LoggerTimings`: polling, flushing, and roster-sync timing
+### Output
 
-All configuration is done through `mvlib::Logger`.
+All six switches default to `true`. The category switches apply to both live and SD output. Set SD output and its destination before `logger.start()`. You can change the other switches while the logger runs.
 
-Configure SD behavior, logging location, build date, odometry, drivetrain references, watches, and waypoints before `logger.start()`. Terminal and printing toggles may be changed at runtime. Timing changes are safe at runtime, although each timing field may take effect independently during an update cycle.
+| Method | Effect when set to `false` |
+| --- | --- |
+| `void setLogToTerminal(bool enabled)` | Turns off live output. SD logging can continue. |
+| `void setLogToSD(bool enabled)` | Turns off recording to the card. Calls after `start()` are ignored. |
+| `void setPrintWatches(bool enabled)` | Pauses automatic watch sampling. Watches stay registered. |
+| `void setPrintTelemetry(bool enabled)` | Suppresses periodic pose and drivetrain data. Waypoint tracking continues. |
+| `void setPrintWaypoints(bool enabled)` | Suppresses waypoint events while handles continue to update. Events skipped during that time are lost. |
+| `void setLogSystemInfo(bool enabled)` | Suppresses MVLib's own diagnostics, including SD startup messages. User logs have their own severity filter. |
 
-## `LoggerConfig`
+Use `setLoggingLocation(...)` to choose the destination and `setBuildDate(__DATE__)` when using generated filenames. [SD Logging](./SDLogging.md#setlogginglocation)
 
-`LoggerConfig` is the logger's runtime output state:
+### Choose what to turn off
+
+First decide whether you want to change the recording or only what MotionView shows. For example, if debug logs are distracting but you may need them later, leave them enabled on the robot and filter the Logs tab. If you raise the robot's minimum level, future debug messages are skipped in both destinations.
+
+The output switches also differ in what keeps running.
+
+- Turning off terminal output leaves SD recording available. When you re-enable terminal output, MotionView can receive new data. Use the SD file to review what happened while live output was off.
+- Turning off automatic watch output stops the logger from reading the watch getters on its normal schedule. Turning it back on resumes the registered watches. An on-change watch can stay quiet if its value still matches the last report. A handle can still request a manual sample while automatic output is off. [WatchHandle](./Watches.md#watchhandle)
+- Turning off pose output removes the path from the recording for that period. Waypoints still use odometry and can still report reach and timeout events. Turning off waypoint output hides those events while the handles continue to update.
+- Pausing the logger also pauses waypoint checks. Use the output switches when you want checks to continue quietly. [Logger startup and controls](./Setup.md#start-and-control-the-logger)
+
+### Minimum log level
+
+`void setMinLogLevel(LogLevel level)` sets the minimum severity for logs and watch samples on both outputs. The default is `INFO`. Use `WARN` to keep warnings and errors, or `LogLevel::OFF` to suppress ordinary logs and watches. Use the separate switches above for pose and waypoint output. [Logs](./Logs.md) · [Watch thresholds](./Watches.md#flag-readings-above-a-threshold)
+
+The minimum applies to each sample's final severity. For instance, an `INFO` current watch with a `WARN` threshold can still show high readings at a `WARN` minimum. MVLib's startup messages are also filtered by level. If you need the SD filename or other startup details, keep system messages enabled and the minimum at `INFO` during setup.
+
+### Built-in watchdogs
 
 ```cpp
-struct LoggerConfig {
-  std::atomic<bool> logToTerminal{true};
-  std::atomic<bool> logToSD{true};
-  std::atomic<bool> printWatches{true};
-  std::atomic<bool> printTelemetry{true};
-  std::atomic<bool> printWaypoints{true};
-  std::atomic<bool> logSystemInfo{true};
+struct DefaultWatches {
+  bool leftDrivetrainWatchdog = true;
+  bool rightDrivetrainWatchdog = true;
+  bool batteryWatchdog = true;
 };
+
+bool setDefaultWatches(DefaultWatches watches);
 ```
 
-You normally change these through setters:
+`DefaultWatches` is a type on `mvlib::Logger`. Call `setDefaultWatches(...)` once during setup with the flags you want. Configure the drivetrain with `setRobot(...)` first. Without a valid drivetrain, the call returns `false` and skips the drivetrain watches. Battery watches can still be registered.
+
+The watchdogs report at `WARN` and stay quiet during normal operation.
+
+- Left and right drivetrain temperatures warn at 50 °C or above.
+- Battery temperature warns at 45 °C or above. Battery voltage warns outside 11.7–13.25 V.
+- Changed warnings use a 750 ms debounce. A steady warning repeats every five seconds.
+
+Use the watchdogs to notice a problem during a run. A motor cooling below the threshold makes the watchdog quiet again. If you need the readings before and after the warning or want to measure how long it took to cool, add an interval temperature watch. The watchdogs follow the automatic watch switch and the logger's minimum level. [Watches](./Watches.md)
+
+### Timings
+
+`void setTimings(LoggerTimings timings)` sets the full group of timings in milliseconds. Pass all your chosen values together. Configure them before `start()` if they need to be in effect from the beginning.
+
+| `LoggerTimings` field | Default | Effect |
+| --- | --- | --- |
+| `sdBufferFlushInterval` | 1000 ms | How long to wait before the next SD write also flushes pending data. Shorter intervals reduce how much recent data you can lose on power-off. `0` flushes every write. Errors and fatal messages flush immediately. |
+| `stdoutBufferFlushInterval` | 400 ms | How often to flush pending terminal output. `0` disables periodic flushing. |
+| `terminalPollingRate` | 100 ms | Interval for pose updates when live output is on. This also sets the pose interval in the SD recording while both outputs are on. `0` disables those updates. |
+| `sdPollingRate` | 80 ms | Interval for pose updates when live output is off. `0` disables those updates. |
+| `rosterSyncAllInterval` | 8000 ms | How often MVLib re-sends watch names and active waypoint definitions so a viewer can join late. Shorter intervals help names appear sooner but use more bandwidth. `0` disables periodic resends. |
+
+Choose the pose interval based on whether terminal output is enabled in MVLib. Disconnecting MotionView while leaving terminal output enabled still uses `terminalPollingRate`. If you turn terminal output off for a run, set `sdPollingRate` for the detail you want in the saved path. Neither interval changes watch cadence or waypoint checks.
+
+If you have already tuned several settings, keep and reuse your `LoggerTimings` value when making another change. Starting from a fresh `LoggerTimings{}` restores defaults for any fields you leave alone.
+
+## Examples
+
+### Choose live, SD, or both
+
+Leave both outputs enabled to see a run live and keep a copy. For a run you plan to review later, disable terminal output before starting the logger.
 
 ```cpp
 auto& logger = mvlib::Logger::getInstance();
-
-logger.setLogToTerminal(true);
-logger.setPrintWatches(true);
-logger.setPrintTelemetry(true);
-logger.setPrintWaypoints(true);
-logger.setLogSystemInfo(true);
+logger.setLogToTerminal(false);
+logger.setBuildDate(__DATE__);
+logger.start();
 ```
 
-## Output Toggles
+For live tuning without a card, leave terminal output enabled and call `logger.setLogToSD(false)` before startup. If you only need watches and logs during a bench test, call `logger.setPrintTelemetry(false)` to leave pose updates out of both outputs.
 
-### `setLogToTerminal(bool)`
-
-Controls whether MVLib sends live telemetry and logs over the robot terminal link.
-
-Leave this on when:
-
-- you want MotionView live streaming
-- you want live watches, logs, and waypoint events
-
-Turn it off when:
-
-- you only want SD logging
-- you are intentionally disabling all terminal-side MVLib traffic
-
-Important:
-
-- In `v2.0.0`, terminal output stopped using the old plain-text MotionView stream. MVLib now uses a binary telemetry protocol for live MotionView data.
-- If this is off, MotionView will not receive live telemetry from MVLib.
-
-### `setLogToSD(bool)`
-
-Controls whether MVLib writes logs to the SD card.
-
-Leave this on when:
-
-- you want saved logs after the run
-- you want to review logs without live streaming
-
-Turn it off when:
-
-- you are not using an SD card
-- you want to avoid SD writes entirely
-
-Notes:
-
-- This setting is only changeable before `logger.start()`; calls after startup are ignored.
-- SD logging is disabled if initialization, a write, or a flush fails.
-- When terminal and system messages are enabled, MVLib emits one terminal error when a runtime SD write or flush failure disables logging.
-
-### `setPrintWatches(bool)`
-
-Controls whether registered watches are emitted.
-
-If disabled:
-
-- the watches stay registered
-- MotionView will not receive watch samples until you re-enable watch printing
-
-### `setPrintTelemetry(bool)`
-
-Controls whether MVLib emits periodic pose/drivetrain telemetry.
-
-If disabled:
-
-- MotionView can still receive logs, watches, and waypoint events
-- waypoint evaluation and `WaypointHandle` lifecycle state continue independently
-
-### `setPrintWaypoints(bool)`
-
-Controls whether MVLib emits waypoint events.
-
-In current MVLib, that means:
-
-- `CREATED`
-- `REACHED`
-- `TIMEDOUT`
-
-It does not mean periodic waypoint offset streaming anymore. That old terminal-side offset event flow was removed.
-
-Disabling this output does not pause waypoint tracking. MVLib continues updating
-`reached()`, `timedOut()`, `active()`, and `getOffset()` lifecycle fields, but it
-does not emit `CREATED`, `REACHED`, or `TIMEDOUT` records until output is enabled
-again. Events that occur while output is disabled are not replayed.
-
-## Built-in Watchdogs
-
-`setDefaultWatches(...)` registers drivetrain-temperature and battery watchdogs.
-They stay silent while their values are normal. On a tripped condition, MVLib emits
-a warning immediately, honors the 750 ms on-change debounce for changed values,
-and repeats an unchanged tripped state every five seconds.
-
-- drivetrain temperature warns at `50 C` or above
-- battery temperature warns at `45 C` or above
-- battery voltage warns outside `11.7 V` to `13.25 V`
-
-### `setLogSystemInfo(bool)`
-
-Controls whether MVLib emits its own internal/system messages.
-
-This is useful when:
-
-- bringing MVLib up for the first time
-- debugging configuration or SD issues
-
-Turn it off if you want MotionView to stay focused on your own logs and telemetry.
-
-## `LoggerTimings`
-
-`LoggerTimings` is the timing configuration struct:
+### Keep warnings and errors
 
 ```cpp
-struct LoggerTimings {
-  uint32_t sdBufferFlushInterval = 1000;
-  uint32_t stdoutBufferFlushInterval = 400;
-  uint32_t sdPollingRate = 80;
-  uint32_t terminalPollingRate = 100;
-  uint32_t rosterSyncAllInterval = 8000;
-};
+logger.setMinLogLevel(mvlib::LogLevel::WARN);
 ```
 
-Set it with:
+This also hides normal samples from an `INFO` watch with a `WARN` override. Use `INFO` if you need to see the readings leading up to a warning.
+
+### Enable the built-in watchdogs
+
+After registering your drivetrain, use an empty initializer to enable all the watchdogs. For a test focused on drivetrain heat, turn off the battery watchdog.
 
 ```cpp
-logger.setTimings({
-  .sdBufferFlushInterval = 1000,
-  .stdoutBufferFlushInterval = 400,
-  .sdPollingRate = 80,
-  .terminalPollingRate = 100,
-  .rosterSyncAllInterval = 8000
-});
+logger.setDefaultWatches({.batteryWatchdog = false});
 ```
 
-Timings can be changed at runtime. They are stored independently, so set all
-fields before `logger.start()` when they must begin together.
+### Tune timing for the run
 
-## Timing Fields
-
-### `sdBufferFlushInterval`
-
-Default: `1000`
-
-How often MVLib flushes the SD file buffer with `fflush(file)`.
-
-Lower values:
-
-- reduce buffered data waiting in RAM
-- increase flush frequency
-
-Higher values:
-
-- reduce flush overhead
-- increase the amount of data sitting in memory before a flush
-
-Also note:
-
-- `ERROR` and `FATAL` SD writes are flushed immediately.
-
-### `stdoutBufferFlushInterval`
-
-Default: `400`
-
-How often MVLib flushes the terminal/stdout buffer.
-
-Use this cautiously. Lower values increase flush frequency and terminal pressure.
-
-### `sdPollingRate`
-
-Default: `80`
-
-How often MVLib emits periodic pose telemetry when terminal output is disabled.
-
-This also controls periodic pose records written to SD in SD-only mode. It does
-not control SD flushes, watches, waypoint events, or direct log calls.
-
-Lower values:
-
-- increase SD-side work
-- make SD updates happen more frequently
-
-Higher values:
-
-- reduce SD-side activity
-- may reduce logger overhead
-
-### `terminalPollingRate`
-
-Default: `100`
-
-How often MVLib emits periodic pose telemetry when terminal output is enabled.
-
-When terminal and SD logging are both enabled, this cadence also controls the
-periodic pose records written to SD. Watches and waypoint checks run on the
-fixed 40 ms MVLib update loop.
-
-Lower values:
-
-- make MotionView feel more responsive
-- increase live telemetry traffic
-
-Higher values:
-
-- reduce live traffic
-- reduce logger overhead
-
-Warning:
-
-- Setting this too low can overwhelm the brain-to-controller link.
-
-### `rosterSyncAllInterval`
-
-Default: `8000`
-
-How often MVLib re-sends watch and waypoint roster metadata for late joiners.
-
-Lower values:
-
-- improve recovery if MotionView attaches late
-- increase bandwidth usage
-
-Higher values:
-
-- reduce metadata traffic
-- may make late-join recovery slower
-
-## `setLoggingLocation(...)`
-
-Allows you to set a custom logging folder and/or file to route all SD card data to.
-
-See [SD Logging](./SDLogging.md#setlogginglocation) for the full API contract, path rules, and fallback policy behavior.
-
-## Minimum Log Level
-
-Use `setMinLogLevel(...)` to filter normal log output:
+If the path gets choppy over a controller link, try sending pose less often. This doubles the live pose interval while keeping the other timings at their defaults.
 
 ```cpp
-logger.setMinLogLevel(LogLevel::WARN);
+mvlib::LoggerTimings timings{};
+timings.terminalPollingRate = 200;
+logger.setTimings(timings);
 ```
 
-That filters out:
+## Troubleshooting
 
-- `DEBUG`
-- `INFO`
+**The SD pose recording rate changed when I enabled live streaming.** `terminalPollingRate` now controls both copies of the pose data.
 
-And still allows:
+**I turned off pose output and the waypoint still reached.** Waypoint tracking still reads odometry. Use `setPrintWaypoints(false)` to hide the events while keeping handle state.
 
-- `WARN`
-- `ERROR`
-- `FATAL`
-
-This affects MVLib's standard log methods such as `logger.info(...)` and watch output levels.
-
-Set the minimum level before `logger.start()` when possible so the telemetry task and user tasks begin with the same filter state.
+**The live stream falls behind during a test.** Increase `terminalPollingRate` for fewer pose updates, slow down a high-rate watch, or raise the minimum level if debug messages dominate the stream. Change one setting at a time to see which helped.

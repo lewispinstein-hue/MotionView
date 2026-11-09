@@ -1,191 +1,107 @@
 # MVLib SD Logging
 
-This guide covers MVLib's SD logging path API, fallback policies, and path rules.
+SD logging saves logs, watches, waypoints, and pose data for later review. Use it for matches, untethered practice, or a backup of a live session. Open the saved file in MotionView to review the data together. [Configuration](./Configuration.md#choose-live-sd-or-both)
 
-## `setLoggingLocation(...)`
+## API reference
+
+### Startup settings
+
+| Method | When to use it |
+| --- | --- |
+| `void setLogToSD(bool enabled)` | SD logging is on by default. Pass `false` before `start()` for a live-only run. |
+| `void setBuildDate(const char* buildDate)` | Pass `__DATE__` before `start()` when MVLib might generate a filename. MVLib uses the build date if the Brain's clock is unreliable. If you skip this call, it uses the library's build date. |
+
+### `setLoggingLocation(...)`
 
 ```cpp
-bool setLoggingLocation(const char *location,
+bool setLoggingLocation(const char* location,
                         MissingFolderPolicy folderPolicy = MissingFolderPolicy::useRoot,
                         ExistingFilePolicy filePolicy = ExistingFilePolicy::automatic);
 ```
 
-Use this to route SD log output to either:
+Call this before `start()` to choose a folder or an explicit filename. A folder produces a new filename for each run. The default location is the SD card root.
 
-- a folder, where MVLib generates a timestamped filename later
-- a specific file path, where MVLib targets that exact file unless policy resolution changes it
+The call resolves the destination using the card present at setup. It returns `true` if it accepts the destination, including a fallback. The file opens later during `start()`. Use the startup message to confirm the file opened and find its actual path. Keep the same card in place through startup.
 
-Call it before `logger.start()`.
+- Start the path with `/` and leave off the Brain's `/usd` prefix.
+- Use an existing folder, such as `/logs`. Folder segments cannot contain dots. A path without a file extension, such as `/logs/match`, is treated as a folder.
+- Use a filename with a name and extension, such as `/logs/match.log`.
+- The resolved folder path can be up to 23 bytes. The resolved explicit file path can be up to 127 bytes. Both limits include the leading slash.
 
-If MVLib will generate the filename automatically, also provide the user
-project build date before `logger.start()`:
+### Folder and file policies
 
-```cpp
-logger.setBuildDate(__DATE__);
-```
+MVLib resolves the folder first. It checks the file policy only when you specify a filename that already exists in the resolved folder.
 
-MVLib uses this date to sanity-check the VEX Brain RTC before trusting it for timestamped SD filenames. If you do not provide it, MVLib falls back to the date baked into the MVLib archive.
+| Policy | Effect |
+| --- | --- |
+| `MissingFolderPolicy::useRoot` | If the folder is missing, use the card root and resolve the filename there. This is the default. |
+| `MissingFolderPolicy::disable` | If the folder is missing, disable SD logging and return `false`. |
+| `ExistingFilePolicy::automatic` | If the file exists, keep it and generate a new filename in the resolved folder. This is the default. |
+| `ExistingFilePolicy::overwrite` | If the file exists, replace its contents when logging starts. |
+| `ExistingFilePolicy::disable` | If the file exists, disable SD logging and return `false`. |
 
-## Path Rules
+The policy types are in `mvlib`. The aliases on `mvlib::Logger` also work. `MVLIB_USE_SIMPLES` lets you write the names without qualification.
 
-- pass a POSIX-style path relative to `/usd`
-- start the path with `/`
-- the target folder must already exist on the SD card unless `MissingFolderPolicy::useRoot` is selected
-- folder paths are limited to 23 characters, including the leading `/`
-- explicit file paths are limited to 127 characters, including the leading `/`
-- if you pass a file path, the filename must have a non-empty name and extension such as `match.log`
-- folder segments must not contain `.`
+### Respond to a failed setup
 
-Examples:
+A `false` return can mean different things. Check the path and which policy you selected before deciding whether to retry.
 
-- valid folder: `/logs`
-- valid file: `/logs/match.log`
-- invalid path: `/usd/logs/`
-- invalid folder segments: `/logs.match/run`
-- invalid file path: `/logs/match`
-
-## Resolution Order
-
-MVLib resolves the destination in this order:
-
-1. Determine whether `location` is a folder or an explicit file path.
-2. Resolve the folder using `MissingFolderPolicy`.
-3. If an explicit filename remains selected, apply `ExistingFilePolicy` only if that exact file already exists in the resolved folder.
-4. If no explicit filename remains selected, `initSDLogger()` generates a timestamped filename in the resolved folder.
-
-## `MissingFolderPolicy`
-
-```cpp
-enum class mvlib::MissingFolderPolicy : uint8_t {
-  disable = 0,
-  useRoot
-};
-```
-
-The policies live in the `mvlib` namespace. `Logger::MissingFolderPolicy` and
-`Logger::ExistingFilePolicy` remain supported as compatibility aliases. With
-`MVLIB_USE_SIMPLES`, both policy names can be used without the namespace.
-
-### `disable`
-
-If the requested folder does not exist:
-
-- SD logging is disabled
-- `setLoggingLocation(...)` returns `false`
-
-### `useRoot`
-
-If the requested folder does not exist:
-
-- MVLib falls back to the SD root directory, `/usd/`
-- file resolution continues there
-
-Example:
-
-```cpp
-logger.setLoggingLocation("/telem/route.log",
-                          MissingFolderPolicy::useRoot,
-                          ExistingFilePolicy::automatic);
-```
-
-If `/telem` does not exist, the resolved folder becomes `/`, and file resolution continues with `/route.log`.
-
-## `ExistingFilePolicy`
-
-```cpp
-enum class mvlib::ExistingFilePolicy : uint8_t {
-  disable = 0,
-  overwrite,
-  automatic
-};
-```
-
-This policy is only consulted after folder resolution finishes, and only when an explicit file path is still selected and that file already exists.
-
-### `disable`
-
-If the explicit target file already exists:
-
-- SD logging is disabled
-- `setLoggingLocation(...)` returns `false`
-
-### `overwrite`
-
-If the explicit target file already exists:
-
-- MVLib keeps that exact resolved file path
-- `initSDLogger()` later opens it with `"w"` and overwrites it
-
-### `automatic`
-
-If the explicit target file already exists:
-
-- MVLib preserves the resolved folder
-- the explicit file path is cleared
-- `initSDLogger()` later generates a timestamped filename in that folder and
-  retries generated names that already exist
-
-If the explicit target file does not exist, no fallback is needed and MVLib uses the requested filename directly.
-
-MVLib will not intentionally overwrite an automatically generated name. If it
-cannot select a unique generated name after 16 attempts, SD initialization
-fails and SD logging is disabled.
+- For a malformed path, fix the path and retry before `start()`. MVLib can still use a previously accepted destination or its default if you continue without correcting the call.
+- If a `disable` policy is triggered, SD recording is disabled for this program run. For example, if `/telemetry` is missing and you chose `MissingFolderPolicy::disable`, create the folder and restart the program. Calling `setLogToSD(true)` in the same run will not recover the recording.
+- If the destination was accepted but the file cannot open at startup, or a write fails later, fix the card or destination and restart the program. Live output can continue if enabled. Keep the logger at `INFO` with system messages enabled during setup to see the file path and any errors.
 
 ## Examples
 
-### Folder with generated file
+### Save each run to its own file
+
+Create `/telemetry` on the card and add the following to logger setup. A missing folder falls back to the root.
 
 ```cpp
 logger.setBuildDate(__DATE__);
-logger.setLoggingLocation("/telemetry",
-                          MissingFolderPolicy::disable,
-                          ExistingFilePolicy::automatic);
+if (!logger.setLoggingLocation("/telemetry")) {
+  logger.warn("Could not select the /telemetry SD log destination");
+}
+logger.start();
 ```
 
-Result:
+Pass `mvlib::MissingFolderPolicy::disable` as the second argument if the run must be recorded in that folder.
 
-- resolved folder: `/telemetry`
-- explicit filename: none
-- generated file: `/telemetry/MVLIB_....log`
+### Reuse a filename for the latest run
 
-### Explicit file
+Use `overwrite` if you always want to open the same file after practice and only need the latest run.
 
 ```cpp
+const bool accepted = logger.setLoggingLocation("/telemetry/match.log",
+  mvlib::MissingFolderPolicy::disable,
+  mvlib::ExistingFilePolicy::overwrite);
+if (!accepted) {
+  logger.warn("Could not select /telemetry/match.log");
+}
+```
+
+### Keep the old file when a fixed name is taken
+
+Use `automatic` if you prefer `match.log` for a first run and want to keep it when recording again. This example also allows recording in the root if the folder is missing.
+
+```cpp
+logger.setBuildDate(__DATE__);
 logger.setLoggingLocation("/telemetry/match.log",
-                          MissingFolderPolicy::disable,
-                          ExistingFilePolicy::overwrite);
+  mvlib::MissingFolderPolicy::useRoot,
+  mvlib::ExistingFilePolicy::automatic);
 ```
 
-Result:
+If `/telemetry` exists, MVLib uses `/telemetry/match.log` when it is free and generates a name in `/telemetry` if that file already exists. If the folder is missing, MVLib tries `/match.log` and makes the same decision there. An existing `/match.log` in the root matters only when that is the resolved destination. Set the build date in this example because either collision can result in an automatically named file.
 
-- resolved folder: `/telemetry`
-- explicit filename: `/telemetry/match.log`
-- if the file exists, it is overwritten later
-- if the file does not exist, MVLib creates it later
+### Open the recording
 
-### Missing folder with root fallback
+Find the filename in the startup messages, copy the `.log` file from the card, and choose **Open File** in MotionView's Viewing mode. Find the event you want in the timeline, then inspect the watches and pose at that point.
 
-```cpp
-logger.setLoggingLocation("/telem/route.log",
-                          MissingFolderPolicy::useRoot,
-                          ExistingFilePolicy::automatic);
-```
+## Troubleshooting
 
-If `/telem` does not exist:
+**I see live data but no SD file.** Check that the Brain detects the card, SD logging is enabled, and the program called `start()`. Check whether a folder or file policy disabled recording. Restart the robot program after changing the card or destination.
 
-- resolved folder becomes `/`
-- candidate file becomes `/route.log`
-- if `/route.log` does not exist, that exact file is used
-- if `/route.log` does exist, `automatic` clears the explicit file and a timestamped root-level filename is generated later
+**The file is in the root or its name looks different.** Check the startup message for the resolved filename. A missing folder can trigger root fallback, and an existing file can trigger automatic naming. If an automatic filename uses a build date, check the Brain clock and the value passed to `setBuildDate(...)`.
 
-When relying on that automatic timestamped fallback, call `logger.setBuildDate(__DATE__);` before `logger.start()`.
+**The file ends early.** SD write or flush errors can stop the recording. Keep terminal output and system messages enabled to see the error. A power cut can also lose recent buffered data. Shorten `sdBufferFlushInterval` if you need data saved more frequently. [Logger timings](./Configuration.md#timings)
 
-## Common Mistakes
-
-- Passing `/usd/...` instead of a path relative to `/usd`
-- Forgetting the leading `/`
-- Passing a file path without a non-empty extension
-- Using `.` in a folder segment
-- Exceeding the folder or explicit-file path length limits
-- Calling `setLoggingLocation(...)` after `logger.start()`
-- Relying on MVLib's archive build date when the consumer project's build date is desired
+**The file exists but some data is missing.** Check the logger's minimum severity and category switches. Those settings also affect the SD file. If only the first messages are missing, check whether they ran before `start()`. [Configuration](./Configuration.md#output) · [Log recording](./Logs.md#when-a-message-reaches-the-recording)

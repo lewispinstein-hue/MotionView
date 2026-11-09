@@ -1,130 +1,85 @@
 # MVLib Logs
 
-MVLib provides 5 standard log functions:
+Use logs to record decisions and events in your robot code, such as starting autonomous, commanding the clamp to close, or deciding to retry a pickup. In MotionView, open the **Logs** tab to read those messages alongside the run and filter them by severity. [Viewing Mode](../MotionView/ViewingMode/ViewingMode.md#logs)
 
-- `logger.debug(...)`
-- `logger.info(...)`
-- `logger.warn(...)`
-- `logger.error(...)`
-- `logger.fatal(...)`
+Use watches for values you want to sample over time and waypoints for targets you want to check against the robot's pose. [Watches](./Watches.md) · [Waypoints](./Waypoints.md)
 
-Use these just as you would `printf` or `std::cout`
-
-## Declarations
+## API reference
 
 ```cpp
-void debug(const char *fmt, ...);
-void info(const char *fmt, ...);
-void warn(const char *fmt, ...);
-void error(const char *fmt, ...);
-void fatal(const char *fmt, ...);
+void debug(const char* fmt, ...);
+void info(const char* fmt, ...);
+void warn(const char* fmt, ...);
+void error(const char* fmt, ...);
+void fatal(const char* fmt, ...);
 ```
 
-All 5 use `printf`-style formatting.
+All five methods use `printf`-style formatting. Use `%d` for an `int`, `%.1f` for a number with one decimal place, and `%s` with `name.c_str()` for a `std::string`.
 
-## What Changed In `v2.0.0`
+| Method | When to use it |
+| --- | --- |
+| `debug(...)` | Details for tuning or diagnosis, such as the flywheel target or a command timestamp. |
+| `info(...)` | Expected milestones, such as the routine starting or a pickup succeeding. |
+| `warn(...)` | A problem the robot can recover from, such as an unconfirmed pickup it can retry. |
+| `error(...)` | A step failed and the routine needs to skip it or take a fallback. |
+| `fatal(...)` | A critical failure prevents the routine from continuing. Your code still needs to stop the robot or return as appropriate. |
 
-Live MotionView logging is no longer the old plain-text terminal format.
+### When a message reaches the recording
 
-In `v2.0.0`:
+The logger's minimum severity applies before sending a message live or saving it to SD. At the default `INFO`, `info()`, `warn()`, `error()`, and `fatal()` are eligible. Use `DEBUG` to capture debug messages too. Raising the minimum to `WARN` during a run drops future `INFO` and `DEBUG` messages. If you may need them after the run, keep recording them and filter the Logs tab in MotionView instead. [Configuration](./Configuration.md#minimum-log-level)
 
-- terminal/live logs are sent through MVLib's binary telemetry protocol
-- SD logs are still written as readable text lines
+A direct log call can send a live message before `start()` if terminal output is enabled and the viewer is listening. The SD file opens during `start()`, so put a startup confirmation after that call if it needs to appear in the file. Direct logs still follow these rules while the periodic logger task is paused. [SD Logging](./SDLogging.md)
 
-So the important behavior is that MotionView still receives and displays these logs
+After the first call to `Logger::getInstance()`, use the logger for terminal messages. Raw `printf` and `std::cout` output can interfere with live telemetry.
 
 ## Examples
 
-### `debug(...)`
+### Trace an autonomous pickup
 
-Use for low-priority debug details.
+Log the routine at entry, the command where you issue it, and the outcome where you check the sensor. For this test, enable `DEBUG` during setup to capture the clamp command.
 
 ```cpp
-logger.debug("Flywheel target set to %d", targetRpm);
+logger.setMinLogLevel(mvlib::LogLevel::DEBUG);
 ```
-
-### `info(...)`
-
-Use for expected runtime milestones.
 
 ```cpp
 logger.info("Started autonomous routine %d", selectedAuton);
+
+// Immediately after issuing the command.
+logger.debug("Commanded goal clamp to close");
+
+// When the confirmation window ends.
+if (goalDetected) {
+  logger.info("Goal pickup confirmed");
+} else {
+  logger.warn("Goal pickup unconfirmed after %u ms",
+              static_cast<unsigned>(pickupWaitMs));
+}
 ```
 
-### `warn(...)`
+Find the warning in MotionView and check the path and clamp watch at that point on the timeline. A matching waypoint can show whether the robot reached the pickup pose. If the routine polls the sensor repeatedly, put the warning after the confirmation window expires. That yields one event with the elapsed time. Use a watch if you need to see the sensor readings during the wait.
 
-Use for non-fatal problems or suspicious states.
+### Report a failure
+
+Use `error()` if the routine can continue with a different plan. Call it at the point where the code chooses that fallback.
 
 ```cpp
-logger.warn("Intake current high: %d", intake.get_current_draw());
+logger.error("Goal pickup failed, skipping score");
 ```
 
-### `error(...)`
-
-Use for real failures.
+Use `fatal()` if the routine cannot start, for example when odometry is required and calibration failed. This example returns from the autonomous routine.
 
 ```cpp
-logger.error("Failed to detect ring at expected point");
+if (!odomReady()) {
+  logger.fatal("Odometry unavailable, aborting autonomous");
+  return;
+}
 ```
 
-### `fatal(...)`
+## Troubleshooting
 
-Use for critical failures.
+**I see warnings but no startup or debug messages.** Check `setMinLogLevel(...)` and the Logs tab's filter. For messages from MVLib itself, check `setLogSystemInfo(true)` too.
 
-```cpp
-logger.fatal("Odometry failed to calibrate");
-```
+**I see a message live but it is missing from the SD file.** Confirm the SD file opened and the call happened after `start()`. [SD troubleshooting](./SDLogging.md#troubleshooting)
 
-## Filtering
-
-These functions respect the logger minimum level:
-
-```cpp
-logger.setMinLogLevel(LogLevel::WARN);
-```
-
-With that setting:
-
-- `debug(...)` and `info(...)` are filtered out
-- `warn(...)`, `error(...)`, and `fatal(...)` still emit
-
-## Routing
-
-These functions follow normal MVLib routing:
-
-- if terminal logging is enabled, MotionView receives them live
-- if SD logging is enabled, they are also written to the SD log
-
-## Message Length
-
-MVLib formats log messages into a 1024-byte buffer. Live terminal telemetry carries
-up to 511 text bytes per log message, while SD log lines can contain up to 1023
-formatted message bytes.
-
-## Important `v2.0.0` Note
-
-After `Logger::getInstance()` is created, do not use raw `printf`, `std::cout`, or other plain terminal prints for MVLib live logging.
-
-Why:
-
-- MVLib disables the normal PROS user-serial framing path when the logger is instantiated
-- raw terminal text can collide with MVLib's binary telemetry stream
-
-Use `logger.debug/info/warn/error/fatal(...)` instead.
-
-## Logs vs Watches
-
-Use logs for events:
-
-- "Autonomous started"
-- "Clamp closed"
-- "Sensor calibration failed"
-- "Reached matchload corner"
-
-Use watches for sampled values:
-
-- battery voltage
-- RPM
-- current draw
-- temperature
-- auton state over time
+**The log says the clamp closed, but it was still open.** Check where the message is written. A message next to the motor or solenoid command only confirms the command ran. Use distinct messages for the command and for a later sensor confirmation so the timeline shows where the two diverged.

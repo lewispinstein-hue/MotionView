@@ -1,18 +1,66 @@
 # MVLib Setup
 
-This guide covers the current MVLib setup flow for a PROS V5 C++ project.
+MVLib connects a PROS V5 C++ project to MotionView. Start with a battery watch and a startup log to verify the connection, then add the data you need.
 
-At a high level:
+- For logs and watches, start the logger and choose an output. You can test this with the robot sitting still.
+- For a path or waypoint reach checks, attach a pose source. Registering motor groups alone gives MVLib a speed source, while the path still needs position and heading.
+- For per-side velocity or drivetrain watchdogs, register the motor groups as well. If you only need the path, pose-based speed estimation can use the pose source by itself.
 
-1. Install the library package
-2. Include `mvlib/api.hpp`
-3. Optionally attach odometry
-4. Optionally register left/right drivetrain motor groups
-5. Optionally set SD folder or timing/config toggles
-6. Call `logger.start()`
-## 1. Install MVLib
+## API reference
 
-Use the `v3.0.0` package:
+### Start and control the logger
+
+Include `mvlib/api.hpp` for the logger, watches, waypoints, and time literals.
+
+| Method | When to call it |
+| --- | --- |
+| `static Logger& getInstance()` | Get the shared logger. After the first call, route terminal messages through MVLib's log methods. Raw `printf` or `std::cout` output can interfere with the live stream. |
+| `void start()` | Call once per program run, after configuration. Starts periodic updates and opens the SD log if enabled. |
+| `void pause()` | Pauses periodic updates, including watch sampling and waypoint checks. Direct log calls still work, and waypoint deadlines still count from registration. |
+| `void resume()` | Resumes periodic updates after `pause()`. |
+| `uint32_t status() const` | Returns the PROS task state. Before the task starts, it returns `pros::E_TASK_STATE_INVALID`. |
+
+Set the SD destination and call `setBuildDate(__DATE__)` before `start()` if you use generated filenames. The logger supports live-only, SD-only, and combined output. [Configuration](./Configuration.md) · [SD Logging](./SDLogging.md)
+
+Use `pause()` when you want to suspend periodic work across the whole logger. When you resume, updates pick up with the current readings. A waypoint whose deadline passed during the pause can time out on the next check. If you only want to hide waypoint events while continuing to check reaches and deadlines, use `setPrintWaypoints(false)`.
+
+### Choose how to write types and times
+
+Use qualified names such as `mvlib::LogLevel` and pass timing values in milliseconds. For shorthand, define `MVLIB_USE_SIMPLES` before the first inclusion of `mvlib/api.hpp`. This enables names such as `LogLevel` and `WatchMode` and time literals such as `1_mvS` and `250_mvMs`.
+
+### Attach odometry to see the robot's path
+
+Logs and watches work with or without odometry. Pose updates and waypoint reach checks need a working pose source. Include only the adapter for your odometry library and call `mvlib::setOdom(...)` after your normal odometry setup, before `logger.start()`. Keep the object you pass to MVLib alive for as long as the logger uses it.
+
+| Source | Header | Argument to `mvlib::setOdom(...)` |
+| --- | --- | --- |
+| LemLib | `mvlib/Optional/lemlib.hpp` | Pointer to a `lemlib::Chassis`. |
+| EZ-Template | `mvlib/Optional/ezTemplate.hpp` | Pointer to an `ez::Drive` with odometry enabled. |
+| OkapiLib | `mvlib/Optional/okapi.hpp` | Pointer to an `okapi::OdomChassisController`. Pass `odomChassis.get()` if your project holds it in a `std::shared_ptr`. Position defaults to inches and heading is in degrees. Pass a second argument to choose another length unit. |
+| Custom odometry | `mvlib/Optional/customOdom.hpp` | Callable returning `std::optional<mvlib::Pose>`. Return `std::nullopt` until pose is available. |
+
+Attach the adapter after your chassis is initialized and odometry is ready. If your tracker becomes unavailable during a run, a custom adapter can return `std::nullopt` for those reads. Logs and watches can continue, but MVLib needs a pose to draw a new path point or record a waypoint reach. Timed waypoints still have their original deadlines. [Waypoint timeouts](./Waypoints.md#how-the-timeout-works)
+
+### Register the drivetrain
+
+```cpp
+struct Drivetrain {
+  pros::MotorGroup* leftDrivetrain;
+  pros::MotorGroup* rightDrivetrain;
+};
+
+bool setRobot(Drivetrain drivetrain, bool useSpeedEstimation = false);
+```
+
+`Drivetrain` is a type on `mvlib::Logger`. Pass both motor groups before startup if you want per-side motor velocity or drivetrain watchdogs. Keep both groups alive while the logger uses them.
+
+`setRobot(...)` returns `true` on successful registration. A null pointer, a previous successful registration, or an already started logger causes the call to return `false`.
+
+If you omit the groups, MVLib estimates speed from pose. Pass `true` as the second argument to register the groups and still use pose-based speed. Both speed modes need a valid pose to appear in MotionView.
+
+## Install MVLib in your PROS project
+
+Download a package compatible with your MotionView version and place the ZIP in the PROS project root. This example uses v3.0.0. Substitute the version from your ZIP filename in both commands. [Downloads](../../Download.md) · [Version compatibility](../../Home.md#version-compatibility)
 
 ```bash
 pros c fetch libmvlib@3.0.0.zip
@@ -20,218 +68,42 @@ pros c apply libmvlib@3.0.0
 pros make all
 ```
 
-## 2. Include The Main Header
+If you are updating an existing project, run `pros c info-project` and check the `libmvlib` entry before uploading. A successful build confirms the installed headers and library work with your project. Uploading that build is what puts the version on the robot. [Updating to v3.0.0](./UpdatingTo-v3.0.0.md)
 
-For most projects:
+## Examples
 
-```cpp
-#include "mvlib/api.hpp"
-```
+### Verify live output with a battery watch
 
-`mvlib/api.hpp` includes:
-
-- the logger API
-- watches
-- waypoints
-- time literals
-- telemetry support headers
-
-### Optional shorthand
-
-If you want the common time literals and type aliases without the full namespace:
-
-```cpp
-#define MVLIB_USE_SIMPLES
-#include "mvlib/api.hpp"
-```
-
-## 3. Important Terminal Note
-
-As soon as you create the logger instance:
-
-```cpp
-auto& logger = mvlib::Logger::getInstance();
-```
-
-MVLib disables the normal PROS terminal framing path used by plain `printf`/`std::cout` style output.
-
-After that:
-
-- do not use raw terminal printing for MVLib live data
-- use `logger.debug/info/warn/error/fatal(...)`
-
-This matters because live MotionView telemetry now uses a binary stream.
-
-## 4. Attach Odometry
-
-Odometry is optional, but strongly recommended.
-
-Without odometry, you still get:
-
-- logs
-- watches
-- waypoint registration
-
-Without odometry, you do not get live pose telemetry, path drawing, or waypoint reach math.
-
-Calling `setRobot(...)` without a pose source still registers the drivetrain for velocity reporting, but MVLib's live telemetry stream remains pose-gated in the current implementation.
-
-With odometry, MotionView can also draw:
-
-- robot path
-- heading
-- pose over time
-- waypoint reach/timeout behavior based on real position
-
-### Use exactly one odometry adapter
-
-Choose 1 of:
-
-- `mvlib/Optional/lemlib.hpp`
-- `mvlib/Optional/ezTemplate.hpp`
-- `mvlib/Optional/okapi.hpp`
-- `mvlib/Optional/customOdom.hpp`
-
-Do not include more than one.
-
-### LemLib
+Add the headers and merge the example into your existing `initialize()`. It samples once per second and converts the battery reading from millivolts to volts.
 
 ```cpp
 #include "main.h"
+#include "pros/misc.hpp"
 #include "mvlib/api.hpp"
-#include "mvlib/Optional/lemlib.hpp"
-
-extern lemlib::Chassis chassis;
-
-void initialize() {
-  auto& logger = mvlib::Logger::getInstance();
-  logger.setBuildDate(__DATE__);
-  mvlib::setOdom(&chassis);
-  logger.start();
-}
-```
-
-### EZ-Template
-
-```cpp
-#include "mvlib/Optional/ezTemplate.hpp"
-
-extern ez::Drive chassis;
-
-void initialize() {
-  auto& logger = mvlib::Logger::getInstance();
-  logger.setBuildDate(__DATE__);
-  mvlib::setOdom(&chassis);
-  logger.start();
-}
-```
-
-### Okapi
-
-```cpp
-#include "mvlib/Optional/okapi.hpp"
-
-extern std::shared_ptr<okapi::OdomChassisController> odomChassis;
-
-void initialize() {
-  auto& logger = mvlib::Logger::getInstance();
-  logger.setBuildDate(__DATE__);
-  mvlib::setOdom(odomChassis.get());
-  logger.start();
-}
-```
-
-You can also pass a different Okapi length unit if needed:
-
-```cpp
-mvlib::setOdom(odomChassis.get(), okapi::inch);
-```
-
-### Custom odometry
-
-```cpp
-#include "mvlib/Optional/customOdom.hpp"
 
 void initialize() {
   auto& logger = mvlib::Logger::getInstance();
   logger.setBuildDate(__DATE__);
 
-  mvlib::setOdom([&]() -> std::optional<mvlib::Pose> {
-    if (!odomReady()) return std::nullopt;
-    return mvlib::Pose{
-      tracking.getX(),
-      tracking.getY(),
-      tracking.getHeading()
-    };
-  });
+  logger.watch("Battery Voltage (V)", mvlib::LogLevel::INFO,
+    mvlib::WatchMode::onInterval, 1000,
+    []() { return pros::battery::get_voltage() / 1000.0; });
 
   logger.start();
+  logger.info("Robot logger ready");
 }
 ```
 
-## 5. Optionally Register The Drivetrain
+Upload and run the program, then connect MotionView and open **Watches**. To see **Robot logger ready** live, have MotionView listening when the program starts. You can also find the message in the SD recording if the file opened successfully. [Live streaming setup](../MotionView/SetupLivestreaming.md) · [Viewing Mode](../MotionView/ViewingMode/ViewingMode.md#live-streaming)
 
-If you have left/right `pros::MotorGroup`s, register them:
+If the startup message appears but the battery watch stays blank, the link is receiving direct logs. Check that periodic updates are running and automatic watch output is enabled. If both appear but the field is empty, the logger is working and the example still needs a pose source to draw a path.
 
-```cpp
-logger.setRobot({
-  .leftDrivetrain = &left_motors,
-  .rightDrivetrain = &right_motors
-});
-```
+### Add LemLib odometry and motor groups
 
-This lets MVLib use actual drivetrain motor velocity instead of estimating speed from pose.
-
-You can also force speed estimation:
-
-```cpp
-logger.setRobot({
-  .leftDrivetrain = &left_motors,
-  .rightDrivetrain = &right_motors
-}, true);
-```
-
-Use that only if you intentionally want odometry-based speed estimation.
-
-## 6. Optional SD Logging Location Setup
-
-`logger.setLoggingLocation(...)` lets you route all SD log data into a custom folder and/or file.
-
-See [SD Logging](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/SDLogging) for the full path rules, fallback policies, and examples.
-
-Do this before `logger.start()`. If you want MVLib to automatically generate timestamped SD filenames, also provide the user project build date before `logger.start()`:
-
-```cpp
-logger.setBuildDate(__DATE__);
-```
-
-MVLib uses this date to decide whether the VEX Brain RTC is plausible before using it in an automatic SD filename.
-
-## 7. Start The Logger
-
-Start the background task once:
-
-```cpp
-logger.start();
-```
-
-Do your setup first:
-
-- odometry
-- drivetrain
-- watches
-- waypoints
-- output toggles
-- timings
-- logging location
-
-Then start the logger.
-
-## 8. Recommended Baseline Setup
+This example assumes your project already defines the chassis and motor groups. Calibrate the chassis before starting the logger.
 
 ```cpp
 #include "main.h"
-#define MVLIB_USE_SIMPLES
 #include "mvlib/api.hpp"
 #include "mvlib/Optional/lemlib.hpp"
 
@@ -240,11 +112,11 @@ extern pros::MotorGroup left_motors;
 extern pros::MotorGroup right_motors;
 
 void initialize() {
+  chassis.calibrate();
+
   auto& logger = mvlib::Logger::getInstance();
   logger.setBuildDate(__DATE__);
-
   mvlib::setOdom(&chassis);
-
   logger.setRobot({
     .leftDrivetrain = &left_motors,
     .rightDrivetrain = &right_motors
@@ -254,49 +126,33 @@ void initialize() {
 }
 ```
 
-## 9. Add A First Watch
+### Supply a custom pose
+
+Use the custom adapter if you already have a tracker that provides position and heading. Here, `odomReady()` and `tracking` belong to your project. Report position in inches for MotionView's field scale and heading in degrees, with 0° facing +Y.
 
 ```cpp
-mvlib::WatchHandle batteryWatch = logger.watch("Battery Voltage", LogLevel::INFO,
-  WatchMode::onInterval, 1_mvS, []() { return pros::battery::get_voltage(); });
+#include "mvlib/Optional/customOdom.hpp"
 ```
 
-For event-like values, use `WatchMode::onChange`:
-
 ```cpp
-logger.watch("Auton Stage", LogLevel::INFO, WatchMode::onChange, 250_mvMs,
-  []() { return autonStage; });
-```
-
-You can keep the returned `WatchHandle` if you want to enable/disable the watch,
-change its interval, force an evaluation, or re-send its roster entry later.
-For `WatchMode::onChange` watches, `250_mvMs` above is the debounce interval.
-`LevelOverride` is optional.
-
-The full watches documentation is [here](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Watches).
-
-## 10. Optional Runtime Controls
-
-Examples:
-
-```cpp
-logger.setLogToTerminal(true);
-logger.setPrintTelemetry(true);
-logger.setPrintWatches(true);
-logger.setPrintWaypoints(true);
-logger.setLogSystemInfo(true);
-
-logger.setMinLogLevel(LogLevel::INFO);
-
-logger.setTimings({
-  .sdBufferFlushInterval = 1000,
-  .stdoutBufferFlushInterval = 400,
-  .sdPollingRate = 80,
-  .terminalPollingRate = 100,
-  .rosterSyncAllInterval = 8000
+mvlib::setOdom([]() -> std::optional<mvlib::Pose> {
+  if (!odomReady()) return std::nullopt;
+  return mvlib::Pose{
+    tracking.getX(),
+    tracking.getY(),
+    tracking.getHeading()
+  };
 });
 ```
 
-The full runtime controls documentation is [here](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Configuration).
+Return an empty pose while the tracker is calibrating. Returning a default pose at the origin would tell MVLib the robot really is at the origin, so a waypoint there could be recorded as reached. Once the tracker is ready, check a known position and turn before relying on a waypoint's tolerances.
 
-`setLogToSD(...)` is setup-only and must be called before `logger.start()`.
+## Troubleshooting
+
+**There is no live data.** Check that the uploaded program runs, `start()` is called, and MotionView is connected to the correct robot. Check the version pair and make sure terminal output is enabled. [Live streaming setup](../MotionView/SetupLivestreaming.md) · [Version compatibility](../../Home.md#version-compatibility)
+
+**The battery watch works, but there is no path.** Check that your adapter is attached, odometry is producing a valid pose, and `setPrintTelemetry(true)` is in effect. Move the robot and verify the displayed pose before testing waypoints.
+
+**Startup reports a missing drivetrain and speed estimation.** Speed estimation is the fallback when you omit `setRobot(...)`. If you intended to use motor velocities, check both pointers and confirm the call succeeds before `start()`.
+
+**The project builds until I add the odometry header.** Check that the corresponding library is installed and that your project includes a single MVLib adapter. If you are upgrading from v2, check for renamed methods and changed signatures. [Updating to v3.0.0](./UpdatingTo-v3.0.0.md)

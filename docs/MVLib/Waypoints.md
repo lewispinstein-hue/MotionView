@@ -1,40 +1,19 @@
 # MVLib Waypoints
 
-Waypoints are named target poses you register so MotionView can tell you when the robot:
+A waypoint is a named target MVLib checks against your robot's odometry. Use waypoints to see whether the robot passed through a ring pickup zone, lined up for a goal pickup, or reached a practice checkpoint before a deadline. Your drive code commands the motion, and MotionView shows the result. [MVLib Setup](./Setup.md#attach-odometry-to-see-the-robots-path) · [Viewing Mode](../MotionView/ViewingMode/ViewingMode.md#waypoints)
 
-- reached a target
-- timed out before reaching it
-- should expose the target in the viewer roster
+## API reference
 
-They are most useful for autonomous debugging.
-Also useful for driver practice. For example, set up waypoints with timeouts to practice timed runs.
-
-## What You Need First
-
-Waypoints depend on pose data.
-
-That means you should already have odometry attached through one of the supported adapters or a custom pose getter
-
-Without pose data, waypoint creation still succeeds, but reach math will not happen.
-
-## Main API
+### `addWaypoint(...)`
 
 ```cpp
 template<size_t len>
 WaypointHandle addWaypoint(const char (&name)[len], WaypointParams details);
 ```
 
-Example:
+Use a fixed string literal of at most 23 characters for live display. Keep the returned `WaypointHandle` if your code needs to inspect the result.
 
-```cpp
-auto goalPickup = logger.addWaypoint("Goal Pickup", {
-  .tarX = 48,
-  .tarY = -24,
-  .linearTol = 2
-});
-```
-
-## `WaypointParams`
+### `WaypointParams`
 
 ```cpp
 struct WaypointParams {
@@ -48,256 +27,151 @@ struct WaypointParams {
 };
 ```
 
-### Fields
+| Field | What to pass |
+| --- | --- |
+| `tarX`, `tarY` | Target coordinates in the same units and coordinate system as your odometry. |
+| `tarT` | Optional target heading in degrees. Leave it unset for a position-only target. |
+| `timeoutMs` | Optional deadline in milliseconds from the call to `addWaypoint()`. |
+| `linearTol` | Maximum straight-line distance from the target that counts as a reach, in your odometry's distance units. |
+| `thetaTol` | Maximum heading error in degrees. When `tarT` is set, this defaults to the numeric value of `linearTol`. It applies only when a target heading is set. |
+| `retriggerable` | Set to `true` to keep tracking after the first reach and report later re-entries. |
 
-- `tarX`: target X position
-- `tarY`: target Y position
-- `linearTol`: required linear tolerance
-- `tarT`: optional target heading
-- `thetaTol`: optional heading tolerance
-- `timeoutMs`: optional timeout starting from waypoint creation time
-- `retriggerable`: whether the waypoint can continue reporting repeated reaches instead of deactivating on first reach
+Keep designated initializers in the order shown above. In particular, `.timeoutMs` goes before `.linearTol`.
 
-## Important `v2.0.0` Changes
+### How MVLib decides a reach
 
-- `WaypointParams::logOffsetEveryMs` no longer exists.
-- MVLib no longer emits periodic terminal-side waypoint `OFFSET` events.
-- Live waypoint output is now centered on:
-  - `CREATED`
-  - `REACHED`
-  - `TIMEDOUT`
-- Waypoint roster metadata can be re-sent with the new roster resync helpers.
+During a check, MVLib compares the straight-line distance to `linearTol` and the absolute heading error to `thetaTol` if a target heading is set. Both must be at or below their tolerances in the same pose sample. For example, a robot 1 inch east and 1 inch north of a target is about 1.4 inches away. A 1-inch tolerance still misses it. A robot facing 358° is 4° from a 2° target, so a 5° heading tolerance accepts it.
 
-## Heading Behavior
+A one-shot waypoint finishes on the first reach. A retriggerable waypoint stays active and can report another reach after MVLib observes the robot outside tolerance and then inside again. Staying inside with a valid pose produces a single reach. If odometry becomes unavailable and then recovers while the robot is still inside, the first pose after recovery can register another reach.
 
-If you provide `tarT` but not `thetaTol`, MVLib automatically uses `linearTol` as the heading tolerance.
+### How the timeout works
 
-If you provide `thetaTol` without `tarT`, MVLib clears `thetaTol` because there is no target heading to compare against.
+The clock starts when you call `addWaypoint()`, even if `start()` has yet to run or the logger is paused. Register a timed target when the maneuver or drill starts so time spent waiting for the run does not use up its deadline.
 
-## Timeouts
+- Omit `timeoutMs` for no deadline. A retriggerable waypoint can then keep tracking for the rest of the program run. A value of `0` instead expires on the first check.
+- With a timeout, the first active check at or after the deadline ends tracking. If the robot is in tolerance on that check, timeout takes priority. A missing pose still allows a timeout.
+- A one-shot waypoint that reached before its deadline is already inactive and stays reached. For a retriggerable waypoint, each reach leaves the original deadline in place. At the deadline it stops tracking, even if the robot is still inside the target.
 
-Timeouts start when the waypoint is created:
+### Waypoint events
 
-```cpp
-auto goal = logger.addWaypoint("Goal", {
-  .tarX = 48,
-  .tarY = -24,
-  .linearTol = 2,
-  .timeoutMs = 3_mvS
-});
-```
+MotionView can show `CREATED` at registration, `REACHED` at each recorded reach, and `TIMEDOUT` when tracking ends because of a deadline. A waypoint registered before `start()` can appear in the SD recording if waypoint output is enabled at registration and startup.
 
-If the waypoint is still active after 3000 ms, MVLib marks it timed out.
-
-## Retriggerable Waypoints
-
-Example:
-
-```cpp
-auto lineCross = logger.addWaypoint("Center Line", {
-  .tarX = 0,
-  .tarY = 0,
-  .linearTol = 2.0f,
-  .timeoutMs = 30_mvS,
-  .retriggerable = true
-});
-```
-
-Behavior:
-
-- a non-retriggerable waypoint deactivates after the first `REACHED`
-- a retriggerable waypoint stays active after `REACHED`
-- a retriggerable waypoint still deactivates on timeout if `timeoutMs` is set
-- a retriggerable waypoint's `reached()` and `getOffset().reached` state is latched; once it has been reached at least once, those APIs continue returning `true`
-
-Note:
-
-- Both live binary waypoint-created packets and SD `[WPOINT]` creation lines include the retriggerable flag.
+`setPrintWaypoints(false)` suppresses events on both outputs while tracking continues. A waypoint can reach or time out while output is off, and its handle still records that result. Turning output back on makes future events visible. [Configuration](./Configuration.md#output)
 
 ## `WaypointHandle`
 
-`addWaypoint(...)` returns a `WaypointHandle`:
+| Method | Behavior |
+| --- | --- |
+| `WaypointParams getParams() const` | Returns the stored target, tolerances, deadline, and retrigger setting, including the heading tolerance MVLib resolved. |
+| `std::string getLabel() const` | Returns the name used at registration. |
+| `bool active() const` | Returns `true` while the waypoint is eligible for reach and timeout checks. A first reach ends a one-shot waypoint. A timeout ends either kind. You can still inspect an inactive waypoint. |
+| `bool resyncRoster() const` | Re-sends the active waypoint's name to MotionView. In v3.0.2 it also re-sends the target definition. Returns `false` if the waypoint is inactive or live output is unavailable. |
 
-```cpp
-class WaypointHandle {
-public:
-  WaypointOffset getOffset() const;
-  WaypointParams getParams() const;
-  std::string getLabel() const;
-  bool reached() const;
-  bool timedOut() const;
-  bool active() const;
-  bool resyncRoster() const;
-};
-```
+MVLib v3.0.2 also exposes `bool valid() const` to check whether registration succeeded. Keep at least one of terminal and SD logging enabled when creating waypoints.
 
-### `getOffset()`
-
-Returns the current `WaypointOffset` for this waypoint.
-
-Behavior:
-
-- if pose data is available, the offset is computed from the robot's current pose to this waypoint's target
-- if the waypoint tracks heading, `offT` is included
-- if the waypoint has a timeout, timeout-related fields are included
-- if pose data is unavailable, geometric offsets are defaulted, but stored lifecycle fields such as `reached`, `timedOut`, and `remainingTimeout` are still reported when available
-
-Use this when you want the raw positional error and timeout state:
-
-```cpp
-auto off = goalPickup.getOffset();
-logger.info("Goal offset: %.2f, %.2f", off.offX, off.offY);
-```
-
-### `getParams()`
-
-Returns the waypoint's stored `WaypointParams`.
-
-This is the waypoint configuration MVLib is currently using for target position, tolerances, timeout, and retriggerability.
-
-### `getLabel()`
-
-Returns the waypoint's label exactly as it was registered.
+Call `logger.resyncAllWaypointsRoster()` to re-send all active targets if MotionView joins late.
 
 ### `reached()`
 
-Returns whether the waypoint is currently within tolerance or has already been reached before.
+`bool reached() const` starts out `false`. It becomes `true` after a logger check observes the waypoint active and within tolerance before its deadline, if one is set. Reading the handle returns that stored result. For example, immediately after stopping at the target, `reached()` can still be `false` until the logger checks the pose.
 
-Behavior:
-
-- position must be within `linearTol`
-- if the waypoint has a target heading, heading must also be within `thetaTol`
-- once MVLib observes a waypoint as reached, this value is latched true for that waypoint
-
-For retriggerable waypoints, `reached()` remains true after the first reach even if the robot later leaves the tolerance window. Repeated `REACHED` events can still occur when the robot leaves and re-enters tolerance, but the handle-level reached state answers "has this waypoint ever been reached?"
+Once `reached()` is `true`, it stays true for that registration. A retriggerable waypoint can leave tolerance, re-enter it, or eventually time out and still have `reached() == true`. To check current alignment, read `getOffset()` with a valid pose and compare it with the tolerances.
 
 ### `timedOut()`
 
-Returns whether the waypoint has timed out. A waypoint becomes timed out after it has existed longer than its `timeoutMs` allows.
+`bool timedOut() const` stays `false` until a logger check finds an active waypoint at or past its configured deadline. It becomes `true` on that check, stays true, and the waypoint becomes inactive. It remains false for a target without a timeout and for a one-shot target that reached before expiry.
 
-Behavior:
+Use `timedOut()` to distinguish an expired target from one still waiting to reach. A `false` return by itself covers both a target that is still active and a one-shot target that already succeeded. A retriggerable target can return `true` from both methods. It reached at least once and later finished because its time ran out.
 
-- only waypoints with `timeoutMs` can time out
-- a timed out waypoint is automatically deactivated
-- once a waypoint times out, `timedOut()` continues returning `true` for that waypoint
-- if no timeout was configured, this returns `false`
+### `WaypointOffset`
 
-### `active()`
+`WaypointOffset getOffset() const` combines the error from the current pose with the latest recorded reach and timeout flags. You can read it even after the waypoint becomes inactive. The flags and the current error can describe different moments. For example, the robot can be far from a target it reached earlier.
 
-Returns whether MVLib is still actively tracking this waypoint.
+| Field | What it reports |
+| --- | --- |
+| `totalOffset` | Straight-line distance to the target. |
+| `offX`, `offY` | Target position minus current position along each axis. |
+| `offT` | Optional heading error in degrees along the shorter arc, present when pose and a target heading are available. |
+| `remainingTimeout` | Optional milliseconds left on the configured timer, clamped to zero. Check `timedOut` for the actual outcome. |
+| `reached`, `timedOut` | The same status reported by the handle methods. |
 
-Active means the waypoint is still participating in MVLib's internal waypoint lifecycle: it can still be checked for `REACHED` or `TIMEDOUT`, and it is still eligible for active waypoint behavior.
+With pose unavailable, the distance and axis offsets default to zero and `offT` is empty. Check odometry before interpreting those zeros as alignment. `remainingTimeout` can reach zero before the logger records a timeout, or after an already successful one-shot reach. Read `timedOut` for the recorded outcome.
 
-Behavior:
+## Examples
 
-- a non-retriggerable waypoint becomes inactive after its first `REACHED`
-- a retriggerable waypoint stays active after `REACHED`
-- any waypoint becomes inactive after `TIMEDOUT`
-- an inactive waypoint remains registered, but MVLib no longer treats it as an active waypoint target
+### Check a position
 
-### `resyncRoster()`
-
-Re-sends this waypoint's roster metadata to MotionView.
-
-Use it when the waypoint exists but its name did not appear in the viewer because MotionView joined late or missed the original roster packet.
-
-Behavior:
-
-- returns `true` if this waypoint's roster entry was actually re-sent
-- returns `false` if the waypoint is no longer active, does not exist, or roster output is not currently available
-
-## Name Length
-
-The C++ `addWaypoint(...)` literal overload rejects waypoint names longer than 24 characters.
-
-Live MotionView roster packets reserve 24 bytes for the name including the trailing null byte, so only 23 visible characters are guaranteed to survive unchanged in live telemetry. Use 23 characters or fewer for waypoint names that must display exactly in MotionView.
-
-## `WaypointOffset`
+For a ring pickup, register a position-only target before the drive segment. This records a reach within three inches of the target when odometry is in inches.
 
 ```cpp
-struct WaypointOffset {
-  double totalOffset;
-  double offX;
-  double offY;
-  std::optional<double> offT = std::nullopt;
-  std::optional<uint32_t> remainingTimeout = std::nullopt;
-  bool reached;
-  bool timedOut;
-};
-```
-
-### Fields
-
-- `totalOffset`: Euclidean linear distance from the target
-- `offX`: target X minus current X
-- `offY`: target Y minus current Y
-- `offT`: wrapped heading error in degrees, if heading is tracked
-- `remainingTimeout`: milliseconds left before timeout, if one exists
-- `reached`: whether the waypoint is currently within tolerance or has already been reached before. For retriggerable waypoints, this remains true after the first reach.
-- `timedOut`: whether timeout has already occurred
-
-## What MVLib Emits
-
-With waypoint printing enabled, MVLib emits:
-
-- `CREATED` when you call `addWaypoint(...)` while waypoint printing is enabled. If the waypoint was registered before `logger.start()`, MVLib writes its SD creation record after the SD log opens while preserving the waypoint's original creation timestamp.
-- `REACHED` when the waypoint enters tolerance
-- `TIMEDOUT` when timeout expires first
-
-In `v2.0.0`, live terminal waypoint events are sent through MVLib's binary telemetry protocol. SD logging still writes readable `[WPOINT],...` lines.
-
-## Roster Resync Helpers
-
-To re-send every active waypoint name:
-
-```cpp
-logger.resyncAllWaypointsRoster();
-```
-
-This is useful if MotionView joins late and misses waypoint roster metadata.
-
-## Practical Examples
-
-### Position-only waypoint
-
-```cpp
-auto ringZone = logger.addWaypoint("Ring Zone", {
+logger.addWaypoint("Ring Zone", {
   .tarX = 60,
   .tarY = -18,
   .linearTol = 3.0f
 });
 ```
 
-### Position + heading waypoint
+### Check position, heading, and arrival time
+
+Register this just before approaching a goal. It checks whether the robot gets within two inches and eight degrees of the pickup pose within three seconds. The time literal is available with `MVLIB_USE_SIMPLES`. [MVLib Setup](./Setup.md#choose-how-to-write-types-and-times)
 
 ```cpp
-auto allianceStake = logger.addWaypoint("Alliance Stake", {
-  .tarX = 24,
-  .tarY = 12,
+auto goalPickup = logger.addWaypoint("Goal Pickup", {
+  .tarX = 48,
+  .tarY = -24,
   .tarT = 180,
-  .linearTol = 1.5f,
+  .timeoutMs = 3_mvS,
+  .linearTol = 2.0f,
   .thetaTol = 8.0f
 });
 ```
 
-### Timeout-constrained waypoint
+Keep the handle to distinguish a pickup that timed out from one that the logger is still tracking. Run this check after the approach, while odometry is available.
 
 ```cpp
-auto matchload = logger.addWaypoint("Matchload Corner", {
-  .tarX = 70,
-  .tarY = -47,
-  .tarT = 0,
+const auto offset = goalPickup.getOffset();
+if (offset.timedOut) {
+  logger.warn("Goal pickup timed out, %.1f in from target", offset.totalOffset);
+  if (offset.offT) {
+    logger.info("Goal pickup heading error %.1f deg", *offset.offT);
+  }
+} else if (offset.reached) {
+  logger.info("Goal pickup pose reached");
+}
+```
+
+If both flags are false, the logger may still be waiting for a reach or the deadline. The approach ending in your drive code and the logger finishing its waypoint check are separate events.
+
+### Track repeated passes
+
+For a 30-second driving drill, register a retriggerable waypoint so each observed pass can show up in MotionView.
+
+```cpp
+logger.addWaypoint("Practice Gate", {
+  .tarX = 0,
+  .tarY = 0,
+  .timeoutMs = 30_mvS,
   .linearTol = 2.0f,
-  .thetaTol = 10.0f,
-  .timeoutMs = 5_mvS
+  .retriggerable = true
 });
 ```
 
-## Common Mistakes
+Here is what the same drill would report with and without `retriggerable`, assuming the logger observes the poses at the times shown.
 
-- Expecting periodic `OFFSET` events from the live stream. That API was removed.
-- Using waypoints without any pose source configured.
-- Forgetting that timeouts start at creation time.
-- Assuming a waypoint stays active after `REACHED` when `retriggerable` is `false`.
-- Assuming `reached()` means "currently inside tolerance" for retriggerable waypoints. It is a latched "has ever reached" state.
-- Using waypoint names longer than 23 visible characters when exact live MotionView display names matter.
+| Time since registration | Robot | With `retriggerable = true` | With the default `false` |
+| --- | --- | --- | --- |
+| 0 s | Outside tolerance | Active. Both flags are false. | Active. Both flags are false. |
+| 6 s | First pass | `REACHED`. Still active, with `reached() == true`. | `REACHED`. Inactive, with `reached() == true`. |
+| 12 s | Leaves the gate | Still active. `reached()` stays true. | Already finished. |
+| 20 s | Passes again | Another `REACHED` event. Still active. | Already finished. |
+| 30 s | Drill deadline | `TIMEDOUT`. Inactive, with both flags true. | Inactive. `reached()` stays true and `timedOut()` stays false. |
+
+If the driver misses every pass, either kind can time out at 30 seconds with `reached() == false`.
+
+## Troubleshooting
+
+**The waypoint never reaches.** Check that odometry is updating and that the target uses the same units, origin, and heading convention. Brief passes can happen between checks. If the deadline runs out before the robot moves, register the waypoint closer to the drive command.
+
+**The handle reports a reach, but MotionView shows no event.** Check `setPrintWaypoints(true)` and terminal output. If you connected late, resync active waypoints to make future events identifiable. For an earlier reach, check the SD recording if it was enabled at the time.
+
+**The timer reached zero, but `timedOut()` is still false.** Check `reached()` and `active()`. A successful one-shot waypoint stays reached. An active waypoint can still be waiting for the logger's next update, especially if updates are paused.
