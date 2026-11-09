@@ -1,138 +1,71 @@
 # Planning Template
 
 <p align="left">
-    <img src="assets/MotionView/PlanningDocs/PlanningExportTemplate.png" alt="Theta Handle" width="700" />
+    <img src="assets/MotionView/PlanningDocs/PlanningExportTemplate.png" alt="Planning export template editor" width="700" />
 </p>
 
-This document defines the Planning mode export template system used by MotionView.
-Used for visually generating autonomous routines for the robot to follow. Completely platform and language-agnostic — can be used for any robot, any language, and any IDE.
+Use Planning export templates to turn a route into calls for your robot's drive library. Write the code for a motion once and use placeholders for the coordinates, heading, speed, and other values that change along the route.
 
 ## Purpose
 
-Planning export templates generate one output block per planned waypoint.
+MotionView exports the segments between waypoints. For each segment, it uses the motions assigned to the departure waypoint, in their listed order. Each motion uses its template or its individual code override. All motions on that segment share the same placeholder values.
 
-MotionView processes waypoints sequentially from first to last. For each waypoint, MotionView evaluates the template once and replaces all supported template variables with the values for that waypoint.
-
-If custom event nodes exist on the Planning timeline, MotionView inserts their method code into the export in timeline order:
-
-- nodes before the first waypoint are exported first
-- then the first waypoint template block is exported
-- then nodes between waypoint 1 and waypoint 2 are exported
-- then the second waypoint template block is exported
-- this continues through the full route
-- nodes after the final waypoint are exported last
-
-The generated result is the full exported code block.
-
-## Per-Waypoint Generation
-
-For a planned path with `N` waypoints:
-
-- MotionView loops through all `N` waypoints in order
-- MotionView generates one output block for each waypoint
-- The template text is reused for every waypoint
-- Variable replacement is performed independently for each waypoint
-- Any placed custom event methods are inserted between waypoint blocks according to their planning-timeline order
-- The final export is the generated blocks joined in order
-
-
-**Notes:**
-
-- The template may contain arbitrary text, including newlines.
-- The template is evaluated once per waypoint and the resulting blocks are concatenated in order.
-- Method code from custom event nodes is exported exactly as stored on the method.
+Custom event methods appear in timeline order. Methods placed before the first waypoint are exported before any motion. Methods placed in the gap between two waypoints are exported after that segment's motion code. Placed method code and any override on that placement can use the same placeholders as motion templates.
 
 ## Supported Template Variables
 
-### `${x}`
+Use either the long form or its shorthand. For example, `${theta}` and `@th` produce the same value, and you can mix both forms in one template.
 
-The waypoint x-position.
+| Long form | Shorthand | In motion code for a segment | In a placed custom method |
+| --- | --- | --- | --- |
+| `${x}` | `@x` | Destination waypoint's X coordinate. | Context waypoint's X coordinate. |
+| `${y}` | `@y` | Destination waypoint's Y coordinate. | Context waypoint's Y coordinate. |
+| `${theta}` | `@th` | Destination waypoint's heading in degrees. | Context waypoint's heading in degrees. |
+| `${distance}` | `@dist` | Straight-line distance from departure to destination, in Planning's coordinate units. | Straight-line distance from the previous waypoint to the context waypoint. At the first waypoint this is `0`. |
+| `${iteration}` | `@iter` | Zero-based segment index. The first segment is `0`, even if it contains several motions. | Zero-based index of the context waypoint. |
+| `${speed}` | `@spd` | Maximum speed setting at the departure waypoint, exported as a whole number on the Planning power scale, where `127` is full power. | Maximum speed setting at the context waypoint. |
+| `${minSpeed}` | `@minspd` | Minimum speed setting at departure. Defaults to `0` and is capped by the maximum speed setting. | Minimum speed setting at the context waypoint. |
+| `${forwards}` | `@fwd` | Boolean for whether the robot drives forward from departure to destination. | Boolean for travel from the context waypoint to the next waypoint. |
+| `${lead}` | `@ld` | Boomerang lead at departure, from `0` to `1`, used to shape the approach. Defaults to `0.6` for a boomerang without a lead setting and `0` when no lead applies. | Boomerang lead at the context waypoint. |
+| `${lockedDriveSide}` | `@side` | The selected template library's code for the locked side of the first Swing motion at departure. Defaults to the library's Locked Left value. | The same lookup at the context waypoint. |
+| `${bearing}` | `@bearing` | The heading the robot should face for a straight drive along the segment, in degrees. Includes a 180° adjustment for reverse travel. | The facing heading for travel from the context waypoint to the next waypoint. |
 
-- Source: the current waypoint's stored `x` value
-- Unit: the current Planning mode coordinate unit
-- Scope: current waypoint
+For a placed method, the **context waypoint** is the waypoint immediately to its left on the timeline. A method placed before the first waypoint uses that first waypoint. For example, a method placed between A and B uses A's coordinates even though it appears after the A-to-B motion code in the export.
 
-### `${y}`
+### Choose a heading and direction
 
-The waypoint y-position.
+Use `@th` when the command should turn to the heading set on the destination waypoint. Use `@bearing` when the command should face along a straight drive to the destination. For example, an eastbound drive has a bearing of 90° going forward or 270° going backward, regardless of the destination waypoint's heading. For a zero-distance segment, `@bearing` uses the departure heading.
 
-- Source: the current waypoint's stored `y` value
-- Unit: the current Planning mode coordinate unit
-- Scope: current waypoint
-
-### `${theta}`
-
-The waypoint heading.
-
-- Source: the current waypoint's stored heading value
-- Unit: degrees
-- Scope: current waypoint
-
-### `${distance}`
-
-The distance from the previous waypoint to the current waypoint.
-
-- Source: calculated from the current waypoint and the previous waypoint
-- Unit: the current Planning mode coordinate unit
-- Scope: current waypoint
-
-Calculation rules:
-
-- For the first waypoint, `${distance}` is `0`
-- For every later waypoint, `${distance}` is the straight-line distance from the previous waypoint
-- Distance is calculated using the previous waypoint and current waypoint positions only
-
-### `${iteration}`
-
-The current waypoint index.
-
-- Source: the current waypoint position in the planning path
-- Type: integer
-- Scope: current waypoint
-
-Calculation rules:
-
-- 0-based indexing is used: the first waypoint has an index of `0`, the second waypoint has an index of `1`, etc.
-
-### `${speed}`
-
-The waypoint speed value.
-
-- Source: the current waypoint's stored `speed` field
-- Range: `-127` to `127`
-- Scope: current waypoint
+`@fwd` uses the direction set on the departure waypoint when you choose one. Otherwise, MotionView infers direction from the waypoint's heading relative to the segment. The output is `true` or `false` in C++ and `True` or `False` in Python.
 
 ## Output Rules
 
-- One template pass produces one output block
-- One waypoint produces one output block
-- Waypoints are exported in planning order
-- Custom event methods are exported in planning-timeline order relative to the waypoint blocks
-- Variable replacement is text substitution
-- Unsupported text is left unchanged
+- Templates can span multiple lines. Substitution applies to motion templates, individual motion overrides, and placed method code. Export headers and footers are added as written.
+- Shorthands are case-sensitive. Keep them separate from letters, digits, and underscores. Use `${iteration}` in a name such as `point_${iteration}`, where `point_@iter` would stay unchanged.
+- Unknown placeholders stay as written. Code inserted by `@side` is used as written, including any placeholder-like text it contains.
 
 ## Example
 
-Waypoints:
+Suppose the route has these waypoints and uses one drive motion per segment.
+
+| Waypoint | X | Y | Heading | Max speed | Min speed | Outgoing direction |
+| --- | --- | --- | --- | --- | --- | --- |
+| Start | 0 | 0 | 0° | 50 | 10 | Forward |
+| Corner | 0 | 10 | 0° | 80 | 25 | Backward |
+| Finish | 10 | 10 | 90° | 100 | 0 | — |
+
+Motion template:
 
 ```cpp
-{
-  [.x = 0, .y = 0, .theta = 0, .speed = 50],
-  [.x = 0, .y = 10, .theta = 0, .speed = 50],
-  [.x = 10, .y = 10, .theta = 90, .speed = 80]
-}
+driveSegment(@x, @y, @bearing, @th, @dist, @spd, @minspd, @fwd); // Segment ${iteration}
 ```
 
-Template:
+Place a custom method with the code `markPosition(@iter, @x, @y);` between **Start** and **Corner** on the timeline. The generated method call follows the first motion and uses **Start** as its context.
 
 ```cpp
-moveToPoint(${x}, ${y}, ${theta}, {.targetSpeed = ${speed}}); // Distance: ${distance}, Iteration: ${iteration}
+driveSegment(0, 10, 0, 0, 10, 50, 10, true); // Segment 0
+markPosition(0, 0, 0);
+driveSegment(10, 10, 270, 90, 10, 80, 25, false); // Segment 1
 ```
 
-Generated output:
-
-```cpp
-moveToPoint(0, 0, 0, {.targetSpeed = 50}); // Distance: 0, Iteration: 0
-moveToPoint(0, 10, 0, {.targetSpeed = 50}); // Distance: 10, Iteration: 1
-moveToPoint(10, 10, 90, {.targetSpeed = 80}); // Distance: 10, Iteration: 2
-```
+The second drive uses the corner's speed settings and the finish's coordinates. Its bearing is 270° because the robot backs east, while the destination heading is still 90°.
