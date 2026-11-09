@@ -168,6 +168,14 @@ export const LIVE_SHORTCUTS = {
 } as const;
 
 export const PLANNING_SHORTCUTS = {
+  edit: shortcut({
+    id: "planning-edit",
+    scope: "planning",
+    keys: [{ key: "e", ...noModifiers }],
+    display: "E",
+    label: "Edit selected waypoint, node, or method",
+    helpGroup: "Planning",
+  }),
   playback: shortcut({
     id: "planning-playback",
     scope: "planning",
@@ -181,7 +189,7 @@ export const PLANNING_SHORTCUTS = {
     scope: "planning",
     keys: [{ key: "Delete" }, { key: "Backspace" }],
     display: "Delete / Backspace",
-    label: "Delete selected waypoint(s) or node",
+    label: "Delete selected waypoints or nodes",
     helpGroup: "Planning",
   }),
   nudge: shortcut({
@@ -249,6 +257,7 @@ export const SHORTCUT_CATALOG: readonly ShortcutDefinition[] = [
   VIEWING_SHORTCUTS.playback,
   VIEWING_SHORTCUTS.previousPose,
   PLANNING_SHORTCUTS.playback,
+  PLANNING_SHORTCUTS.edit,
   PLANNING_SHORTCUTS.remove,
   PLANNING_SHORTCUTS.nudge,
   PLANNING_SHORTCUTS.nudgeFast,

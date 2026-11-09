@@ -8,7 +8,7 @@ export interface PlanningMethodSelection {
 export interface PlanningSelectionState {
   readonly selectedWaypoints: Set<number>;
   selectedWaypoint: number;
-  selectedNodeId: string | null;
+  readonly selectedNodeIds: Set<string>;
   selectedMethod: PlanningMethodSelection | null;
 }
 
@@ -55,11 +55,11 @@ export function maintainPlanningDocumentInvariants(
       bucketCounts.set(node.beforeWaypoint, index + 1);
     }
   }
-  if (
-    selection.selectedNodeId &&
-    !activePath.nodes.some((node) => node.id === selection.selectedNodeId)
-  ) {
-    selection.selectedNodeId = null;
+  if (selection.selectedNodeIds.size) {
+    const activeNodeIds = new Set(activePath.nodes.map((node) => node.id));
+    for (const id of selection.selectedNodeIds) {
+      if (!activeNodeIds.has(id)) selection.selectedNodeIds.delete(id);
+    }
   }
   if (
     selection.selectedMethod &&

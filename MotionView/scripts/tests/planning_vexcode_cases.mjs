@@ -120,7 +120,14 @@ export async function runPlanningVexcodeTests(server) {
     const expectedCode =
       library === "vexcode-cpp"
         ? "Drivetrain.setTurnVelocity(90 * 100.0 / 127.0, percent);\nDrivetrain.turnToHeading(225, degrees);\nDrivetrain.setDriveVelocity(90 * 100.0 / 127.0, percent);\nDrivetrain.driveFor((false ? forward : reverse), 42.426, inches);\nDrivetrain.setTurnVelocity(90 * 100.0 / 127.0, percent);\nDrivetrain.turnToHeading(90, degrees);"
-        : "drivetrain.set_turn_velocity(90 * 100.0 / 127.0, PERCENT)\ndrivetrain.turn_to_heading(225, DEGREES)\ndrivetrain.set_drive_velocity(90 * 100.0 / 127.0, PERCENT)\ndrivetrain.drive_for(FORWARD if False else REVERSE, 42.426, INCHES)\ndrivetrain.set_turn_velocity(90 * 100.0 / 127.0, PERCENT)\ndrivetrain.turn_to_heading(90, DEGREES)";
+        : [
+            "    drivetrain.set_turn_velocity(90 * 100.0 / 127.0, PERCENT)",
+            "    drivetrain.turn_to_heading(225, DEGREES)",
+            "    drivetrain.set_drive_velocity(90 * 100.0 / 127.0, PERCENT)",
+            "    drivetrain.drive_for(FORWARD if False else REVERSE, 42.426, INCHES)",
+            "    drivetrain.set_turn_velocity(90 * 100.0 / 127.0, PERCENT)",
+            "    drivetrain.turn_to_heading(90, DEGREES)",
+          ].join("\n");
     assert.equal(
       generatePlanningCode(planning),
       expectedCode,
@@ -414,17 +421,18 @@ export async function runPlanningVexcodeTests(server) {
   editPlanningMotionTemplate(
     python,
     "forward",
-    python.templates[python.library].forward + "\n# Custom Python",
+    python.templates[python.library].forward + "\n\nif @fwd:\n    pass",
   );
   assert.equal(python.library, "custom");
   assert.equal(python.customLanguage, "python");
   planning.setTemplateConfiguration(python);
   const generatedPython = generatePlanningCode(planning);
   assert.ok(generatedPython.includes("FORWARD if True else REVERSE"));
+  assert.ok(generatedPython.endsWith("\n\n    if True:\n        pass"));
   const syntax = spawnSync(
     "python3",
     ["-c", "import ast, sys; ast.parse(sys.stdin.read())"],
-    { input: generatedPython, encoding: "utf8" },
+    { input: `def autonomous():\n${generatedPython}`, encoding: "utf8" },
   );
   assert.equal(syntax.status, 0, syntax.stderr);
   planning.setTemplateConfiguration({
@@ -449,7 +457,7 @@ export async function runPlanningVexcodeTests(server) {
   ]);
   assert.equal(
     generatePlanningCode(planning),
-    "probe(@dt,24,24);",
+    "    probe(@dt,24,24);",
     "the mistyped @dt alias is not added",
   );
 

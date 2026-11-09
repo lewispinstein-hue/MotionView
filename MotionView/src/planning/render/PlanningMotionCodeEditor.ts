@@ -149,6 +149,8 @@ export class PlanningMotionCodeEditor {
   }
 
   private renderDisplay(): void {
+    // The overlay positions the section headings. The textarea draws the
+    // editable code so the text and caret share the same baseline.
     this.#display.replaceChildren();
     let offset = 0;
     for (const range of this.#ranges) {

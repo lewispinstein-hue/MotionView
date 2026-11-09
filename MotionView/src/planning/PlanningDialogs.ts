@@ -88,6 +88,22 @@ export class PlanningDialogs {
     this.dom.templateConfirm.addEventListener("click", () =>
       this.confirmEditor(),
     );
+    this.dom.templateModal.addEventListener("keydown", (event) => {
+      if (!this.#editorResolver || event.key !== "Enter" || event.isComposing)
+        return;
+      const confirmShortcut = event.metaKey || event.ctrlKey;
+      const nameOnly = this.#editorUsesName && !this.#editorUsesCode;
+      const waypointOutsideCode = this.#motionEditor.editingWaypoint &&
+        event.target !== this.#motionEditor.focusTarget;
+      if (!confirmShortcut && !nameOnly && !waypointOutsideCode) return;
+      // Keep the explicit Cancel and close buttons keyboard operable.
+      if (!confirmShortcut &&
+          (event.target === this.dom.templateCancel || event.target === this.dom.templateClose))
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.confirmEditor();
+    });
     this.dom.templateIndicatorPicker.addEventListener("click", (event) =>
       this.toggleIndicator(event),
     );

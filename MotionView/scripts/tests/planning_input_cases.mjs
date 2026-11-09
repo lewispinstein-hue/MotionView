@@ -30,10 +30,15 @@ export async function runPlanningInputTests(server) {
     setMode("planning");
     setCurrentUnits("in");
     const planning = new PlanningFeature();
+    let editOpened = false;
     const input = new PlanningInput(
       planning,
       { getFieldRotationDeg: () => rotation },
       {},
+      () => {
+        editOpened = planning.selection.primaryWaypointIndex >= 0;
+        return editOpened;
+      },
     );
     const reset = (x = 10, y = -10) => {
       planning.load({
@@ -47,6 +52,9 @@ export async function runPlanningInputTests(server) {
         key,
         code: key,
         shiftKey,
+        ctrlKey: false,
+        metaKey: false,
+        altKey: false,
         target: null,
         defaultPrevented: false,
         preventDefault() {
@@ -94,6 +102,8 @@ export async function runPlanningInputTests(server) {
       }
     }
     reset();
+    press("e");
+    assert.equal(editOpened, true);
     for (const key of [
       "ArrowLeft",
       "ArrowLeft",
@@ -132,6 +142,31 @@ export async function runPlanningInputTests(server) {
       theta: 7,
     });
     assert.deepEqual(snapped, { x: 10, y: -10, theta: 0 });
+
+    planning.clear();
+    for (const x of [0, 12, 24]) planning.route.add({ x, y: 0 });
+    assert.deepEqual(planning.route.waypoints[0].motions.map((motion) => motion.type),
+      ["forward", "rotate"]);
+    const objectId = planning.objects.add({ name: "Test Object" });
+    const methodId = planning.objects.addMethod(objectId, { name: "Test Method", code: "" });
+    const addNode = (bucket, index) =>
+      planning.timeline.insert(objectId, methodId, bucket, index).id;
+    const first = addNode(0, 0);
+    const stationary = addNode(1, 0);
+    const last = addNode(2, 0);
+    planning.selection.selectNode(last);
+    planning.selection.selectNode(first, true);
+    assert.equal(planning.selection.selectedNode.id, first);
+    assert.ok(planning.timeline.moveMany(planning.selection.selectedNodeIds, 1, 1));
+    assert.deepEqual(planning.timeline.nodes.map((node) => [node.id, node.beforeWaypoint]),
+      [[stationary, 1], [first, 1], [last, 1]], "a group drop preserves execution order");
+    press("Delete");
+    assert.deepEqual(planning.timeline.nodes.map((node) => node.id), [stationary]);
+    assert.equal(planning.selection.selectedNodeIds.size, 0);
+    assert.equal(planning.history.undo(), true);
+    assert.deepEqual([...planning.selection.selectedNodeIds], [last, first]);
+    assert.equal(planning.history.undo(), true);
+    assert.deepEqual(planning.timeline.nodes.map((node) => node.beforeWaypoint), [0, 1, 2]);
   } finally {
     setMode(previousMode);
     setCurrentUnits(previousUnits);

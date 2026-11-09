@@ -53,11 +53,14 @@ export class PlanningRoute {
       for (const node of this.session.nodes) {
         if (node.beforeWaypoint > insertionIndex) node.beforeWaypoint += 1;
       }
-      this.session.waypoints.splice(
-        insertionIndex,
-        0,
-        clonePlanningWaypoint(waypoint),
-      );
+      const point = clonePlanningWaypoint(waypoint);
+      if (!point.motions && !Object.hasOwn(point, "overrideCode") && !isBoomerangWaypoint(point)) {
+        point.motions = [
+          { id: createPlanMotionId(), type: "forward" },
+          { id: createPlanMotionId(), type: "rotate" },
+        ];
+      }
+      this.session.waypoints.splice(insertionIndex, 0, point);
     });
     return insertionIndex;
   }

@@ -27,7 +27,7 @@ function requiredElement<T extends HTMLElement>(
 
 export class PlanningLayoutView {
   readonly changed = new TypedEvent<Record<string, never>>();
-  readonly #root = document.documentElement;
+  readonly #root: HTMLElement;
   readonly #splitter: HTMLElement;
   readonly #timelineSplitter: HTMLElement;
   readonly #listSplitter: HTMLElement;
@@ -43,6 +43,7 @@ export class PlanningLayoutView {
     private readonly view: PlanningView,
     document: Document = globalThis.document,
   ) {
+    this.#root = document.documentElement;
     this.#splitter = requiredElement(document, "vSplit");
     this.#timelineSplitter = requiredElement(document, "planningTimelineSplit");
     this.#listSplitter = requiredElement(document, "planSplit");
@@ -105,10 +106,12 @@ export class PlanningLayoutView {
 
     const waypointListHeight = this.parseNumber(layout.waypointListHeight);
     if (waypointListHeight !== null) {
-      const maximum = Math.max(
-        COLLAPSE_LIST_PX,
-        this.#sidebar.getBoundingClientRect().height - 180,
-      );
+      // At startup the app is in Viewing mode and this sidebar has no layout.
+      // Its zero height must not turn a saved expanded list into a collapsed one.
+      const sidebarHeight = this.#sidebar.getBoundingClientRect().height;
+      const maximum = sidebarHeight > 0
+        ? Math.max(COLLAPSE_LIST_PX, sidebarHeight - 180)
+        : Infinity;
       const height = Math.max(0, Math.min(maximum, waypointListHeight));
       this.#root.style.setProperty("--planListH", `${height}px`);
       this.#sidebar.classList.toggle(

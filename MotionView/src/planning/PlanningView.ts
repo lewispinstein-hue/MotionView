@@ -6,10 +6,12 @@ import type {
 import type { PlanningRenderLayer } from "../render/renderScheduler";
 import { requestDrawAll } from "../render/renderScheduler";
 import { subscribeMode } from "../app/modeController";
+import type { SettingsFeature } from "../app/settings/SettingsFeature";
 import type { PlanningDialogs } from "./PlanningDialogs";
 import type { PlanningDom } from "./PlanningDom";
 import type { PlanningFeature } from "./PlanningFeature";
 import { PlanningWaypointEditor } from "./PlanningWaypointEditor";
+import { editPlanningNode } from "./planningNodeEditor";
 import { getPlanNodeEffectiveMethod } from "./planningObjects";
 import { PlanningDragCoordinator } from "./render/PlanningDragCoordinator";
 import { PlanningFieldView } from "./render/PlanningFieldView";
@@ -25,6 +27,7 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
   readonly #sidebar: PlanningSidebarView;
   readonly #timeline: PlanningTimelineView;
   readonly #nodeTooltip: PlanningNodeTooltip;
+  readonly #waypointEditor: PlanningWaypointEditor;
   #routePreviewFrame: number | null = null;
   #bound = false;
 
@@ -32,17 +35,18 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
     private readonly planning: PlanningFeature,
     field: FieldRenderer,
     private readonly dom: PlanningDom,
-    dialogs: PlanningDialogs,
+    private readonly dialogs: PlanningDialogs,
+    settings: SettingsFeature,
   ) {
     const drag = new PlanningDragCoordinator();
-    const waypointEditor = new PlanningWaypointEditor(planning, dialogs);
+    this.#waypointEditor = new PlanningWaypointEditor(planning, dialogs);
     this.#nodeTooltip = new PlanningNodeTooltip(dom.nodeTooltip);
     this.#fieldView = new PlanningFieldView(
       planning,
       field,
       dom,
       dialogs,
-      waypointEditor,
+      this.#waypointEditor,
       this.#nodeTooltip,
     );
     this.#pathManager = new PlanningPathManagerView(planning, dom, dialogs);
@@ -51,20 +55,35 @@ export class PlanningView implements PlanningFieldLayer, PlanningRenderLayer {
       dom,
       dialogs,
       drag,
-      waypointEditor,
+      this.#waypointEditor,
+      settings,
     );
     this.#timeline = new PlanningTimelineView(
       planning,
       dom,
       dialogs,
       drag,
-      waypointEditor,
+      this.#waypointEditor,
       this.#nodeTooltip,
     );
   }
 
   get overlayVisible(): boolean {
     return this.planning.overlayVisible;
+  }
+
+  editSelection(): boolean {
+    const selection = this.planning.selection;
+    const node = selection.selectedNode;
+    const method = selection.selectedMethod;
+    if (selection.primaryWaypointIndex >= 0)
+      void this.#waypointEditor.edit(selection.primaryWaypointIndex);
+    else if (node)
+      void editPlanningNode(this.planning, this.dialogs, node.id);
+    else if (method)
+      void this.#sidebar.editMethod(method.objectId, method.methodId);
+    else return false;
+    return true;
   }
 
   bind(): void {

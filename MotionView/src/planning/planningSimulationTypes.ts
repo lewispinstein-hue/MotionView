@@ -15,8 +15,14 @@ export interface SimulationSample extends PreviewPose {
   readonly linearVelocity: number;
   readonly angularVelocity: number;
 }
-/** Completed means the controller settled, with a remaining target offset. */
+/** Completed means a motion finished with a remaining target offset. */
 export type SimulationOutcome = "reached" | "completed" | "missed" | "stalled" | "incomplete";
+export interface SimulationCompletionOffset {
+  readonly reason: "settling" | "minimum-speed" | "target-plane" | "distance-drive" | "coast";
+  readonly motionType: PlanWaypointMotion["type"];
+  /** Inches for translation, degrees for rotation. */
+  readonly error: number;
+}
 export interface SimulatedMotion {
   readonly motionId: string;
   readonly type: PlanWaypointMotion["type"];
@@ -31,6 +37,7 @@ export interface SimulatedSection {
   readonly samples: readonly SimulationSample[];
   readonly motions: readonly SimulatedMotion[];
   readonly outcome: SimulationOutcome;
+  readonly completionOffset?: SimulationCompletionOffset;
 }
 export interface PlanningSimulationResult {
   readonly sections: readonly SimulatedSection[];

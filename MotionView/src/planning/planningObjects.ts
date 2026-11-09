@@ -67,7 +67,7 @@ export class PlanningObjects {
   remove(id: string): void {
     const index = this.session.objects.findIndex((object) => object.id === id);
     if (index < 0) return;
-    const selectedNodeId = this.session.selectedNodeId;
+    const selectionSize = this.session.selectedNodeIds.size;
     this.session.mutate("object", () => {
       this.session.objects.splice(index, 1);
       for (const path of this.session.pathEntries) {
@@ -81,7 +81,7 @@ export class PlanningObjects {
         }
       }
     });
-    if (selectedNodeId && this.session.selectedNodeId !== selectedNodeId) {
+    if (this.session.selectedNodeIds.size !== selectionSize) {
       this.session.events.selectionChanged.emit({ kind: "node" });
     }
   }
@@ -158,7 +158,7 @@ export class PlanningObjects {
     const index =
       object?.methods.findIndex((method) => method.id === methodId) ?? -1;
     if (!object || index < 0) return;
-    const selectedNodeId = this.session.selectedNodeId;
+    const selectionSize = this.session.selectedNodeIds.size;
     this.session.mutate("method", () => {
       object.methods.splice(index, 1);
       for (const path of this.session.pathEntries) {
@@ -173,7 +173,7 @@ export class PlanningObjects {
         }
       }
     });
-    if (selectedNodeId && this.session.selectedNodeId !== selectedNodeId) {
+    if (this.session.selectedNodeIds.size !== selectionSize) {
       this.session.events.selectionChanged.emit({ kind: "node" });
     }
   }

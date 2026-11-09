@@ -46,7 +46,7 @@ interface PlanningHistorySnapshot {
   objects: PlanningObject[];
   selected: number[];
   selectedIndex: number;
-  selectedNodeId: string | null;
+  selectedNodeIds: string[];
   selectedMethod: PlanningMethodSelection | null;
   playTime: number;
   templateConfiguration: PlanningTemplateConfiguration;
@@ -62,7 +62,7 @@ export class PlanningSession {
   readonly objects: PlanningObject[] = [];
   readonly selectedWaypoints = new Set<number>();
   selectedWaypoint = -1;
-  selectedNodeId: string | null = null;
+  readonly selectedNodeIds = new Set<string>();
   selectedMethod: PlanningMethodSelection | null = null;
   templateConfiguration: PlanningTemplateConfiguration;
   simulationConfiguration = normalizePlanningSimulationConfiguration(undefined);
@@ -362,7 +362,7 @@ export class PlanningSession {
       objects: this.objects.map(clonePlanningObject),
       selected: [...this.selectedWaypoints],
       selectedIndex: this.selectedWaypoint,
-      selectedNodeId: this.selectedNodeId,
+      selectedNodeIds: [...this.selectedNodeIds],
       selectedMethod: this.selectedMethod ? { ...this.selectedMethod } : null,
       playTime: this.playbackTime,
       templateConfiguration: normalizePlanningTemplateConfiguration(
@@ -383,7 +383,8 @@ export class PlanningSession {
     this.selectedWaypoints.clear();
     for (const index of snapshot.selected) this.selectedWaypoints.add(index);
     this.selectedWaypoint = snapshot.selectedIndex;
-    this.selectedNodeId = snapshot.selectedNodeId;
+    this.selectedNodeIds.clear();
+    for (const id of snapshot.selectedNodeIds) this.selectedNodeIds.add(id);
     this.selectedMethod = snapshot.selectedMethod
       ? { ...snapshot.selectedMethod }
       : null;
@@ -402,7 +403,8 @@ export class PlanningSession {
     return (
       snapshot.activePathId === this.activePathId &&
       snapshot.selectedIndex === this.selectedWaypoint &&
-      snapshot.selectedNodeId === this.selectedNodeId &&
+      snapshot.selectedNodeIds.length === this.selectedNodeIds.size &&
+      snapshot.selectedNodeIds.every((id) => this.selectedNodeIds.has(id)) &&
       snapshot.selectedMethod?.objectId === this.selectedMethod?.objectId &&
       snapshot.selectedMethod?.methodId === this.selectedMethod?.methodId &&
       snapshot.playTime === this.playbackTime &&
@@ -420,7 +422,7 @@ export class PlanningSession {
   private resetActivePathTransientState(): void {
     this.selectedWaypoints.clear();
     this.selectedWaypoint = -1;
-    this.selectedNodeId = null;
+    this.selectedNodeIds.clear();
     this.selectedMethod = null;
     this.playbackTime = 0;
   }

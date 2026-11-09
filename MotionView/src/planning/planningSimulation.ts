@@ -10,13 +10,14 @@ import { angleError } from "./planningSimulationControllers";
 import { createPlanningSimulationController } from "./planningSimulationController";
 import { PlanningPreviewDrivetrain } from "./planningPreviewDrivetrain";
 import { planningMotionsForLibrary, isVexcodePlanningLibrary, supportsPlanningMinSpeed } from "./planningTemplateCapabilities";
-import type { PlanningTemplateLibrary } from "./planningTemplatePresets";
+import { LEMLIB_PLANNING_TIMEOUT_MS, type PlanningTemplateLibrary } from "./planningTemplatePresets";
 import type {
   PlanningSimulationRequest,
   PlanningSimulationResult,
   PreviewPose,
   SimulatedMotion,
   SimulatedSection,
+  SimulationCompletionOffset,
   SimulationOutcome,
   SimulationSample,
 } from "./planningSimulationTypes";
@@ -25,6 +26,9 @@ export const SIMULATION_TIME_STEP = 0.01;
 const MAX_MOTION_STEPS = 12000; // Numerical guard, never presented as a robot timeout.
 const ARRIVAL_DWELL_STEPS = 5;
 const STANDSTILL_WINDOW = 100;
+type MotionRunResult =
+  | { outcome: Exclude<SimulationOutcome, "completed"> }
+  | { outcome: "completed"; offset: SimulationCompletionOffset };
 const poseOf = (p: Readonly<PlanWaypoint>): PreviewPose => ({
   x: p.x,
   y: p.y,
@@ -46,8 +50,18 @@ function motionsOf(
         {
           id: `legacy-${index}`,
           type: isBoomerangWaypoint(point) ? "boomerang" : "forward",
+          overrideCode: point.overrideCode,
         },
       ], model === "vexcode" ? "vexcode-cpp" : library);
+}
+function motionTimeoutMs(request: PlanningSimulationRequest, motion: Readonly<PlanWaypointMotion>): number | undefined {
+  // The built-in LemLib command has a known timeout. Overrides can use a
+  // different one, and their source is intentionally opaque to the preview.
+  if (request.configuration.previewModel === "lemlib" && request.templateLibrary === "lemlib" &&
+      motion.overrideCode === undefined) {
+    return LEMLIB_PLANNING_TIMEOUT_MS[motion.type];
+  }
+  return undefined;
 }
 export function simulationSectionKey(
   request: PlanningSimulationRequest,
@@ -72,6 +86,7 @@ export function simulationSectionKey(
     motionsOf(start, index, request.templateLibrary, request.configuration.previewModel).map((m) => [
       m.id,
       m.type,
+      motionTimeoutMs(request, m),
       m.lockedDriveSide ?? "left",
       supportsPlanningMinSpeed(request.templateLibrary ?? "custom", m.type),
     ]),
@@ -104,10 +119,14 @@ export function simulatePlanningRoute(
     if (section.outcome === "incomplete")
       return { sections, duration: time, complete: false };
   }
+  const model = request.configuration.previewModel;
+  const vexcodeTemplate = isVexcodePlanningLibrary(request.templateLibrary ?? "custom");
   const drivetrain = new PlanningPreviewDrivetrain(
     request.configuration,
     sections.at(-1)?.drivetrainState,
+    model === "lemlib" && !vexcodeTemplate,
   );
+  const controllerSettles = ["lemlib", "jar-template", "vexcode"].includes(model);
   const sample = (): SimulationSample => ({
     ...pose,
     time,
@@ -123,14 +142,20 @@ export function simulatePlanningRoute(
     speed: number,
     samples: SimulationSample[],
     minSpeed = 0,
-  ): SimulationOutcome => {
+  ): MotionRunResult => {
     const controller = createPlanningSimulationController(
       motion, target, lead, forwards, speed, request.configuration, pose, drivetrain, minSpeed,
     );
-    let outcome: SimulationOutcome = "incomplete", dwell = 0;
+    let result: MotionRunResult = { outcome: "incomplete" };
+    let dwell = 0;
     const movement: number[] = [], rotation: number[] = [];
     let moved = 0, turned = 0;
+    const timeout = motionTimeoutMs(request, motion);
     for (let step = 0; step < MAX_MOTION_STEPS; step++) {
+      if (timeout !== undefined && step * SIMULATION_TIME_STEP * 1000 >= timeout) {
+        result = { outcome: "missed" };
+        break;
+      }
       const output = controller.update(pose, drivetrain);
       if (![output.left, output.right, pose.x, pose.y, pose.theta].every(Number.isFinite)) break;
       // A fast crossing is not a settled arrival: ending the controller there
@@ -143,7 +168,6 @@ export function simulatePlanningRoute(
       dwell = output.arrived && settledVelocity ? dwell + 1 : 0;
       // These controllers apply their own exit windows rather than the generic
       // velocity/XY gate used by the EZ and combined Custom approximation.
-      const controllerSettles = ["lemlib", "jar-template", "vexcode"].includes(request.configuration.previewModel);
       const finished = output.chained || (controllerSettles ? output.arrived : dwell >= ARRIVAL_DWELL_STEPS);
       const delta = drivetrain.step(
         finished ? 0 : output.left,
@@ -169,19 +193,27 @@ export function simulatePlanningRoute(
       }
       if (step % 3 === 0) samples.push(sample());
       if (finished) {
-        outcome = controllerSettles
-          ? targetErrorFor(motion.type, target, pose) <= 1 ? "reached" : "completed"
-          : angularMotion || Math.hypot(target.x - pose.x, target.y - pose.y) <= 1 ? "reached" : "missed";
+        const error = targetErrorFor(motion.type, target, pose);
+        if (error <= 1 || (!controllerSettles && angularMotion)) {
+          result = { outcome: "reached" };
+        } else if (controllerSettles) {
+          const reason = output.chained
+            ? model === "jar-template" ? "target-plane" : "minimum-speed"
+            : "settling";
+          result = { outcome: "completed", offset: { reason, motionType: motion.type, error } };
+        } else {
+          result = { outcome: "missed" };
+        }
         break;
       }
       if (movement.length === STANDSTILL_WINDOW && moved < 0.05 && turned < Math.PI / 720) {
-        outcome = "stalled";
+        result = { outcome: "stalled" };
         break;
       }
     }
     // Include stage boundaries too, so the VEXcode alignment turn consumes time.
     if (samples.at(-1)!.time !== time) samples.push(sample());
-    return outcome;
+    return result;
   };
   for (; index < request.waypoints.length - 1; index++) {
     const start = request.waypoints[index]!,
@@ -189,33 +221,41 @@ export function simulatePlanningRoute(
     const samples: SimulationSample[] = [sample()];
     const motions: SimulatedMotion[] = [];
     let sectionOutcome: SimulationOutcome = "reached";
+    let completionOffset: SimulationCompletionOffset | undefined;
     for (const motion of motionsOf(start, index, request.templateLibrary, request.configuration.previewModel)) {
       const forwards = isSegmentForwards(start, request.waypoints[index + 1]);
       const startTime = time;
-      const vexcodeStraight = (isVexcodePlanningLibrary(request.templateLibrary ?? "custom") ||
-        request.configuration.previewModel === "vexcode") && motion.type === "forward";
+      const vexcodeStraight = (vexcodeTemplate || model === "vexcode") && motion.type === "forward";
       const driveDistance = Math.hypot(target.x - start.x, target.y - start.y) * (forwards ? 1 : -1);
-      let outcome: SimulationOutcome = "reached";
+      let result: MotionRunResult = { outcome: "reached" };
       if (vexcodeStraight && Math.abs(driveDistance) > 1e-10) {
-        outcome = runMotion(
+        result = runMotion(
           { id: motion.id, type: "rotate" },
           { ...target, theta: segmentDriveHeading(start, request.waypoints[index + 1]) * Math.PI / 180 },
           0, forwards, start.speed ?? 127, samples,
         );
       }
-      if (outcome !== "incomplete") {
+      if (result.outcome !== "incomplete") {
         // Match turnToHeading + driveFor: keep the actual pose after alignment,
         // then drive the exported distance along its heading without snapping.
         const motionTarget = vexcodeStraight
           ? { x: pose.x + Math.sin(pose.theta) * driveDistance, y: pose.y + Math.cos(pose.theta) * driveDistance, theta: pose.theta }
           : target;
-        const driveOutcome = runMotion(motion, motionTarget, waypointLead(start), forwards, start.speed ?? 127, samples,
+        const drive = runMotion(motion, motionTarget, waypointLead(start), forwards, start.speed ?? 127, samples,
           supportsPlanningMinSpeed(request.templateLibrary ?? "custom", motion.type)
             ? normalizePlanningMinSpeed(start.minSpeed, start.speed) : 0);
-        if (outcome === "reached" || (outcome === "completed" && driveOutcome !== "reached") || driveOutcome === "incomplete") outcome = driveOutcome;
-        if (outcome === "reached" && motion.type === "forward" && Math.hypot(target.x - pose.x, target.y - pose.y) > 1)
-          outcome = request.configuration.previewModel === "lemlib" ? "completed" : "missed";
+        if (result.outcome === "reached" || (result.outcome === "completed" && drive.outcome !== "reached") || drive.outcome === "incomplete")
+          result = drive;
+        if (result.outcome === "reached" && motion.type === "forward") {
+          const error = targetErrorFor(motion.type, target, pose);
+          if (error > 1) {
+            result = model === "lemlib"
+              ? { outcome: "completed", offset: { reason: "distance-drive", motionType: motion.type, error } }
+              : { outcome: "missed" };
+          }
+        }
       }
+      const { outcome } = result;
       const targetError = targetErrorFor(motion.type, target, pose);
       motions.push({
         motionId: motion.id,
@@ -225,7 +265,17 @@ export function simulatePlanningRoute(
         outcome,
         targetError,
       });
-      if (outcome !== "reached" && (outcome !== "completed" || sectionOutcome === "reached")) sectionOutcome = outcome;
+      if (outcome !== "reached" && (outcome !== "completed" || sectionOutcome === "reached")) {
+        sectionOutcome = outcome;
+        completionOffset = result.outcome === "completed" ? result.offset : undefined;
+      } else if (
+        result.outcome === "completed" &&
+        completionOffset?.reason === "minimum-speed" &&
+        result.offset.reason !== "minimum-speed"
+      ) {
+        // An expected chain should not hide an offset in a later motion.
+        completionOffset = result.offset;
+      }
       if (outcome === "incomplete") break;
     }
     // Once the final command ends, show the nominal coast to rest too. Earlier
@@ -259,15 +309,20 @@ export function simulatePlanningRoute(
       )
         sectionOutcome = "incomplete";
       const finalMotion = motions.at(-1);
-      if (["lemlib", "jar-template", "vexcode"].includes(request.configuration.previewModel) && sectionOutcome === "reached" &&
-          finalMotion && targetErrorFor(finalMotion.type, target, pose) > 1)
-        sectionOutcome = "completed";
+      if (controllerSettles && sectionOutcome === "reached" && finalMotion) {
+        const error = targetErrorFor(finalMotion.type, target, pose);
+        if (error > 1) {
+          sectionOutcome = "completed";
+          completionOffset = { reason: "coast", motionType: finalMotion.type, error };
+        }
+      }
     }
     sections.push({
       key: simulationSectionKey(request, index),
       samples,
       motions,
       outcome: sectionOutcome,
+      ...(sectionOutcome === "completed" && completionOffset ? { completionOffset } : {}),
       drivetrainState: drivetrain.state,
     });
     if (sectionOutcome === "incomplete")

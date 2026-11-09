@@ -48,6 +48,7 @@ export interface MotionViewSettings {
   readonly layoutRightSidebarWidthPlanning?: number;
   readonly layoutTimelineHeight?: number;
   readonly layoutPlanningWaypointHeight?: number;
+  readonly layoutPlanningCollapsedObjectIds?: readonly string[];
   readonly layoutPlanningTimelineHeight?: number;
   readonly appState?: Readonly<Record<string, unknown>>;
 }
@@ -98,6 +99,7 @@ export const DEFAULT_SETTINGS: Readonly<MotionViewSettings> = {
   layoutRightSidebarWidthPlanning: 370,
   layoutTimelineHeight: 180,
   layoutPlanningWaypointHeight: 240,
+  layoutPlanningCollapsedObjectIds: [],
   layoutPlanningTimelineHeight: 144,
   appState: {},
 };

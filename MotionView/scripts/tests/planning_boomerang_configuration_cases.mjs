@@ -193,8 +193,12 @@ export async function runBoomerangConfigurationTests(server) {
   assert.equal(preset("lemlib", custom).previewModel, "lemlib");
 
   // Each physical input has an observable effect; none are decoration.
-  const firstTravel = (values) =>
-    new PlanningPreviewDrivetrain(normalize(values)).step(10, 10).travel;
+  const firstTravel = (values) => {
+    const drive = new PlanningPreviewDrivetrain(normalize(values));
+    let travel = 0;
+    for (let tick = 0; tick < 10; tick++) travel += drive.step(35, 35).travel;
+    return travel;
+  };
   assert.ok(firstTravel({ motorWatts: 66 }) > firstTravel({ motorWatts: 22 }));
   assert.ok(
     firstTravel({ robotWeightPounds: 10 }) >

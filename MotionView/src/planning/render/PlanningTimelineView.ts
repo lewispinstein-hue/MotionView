@@ -1,3 +1,4 @@
+import { editPlanningNode } from "../planningNodeEditor";
 import { getMode } from "../../app/modeController";
 import { requestDrawAll } from "../../render/renderScheduler";
 import { planningTelemetry } from "../../telemetry/createTelemetry";
@@ -40,8 +41,6 @@ const NODE_SHIFT_MS = 320;
 const NODE_ENTER_MS = 240;
 const NODE_EXIT_MS = 220;
 const NODE_MOVE_EPSILON = 0.5;
-const NODE_TEMPLATE_DESCRIPTION =
-  "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, ${forwards}, ${lead} (@ld), and ${lockedDriveSide} (@side)";
 
 interface TimelineBucketLayout {
   readonly beforeWaypoint: number;
@@ -59,6 +58,7 @@ interface TimelineLayout {
 
 interface ActiveDrag extends PlanningMethodDrag {
   readonly ghost: HTMLElement;
+  readonly nodeIds: ReadonlySet<string>;
   started: boolean;
 }
 
@@ -152,6 +152,7 @@ function isLaterTimelineNode(
 export class PlanningTimelineView {
   readonly #context: CanvasRenderingContext2D;
   #activeDrag: ActiveDrag | null = null;
+  #draggedNodeId: string | null = null;
   #drop: Readonly<{ beforeWaypoint: number; index: number; x: number }> | null =
     null;
   #scrubbing = false;
@@ -283,6 +284,7 @@ export class PlanningTimelineView {
       element.type = "button";
       element.className = `planningTimelineNode${this.planning.selection.isNodeHighlighted(node) ? " isSelected" : ""}${hasPlanNodeMethodOverride(node as any) ? " hasOverride" : ""}`;
       element.dataset.nodeId = node.id;
+      element.setAttribute("aria-pressed", String(this.planning.selection.selectedNodeIds.has(node.id)));
       const bucket = layout.buckets[node.beforeWaypoint];
       if (!bucket) continue;
       const left = bucket.nodeStart + node.index * NODE_SLOT;
@@ -305,14 +307,18 @@ export class PlanningTimelineView {
       });
       element.addEventListener("click", (event) => {
         event.stopPropagation();
-        this.planning.selection.selectNode(node.id);
+        if (event.detail && this.#draggedNodeId === node.id) return;
+        this.planning.selection.selectNode(node.id, event.shiftKey || event.metaKey || event.ctrlKey);
       });
       element.addEventListener("dblclick", (event) => {
         event.stopPropagation();
-        void this.editNode(node.id);
+        if (this.#draggedNodeId !== node.id)
+          void editPlanningNode(this.planning, this.dialogs, node.id);
       });
       element.addEventListener("pointerdown", (event) => {
         if (event.button !== 0) return;
+        this.#draggedNodeId = null;
+        if (event.shiftKey || event.metaKey || event.ctrlKey) return;
         this.beginDrag({
           source: "timeline",
           objectId: node.objectId,
@@ -360,6 +366,7 @@ export class PlanningTimelineView {
     this.dom.timelineNodeLayer.querySelectorAll<HTMLElement>("[data-node-id]").forEach(element => {
       const node = this.planning.timeline.get(element.dataset.nodeId!);
       element.classList.toggle("isSelected", !!node && this.planning.selection.isNodeHighlighted(node));
+      element.setAttribute("aria-pressed", String(this.planning.selection.selectedNodeIds.has(element.dataset.nodeId!)));
     });
     this.draw();
   }
@@ -441,8 +448,16 @@ export class PlanningTimelineView {
     if (getMode() !== "planning" || this.planning.route.length < 2) return;
     this.cancelDrag();
     const ghost = this.createMethodGhost(event.objectId, event.methodId);
+    const selected = this.planning.selection.selectedNodeIds;
+    const nodeIds = event.nodeId
+      ? new Set(selected.has(event.nodeId) ? selected : [event.nodeId])
+      : new Set<string>();
+    if (nodeIds.size > 1) {
+      ghost.querySelector(".planMethodName")!.textContent = `${nodeIds.size} nodes`;
+      ghost.querySelector(".planMethodCode")!.textContent = "";
+    }
     document.body.appendChild(ghost);
-    this.#activeDrag = { ...event, ghost, started: false };
+    this.#activeDrag = { ...event, ghost, nodeIds, started: false };
   }
 
   private moveDrag(event: PointerEvent): void {
@@ -453,7 +468,14 @@ export class PlanningTimelineView {
       Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4
     )
       return;
-    drag.started = true;
+    if (!drag.started) {
+      drag.started = true;
+      if (drag.nodeId) {
+        this.#draggedNodeId = drag.nodeId;
+        if (!this.planning.selection.selectedNodeIds.has(drag.nodeId))
+          this.planning.selection.selectNode(drag.nodeId);
+      }
+    }
     drag.sourceElement.classList.add("isDragging");
     document.body.style.cursor = "grabbing";
     document.body.style.userSelect = "none";
@@ -461,10 +483,6 @@ export class PlanningTimelineView {
     drag.ghost.style.top = `${event.clientY + 12}px`;
     drag.ghost.style.zIndex = "1000";
     const rect = this.dom.timelineViewport.getBoundingClientRect();
-    if (event.clientX < rect.left + 40)
-      this.dom.timelineViewport.scrollLeft -= 10;
-    else if (event.clientX > rect.right - 40)
-      this.dom.timelineViewport.scrollLeft += 10;
     if (
       event.clientX < rect.left ||
       event.clientX > rect.right ||
@@ -473,6 +491,10 @@ export class PlanningTimelineView {
     ) {
       this.#drop = null;
     } else {
+      if (event.clientX < rect.left + 40)
+        this.dom.timelineViewport.scrollLeft -= 10;
+      else if (event.clientX > rect.right - 40)
+        this.dom.timelineViewport.scrollLeft += 10;
       this.#drop = this.dropTarget(event.clientX);
     }
     this.updateDropLine();
@@ -482,31 +504,16 @@ export class PlanningTimelineView {
     const drag = this.#activeDrag;
     const drop = this.#drop;
     if (drag?.started && drop) {
-      const node =
-        drag.source === "sidebar"
-          ? this.planning.timeline.insert(
-              drag.objectId,
-              drag.methodId,
-              drop.beforeWaypoint,
-              drop.index,
-            )
-          : drag.nodeId
-            ? this.planning.timeline.move(
-                drag.nodeId,
-                drop.beforeWaypoint,
-                drop.index,
-              )
-            : null;
-      if (node) {
-        this.planning.selection.selectNode(node.id);
-        const telemetry =
-          drag.source === "sidebar"
-            ? planningTelemetry.timelineNodeCreated
-            : planningTelemetry.timelineNodeMoved;
-        void telemetry.call(
-          planningTelemetry,
-          this.planning.telemetryProperties(),
+      if (drag.source === "sidebar") {
+        const node = this.planning.timeline.insert(
+          drag.objectId, drag.methodId, drop.beforeWaypoint, drop.index,
         );
+        if (node) {
+          this.planning.selection.selectNode(node.id);
+          void planningTelemetry.timelineNodeCreated(this.planning.telemetryProperties());
+        }
+      } else if (this.planning.timeline.moveMany(drag.nodeIds, drop.beforeWaypoint, drop.index)) {
+        void planningTelemetry.timelineNodeMoved(this.planning.telemetryProperties());
       }
     }
     this.cancelDrag();
@@ -801,8 +808,8 @@ export class PlanningTimelineView {
         bucket;
     }
     if (!bucket) return null;
-    const dragId = this.#activeDrag?.nodeId;
-    const remainingNodes = bucket.nodes.filter((node) => node.id !== dragId);
+    const dragging = this.#activeDrag?.nodeIds;
+    const remainingNodes = bucket.nodes.filter((node) => !dragging?.has(node.id));
     const index = remainingNodes.length
       ? remainingNodes.filter(
           (node) => x > bucket.nodeStart + node.index * NODE_SLOT,
@@ -870,28 +877,6 @@ export class PlanningTimelineView {
     return this.planning.projection.duration;
   }
 
-  private async editNode(nodeId: string): Promise<void> {
-    const node = this.planning.timeline.get(nodeId);
-    const method = node
-      ? getPlanNodeEffectiveMethod(this.planning.objects.items, node)
-      : null;
-    if (!node || !method) return;
-    const result = await this.dialogs.edit({
-      title: "Edit Placed Node",
-      groupTitle: "Node Code",
-      description: NODE_TEMPLATE_DESCRIPTION,
-      code: method.code,
-    });
-    if (!result) return;
-    const changed = this.planning.timeline.setCodeOverride(nodeId, result.code);
-    if (changed.changed)
-      void planningTelemetry.timelineNodeUpdated(
-        this.planning.telemetryProperties({
-          node_override_created: !changed.hadOverride && changed.hasOverride,
-          node_override_cleared: changed.hadOverride && !changed.hasOverride,
-        }),
-      );
-  }
 
   private showTooltip(
     text: string,

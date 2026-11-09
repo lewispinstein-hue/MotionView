@@ -106,6 +106,17 @@ export async function runPlanningMinSpeedTests(server) {
   boom.update({ x: 0, y: 0, theta: 0 }, drive);
   assert.equal(boom.update({ x: 0, y: 13, theta: 0 }, drive).chained, true,
     "LemLib Boomerang follows the library's close-range carrot-side chaining test");
+  const [chainedSection] = simulate({
+    waypoints: [
+      { x: 0, y: 0, theta: 0, minSpeed: 1, lead: .6,
+        motions: [{ id: "boom", type: "boomerang" }] },
+      { x: 0, y: 24, theta: 0 },
+    ],
+    configuration: config,
+  }).sections;
+  assert.equal(chainedSection.outcome, "completed");
+  assert.equal(chainedSection.completionOffset?.reason, "minimum-speed");
+  assert.ok(chainedSection.completionOffset.error > 1);
 
   const waypoints = [
     { x: 0, y: 0, theta: 0, speed: 80, motions: [{ id: "first", type: "forward" }] },

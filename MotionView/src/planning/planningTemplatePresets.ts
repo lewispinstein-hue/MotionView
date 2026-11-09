@@ -13,6 +13,13 @@ export const PLANNING_TEMPLATE_LIBRARIES = [
 export type PlanningTemplateLibrary = typeof PLANNING_TEMPLATE_LIBRARIES[number]["id"];
 export type PlanningTemplateLanguage = "cpp" | "python";
 
+export const LEMLIB_PLANNING_TIMEOUT_MS = {
+  forward: 4000,
+  rotate: 2000,
+  swing: 2000,
+  boomerang: 4000,
+} as const;
+
 export interface PlanningSwingDriveSides {
   left: string;
   right: string;
@@ -61,10 +68,10 @@ export function createPlanningTemplateConfiguration(): PlanningTemplateConfigura
       // timeline nodes do not overtake a movement still running on the robot.
       // https://github.com/LemLib/LemLib/blob/stable/include/lemlib/chassis/chassis.hpp
       lemlib: {
-        forward: "chassis.moveToPoint(@x, @y, 4000, {.forwards = @fwd, .maxSpeed = @spd, .minSpeed = @minspd}, false);",
-        rotate: "chassis.turnToHeading(@th, 2000, {.maxSpeed = @spd, .minSpeed = @minspd}, false);",
-        swing: "chassis.swingToHeading(@th, @side, 2000, {.maxSpeed = @spd, .minSpeed = @minspd}, false);",
-        boomerang: "chassis.moveToPose(@x, @y, @th, 4000, {.forwards = @fwd, .lead = @ld, .maxSpeed = @spd, .minSpeed = @minspd}, false);",
+        forward: `chassis.moveToPoint(@x, @y, ${LEMLIB_PLANNING_TIMEOUT_MS.forward}, {.forwards = @fwd, .maxSpeed = @spd, .minSpeed = @minspd}, false);`,
+        rotate: `chassis.turnToHeading(@th, ${LEMLIB_PLANNING_TIMEOUT_MS.rotate}, {.maxSpeed = @spd, .minSpeed = @minspd}, false);`,
+        swing: `chassis.swingToHeading(@th, @side, ${LEMLIB_PLANNING_TIMEOUT_MS.swing}, {.maxSpeed = @spd, .minSpeed = @minspd}, false);`,
+        boomerang: `chassis.moveToPose(@x, @y, @th, ${LEMLIB_PLANNING_TIMEOUT_MS.boomerang}, {.forwards = @fwd, .lead = @ld, .maxSpeed = @spd, .minSpeed = @minspd}, false);`,
       },
       // https://github.com/EZ-Robotics/EZ-Template/blob/main/include/EZ-Template/drive/drive.hpp
       "ez-template": {

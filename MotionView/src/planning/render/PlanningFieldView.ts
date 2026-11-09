@@ -1,3 +1,4 @@
+import { editPlanningNode } from "../planningNodeEditor";
 import { getMode } from "../../app/modeController";
 import type { FieldRenderer } from "../../render/field";
 import { requestDrawAll } from "../../render/renderScheduler";
@@ -10,7 +11,6 @@ import {
   getPlanMethodTooltipName,
   getPlanNodeEffectiveMethod,
 } from "../planningObjects";
-import { planningTelemetry } from "../../telemetry/createTelemetry";
 import { formatDistanceFromInches } from "../../shared/units";
 import type { PlanningNodeTooltip } from "./PlanningNodeTooltip";
 import { PlanningSegmentsView, type PathSegmentHit } from "./PlanningSegmentsView";
@@ -46,8 +46,6 @@ const NODE_LONG = 12;
 const NODE_THICK = 3.75;
 const NODE_TICK = 10;
 const NODE_BORDER = 1.5;
-const NODE_TEMPLATE_DESCRIPTION =
-  "These code changes only apply to this placed node. Available placeholders: ${x}, ${y}, ${theta}, ${distance}, ${iteration}, ${speed}, ${minSpeed} (@minspd), ${forwards}, ${lead} (@ld), and ${lockedDriveSide} (@side)";
 
 function normalizeDegrees(value: number): number {
   return ((value % 360) + 360) % 360;
@@ -140,7 +138,7 @@ export class PlanningFieldView {
       const node = this.hitNode(point.x, point.y);
       if (node) {
         event.preventDefault();
-        void this.editNode(node.id);
+        void editPlanningNode(this.planning, this.dialogs, node.id);
       }
     });
   }
@@ -359,7 +357,7 @@ export class PlanningFieldView {
     const hit = this.hitWaypoint(point.x, point.y);
     const node = hit < 0 ? this.hitNode(point.x, point.y) : null;
     if (node) {
-      this.planning.selection.selectNode(node.id);
+      this.planning.selection.selectNode(node.id, event.shiftKey || event.metaKey || event.ctrlKey);
       this.releaseCapture(event.pointerId);
       this.#pointerId = null;
       return;
@@ -832,26 +830,4 @@ export class PlanningFieldView {
     this.nodeTooltip.hide();
   }
 
-  private async editNode(nodeId: string): Promise<void> {
-    const node = this.planning.timeline.get(nodeId);
-    const method = node
-      ? getPlanNodeEffectiveMethod(this.planning.objects.items, node)
-      : null;
-    if (!node || !method) return;
-    const result = await this.dialogs.edit({
-      title: "Edit Placed Node",
-      groupTitle: "Node Code",
-      description: NODE_TEMPLATE_DESCRIPTION,
-      code: method.code,
-    });
-    if (!result) return;
-    const changed = this.planning.timeline.setCodeOverride(nodeId, result.code);
-    if (changed.changed)
-      void planningTelemetry.timelineNodeUpdated(
-        this.planning.telemetryProperties({
-          node_override_created: !changed.hadOverride && changed.hasOverride,
-          node_override_cleared: changed.hadOverride && !changed.hasOverride,
-        }),
-      );
-  }
 }

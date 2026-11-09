@@ -20,15 +20,12 @@ export class PlanningSelection {
   get selectedWaypoint(): Readonly<PlanningWaypoint> | null {
     return this.session.waypoints[this.session.selectedWaypoint] ?? null;
   }
-  get selectedNodeId(): string | null {
-    return this.session.selectedNodeId;
+  get selectedNodeIds(): ReadonlySet<string> {
+    return this.session.selectedNodeIds;
   }
   get selectedNode(): Readonly<PlanningNode> | null {
-    return (
-      this.session.nodes.find(
-        (node) => node.id === this.session.selectedNodeId,
-      ) ?? null
-    );
+    const id = [...this.selectedNodeIds].at(-1);
+    return this.session.nodes.find((node) => node.id === id) ?? null;
   }
   get selectedMethod(): Readonly<PlanningMethodSelection> | null {
     return this.session.selectedMethod;
@@ -45,7 +42,7 @@ export class PlanningSelection {
   }
   isNodeHighlighted(node: Readonly<PlanningNode>): boolean {
     return (
-      node.id === this.session.selectedNodeId ||
+      this.selectedNodeIds.has(node.id) ||
       this.isMethodSelected(node.objectId, node.methodId)
     );
   }
@@ -58,7 +55,7 @@ export class PlanningSelection {
       ? index
       : -1;
     if (this.session.selectedWaypoint >= 0) {
-      this.session.selectedNodeId = null;
+      this.session.selectedNodeIds.clear();
       this.session.selectedMethod = null;
     }
     this.events.selectionChanged.emit({ kind: "waypoint" });
@@ -73,7 +70,7 @@ export class PlanningSelection {
     this.session.selectedWaypoint =
       this.session.selectedWaypoints.values().next().value ?? -1;
     if (this.session.selectedWaypoint >= 0) {
-      this.session.selectedNodeId = null;
+      this.session.selectedNodeIds.clear();
       this.session.selectedMethod = null;
     }
     this.events.selectionChanged.emit({ kind: "waypoint" });
@@ -88,20 +85,22 @@ export class PlanningSelection {
       ? index
       : (this.session.selectedWaypoints.values().next().value ?? -1);
     if (this.session.selectedWaypoint >= 0) {
-      this.session.selectedNodeId = null;
+      this.session.selectedNodeIds.clear();
       this.session.selectedMethod = null;
     }
     this.events.selectionChanged.emit({ kind: "waypoint" });
   }
 
-  selectNode(id: string | null): void {
-    this.session.selectedNodeId =
-      id && this.session.nodes.some((node) => node.id === id) ? id : null;
-    this.session.selectedMethod = null;
-    if (this.session.selectedNodeId) {
+  selectNode(id: string | null, toggle = false): void {
+    const ids = this.session.selectedNodeIds;
+    if (!toggle) ids.clear();
+    if (id && this.session.nodes.some((node) => node.id === id)) {
+      if (toggle && ids.has(id)) ids.delete(id);
+      else ids.add(id);
       this.session.selectedWaypoints.clear();
       this.session.selectedWaypoint = -1;
     }
+    this.session.selectedMethod = null;
     this.events.selectionChanged.emit({ kind: "node" });
   }
 
@@ -116,7 +115,7 @@ export class PlanningSelection {
     this.session.selectedMethod = valid
       ? { objectId: objectId!, methodId: methodId! }
       : null;
-    this.session.selectedNodeId = null;
+    this.session.selectedNodeIds.clear();
     if (this.session.selectedMethod) {
       this.session.selectedWaypoints.clear();
       this.session.selectedWaypoint = -1;
@@ -129,7 +128,7 @@ export class PlanningSelection {
   clear(): void {
     this.session.selectedWaypoints.clear();
     this.session.selectedWaypoint = -1;
-    this.session.selectedNodeId = null;
+    this.session.selectedNodeIds.clear();
     this.session.selectedMethod = null;
     this.events.selectionChanged.emit({ kind: "cleared" });
   }

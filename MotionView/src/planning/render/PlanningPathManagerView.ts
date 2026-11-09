@@ -66,7 +66,10 @@ export class PlanningPathManagerView {
         input.addEventListener("blur", () => this.commitPathName(path.id, input.value));
         input.addEventListener("keydown", (event) => {
           event.stopPropagation();
-          if (event.key === "Enter") input.blur();
+          if (event.key === "Enter" && !event.isComposing) {
+            event.preventDefault();
+            this.commitPathName(path.id, input.value);
+          }
           else if (event.key === "Escape") {
             this.#editingPathId = null;
             this.render();
@@ -153,6 +156,7 @@ export class PlanningPathManagerView {
   }
 
   private commitPathName(id: string, value: string): void {
+    if (this.#editingPathId !== id) return;
     this.#editingPathId = null;
     this.planning.paths.rename(id, value);
     this.render();

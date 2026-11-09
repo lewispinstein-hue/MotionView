@@ -20,6 +20,7 @@ export class PlanningInput {
     private readonly planning: PlanningFeature,
     private readonly field: FieldRenderer,
     private readonly dialogs: PlanningDialogs,
+    private readonly editSelection: () => boolean,
   ) {}
 
   bind(): void {
@@ -52,8 +53,13 @@ export class PlanningInput {
   }
 
   handleKeydown(event: KeyboardEvent): boolean {
-    if (getMode() !== "planning" || event.defaultPrevented) return false;
-    if (hasOpenModal() || isTypingTarget(event.target)) return false;
+    if (getMode() !== "planning" || event.defaultPrevented || event.isComposing) return false;
+    if (this.dialogs.isOpen || hasOpenModal() || isTypingTarget(event.target)) return false;
+    if (matchesShortcut(event, PLANNING_SHORTCUTS.edit)) {
+      if (event.repeat || !this.editSelection()) return false;
+      event.preventDefault();
+      return true;
+    }
     if (matchesShortcut(event, PLANNING_SHORTCUTS.undo)) {
       event.preventDefault();
       this.planning.history.undo();
@@ -70,12 +76,10 @@ export class PlanningInput {
       return true;
     }
     if (matchesShortcut(event, PLANNING_SHORTCUTS.remove)) {
-      const nodeId = this.planning.selection.selectedNodeId;
-      if (nodeId && !this.dialogs.isOpen) {
+      const nodeIds = this.planning.selection.selectedNodeIds;
+      if (nodeIds.size) {
         event.preventDefault();
-        const node = this.planning.timeline.get(nodeId);
-        if (node) {
-          this.planning.timeline.remove(nodeId);
+        if (this.planning.timeline.removeMany(nodeIds)) {
           void planningTelemetry.timelineNodeRemoved(
             this.planning.telemetryProperties(),
           );

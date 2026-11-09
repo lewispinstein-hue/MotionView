@@ -51,8 +51,8 @@ const topBar = new TopBarView(app, fieldRenderer, TopBarDom.from());
 const planningDom = PlanningDom.from();
 const planningDialogs = new PlanningDialogs(planningDom);
 const planningCodeExportDialog = new PlanningCodeExportDialog(app.planning, planningDom, planningDialogs, app.settings);
-const planningView = new PlanningView(app.planning, fieldRenderer, planningDom, planningDialogs);
-const planningInput = new PlanningInput(app.planning, fieldRenderer, planningDialogs);
+const planningView = new PlanningView(app.planning, fieldRenderer, planningDom, planningDialogs, app.settings);
+const planningInput = new PlanningInput(app.planning, fieldRenderer, planningDialogs, () => planningView.editSelection());
 
 const viewingView = new ViewingView(app.viewing, fieldRenderer, ViewingDom.from());
 const viewingInput = new ViewingInput(app.viewing, viewingView);

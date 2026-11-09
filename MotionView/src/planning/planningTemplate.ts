@@ -182,5 +182,8 @@ export function buildPlanExportCode(options: BuildPlanExportCodeOptions) {
   }
 
   const code = blocks.join("\n");
-  return /\S/.test(code) ? code : "";
+  if (!/\S/.test(code)) return "";
+  return options.language === "python"
+    ? code.replace(/^(?=[^\r\n]*\S)/gm, "    ")
+    : code;
 }

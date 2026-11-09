@@ -32,6 +32,13 @@ export async function runPersistenceRegressions(server) {
   const { AppShutdown } = await server.ssrLoadModule(
     "/app/lifecycle/AppShutdown.ts",
   );
+  const { PlanningLayoutView } = await server.ssrLoadModule(
+    "/planning/render/PlanningLayoutView.ts",
+  );
+  const { LayoutSettingsBinding } = await server.ssrLoadModule(
+    "/app/settings/bindings/LayoutSettingsBinding.ts",
+  );
+  const { getMode, setMode } = await server.ssrLoadModule("/app/modeController.ts");
   const originalWindow = globalThis.window;
   const originalAddListener = globalThis.addEventListener;
   const originalConsoleError = console.error;
@@ -262,6 +269,49 @@ export async function runPersistenceRegressions(server) {
         writes.map((item) => item.robotW),
         ["10", "20"],
       );
+    }
+    {
+      let stored = "";
+      globalThis.window = {
+        __TAURI_INTERNALS__: {
+          invoke: async (command, args) => {
+            if (command === "read_settings") return stored;
+            assert.equal(command, "write_settings");
+            stored = args.contents;
+          },
+        },
+      };
+      const settings = new SettingsFeature();
+      settings.update({
+        layoutPlanningWaypointHeight: 315,
+        layoutPlanningCollapsedObjectIds: ["object-a"],
+      });
+      await settings.saveNow();
+      const reloaded = new SettingsFeature();
+      await reloaded.load();
+      assert.deepEqual(reloaded.current.layoutPlanningCollapsedObjectIds, ["object-a"]);
+
+      const properties = new Map();
+      const classes = new Map();
+      const layout = new PlanningLayoutView({}, {}, {
+        documentElement: { style: { setProperty: properties.set.bind(properties) } },
+        getElementById: () => ({
+          classList: { toggle: classes.set.bind(classes) },
+          getBoundingClientRect: () => ({ height: 0 }),
+        }),
+      });
+      const mode = getMode();
+      setMode("viewing");
+      try {
+        new LayoutSettingsBinding(reloaded, layout, { applyPersistedLayout() {} }).apply();
+        assert.equal(properties.get("--planListH"), "315px");
+        assert.equal(classes.get("planListCollapsed"), false,
+          "startup restores the waypoint list height while Planning is hidden");
+        layout.applyPersistedLayout({ waypointListHeight: 0 });
+        assert.equal(classes.get("planListCollapsed"), true);
+      } finally {
+        setMode(mode);
+      }
     }
     {
       let current = 1;

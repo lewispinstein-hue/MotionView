@@ -169,7 +169,8 @@ class Drive:
     def turn_to_heading(self, *args): pass
 drivetrain=Drive()
 PERCENT='percent'; DEGREES='degrees'; INCHES='inches'; FORWARD=1; REVERSE=-1
-exec(sys.stdin.read())
+exec("def autonomous():\\n" + sys.stdin.read())
+autonomous()
 assert [kind for kind,_,_ in calls] == ['turn','drive','turn']
 assert all(abs(value - 64*100/127) < 1e-9 and unit == PERCENT for _,value,unit in calls)
 `], { input: python, encoding: "utf8" });

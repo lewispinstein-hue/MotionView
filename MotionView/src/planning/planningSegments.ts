@@ -8,6 +8,7 @@ import { supportsPlanningMotion } from "./planningTemplateCapabilities";
 import type { PlanningTemplateLibrary } from "./planningTemplatePresets";
 import type {
   SimulatedSection,
+  SimulationCompletionOffset,
   SimulationOutcome,
 } from "./planningSimulationTypes";
 import {
@@ -59,6 +60,7 @@ export class PlanningSegment {
   readonly previewAngularError: number;
   readonly translates: boolean;
   readonly outcome: SimulationOutcome;
+  readonly completionOffset: SimulationCompletionOffset | undefined;
   readonly samples: readonly SegmentSample[];
   readonly length: number;
   readonly duration: number;
@@ -94,6 +96,7 @@ export class PlanningSegment {
     const last = preview?.samples.at(-1);
     this.duration = first && last ? last.time - first.time : 0;
     this.outcome = preview?.outcome ?? "incomplete";
+    this.completionOffset = preview?.completionOffset;
     this.previewConverged = this.outcome === "reached" || this.outcome === "completed";
     this.translates = !!preview?.motions.some(
       (m) => m.type === "forward" || m.type === "boomerang",

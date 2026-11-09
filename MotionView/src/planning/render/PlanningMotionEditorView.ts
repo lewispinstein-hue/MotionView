@@ -64,6 +64,10 @@ export class PlanningMotionEditorView {
     return this.#mode !== null;
   }
 
+  get editingWaypoint(): boolean {
+    return this.#mode === "waypoint";
+  }
+
   get result(): PlanningMotionEditorResult {
     if (this.#mode === "templates") return {
       motionTemplates: { ...this.#templates },
@@ -228,7 +232,9 @@ export class PlanningMotionEditorView {
       this.dom.motionPreview.querySelector<HTMLElement>(".planMotionSwap")?.focus();
     });
     row.append(summary, swap);
-    this.dom.motionPreview.append(picker, row, this.createDirectionToggle());
+    this.dom.motionPreview.append(picker, row);
+    if (selection.isSelected("forward") || selection.isSelected("boomerang"))
+      this.dom.motionPreview.appendChild(this.createDirectionToggle());
     const swing = selection.motions.find(motion => motion.type === "swing");
     if (swing) {
       const side = document.createElement("div"); side.className = "planWaypointDirection";

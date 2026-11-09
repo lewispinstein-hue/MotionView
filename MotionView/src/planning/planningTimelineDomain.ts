@@ -66,8 +66,13 @@ export class PlanningTimeline {
     beforeWaypoint: number,
     index: number,
   ): PlanningNodeView | null {
-    const node = this.session.nodes.find((entry) => entry.id === id);
-    if (!node) return null;
+    return this.moveMany(new Set([id]), beforeWaypoint, index) ? this.get(id) : null;
+  }
+
+  /** Moves the selected nodes as one block, retaining their execution order. */
+  moveMany(ids: ReadonlySet<string>, beforeWaypoint: number, index: number): boolean {
+    const moving = this.session.nodes.filter((node) => ids.has(node.id));
+    if (!moving.length) return false;
     const bucket = Math.max(
       0,
       Math.min(
@@ -77,18 +82,16 @@ export class PlanningTimeline {
     );
     const insertionIndex = Math.max(0, Math.round(index || 0));
     this.session.mutate("node", () => {
-      this.session.nodes.splice(this.session.nodes.indexOf(node), 1);
-      const bucketNodes = this.session.nodes
-        .filter((entry) => entry.beforeWaypoint === bucket)
-        .sort((a, b) => a.index - b.index || a.id.localeCompare(b.id));
-      node.beforeWaypoint = bucket;
-      bucketNodes.splice(Math.min(insertionIndex, bucketNodes.length), 0, node);
+      const bucketNodes = this.session.nodes.filter(
+        (entry) => entry.beforeWaypoint === bucket && !ids.has(entry.id),
+      );
+      bucketNodes.splice(Math.min(insertionIndex, bucketNodes.length), 0, ...moving);
       bucketNodes.forEach((entry, nextIndex) => {
+        entry.beforeWaypoint = bucket;
         entry.index = nextIndex;
       });
-      this.session.nodes.push(node);
     });
-    return this.get(id);
+    return true;
   }
 
   update(id: string, values: Partial<Omit<PlanningNode, "id">>): void {
@@ -129,11 +132,18 @@ export class PlanningTimeline {
   }
 
   remove(id: string): void {
-    const index = this.session.nodes.findIndex((node) => node.id === id);
-    if (index < 0) return;
-    const removedSelection = this.session.selectedNodeId === id;
-    this.session.mutate("node", () => this.session.nodes.splice(index, 1));
-    if (removedSelection)
+    this.removeMany(new Set([id]));
+  }
+
+  removeMany(ids: ReadonlySet<string>): boolean {
+    const remaining = this.session.nodes.filter((node) => !ids.has(node.id));
+    if (remaining.length === this.session.nodes.length) return false;
+    const selectionSize = this.session.selectedNodeIds.size;
+    this.session.mutate("node", () => {
+      this.session.nodes.splice(0, this.session.nodes.length, ...remaining);
+    });
+    if (this.session.selectedNodeIds.size !== selectionSize)
       this.session.events.selectionChanged.emit({ kind: "node" });
+    return true;
   }
 }

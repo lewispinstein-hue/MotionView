@@ -3377,11 +3377,68 @@ body:not(.mode-planning) #rightPlanning {
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
 }
 
+.planObjectBody:not([hidden]) {
+  display: grid;
+  gap: 12px;
+}
+
 .planObjectHeader {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 6px;
+}
+
+.planObjectCollapse {
+  display: grid;
+  place-items: center;
+  flex: 0 0 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.planObjectCollapse:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.planObjectCollapse::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 150ms ease;
+}
+
+.planObjectCollapse[aria-expanded="true"]::before {
+  transform: rotate(135deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planObjectCollapse::before {
+    transition: none;
+  }
+}
+
+.planObjectSwatch {
+  flex: 0 0 10px;
+  height: 10px;
+  margin-top: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  background: var(--plan-object-color);
+}
+
+#rightPlanning.isMethodDragging {
+  overflow: hidden;
+  overflow-anchor: none;
+  touch-action: none;
 }
 
 .planObjectMeta {
@@ -3422,6 +3479,7 @@ body:not(.mode-planning) #rightPlanning {
   flex-direction: column;
   align-items: flex-start;
   flex: 0 0 auto;
+  max-width: 48%;
   gap: 2px;
   padding: 6px 8px;
   border-radius: 10px;
@@ -3454,6 +3512,7 @@ body:not(.mode-planning) #rightPlanning {
   color: var(--text);
   font-size: 12px;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 #rightPlanning .planMethodList {
@@ -4288,7 +4347,7 @@ body:not(.mode-planning) #rightPlanning {
   inset: 0;
   z-index: 2;
   overflow: hidden;
-  color: var(--text);
+  color: transparent;
   pointer-events: none;
   user-select: none;
 }
@@ -4324,8 +4383,7 @@ body:not(.mode-planning) #rightPlanning {
   overflow: auto;
   border-radius: 0;
   background: transparent;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
+  color: var(--text);
   caret-color: var(--text);
   resize: vertical;
   outline: none;
@@ -4333,7 +4391,6 @@ body:not(.mode-planning) #rightPlanning {
 
 .planMotionCodeInput::selection {
   background: rgba(90, 151, 227, 0.35);
-  color: transparent;
 }
 
 .planMotionCodePreview[hidden] {

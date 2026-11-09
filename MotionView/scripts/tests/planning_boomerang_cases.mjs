@@ -322,10 +322,14 @@ async function runFieldInteractionTests(server, PlanningFeature, points) {
     getBoundingClientRect: () => ({ left: 0, top: 0 }),
   };
   const dots = [];
+  const labels = [];
   const context = new Proxy(
     {
       arc(x, y) {
         dots.push({ x, y });
+      },
+      fillText(text) {
+        labels.push({ text, color: this.fillStyle });
       },
     },
     { get: (target, key) => target[key] ?? (() => {}) },
@@ -485,6 +489,34 @@ async function runFieldInteractionTests(server, PlanningFeature, points) {
       3,
       "the removed target connector is not a hit-testable driven path",
     );
+    labels.length = 0;
+    segmentView.drawSelectionLabels([0]);
+    const warningColor = labels.find(({ text }) => text.startsWith("Stalled")).color;
+    const chainStart = {
+      x: 0, y: 0, theta: 0, minSpeed: 1, lead: .6,
+      motions: [{ id: "drive", type: "boomerang" }],
+    };
+    planning.route.replace([chainStart, { x: 0, y: 24, theta: 0 }]);
+    labels.length = 0;
+    segmentView.drawSelectionLabels([0]);
+    assert.match(labels[0].text, /^Minimum speed chaining · .+ from position target$/);
+    assert.notEqual(labels[0].color, warningColor);
+
+    planning.setSimulationConfiguration({ angularPID: { kP: 0, kI: 0, kD: 0 } });
+    planning.route.replace([
+      {
+        ...chainStart,
+        motions: [...chainStart.motions, { id: "turn", type: "rotate" }],
+      },
+      { x: 0, y: 24, theta: 2.5 },
+    ]);
+    labels.length = 0;
+    segmentView.drawSelectionLabels([0]);
+    assert.deepEqual(labels.slice(0, 2), [
+      { text: "Completed with offset · 2.5° from heading target", color: warningColor },
+      { text: "Controller met its settling rule", color: warningColor },
+    ], "a turn miss takes priority over the preceding chain and uses the stall warning color");
+
     planning.route.replace([
       { x: 0, y: 0, theta: 0 },
       { x: 0.5, y: 0, theta: 90 },

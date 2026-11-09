@@ -58,7 +58,12 @@ export async function runPlanningSimulationTests(server) {
         configuration,
       );
       assert.equal(result.complete, true, `${library} ${type}`);
-      assert.equal(result.sections[0].outcome, "reached");
+      const section = result.sections[0];
+      if (library === "lemlib" && section.outcome === "completed") {
+        assert.ok(section.completionOffset.error < 1.5, `${type} settles close to its target`);
+      } else {
+        assert.equal(section.outcome, "reached");
+      }
       assert.ok(result.duration > 0 && result.duration < 10);
       const samples = result.sections[0].samples;
       assert.ok(samples.every((s) => Object.values(s).every(Number.isFinite)));
@@ -147,7 +152,7 @@ export async function runPlanningSimulationTests(server) {
     0,
     "next section begins at the actual missed pose",
   );
-  assert.ok(stalled.sections[1].samples.at(-1).y > 49);
+  assert.ok(Math.abs(stalled.sections[1].samples.at(-1).y - 50) < 1.5);
 
   const chain = route(["forward"]);
   chain[1].motions = [motion("boomerang")];

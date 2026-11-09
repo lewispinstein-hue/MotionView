@@ -2,6 +2,7 @@ import removeIconSvg from "../../assets/svg/planning/removePlanningObject.svg?ra
 import colorIconSvg from "../../assets/svg/planning/changeObjectColor.svg?raw";
 import { requestDrawAll } from "../../render/renderScheduler";
 import { setStatus } from "../../app/status";
+import type { SettingsFeature } from "../../app/settings/SettingsFeature";
 import {
   currentUnitsToInches,
   formatDistanceFromInches,
@@ -63,7 +64,6 @@ interface MethodOrderAnimation {
 
 export class PlanningSidebarView {
   #editingObjectId: string | null = null;
-  #selectObjectName = false;
   #openColorObjectId: string | null = null;
   #copySuccessTimer: number | null = null;
   #activeMethodReorder: ActiveMethodReorder | null = null;
@@ -76,6 +76,7 @@ export class PlanningSidebarView {
     private readonly dialogs: PlanningDialogs,
     private readonly drag: PlanningDragCoordinator,
     private readonly waypointEditor: PlanningWaypointEditor,
+    private readonly settings: SettingsFeature,
   ) {}
 
   bind(): void {
@@ -96,6 +97,8 @@ export class PlanningSidebarView {
     this.bindSelectionField(this.dom.selectedTheta, "theta");
     this.bindSelectionField(this.dom.selectedMinSpeed, "minSpeed");
     this.bindSelectionField(this.dom.selectedSpeed, "speed");
+    const releaseSidebarScroll = () =>
+      this.dom.objectList.closest("#rightPlanning")?.classList.remove("isMethodDragging");
     document.addEventListener(
       "mousedown",
       (event) => {
@@ -113,9 +116,16 @@ export class PlanningSidebarView {
     window.addEventListener("pointermove", (event) =>
       this.moveMethodReorder(event),
     );
-    window.addEventListener("pointerup", () => this.finishMethodReorder());
-    window.addEventListener("pointercancel", () => this.cancelMethodReorder());
-    window.addEventListener("blur", () => this.cancelMethodReorder());
+    window.addEventListener("pointerup", () => {
+      releaseSidebarScroll();
+      this.finishMethodReorder();
+    });
+    const cancelDrag = () => {
+      releaseSidebarScroll();
+      this.cancelMethodReorder();
+    };
+    window.addEventListener("pointercancel", cancelDrag);
+    window.addEventListener("blur", cancelDrag);
   }
 
   render(): void {
@@ -162,7 +172,7 @@ export class PlanningSidebarView {
   updateSelection(): void {
     for (const row of this.dom.list.querySelectorAll<HTMLElement>(".planItem"))
       row.classList.toggle("selected", this.planning.selection.isWaypointSelected(Number(row.dataset.idx)));
-    this.renderObjects();
+    this.updateObjectSelection();
     this.renderSelection();
   }
 
@@ -243,14 +253,37 @@ export class PlanningSidebarView {
 
   renderObjects(): void {
     this.dom.objectList.replaceChildren();
-    const selectedNode = this.planning.selection.selectedNode;
+    const saved = this.settings.current.layoutPlanningCollapsedObjectIds;
+    const collapsedObjects = new Set(
+      Array.isArray(saved) ? saved.filter((id) => typeof id === "string") : [],
+    );
     this.planning.objects.items.forEach((object, objectIndex) => {
       const card = document.createElement("article");
-      const selectedMethod = this.planning.selection.selectedMethod;
-      card.className = `planObjectCard${selectedNode?.objectId === object.id || selectedMethod?.objectId === object.id ? " isHighlighted" : ""}`;
+      card.className = "planObjectCard";
       card.dataset.objectId = object.id;
       const header = document.createElement("div");
       header.className = "planObjectHeader";
+      const collapse = document.createElement("button");
+      collapse.type = "button";
+      collapse.className = "planObjectCollapse";
+      const body = document.createElement("div");
+      body.className = "planObjectBody";
+      const updateCollapsed = () => {
+        const collapsed = collapsedObjects.has(object.id);
+        body.hidden = collapsed;
+        collapse.setAttribute("aria-expanded", String(!collapsed));
+        collapse.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${object.name}`);
+      };
+      collapse.addEventListener("click", () => {
+        if (!collapsedObjects.delete(object.id)) collapsedObjects.add(object.id);
+        this.settings.update({ layoutPlanningCollapsedObjectIds: [...collapsedObjects] });
+        updateCollapsed();
+      });
+      updateCollapsed();
+      const swatch = document.createElement("span");
+      swatch.className = "planObjectSwatch";
+      swatch.title = "Object color";
+      header.append(collapse, swatch);
       const meta = document.createElement("div");
       meta.className = "planObjectMeta";
       if (this.#editingObjectId === object.id) {
@@ -261,9 +294,11 @@ export class PlanningSidebarView {
           this.commitObjectName(object.id, input.value),
         );
         input.addEventListener("keydown", (event) => {
-          if (event.key === "Enter")
+          if (event.key === "Enter" && !event.isComposing) {
+            event.preventDefault();
+            event.stopPropagation();
             this.commitObjectName(object.id, input.value);
-          else if (event.key === "Escape") {
+          } else if (event.key === "Escape") {
             this.#editingObjectId = null;
             this.renderObjects();
           }
@@ -271,7 +306,7 @@ export class PlanningSidebarView {
         meta.appendChild(input);
         requestAnimationFrame(() => {
           input.focus();
-          if (this.#selectObjectName) input.select();
+          input.select();
         });
       } else {
         const name = document.createElement("div");
@@ -279,7 +314,6 @@ export class PlanningSidebarView {
         name.textContent = object.name || getDefaultPlanObjectName(objectIndex);
         name.addEventListener("dblclick", () => {
           this.#editingObjectId = object.id;
-          this.#selectObjectName = true;
           this.renderObjects();
         });
         meta.appendChild(name);
@@ -307,7 +341,7 @@ export class PlanningSidebarView {
         methods.innerHTML = `<div class="planMethodEmpty">No methods yet.</div>`;
       object.methods.forEach((method, methodIndex) => {
         const methodCard = document.createElement("div");
-        methodCard.className = `planMethodCard${(selectedNode?.objectId === object.id && selectedNode.methodId === method.id) || this.planning.selection.isMethodSelected(object.id, method.id) ? " isHighlighted" : ""}`;
+        methodCard.className = "planMethodCard";
         methodCard.dataset.objectId = object.id;
         methodCard.dataset.methodId = method.id;
         methodCard.innerHTML = `<div class="planMethodGrip" aria-hidden="true">⋮⋮</div><div class="planMethodIndex">${methodIndex + 1}</div><div class="planMethodContent"><div class="planMethodName"></div><div class="planMethodCode"></div></div><button class="iconBtn planMethodRemoveBtn" type="button" title="Remove Method">${icon(removeIconSvg)}</button>`;
@@ -322,6 +356,8 @@ export class PlanningSidebarView {
               event.target.closest(".planMethodRemoveBtn"))
           )
             return;
+          event.preventDefault();
+          this.dom.objectList.closest("#rightPlanning")?.classList.add("isMethodDragging");
           this.beginMethodReorder({
             objectId: object.id,
             methodId: method.id,
@@ -354,7 +390,6 @@ export class PlanningSidebarView {
           );
         methods.appendChild(methodCard);
       });
-      card.appendChild(methods);
       const actions = document.createElement("div");
       actions.className = "planObjectActions";
       const addMethod = document.createElement("button");
@@ -400,7 +435,8 @@ export class PlanningSidebarView {
         () => void this.removeObject(object.id),
       );
       actions.append(addMethod, actionTools, removeObject);
-      card.appendChild(actions);
+      body.append(methods, actions);
+      card.appendChild(body);
       card.style.setProperty(
         "--plan-object-color",
         object.color || getDefaultPlanObjectColor(objectIndex),
@@ -408,7 +444,28 @@ export class PlanningSidebarView {
       card.style.color = getContrastTextColor(object.color);
       this.dom.objectList.appendChild(card);
     });
+    this.updateObjectSelection();
     this.animateMethodReorder();
+  }
+
+  private updateObjectSelection(): void {
+    const selection = this.planning.selection;
+    const selectedNodes = this.planning.timeline.nodes.filter(
+      (node) => selection.selectedNodeIds.has(node.id),
+    );
+    for (const card of this.dom.objectList.querySelectorAll<HTMLElement>(".planObjectCard")) {
+      const objectId = card.dataset.objectId!;
+      const selectedMethods = new Set(selectedNodes
+        .filter((node) => node.objectId === objectId)
+        .map((node) => node.methodId));
+      card.classList.toggle("isHighlighted",
+        selectedMethods.size > 0 || selection.selectedMethod?.objectId === objectId);
+      for (const method of card.querySelectorAll<HTMLElement>(".planMethodCard")) {
+        const methodId = method.dataset.methodId!;
+        method.classList.toggle("isHighlighted",
+          selectedMethods.has(methodId) || selection.isMethodSelected(objectId, methodId));
+      }
+    }
   }
 
   updatePlayback(): void {
@@ -702,7 +759,7 @@ export class PlanningSidebarView {
     void planningTelemetry.methodCreated(this.planning.telemetryProperties());
   }
 
-  private async editMethod(objectId: string, methodId: string): Promise<void> {
+  async editMethod(objectId: string, methodId: string): Promise<void> {
     const method = this.planning.objects.method(objectId, methodId);
     if (!method) return;
     const previousName = method.name;
@@ -820,6 +877,8 @@ export class PlanningSidebarView {
   }
 
   private commitObjectName(id: string, name: string): void {
+    if (this.#editingObjectId !== id) return;
+    this.#editingObjectId = null;
     this.planning.objects.rename(
       id,
       name.trim() ||
@@ -827,7 +886,6 @@ export class PlanningSidebarView {
           this.planning.objects.items.findIndex((object) => object.id === id),
         ),
     );
-    this.#editingObjectId = null;
   }
 
   private latestMethodName(objectId: string): string {

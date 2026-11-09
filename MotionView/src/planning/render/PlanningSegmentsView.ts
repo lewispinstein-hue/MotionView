@@ -1,11 +1,19 @@
 import type { FieldRenderer } from "../../render/field";
 import type { PlanningFeature } from "../PlanningFeature";
 import type { PlanningSegment, SegmentPoint } from "../planningSegments";
+import type { SimulationCompletionOffset } from "../planningSimulationTypes";
 import { formatDistanceFromInches, getCurrentUnits } from "../../shared/units";
 
 export interface PathSegmentHit extends SegmentPoint {
   readonly index: number;
 }
+
+const COMPLETION_REASON: Record<Exclude<SimulationCompletionOffset["reason"], "minimum-speed">, string> = {
+  settling: "Controller met its settling rule",
+  "target-plane": "Controller exited after crossing the target plane",
+  "distance-drive": "Distance drive ended away from the waypoint",
+  coast: "Robot coasted after the motion ended",
+};
 
 /** Drawing and hit testing use the live preview; playback commits on release. */
 export class PlanningSegmentsView {
@@ -52,9 +60,24 @@ export class PlanningSegmentsView {
       if (!this.planning.projection.pending && segment.outcome !== "reached") {
         const last = this.screen(segment.samples.at(-1)!);
         context.font = "11px system-ui, sans-serif";
-        context.fillStyle = segment.outcome === "completed" ? "rgba(210,230,255,0.95)" : "rgba(235,200,145,0.95)";
-        const error = segment.translates ? `${formatDistanceFromInches(segment.previewTargetError, 2)} ${getCurrentUnits()} from position target` : `${segment.previewAngularError.toFixed(1)}° from heading target`;
-        context.fillText(`${segment.outcome === "incomplete" ? "Preview incomplete" : segment.outcome === "stalled" ? "Stalled" : segment.outcome === "completed" ? "Completed with offset" : "Missed target"} · ${error}`, last.x + 10, last.y - 10);
+        const offset = segment.completionOffset;
+        const chaining = offset?.reason === "minimum-speed";
+        context.fillStyle = chaining ? "rgba(210,230,255,0.95)" : "rgba(235,200,145,0.95)";
+        const headingError = offset
+          ? offset.motionType === "rotate" || offset.motionType === "swing"
+          : !segment.translates;
+        const error = headingError
+          ? `${(offset?.error ?? segment.previewAngularError).toFixed(1)}° from heading target`
+          : `${formatDistanceFromInches(offset?.error ?? segment.previewTargetError, 2)} ${getCurrentUnits()} from position target`;
+        const status = {
+          incomplete: "Preview incomplete",
+          stalled: "Stalled",
+          completed: chaining ? "Minimum speed chaining" : "Completed with offset",
+          missed: "Missed target",
+        }[segment.outcome];
+        context.fillText(`${status} · ${error}`, last.x + 10, last.y - 10);
+        if (offset && offset.reason !== "minimum-speed")
+          context.fillText(COMPLETION_REASON[offset.reason], last.x + 10, last.y + 4);
       }
       if (this.hasLeadHandle(segment)) this.drawLeadLabel(segment);
     }
