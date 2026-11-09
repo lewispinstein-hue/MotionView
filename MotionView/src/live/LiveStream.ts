@@ -71,15 +71,14 @@ export class LiveStream {
       const response = await this.bridge.post<LiveApiResponse>(
         "/api/start",
         { resume: this.session.timestampResume() },
-        { timeoutMs: 5_000 },
+        { timeoutMs: 20_000 },
       );
       if (!response.ok || response.json?.ok === false) {
         this.appendConsole(
-          `[api] start failed (${response.json?.status || response.status})`,
+          `Live streaming could not start: ${response.json?.status || response.status}`,
         );
-        this.appendConsole(
-          "Backend may not be working. Try restarting the application.",
-        );
+        if (!response.ok)
+          this.appendConsole("Backend may not be working. Try restarting the application.");
         this.session.clearPending();
         this.setState("idle");
         return false;
@@ -98,7 +97,6 @@ export class LiveStream {
         kind: "success",
         message: "Streaming started",
       });
-      this.appendConsole("[UI] Streaming started");
       return true;
     });
   }

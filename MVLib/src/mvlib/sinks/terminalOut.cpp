@@ -1,4 +1,5 @@
 #include "mvlib/private/terminalOut.hpp"
+#include "mvlib/private/telemetryWrite.hpp"
 #include "mvlib/core.hpp"
 #include "mvlib/private/singleLineText.hpp"
 #include "pros/rtos.hpp"
@@ -24,7 +25,6 @@ constexpr size_t kTelemetryMaxEncodedFrameBytes = kTelemetryMaxRawFrameBytes +
 constexpr size_t kTelemetryQueueCapacity = 96;
 constexpr uint32_t kTelemetryQueueLockTimeoutMs = 2;
 constexpr uint32_t kTelemetryWriteRetryDelayMs = 15;
-constexpr size_t kTelemetryMaxWriteRetries = 8;
 
 constexpr uint32_t kTelemetryWaitForDataTimeoutMs = 12;
 
@@ -169,18 +169,10 @@ bool dequeueTelemetryFrame(TelemetryFrame& frame) {
 
 void writeFrameBlocking(const uint8_t* data, size_t len) {
   telemetryWriteMutex.take();
-  size_t totalWritten = 0;
-  size_t retryCount = 0;
-  while (totalWritten < len) {
-    int result = write(1, data + totalWritten, len - totalWritten);
-    if (result <= 0) {
-      if (++retryCount >= kTelemetryMaxWriteRetries) break;
-      pros::delay(kTelemetryWriteRetryDelayMs);
-      continue;
-    }
-    retryCount = 0;
-    totalWritten += static_cast<size_t>(result);
-  }
+  writeTelemetryFully(
+      data, len,
+      [](const uint8_t* bytes, size_t count) { return write(1, bytes, count); },
+      [] { pros::delay(kTelemetryWriteRetryDelayMs); });
   telemetryWriteMutex.give();
 }
 } // namespace

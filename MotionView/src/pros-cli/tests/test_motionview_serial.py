@@ -137,6 +137,27 @@ class MotionViewSerialDecoderTests(unittest.TestCase):
         self.assertEqual(output.count("[POSE],"), 1)
         self.assertIn("[POSE],10,1.00,2.00,0.00,0,0\n", output)
 
+    def test_dropped_bytes_between_long_text_watches_resynchronize(self) -> None:
+        # Recreates the reported 203-byte hex dump: the last ten text bytes and
+        # delimiter of one watch, then the next watch's header and five text
+        # bytes, were missing from the serial stream.
+        first_text = (
+            "aisudhaiwudhqiouwdhqiuwdhqiuwdhqiuwdhqliwudhqliwduhqlasldjoqwhdjoquh"
+            "wdoiqugwdluqywdg;qofuglqulekfygqlefiwduhq"
+        )
+        second_text = first_text[:-6]
+        first = frame(decoder.MSG_TYPE_WATCH, struct.pack("<HH", 19_008, 2) + first_text.encode(), level=2, subtype=2)
+        second = frame(decoder.MSG_TYPE_WATCH, struct.pack("<HH", 19_008, 3) + second_text.encode(), level=2, subtype=2)
+        damaged = first[:105] + second[11:]
+        self.assertIsNone(decoder._parse_binary_frame(damaged))
+        good_pose = frame(decoder.MSG_TYPE_POSE, struct.pack("<HffHbb", 19_048, 1.0, 2.0, 0, 0, 0))
+
+        output = decoder.decode_bytes_to_str(damaged + b"\0" + good_pose + b"\0")
+
+        self.assertIn("[MotionView] discarded a corrupted telemetry frame", output)
+        self.assertNotIn("05 6A", output)
+        self.assertIn("[POSE],19048,1.00,2.00,0.00,0,0\n", output)
+
     def test_large_pose_coordinates_round_trip_without_rescaling(self) -> None:
         for x in [398_790.0, -398_790.0, 39.875]:
             packet = frame(decoder.MSG_TYPE_POSE, struct.pack("<HffHbb", 10, x, 2.0, 0, 0, 0), level=7) + b"\0"

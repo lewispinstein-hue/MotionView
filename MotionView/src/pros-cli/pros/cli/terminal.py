@@ -10,6 +10,7 @@ from pros.serial.ports import DirectPort
 from pros.common.utils import logger
 from .common import default_options, resolve_v5_port, resolve_cortex_port, pros_root
 from pros.serial.ports.v5_wireless_port import V5WirelessPort
+from pros.serial.ports.port_guard import controller_port_in_use
 
 @pros_root
 def terminal_cli():
@@ -55,25 +56,37 @@ def terminal(port: str, backend: str, **kwargs):
             if ((v5_port is None) ^ (cortex_port is None)) or (v5_port is not None and v5_port == cortex_port):
                 port = v5_port or cortex_port
             else:
-                raise click.UsageError('You must be in a PROS project directory to enable default port selecting')
+                raise click.ClickException('Select a PROS project in MotionView before starting live streaming.')
         else:
             project = c.Project(project_path)
             port = project.target
 
+    target = port
     if port == 'v5':
         port = None
-        port, is_v5_user_joystick = resolve_v5_port(port, 'user')
+        port, is_v5_user_joystick = resolve_v5_port(port, 'user', quiet=True)
     elif port == 'cortex':
         port = None
-        port = resolve_cortex_port(port)
+        port = resolve_cortex_port(port, quiet=True)
         kwargs['raw'] = True
     if not port:
-        return -1
+        if target == 'cortex':
+            raise click.ClickException('No Cortex device was found. Check its power and USB connection, then try again.')
+        raise click.ClickException('No V5 Brain or Controller was found. Check its power and USB connection, then try again.')
 
     if backend == 'share':
         raise NotImplementedError('Share backend is not yet implemented')
         # ser = SerialSharePort(port)
     elif is_v5_user_joystick:
+        try:
+            port_in_use = controller_port_in_use(port)
+        except RuntimeError as error:
+            raise click.ClickException(f'{error} Finish the upload before starting live streaming.') from error
+        if port_in_use:
+            raise click.ClickException(
+                'The V5 Controller port is already in use. Finish the program upload '
+                'and close its terminal before starting live streaming.'
+            )
         logger(__name__).debug("it's a v5 joystick")
         ser = V5WirelessPort(port)
     else:
@@ -114,9 +127,11 @@ def terminal(port: str, backend: str, **kwargs):
         sys.stdout = sys.__stdout__
 
     signal.signal(signal.SIGINT, term.stop)
-    term.start()
-    sys.stdout.write("Established terminal connection\n")
-    sys.stdout.flush()
+    def report_ready():
+        sys.stdout.write("Established terminal connection\n")
+        sys.__stdout__.flush()
+
+    term.start(on_ready=report_ready)
     while not term.alive.is_set():
         time.sleep(0.005)
     sys.stdout = sys.__stdout__

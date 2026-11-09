@@ -120,6 +120,10 @@ export class LiveConnection {
         if (this.session.socket !== socket) return;
         if (typeof event.data !== "string" || !this.stream.acceptingData)
           return;
+        if (event.data === "[INTERNAL] terminal ready") {
+          this.appendConsole("[UI] Streaming started");
+          return;
+        }
         if (event.data === "[INTERNAL] terminal closed") {
           void this.stream.remoteExit();
           return;

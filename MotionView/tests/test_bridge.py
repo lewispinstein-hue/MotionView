@@ -70,6 +70,18 @@ class PipeReaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.runner.proc)
         return self.socket.lines
 
+    async def test_ready_marker_precedes_first_telemetry_record(self):
+        reader = asyncio.StreamReader()
+        reader.feed_data(
+            b"Established terminal connection\n[POSE],10,1,2,0,0,0\n"
+        )
+        reader.feed_eof()
+        self.assertEqual(await self.read_to_exit(reader), [
+            "[INTERNAL] terminal ready",
+            "[POSE],10,1,2,0,0,0",
+            "[INTERNAL] terminal closed",
+        ])
+
     async def test_oversized_complete_line_reports_error_and_next_pose_survives(self):
         reader = asyncio.StreamReader()
         reader.feed_data(b"x" * 70_000 + b"\n[POSE],10,1,2,0,0,0\n")

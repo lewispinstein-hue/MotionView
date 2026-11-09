@@ -865,8 +865,13 @@ class V5Device(VEXDevice, SystemDevice):
 
     @retries
     def user_fifo_read(self) -> bytes:
-        # I can't really think of a better way to only return when a full
-        # COBS message was written than to just cache the data until we hit a \x00.
+        # Return complete frames already in the cache before issuing another
+        # controller transaction. One 64-byte reply may contain several frames.
+        delimiter = self._serial_cache.find(b'\x00')
+        if delimiter >= 0:
+            frame = self._serial_cache[:delimiter + 1]
+            self._serial_cache = self._serial_cache[delimiter + 1:]
+            return frame
 
         # read/write are the same command, behavior dictated by specifying
         # length-to-read as 0xFF and providing additional payload bytes to write or
@@ -877,15 +882,12 @@ class V5Device(VEXDevice, SystemDevice):
         # RX length isn't always 0x40 (end of buffer reached), so don't check_length.
         self._serial_cache += self._txrx_ext_packet(0x27, tx_payload, 0, check_length=False)[1:]
         logger(__name__).debug('Completed ext 0x27 command (read)')
-        # if _serial_cache doesn't have a \x00, pretend we didn't read anything.
-        if b'\x00' not in self._serial_cache:
+        delimiter = self._serial_cache.find(b'\x00')
+        if delimiter < 0:
             return b''
-        # _serial_cache has a \x00, split off the beginning part and hand it down.
-        parts = self._serial_cache.split(b'\x00')
-        ret = parts[0] + b'\x00'
-        self._serial_cache = b'\x00'.join(parts[1:])
-
-        return ret
+        frame = self._serial_cache[:delimiter + 1]
+        self._serial_cache = self._serial_cache[delimiter + 1:]
+        return frame
 
     @retries
     def user_fifo_write(self, payload: Union[Iterable, bytes, bytearray, str]):

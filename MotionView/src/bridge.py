@@ -514,46 +514,6 @@ async def ws_endpoint(websocket: WebSocket):
 
 async def broadcast(line: str):
     line = strip_ansi(line)
-    # Take useless lines and remove them
-    if "resolve_v5_port - No v5 ports were found" in line:
-        line = "No v5 devices were found."
-    elif "You must be in a PROS project directory" in line:
-        line = "The PROS Path selected is not inside of a PROS Project."
-    elif "Couldn't find the response header in the device response after" in line:
-        line = "Connected device disconnected."
-    elif "The PROS Path selected is not inside of a PROS Project" in line:
-        line = "The PROS Path selected is not inside of a PROS Project."
-        
-    elif "Usage: pros terminal [OPTIONS] [PORT]" in line:
-        return
-    elif "Try 'pros terminal --help' for help" in line:
-        return
-    elif ("Press Ctrl" in line
-        or "Sentry is attempting to send" in line
-        or "Waiting up to" in line):
-        return
-    elif "Connection to" in line and "broken" in line and "Device not configured" in line:
-        return
-    elif "Stopping terminal" in line:
-        return
-    elif "warnings.warn(" in line:
-        return
-    elif ("NotOpenSSLWarning" in line
-        or "RequestsDependencyWarning" in line
-        or "currently the 'ssl' module is compiled with 'LibreSSL" in line
-        or "Unable to find acceptable character detection dependency" in line
-        or "Traceback (most recent call last):" in line
-        or "During handling of the above exception" in line
-        or "Exception in thread serial-rx-term:" in line
-        or "Failed to restore V5 pit channel during disconnect cleanup" in line
-        or "serial.serialutil.SerialException: read failed:" in line
-        or "PortConnectionException: read failed:" in line
-        or line.strip().startswith("[Errno 6] Device not configured")
-        or line.strip().startswith("OSError: [Errno 6] Device not configured")
-        or line.strip().startswith("TypeError: argument must be an int, or have a fileno() method.")
-    ):
-        return
-
     async with _clients_lock:
         current = list(clients)
 
@@ -586,6 +546,8 @@ class ProsTerminalRunner:
         self._pty_buf: bytes = b""
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._timestamp_resume: Optional[TimestampResume] = None
+        self._startup_future: Optional[asyncio.Future[bool]] = None
+        self._startup_error: Optional[str] = None
 
     def _ensure_broadcast_worker(self):
         if self._broadcast_task is not None and not self._broadcast_task.done():
@@ -602,6 +564,21 @@ class ProsTerminalRunner:
             # Serial output is untrusted and can be arbitrarily fast. Preserve
             # bridge responsiveness rather than creating an unbounded task list.
             pass
+
+    def _observe_terminal_line(self, line: str):
+        startup = self._startup_future
+        if startup is None or startup.done():
+            return
+        if line == "Established terminal connection":
+            startup.set_result(True)
+        elif line.startswith(("Error: ", "The V5 ", "Could not open the V5 ",
+                              "No V5 ", "Select a PROS ", "Cannot check ")):
+            self._startup_error = line.removeprefix("Error: ")
+
+    def _startup_exited(self):
+        startup = self._startup_future
+        if startup is not None and not startup.done():
+            startup.set_result(False)
 
     async def _broadcast_lines(self):
         assert self._broadcast_queue is not None
@@ -661,6 +638,8 @@ class ProsTerminalRunner:
 
             self._loop = asyncio.get_running_loop()
             self._ensure_broadcast_worker()
+            self._startup_future = self._loop.create_future()
+            self._startup_error = None
 
             # If a previous session exited without cleanup, clear stale PTY/reader state.
             if self._pty_master_fd is not None:
@@ -668,15 +647,28 @@ class ProsTerminalRunner:
 
             try:
                 await asyncio.wait_for(self._start_pipes(), timeout=3.0)
-                return {"ok": True, "status": "started", "pid": self.pid, "mode": "pipes"}
             except Exception as e:
                 if os.name != "nt":
                     try:
                         await asyncio.wait_for(self._start_unix_pty(), timeout=3.0)
-                        return {"ok": True, "status": "started", "pid": self.pid, "mode": "pty"}
                     except Exception as pty_error:
                         return {"ok": False, "status": f"start failed: pipes={e}; pty={pty_error}"}
-                return {"ok": False, "status": f"start failed: {e}"}
+                    mode = "pty"
+                else:
+                    return {"ok": False, "status": f"start failed: {e}"}
+            else:
+                mode = "pipes"
+
+            try:
+                ready = await asyncio.wait_for(self._startup_future, timeout=12.0)
+            except asyncio.TimeoutError:
+                ready = False
+                self._startup_error = "The V5 terminal did not connect. Check the device and try again."
+            if not ready:
+                message = self._startup_error or "The V5 terminal exited before connecting."
+                await self._terminate(graceful=True)
+                return {"ok": False, "status": message}
+            return {"ok": True, "status": "started", "pid": self.pid, "mode": mode}
 
     async def stop(self) -> dict:
         async with self._op_lock:
@@ -832,10 +824,12 @@ class ProsTerminalRunner:
         try:
             data = os.read(self._pty_master_fd, 4096)
         except OSError:
+            self._startup_exited()
             self._close_pty_reader()
             return
         if not data:
             # EOF: remove reader to avoid busy loop, and close master.
+            self._startup_exited()
             self._close_pty_reader()
             return
 
@@ -846,7 +840,10 @@ class ProsTerminalRunner:
             raw, self._pty_buf = self._pty_buf.split(b"\n", 1)
             line = raw.decode("utf-8", errors="replace").rstrip("\r").strip()
             if line:
-                self._enqueue_broadcast(line)
+                self._observe_terminal_line(line)
+                self._enqueue_broadcast(
+                    "[INTERNAL] terminal ready" if line == "Established terminal connection" else line
+                )
 
     async def _start_pipes(self):
         creationflags = 0
@@ -917,12 +914,16 @@ class ProsTerminalRunner:
                 continue
             text = line.decode("utf-8", errors="replace").rstrip("\r\n")
             if text.strip():
-                self._enqueue_broadcast(text)
+                self._observe_terminal_line(text.strip())
+                self._enqueue_broadcast(
+                    "[INTERNAL] terminal ready" if text.strip() == "Established terminal connection" else text
+                )
 
         # The child hit EOF on its own (robot unplugged, brain rebooted, etc.)
         # rather than via stop()/kill(), which cancel this task before it can
         # reach here. Reap it and tell the frontend so it doesn't stay stuck
         # in "streaming" until the user notices and clicks Stop.
+        self._startup_exited()
         returncode = await proc.wait()
         async with self._op_lock:
             if self.proc is proc:

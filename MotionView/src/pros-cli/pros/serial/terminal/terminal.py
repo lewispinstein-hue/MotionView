@@ -11,6 +11,7 @@ from pros.common.utils import logger
 from pros.serial import bytes_to_str, decode_bytes_to_str
 from pros.serial.devices import RawStreamDevice, StreamDevice
 from pros.serial.ports import PortConnectionException
+from .errors import friendly_terminal_error
 
 
 # This file is a modification of the miniterm implementation on pyserial
@@ -233,7 +234,9 @@ class Terminal(object):
             try:
                 self.device.write(b'pRb')
             except Exception as e:
-                logger(__name__).exception(e)
+                self._report_disconnect(friendly_terminal_error(e))
+                self.stop()
+                return
         
         while not self.alive.is_set() and self._reader_alive:
             try:
@@ -269,7 +272,6 @@ class Terminal(object):
                 # physical disconnect, not transient packet framing noise.
                 if isinstance(self.device, RawStreamDevice):
                     if not self.alive.is_set():
-                        logger(__name__).warning(f'Connection to {self.device.name} broken: {e}')
                         self._report_disconnect("Connected device disconnected.")
                     self.stop()
                     break
@@ -290,10 +292,13 @@ class Terminal(object):
                 break
 
             except UnicodeError as e:
-                logger(__name__).exception(e)
+                if not self.alive.is_set():
+                    self._report_disconnect("The V5 sent data MotionView could not decode. Restart live streaming.")
+                logger(__name__).debug(e)
+                self.stop()
+                break
             
             except PortConnectionException:
-                logger(__name__).warning(f'Connection to {self.device.name} broken')
                 if not self.alive.is_set():
                     self._report_disconnect("Connected device disconnected.")
                     self.stop()
@@ -301,7 +306,7 @@ class Terminal(object):
 
             except Exception as e:
                 if not self.alive.is_set():
-                    logger(__name__).exception(e)
+                    self._report_disconnect(friendly_terminal_error(e))
                 else:
                     logger(__name__).debug(e)
                 self.stop()
@@ -326,7 +331,7 @@ class Terminal(object):
                     self.console.write(c)
         except Exception as e:
             if not self.alive.is_set():
-                logger(__name__).exception(e)
+                self._report_disconnect(friendly_terminal_error(e))
             else:
                 logger(__name__).debug(e)
             self.stop()
@@ -335,9 +340,11 @@ class Terminal(object):
     def catch_sigint(self):
         self.no_sigint = False
 
-    def start(self):
+    def start(self, on_ready=None):
         self.console.setup()
         self.alive.clear()
+        if on_ready is not None:
+            on_ready()
         self._start_rx()
         if self.allow_input:
             self._start_tx()
@@ -346,12 +353,12 @@ class Terminal(object):
     def stop(self, *args):
         self.console.cleanup()
         if not self.alive.is_set():
-            logger(__name__).warning('Stopping terminal')
+            logger(__name__).info('Stopping terminal')
             self.alive.set()
             try:
                 self.device.destroy()
             except Exception as e:
-                logger(__name__).warning(f"Terminal cleanup failed: {e}")
+                logger(__name__).debug("Terminal cleanup failed: %s", e)
             if self.transmitter_thread and threading.current_thread() != self.transmitter_thread and self.transmitter_thread.is_alive():
                 self.console.cleanup()
                 self.console.cancel()

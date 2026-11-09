@@ -16,6 +16,7 @@ class MVLibTextTransportTests(unittest.TestCase):
         compiler = shutil.which("clang++") or shutil.which("g++")
         if not compiler:
             raise unittest.SkipTest("MVLib transport fixture needs a host C++23 compiler")
+        cls.compiler = compiler
         root = Path(__file__).resolve().parents[4]
         with tempfile.TemporaryDirectory(prefix="motionview-text-test-") as temporary:
             executable = Path(temporary) / "terminal-text-fixture"
@@ -50,6 +51,17 @@ class MVLibTextTransportTests(unittest.TestCase):
         actual = "".join(decoder.decode_bytes_to_str(bytes([byte])) for byte in self.packets)
         self.assertEqual(actual, expected)
         self.assertEqual(decoder.STREAM_BUFFER, b"")
+
+    def test_telemetry_writer_finishes_a_frame_after_backpressure(self) -> None:
+        root = Path(__file__).resolve().parents[4]
+        with tempfile.TemporaryDirectory(prefix="motionview-write-test-") as temporary:
+            executable = Path(temporary) / "telemetry-write-fixture"
+            subprocess.run([
+                self.compiler, "-std=c++23", "-I", str(root / "MVLib/include"),
+                str(root / "MVLib/tests/host/telemetryWriteFixture.cpp"),
+                "-o", str(executable),
+            ], check=True, capture_output=True)
+            subprocess.run([str(executable)], check=True, capture_output=True)
 
 
 if __name__ == "__main__":

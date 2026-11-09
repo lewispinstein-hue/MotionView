@@ -10,20 +10,27 @@ class V5WirelessPort(BasePort):
         self.buffer: bytearray = bytearray()
 
         self.port_instance = DirectPort(port)
-        self.device = V5Device(self.port_instance)
-        self.download_channel = self.device.DownloadChannel(self.device)
-        self.download_channel.__enter__()
+        try:
+            self.device = V5Device(self.port_instance)
+            self.download_channel = self.device.DownloadChannel(self.device)
+            self.download_channel.__enter__()
+        except Exception:
+            try:
+                self.port_instance.destroy()
+            except Exception:
+                pass
+            raise
 
     def destroy(self):
         try:
             self.download_channel.__exit__()
         except Exception as e:
-            logger(__name__).warning(f"Failed to restore V5 pit channel during disconnect cleanup: {e}")
+            logger(__name__).debug("Failed to restore V5 pit channel during disconnect cleanup: %s", e)
         finally:
             try:
                 self.port_instance.destroy()
             except Exception as e:
-                logger(__name__).warning(f"Failed to close V5 wireless port cleanly: {e}")
+                logger(__name__).debug("Failed to close V5 wireless port cleanly: %s", e)
 
     def config(self, command: str, argument: Any):
         return self.port_instance.config(command, argument)
@@ -34,7 +41,8 @@ class V5WirelessPort(BasePort):
 
     def read(self, n_bytes: int = 0) -> bytes:
         if n_bytes <= 0:
-            self.buffer.extend(self.device.user_fifo_read())
+            if not self.buffer:
+                self.buffer.extend(self.device.user_fifo_read())
             ret = bytes(self.buffer)
             self.buffer = bytearray()
             return ret

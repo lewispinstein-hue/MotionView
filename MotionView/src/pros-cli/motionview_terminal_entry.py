@@ -2,17 +2,10 @@ import logging
 import sys
 import warnings
 
-try:
-    from urllib3.exceptions import NotOpenSSLWarning
-    warnings.filterwarnings("ignore", category=NotOpenSSLWarning)
-except Exception:
-    pass
-
-try:
-    from requests.exceptions import RequestsDependencyWarning
-    warnings.filterwarnings("ignore", category=RequestsDependencyWarning)
-except Exception:
-    pass
+# Importing urllib3 to obtain its warning class can emit the warning first.
+# These filters must be installed before any PROS dependency imports it.
+warnings.filterwarnings("ignore", message=r"urllib3 v2 only supports OpenSSL")
+warnings.filterwarnings("ignore", message=r"Unable to find acceptable character detection dependency")
 
 import click
 
@@ -21,6 +14,7 @@ import pros.common.ui.log
 from pros.cli.terminal import terminal_cli
 from pros.common.utils import get_version, logger
 from pros.serial import resume_timestamp_from_environment
+from pros.serial.terminal.errors import friendly_terminal_error
 
 
 def resume_decoder_from_environment():
@@ -47,11 +41,21 @@ def main():
     try:
         ctx_obj = configure_logging()
         resume_decoder_from_environment()
-        terminal_cli.main(prog_name="pros", args=sys.argv[1:], obj=ctx_obj, windows_expand_args=False)
+        # Use Click's plain error path; RichClick prints multi-line boxes to the
+        # telemetry console even when its command exits before connecting.
+        click.Command.main(
+            terminal_cli,
+            prog_name="pros", args=sys.argv[1:], obj=ctx_obj,
+            windows_expand_args=False, standalone_mode=False,
+        )
     except KeyboardInterrupt:
         click.echo("Aborted!")
+    except click.ClickException as error:
+        click.echo(error.format_message(), err=True)
+        raise SystemExit(error.exit_code) from None
     except Exception as e:
-        logger(__name__).exception(e)
+        click.echo(friendly_terminal_error(e), err=True)
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

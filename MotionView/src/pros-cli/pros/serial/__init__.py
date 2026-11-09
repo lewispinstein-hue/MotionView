@@ -544,6 +544,13 @@ def _decode_binary_frame(frame: bytes) -> str:
     return _decode_plain_text_or_hex(frame)
 
 
+def _looks_like_damaged_telemetry(frame: bytes) -> bool:
+    if len(frame) < 2 or frame[0] < 2 or frame[0] > len(frame):
+        return False
+    header = frame[1]
+    return _expected_payload_len((header >> 5) & 0x07, header & 0x03) is not None
+
+
 def _decode_text_chunk(chunk: bytes, encoding: str, errors: str) -> str:
     try:
         return chunk.decode(encoding=encoding, errors=errors)
@@ -683,7 +690,10 @@ def decode_bytes_to_str(data: Union[bytes, bytearray], encoding: str = "utf-8", 
             continue
 
         del STREAM_BUFFER[:nul_idx + 1]
-        outputs.append(bytes_to_str(frame) + "\n")
+        if _looks_like_damaged_telemetry(frame):
+            outputs.append(f"[MotionView] discarded a corrupted telemetry frame ({len(frame)} bytes).\n")
+        else:
+            outputs.append(bytes_to_str(frame) + "\n")
         continue
 
     return "".join(outputs)

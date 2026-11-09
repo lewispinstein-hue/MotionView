@@ -250,8 +250,7 @@ def resolve_v5_port(port: Optional[str], type: str, quiet: bool = False) -> Tupl
         logger(__name__).debug('Ports: {}'.format(';'.join([str(p.__dict__) for p in ports])))
         if len(ports) == 0:
             if not quiet:
-                logger(__name__).error('No {0} ports were found! If you think you have a {0} plugged in, '
-                                       'run this command again with the --debug flag'.format('v5'),
+                logger(__name__).error('No V5 Brain or Controller was found. Check the USB cable and power, then try again.',
                                        extra={'sentry': False})
             return None, False
         if len(ports) > 1:
