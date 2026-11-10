@@ -20,10 +20,13 @@ Keybinds for MotionView
 | Viewing | `P` | Toggle Planned Overlay |
 | Viewing | `G` | Toggle Floating Graph |
 | Viewing | `←` / `→` | Step to previous/next pose |
-| Planning | `Space` | Play/Pause plan playback |
+| Planning | `Space` | Play/Pause planning simulation |
+| Planning | `Shift + click` | Select multiple waypoints or nodes |
 | Planning | `Delete` / `Backspace` | Delete selected waypoint(s) |
 | Planning | `←` / `→` / `↑` / `↓` | Nudge selected waypoint(s) |
 | Planning | `Shift + ←/→/↑/↓` | Nudge selected waypoint(s) by 5× step |
+| Planning | `E` | Open the edit menu of the selected waypoint, node, or method |
+| Planning | `Cmd/Ctrl + Enter` | Save and close modal |
 | Planning | `Cmd/Ctrl + Z` | Undo |
 | Planning | `Cmd/Ctrl + Shift + Z` | Redo |
 | Planning | `Cmd/Ctrl + K` | Clear planned path |
