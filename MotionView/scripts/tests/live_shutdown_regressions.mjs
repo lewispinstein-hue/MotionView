@@ -17,6 +17,9 @@ export async function runLiveShutdownRegressions(server) {
   const { AppShutdown } = await server.ssrLoadModule(
     "/app/lifecycle/AppShutdown.ts",
   );
+  const { liveTelemetry } = await server.ssrLoadModule(
+    "/telemetry/createTelemetry.ts",
+  );
 
   const originals = {
     WebSocket: globalThis.WebSocket,
@@ -373,6 +376,51 @@ export async function runLiveShutdownRegressions(server) {
         await assertEnded(fixture, "connection_closed");
         scenarios += 1;
       } finally {
+        await fixture.close();
+      }
+    }
+    {
+      // The duration analytics request can remain pending even after the
+      // terminal has stopped. It must not hold Stop or a later Start open.
+      const originalStreamingStopped = liveTelemetry.streamingStopped;
+      let finishTelemetry;
+      const pendingTelemetry = new Promise((resolve) => {
+        finishTelemetry = resolve;
+      });
+      liveTelemetry.streamingStopped = () => pendingTelemetry;
+      const fixture = await make(0);
+      const completesPromptly = async (operation) => {
+        let timer;
+        try {
+          return await Promise.race([
+            operation,
+            new Promise((_, reject) => {
+              timer = setTimeout(
+                () => reject(new Error("live control waited for analytics")),
+                500,
+              );
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
+      };
+      try {
+        assert.equal(await completesPromptly(fixture.stream.stop()), true);
+        assert.equal(await completesPromptly(fixture.stream.start()), true);
+        const disconnected = new Promise((resolve) => {
+          fixture.events.connectionChanged.subscribe(({ current }) => {
+            if (current === "disconnected") resolve();
+          });
+        });
+        fixture.socket.close();
+        await completesPromptly(disconnected);
+        assert.equal(await completesPromptly(fixture.connection.connect()), true);
+        assert.equal(await completesPromptly(fixture.stream.start()), true);
+        scenarios += 1;
+      } finally {
+        finishTelemetry(false);
+        liveTelemetry.streamingStopped = originalStreamingStopped;
         await fixture.close();
       }
     }

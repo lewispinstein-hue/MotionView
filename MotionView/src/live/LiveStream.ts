@@ -74,9 +74,10 @@ export class LiveStream {
         { timeoutMs: 20_000 },
       );
       if (!response.ok || response.json?.ok === false) {
-        this.appendConsole(
-          `Live streaming could not start: ${response.json?.status || response.status}`,
-        );
+        if (!response.json?.status?.startsWith("No V5 Brain or Controller was found."))
+          this.appendConsole(
+            `Live streaming could not start: ${response.json?.status || response.status}`,
+          );
         if (!response.ok)
           this.appendConsole("Backend may not be working. Try restarting the application.");
         this.session.clearPending();
@@ -149,7 +150,7 @@ export class LiveStream {
       this.session.clearPending();
       this.session.resetParser();
       this.setState("idle");
-      await liveTelemetry.streamingStopped();
+      this.recordStreamingStopped();
       const message = force ? "Force-killed" : "Streaming stopped";
       this.events.notice.emit({ kind: "success", message });
       this.appendConsole(`[UI] ${message}`);
@@ -262,7 +263,7 @@ export class LiveStream {
       this.session.clearPending();
       this.session.resetParser();
       this.setState("idle");
-      await liveTelemetry.streamingStopped();
+      this.recordStreamingStopped();
       this.appendConsole("[UI] Robot disconnected");
     });
   }
@@ -274,9 +275,17 @@ export class LiveStream {
     this.session.clearPending();
     this.session.resetParser();
     if (this.streaming || this.session.streamState === "stopping")
-      await liveTelemetry.streamingStopped();
+      this.recordStreamingStopped();
     else liveTelemetry.resetCurrentStreamingSession();
     this.setState("idle");
+  }
+
+  private recordStreamingStopped(): void {
+    // Analytics must not hold the serialized Stop command or socket-close
+    // cleanup open. A stalled request would block the next Start until reload.
+    void liveTelemetry.streamingStopped().catch((error) => {
+      console.warn("Could not record streaming duration:", error);
+    });
   }
 
   reset(): void {
