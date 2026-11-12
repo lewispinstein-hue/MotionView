@@ -49,17 +49,11 @@ Click the **Copy Code** button in the sidebar, and paste the output into your co
 Now, just click the **Export** button to instantly update your auton code!
 
 ## What if I don't have odometry?
-If you are using an environment such as VEXCode that does not easily provide odometry, you can use Planning Mode to the same effect! Instead of using a waypoint template that exports with `x, y, theta` values, use the built-in `${distance}` and `${theta}` variables. Example:
-
-```cpp
-// Template code:
-Drivetrain.driveFor(forward, ${distance}, inches);
-Drivetrain.turnToHeading(${theta}, degrees);
-```
+If you are using an environment such as VEXCode Text (C++ or Python), select `Edit Template` in the top right and then select the correct VEXCode preset for your robot. 
 
 <br>
 
-Download a complete Planning Mode example route [here](https://github.com/lewispinstein-hue/MotionView/blob/main/MotionView_Example.json)
+Download a complete Planning Mode example route [here](https://github.com/lewispinstein-hue/MotionView/blob/main/MotionView-example.json)
 
 
 ## Troubleshooting
