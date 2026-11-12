@@ -67,8 +67,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install bridge test dependencies
-        run: python -m pip install -r requirements.txt
+      - name: Install bridge and PROS CLI test dependencies
+        run: python -m pip install -r requirements.txt -r src/pros-cli/requirements.txt
       - name: Install host compiler for MVLib transport fixtures
         run: |
           sudo apt-get update
