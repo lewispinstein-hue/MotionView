@@ -12,12 +12,19 @@
   - [Installing on Windows](https://lewispinstein-hue.github.io/MotionView/docs/MotionView/InstallingWindows)
 
 ## Installing MVLib
-1. Drag and drop the download `libmvlib@<version>.zip ` into the root of your PROS project.
-2. Open an instance of the PROS terminal and run 
+
+### Standard PROS projects
+
+Use `libmvlib@<version>.zip` for a standard PROS project on kernel 4.2.1 or newer. Drag the ZIP into the project root, then open a PROS terminal there and run:
 
 ```bash
 pros c fetch libmvlib@<version>.zip
 pros c apply libmvlib@<version>
+pros make all
 ```
 
-3. You now have MVLib installed in your project! For setup, see [here](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Setup).
+### EZ-Template projects
+
+Use `libmvlib-ez-template@<version>.zip` for EZ-Template. After fetching and applying it, run the MVLib cache script for your platform. The script compiles MVLib with the PROS toolchain in that project, creates `firmware/libmvlib.a`, and removes the temporary source copy so future builds are fast.
+
+The complete macOS/Linux and Windows commands, success checks, and update instructions are in the [MVLib setup guide](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Setup#install-mvlib-with-ez-template).

@@ -6,6 +6,45 @@ MVLib connects a PROS V5 C++ project to MotionView. Start with a battery watch a
 - For a path or waypoint reach checks, attach a pose source. Registering motor groups alone gives MVLib a speed source, while the path still needs position and heading.
 - For per-side velocity or drivetrain watchdogs, register the motor groups as well. If you only need the path, pose-based speed estimation can use the pose source by itself.
 
+## Install MVLib in your PROS project
+
+Download a package compatible with your MotionView version and place the ZIP in the PROS project root. Use `libmvlib@<version>.zip` for a standard PROS project on kernel 4.2.1 or newer. Substitute the version from your ZIP filename in both commands. [Downloads](../../Download.md) · [Version compatibility](../../Home.md#version-compatibility)
+
+```bash
+pros c fetch libmvlib@<version>.zip
+pros c apply libmvlib@<version>
+pros make all
+```
+
+If you are updating an existing project, run `pros c info-project` and check the `libmvlib` entry before uploading. A successful build confirms the installed headers and library work with your project. Uploading that build is what puts the version on the robot. [Updating to v3.0.0](./UpdatingTo-v3.0.0.md)
+
+### Install MVLib with EZ-Template
+
+For an EZ-Template project, use the source-based `libmvlib-ez-template@<version>.zip` package instead. It supports PROS kernels 4.1.1 through 4.2.2 by compiling MVLib with the toolchain installed in the project. Do not use the precompiled `libmvlib` package for this setup.
+
+From the project root, fetch and apply the EZ-Template package:
+
+```bash
+pros c fetch libmvlib-ez-template@<version>.zip
+pros c apply libmvlib-ez-template@<version>
+```
+
+Then run the cache script for your terminal. This is required once after every fresh apply or update of `libmvlib-ez-template`; it compiles `src/mvlib` into `firmware/libmvlib.a`, removes the source copy, and verifies that the project builds against the archive. Subsequent `pros make` and upload commands use the cached archive.
+
+**macOS or Linux (Bash)**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lewispinstein-hue/MotionView/main/MVLib/scripts/cache-ez-template.sh | bash
+```
+
+**Windows (PowerShell)**
+
+```powershell
+Invoke-RestMethod -Uri "https://raw.githubusercontent.com/lewispinstein-hue/MotionView/main/MVLib/scripts/cache-ez-template.ps1" | Invoke-Expression
+```
+
+Run the Windows command in PowerShell, not Command Prompt. The script runs `pros make` itself, so do not remove `src/mvlib` manually or move the archive yourself. On success it reports that MVLib was cached. Confirm that `firmware/libmvlib.a` exists, `src/mvlib` is gone, and `include/mvlib` remains. If the script fails, it leaves or restores the source directory so you can correct the reported build error and run it again.
+
 ## API reference
 
 ### Start and control the logger
@@ -57,18 +96,6 @@ bool setRobot(Drivetrain drivetrain, bool useSpeedEstimation = false);
 `setRobot(...)` returns `true` on successful registration. A null pointer, a previous successful registration, or an already started logger causes the call to return `false`.
 
 If you omit the groups, MVLib estimates speed from pose. Pass `true` as the second argument to register the groups and still use pose-based speed. Both speed modes need a valid pose to appear in MotionView.
-
-## Install MVLib in your PROS project
-
-Download a package compatible with your MotionView version and place the ZIP in the PROS project root. This example uses v3.0.0. Substitute the version from your ZIP filename in both commands. [Downloads](../../Download.md) · [Version compatibility](../../Home.md#version-compatibility)
-
-```bash
-pros c fetch libmvlib@3.0.0.zip
-pros c apply libmvlib@3.0.0
-pros make all
-```
-
-If you are updating an existing project, run `pros c info-project` and check the `libmvlib` entry before uploading. A successful build confirms the installed headers and library work with your project. Uploading that build is what puts the version on the robot. [Updating to v3.0.0](./UpdatingTo-v3.0.0.md)
 
 ## Examples
 
