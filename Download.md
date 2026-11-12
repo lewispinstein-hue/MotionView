@@ -27,4 +27,4 @@ pros make all
 
 Use `libmvlib-ez-template@<version>.zip` for EZ-Template. After fetching and applying it, run the MVLib cache script for your platform. The script compiles MVLib with the PROS toolchain in that project, creates `firmware/libmvlib.a`, and removes the temporary source copy so future builds are fast.
 
-The complete macOS/Linux and Windows commands, success checks, and update instructions are in the [MVLib setup guide](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Setup#install-mvlib-with-ez-template).
+The complete macOS/Linux and Windows commands, success checks, and update instructions are in the [MVLib setup guide](https://lewispinstein-hue.github.io/MotionView/docs/MVLib/Setup?id=install-mvlib-with-ez-template).

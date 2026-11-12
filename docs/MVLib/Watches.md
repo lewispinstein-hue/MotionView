@@ -1,6 +1,6 @@
 # MVLib Watches
 
-Watches sample values from your robot so you can see how they change during a run. In MotionView, open the **Watches** tab to see the latest value, pin it, or graph and compare numeric watches. [Viewing Mode](../MotionView/ViewingMode/ViewingMode.md#watches)
+Watches sample values from your robot so you can see how they change during a run. In MotionView, open the **Watches** tab to see the latest value, pin it, or graph and compare numeric watches. [Viewing Mode](../MotionView/ViewingMode/ViewingMode.md?id=watches)
 
 - Use an **interval watch** for flywheel RPM, battery voltage, or motor temperature. It reports at a regular cadence even when the value holds steady, which gives you a consistent graph.
 - Use an **on-change watch** for clamp state or autonomous stage. It reports an initial value and then reports changes, keeping a steady state from filling the recording with repeats.
@@ -44,7 +44,7 @@ Use a level override when the same watch serves two purposes, such as graphing i
 
 ### Decide what to record
 
-Consider a watch with base level `INFO` and a `WARN` override when current exceeds 2000 mA. At the default logger minimum of `INFO`, you get the normal readings, the warnings, and the readings after current returns to normal. A minimum of `WARN` keeps only the warnings. If you want to hide this watch's normal readings while keeping other `INFO` logs, set this watch's base level to `DEBUG` and leave the logger minimum at `INFO`. The same settings apply to both live and SD output. MVLib still reads the watch on its usual schedule so it can check for a warning. [Minimum log level](./Configuration.md#minimum-log-level)
+Consider a watch with base level `INFO` and a `WARN` override when current exceeds 2000 mA. At the default logger minimum of `INFO`, you get the normal readings, the warnings, and the readings after current returns to normal. A minimum of `WARN` keeps only the warnings. If you want to hide this watch's normal readings while keeping other `INFO` logs, set this watch's base level to `DEBUG` and leave the logger minimum at `INFO`. The same settings apply to both live and SD output. MVLib still reads the watch on its usual schedule so it can check for a warning. [Minimum log level](./Configuration.md?id=minimum-log-level)
 
 The override changes the severity of a sample the watch is due to report. After the initial reading, an on-change warning still needs a change in the watched value. Choose the mode based on what you need from the warning.
 
@@ -58,7 +58,7 @@ The override changes the severity of a sample the watch is due to report. After 
 - Use `PREDICATE(v > 2000)` with an `int32_t` getter. The macro gives you an `int32_t` named `v`.
 - For other types, use `mvlib::asPredicate<T>(...)` with a lambda that returns `bool`, or assign a matching lambda directly to `.predicate`. Keep an alternate name within the same 23-character live display limit as the main name.
 
-See the current, temperature, and boolean examples below. [Threshold examples](#flag-readings-above-a-threshold)
+See the current, temperature, and boolean examples below. [Threshold examples](?id=flag-readings-above-a-threshold)
 
 ## `WatchHandle`
 
@@ -94,7 +94,7 @@ Use `resyncRoster()` for one active watch or `logger.resyncAllWatchesRoster()` f
 
 ## Examples
 
-These examples use `MVLIB_USE_SIMPLES` for the shorter names and time literals. [MVLib Setup](./Setup.md#choose-how-to-write-types-and-times)
+These examples use `MVLIB_USE_SIMPLES` for the shorter names and time literals. [MVLib Setup](./Setup.md?id=choose-how-to-write-types-and-times)
 
 ### Compare target and actual flywheel speed
 

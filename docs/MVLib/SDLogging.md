@@ -1,6 +1,6 @@
 # MVLib SD Logging
 
-SD logging saves logs, watches, waypoints, and pose data for later review. Use it for matches, untethered practice, or a backup of a live session. Open the saved file in MotionView to review the data together. [Configuration](./Configuration.md#choose-live-sd-or-both)
+SD logging saves logs, watches, waypoints, and pose data for later review. Use it for matches, untethered practice, or a backup of a live session. Open the saved file in MotionView to review the data together. [Configuration](./Configuration.md?id=choose-live-sd-or-both)
 
 ## API reference
 
@@ -102,6 +102,6 @@ Find the filename in the startup messages, copy the `.log` file from the card, a
 
 **The file is in the root or its name looks different.** Check the startup message for the resolved filename. A missing folder can trigger root fallback, and an existing file can trigger automatic naming. If an automatic filename uses a build date, check the Brain clock and the value passed to `setBuildDate(...)`.
 
-**The file ends early.** SD write or flush errors can stop the recording. Keep terminal output and system messages enabled to see the error. A power cut can also lose recent buffered data. Shorten `sdBufferFlushInterval` if you need data saved more frequently. [Logger timings](./Configuration.md#timings)
+**The file ends early.** SD write or flush errors can stop the recording. Keep terminal output and system messages enabled to see the error. A power cut can also lose recent buffered data. Shorten `sdBufferFlushInterval` if you need data saved more frequently. [Logger timings](./Configuration.md?id=timings)
 
-**The file exists but some data is missing.** Check the logger's minimum severity and category switches. Those settings also affect the SD file. If only the first messages are missing, check whether they ran before `start()`. [Configuration](./Configuration.md#output) · [Log recording](./Logs.md#when-a-message-reaches-the-recording)
+**The file exists but some data is missing.** Check the logger's minimum severity and category switches. Those settings also affect the SD file. If only the first messages are missing, check whether they ran before `start()`. [Configuration](./Configuration.md?id=output) · [Log recording](./Logs.md?id=when-a-message-reaches-the-recording)

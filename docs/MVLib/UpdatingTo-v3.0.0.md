@@ -17,7 +17,7 @@ Use this guide to update a v2 robot project while keeping its logs, watches, and
 
 ## Examples
 
-The examples use `MVLIB_USE_SIMPLES` for the shorter names and time literals. [MVLib Setup](./Setup.md#choose-how-to-write-types-and-times)
+The examples use `MVLIB_USE_SIMPLES` for the shorter names and time literals. [MVLib Setup](./Setup.md?id=choose-how-to-write-types-and-times)
 
 ### Convert an on-change watch
 
@@ -38,7 +38,7 @@ logger.watch("Auton Stage", LogLevel::INFO, WatchMode::onChange, 250_mvMs,
 
 ### Convert an interval watch
 
-Keep the previous interval and add `WatchMode::onInterval`. Save the returned handle if your code needs to change the watch during a run. [WatchHandle](./Watches.md#watchhandle)
+Keep the previous interval and add `WatchMode::onInterval`. Save the returned handle if your code needs to change the watch during a run. [WatchHandle](./Watches.md?id=watchhandle)
 
 ```cpp
 logger.watch("Flywheel RPM", LogLevel::INFO, WatchMode::onInterval, 1_mvS,
@@ -67,11 +67,11 @@ if (offset.timedOut) {
 }
 ```
 
-This reports an expiry after the logger observes it. To detect whether the waypoint has a deadline at all, use `goalPickup.getParams().timeoutMs.has_value()`. For a retriggerable waypoint, an expiry can follow one or more successful reaches. [Waypoint handles](./Waypoints.md#waypointhandle)
+This reports an expiry after the logger observes it. To detect whether the waypoint has a deadline at all, use `goalPickup.getParams().timeoutMs.has_value()`. For a retriggerable waypoint, an expiry can follow one or more successful reaches. [Waypoint handles](./Waypoints.md?id=waypointhandle)
 
 ### Update an SD destination
 
-The example keeps the behavior of a v2 `setLoggingFolder(..., true)` call. Use `useRoot` if logging should continue in the card root when the folder is missing. [SD Logging](./SDLogging.md#setlogginglocation)
+The example keeps the behavior of a v2 `setLoggingFolder(..., true)` call. Use `useRoot` if logging should continue in the card root when the folder is missing. [SD Logging](./SDLogging.md?id=setlogginglocation)
 
 ```cpp
 logger.setMinLogLevel(mvlib::LogLevel::INFO);
@@ -85,10 +85,10 @@ Run the robot and check a live watch, a waypoint event if you use odometry, and 
 
 For an on-change watch, change the value once and leave it steady to check the debounce you chose. For a timed waypoint, test a successful approach and an approach that runs out of time. For an explicit SD filename, run twice to verify the behavior you chose when a file already exists.
 
-**A watch or waypoint call fails to compile.** Check for a dynamic label, an old watch signature, or a mismatched override type. When using designated initializers for a waypoint, place `.timeoutMs` before `.linearTol`. [Waypoint parameters](./Waypoints.md#waypointparams)
+**A watch or waypoint call fails to compile.** Check for a dynamic label, an old watch signature, or a mismatched override type. When using designated initializers for a waypoint, place `.timeoutMs` before `.linearTol`. [Waypoint parameters](./Waypoints.md?id=waypointparams)
 
 **A watch looks sparse after the upgrade.** Use interval mode when you need a continuous graph. On-change watches report a sample only when the value changes after the initial reading. [Watches](./Watches.md)
 
-**The SD file moved or is missing.** Check the startup message and the folder and file policies. [SD troubleshooting](./SDLogging.md#troubleshooting)
+**The SD file moved or is missing.** Check the startup message and the folder and file policies. [SD troubleshooting](./SDLogging.md?id=troubleshooting)
 
 See the release notes for the full list of changes. [MVLib v3.0.0 changelog](./Changelog/v3.0.0.md)

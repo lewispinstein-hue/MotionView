@@ -8,7 +8,7 @@ MVLib connects a PROS V5 C++ project to MotionView. Start with a battery watch a
 
 ## Install MVLib in your PROS project
 
-Download a package compatible with your MotionView version and place the ZIP in the PROS project root. Use `libmvlib@<version>.zip` for a standard PROS project on kernel 4.2.1 or newer. Substitute the version from your ZIP filename in both commands. [Downloads](../../Download.md) · [Version compatibility](../../Home.md#version-compatibility)
+Download a package compatible with your MotionView version and place the ZIP in the PROS project root. Use `libmvlib@<version>.zip` for a standard PROS project on kernel 4.2.1 or newer. Substitute the version from your ZIP filename in both commands. [Downloads](../../Download.md) · [Version compatibility](../../Home.md?id=version-compatibility)
 
 ```bash
 pros c fetch libmvlib@<version>.zip
@@ -78,7 +78,7 @@ Logs and watches work with or without odometry. Pose updates and waypoint reach 
 | OkapiLib | `mvlib/Optional/okapi.hpp` | Pointer to an `okapi::OdomChassisController`. Pass `odomChassis.get()` if your project holds it in a `std::shared_ptr`. Position defaults to inches and heading is in degrees. Pass a second argument to choose another length unit. |
 | Custom odometry | `mvlib/Optional/customOdom.hpp` | Callable returning `std::optional<mvlib::Pose>`. Return `std::nullopt` until pose is available. |
 
-Attach the adapter after your chassis is initialized and odometry is ready. If your tracker becomes unavailable during a run, a custom adapter can return `std::nullopt` for those reads. Logs and watches can continue, but MVLib needs a pose to draw a new path point or record a waypoint reach. Timed waypoints still have their original deadlines. [Waypoint timeouts](./Waypoints.md#how-the-timeout-works)
+Attach the adapter after your chassis is initialized and odometry is ready. If your tracker becomes unavailable during a run, a custom adapter can return `std::nullopt` for those reads. Logs and watches can continue, but MVLib needs a pose to draw a new path point or record a waypoint reach. Timed waypoints still have their original deadlines. [Waypoint timeouts](./Waypoints.md?id=how-the-timeout-works)
 
 ### Register the drivetrain
 
@@ -121,7 +121,7 @@ void initialize() {
 }
 ```
 
-Upload and run the program, then connect MotionView and open **Watches**. To see **Robot logger ready** live, have MotionView listening when the program starts. You can also find the message in the SD recording if the file opened successfully. [Live streaming setup](../MotionView/SetupLivestreaming.md) · [Viewing Mode](../MotionView/ViewingMode/ViewingMode.md#live-streaming)
+Upload and run the program, then connect MotionView and open **Watches**. To see **Robot logger ready** live, have MotionView listening when the program starts. You can also find the message in the SD recording if the file opened successfully. [Live streaming setup](../MotionView/SetupLivestreaming.md) · [Viewing Mode](../MotionView/ViewingMode/ViewingMode.md?id=live-streaming)
 
 If the startup message appears but the battery watch stays blank, the link is receiving direct logs. Check that periodic updates are running and automatic watch output is enabled. If both appear but the field is empty, the logger is working and the example still needs a pose source to draw a path.
 
@@ -176,7 +176,7 @@ Return an empty pose while the tracker is calibrating. Returning a default pose 
 
 ## Troubleshooting
 
-**There is no live data.** Check that the uploaded program runs, `start()` is called, and MotionView is connected to the correct robot. Check the version pair and make sure terminal output is enabled. [Live streaming setup](../MotionView/SetupLivestreaming.md) · [Version compatibility](../../Home.md#version-compatibility)
+**There is no live data.** Check that the uploaded program runs, `start()` is called, and MotionView is connected to the correct robot. Check the version pair and make sure terminal output is enabled. [Live streaming setup](../MotionView/SetupLivestreaming.md) · [Version compatibility](../../Home.md?id=version-compatibility)
 
 **The battery watch works, but there is no path.** Check that your adapter is attached, odometry is producing a valid pose, and `setPrintTelemetry(true)` is in effect. Move the robot and verify the displayed pose before testing waypoints.
 

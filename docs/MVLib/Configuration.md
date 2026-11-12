@@ -17,7 +17,7 @@ All six switches default to `true`. The category switches apply to both live and
 | `void setPrintWaypoints(bool enabled)` | Suppresses waypoint events while handles continue to update. Events skipped during that time are lost. |
 | `void setLogSystemInfo(bool enabled)` | Suppresses MVLib's own diagnostics, including SD startup messages. User logs have their own severity filter. |
 
-Use `setLoggingLocation(...)` to choose the destination and `setBuildDate(__DATE__)` when using generated filenames. [SD Logging](./SDLogging.md#setlogginglocation)
+Use `setLoggingLocation(...)` to choose the destination and `setBuildDate(__DATE__)` when using generated filenames. [SD Logging](./SDLogging.md?id=setlogginglocation)
 
 ### Choose what to turn off
 
@@ -26,13 +26,13 @@ First decide whether you want to change the recording or only what MotionView sh
 The output switches also differ in what keeps running.
 
 - Turning off terminal output leaves SD recording available. When you re-enable terminal output, MotionView can receive new data. Use the SD file to review what happened while live output was off.
-- Turning off automatic watch output stops the logger from reading the watch getters on its normal schedule. Turning it back on resumes the registered watches. An on-change watch can stay quiet if its value still matches the last report. A handle can still request a manual sample while automatic output is off. [WatchHandle](./Watches.md#watchhandle)
+- Turning off automatic watch output stops the logger from reading the watch getters on its normal schedule. Turning it back on resumes the registered watches. An on-change watch can stay quiet if its value still matches the last report. A handle can still request a manual sample while automatic output is off. [WatchHandle](./Watches.md?id=watchhandle)
 - Turning off pose output removes the path from the recording for that period. Waypoints still use odometry and can still report reach and timeout events. Turning off waypoint output hides those events while the handles continue to update.
-- Pausing the logger also pauses waypoint checks. Use the output switches when you want checks to continue quietly. [Logger startup and controls](./Setup.md#start-and-control-the-logger)
+- Pausing the logger also pauses waypoint checks. Use the output switches when you want checks to continue quietly. [Logger startup and controls](./Setup.md?id=start-and-control-the-logger)
 
 ### Minimum log level
 
-`void setMinLogLevel(LogLevel level)` sets the minimum severity for logs and watch samples on both outputs. The default is `INFO`. Use `WARN` to keep warnings and errors, or `LogLevel::OFF` to suppress ordinary logs and watches. Use the separate switches above for pose and waypoint output. [Logs](./Logs.md) · [Watch thresholds](./Watches.md#flag-readings-above-a-threshold)
+`void setMinLogLevel(LogLevel level)` sets the minimum severity for logs and watch samples on both outputs. The default is `INFO`. Use `WARN` to keep warnings and errors, or `LogLevel::OFF` to suppress ordinary logs and watches. Use the separate switches above for pose and waypoint output. [Logs](./Logs.md) · [Watch thresholds](./Watches.md?id=flag-readings-above-a-threshold)
 
 The minimum applies to each sample's final severity. For instance, an `INFO` current watch with a `WARN` threshold can still show high readings at a `WARN` minimum. MVLib's startup messages are also filtered by level. If you need the SD filename or other startup details, keep system messages enabled and the minimum at `INFO` during setup.
 

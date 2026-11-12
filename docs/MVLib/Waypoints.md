@@ -1,6 +1,6 @@
 # MVLib Waypoints
 
-A waypoint is a named target MVLib checks against your robot's odometry. Use waypoints to see whether the robot passed through a ring pickup zone, lined up for a goal pickup, or reached a practice checkpoint before a deadline. Your drive code commands the motion, and MotionView shows the result. [MVLib Setup](./Setup.md#attach-odometry-to-see-the-robots-path) · [Viewing Mode](../MotionView/ViewingMode/ViewingMode.md#waypoints)
+A waypoint is a named target MVLib checks against your robot's odometry. Use waypoints to see whether the robot passed through a ring pickup zone, lined up for a goal pickup, or reached a practice checkpoint before a deadline. Your drive code commands the motion, and MotionView shows the result. [MVLib Setup](./Setup.md?id=attach-odometry-to-see-the-robots-path) · [Viewing Mode](../MotionView/ViewingMode/ViewingMode.md?id=waypoints)
 
 ## API reference
 
@@ -56,7 +56,7 @@ The clock starts when you call `addWaypoint()`, even if `start()` has yet to run
 
 MotionView can show `CREATED` at registration, `REACHED` at each recorded reach, and `TIMEDOUT` when tracking ends because of a deadline. A waypoint registered before `start()` can appear in the SD recording if waypoint output is enabled at registration and startup.
 
-`setPrintWaypoints(false)` suppresses events on both outputs while tracking continues. A waypoint can reach or time out while output is off, and its handle still records that result. Turning output back on makes future events visible. [Configuration](./Configuration.md#output)
+`setPrintWaypoints(false)` suppresses events on both outputs while tracking continues. A waypoint can reach or time out while output is off, and its handle still records that result. Turning output back on makes future events visible. [Configuration](./Configuration.md?id=output)
 
 ## `WaypointHandle`
 
@@ -113,7 +113,7 @@ logger.addWaypoint("Ring Zone", {
 
 ### Check position, heading, and arrival time
 
-Register this just before approaching a goal. It checks whether the robot gets within two inches and eight degrees of the pickup pose within three seconds. The time literal is available with `MVLIB_USE_SIMPLES`. [MVLib Setup](./Setup.md#choose-how-to-write-types-and-times)
+Register this just before approaching a goal. It checks whether the robot gets within two inches and eight degrees of the pickup pose within three seconds. The time literal is available with `MVLIB_USE_SIMPLES`. [MVLib Setup](./Setup.md?id=choose-how-to-write-types-and-times)
 
 ```cpp
 auto goalPickup = logger.addWaypoint("Goal Pickup", {

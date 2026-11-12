@@ -5,12 +5,12 @@ Table of contents
 | Section | Description |
 | - | - |
 | [PROS Directory](https://lewispinstein-hue.github.io/MotionView/docs/MotionView/SetupLivestreaming) | Enabling telemetry in MotionView |
-| [Robot Image](#robot-image) | Set a custom robot image |
-| [Units & Sizes](#units-and-sizes) | Set units and sizes |
-| [Offsets](#offsets) | Set offsets for the displayed route |
-| [Speed Normalization](#speed-normalization) | Useful primarily for custom loggers |  
-| [Fields](#fields) | Set field-specific settings |
-| [Analytics](#analytics) | Enabling analytics |
+| [Robot Image](?id=robot-image) | Set a custom robot image |
+| [Units & Sizes](?id=units-and-sizes) | Set units and sizes |
+| [Offsets](?id=offsets) | Set offsets for the displayed route |
+| [Speed Normalization](?id=speed-normalization) | Useful primarily for custom loggers |
+| [Fields](?id=fields) | Set field-specific settings |
+| [Analytics](?id=analytics) | Enabling analytics |
 
 ## Robot Image
 Upload a robot image to display instead of the default white square. 

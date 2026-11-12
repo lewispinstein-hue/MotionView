@@ -1,6 +1,6 @@
 # MVLib Logs
 
-Use logs to record decisions and events in your robot code, such as starting autonomous, commanding the clamp to close, or deciding to retry a pickup. In MotionView, open the **Logs** tab to read those messages alongside the run and filter them by severity. [Viewing Mode](../MotionView/ViewingMode/ViewingMode.md#logs)
+Use logs to record decisions and events in your robot code, such as starting autonomous, commanding the clamp to close, or deciding to retry a pickup. In MotionView, open the **Logs** tab to read those messages alongside the run and filter them by severity. [Viewing Mode](../MotionView/ViewingMode/ViewingMode.md?id=logs)
 
 Use watches for values you want to sample over time and waypoints for targets you want to check against the robot's pose. [Watches](./Watches.md) · [Waypoints](./Waypoints.md)
 
@@ -26,7 +26,7 @@ All five methods use `printf`-style formatting. Use `%d` for an `int`, `%.1f` fo
 
 ### When a message reaches the recording
 
-The logger's minimum severity applies before sending a message live or saving it to SD. At the default `INFO`, `info()`, `warn()`, `error()`, and `fatal()` are eligible. Use `DEBUG` to capture debug messages too. Raising the minimum to `WARN` during a run drops future `INFO` and `DEBUG` messages. If you may need them after the run, keep recording them and filter the Logs tab in MotionView instead. [Configuration](./Configuration.md#minimum-log-level)
+The logger's minimum severity applies before sending a message live or saving it to SD. At the default `INFO`, `info()`, `warn()`, `error()`, and `fatal()` are eligible. Use `DEBUG` to capture debug messages too. Raising the minimum to `WARN` during a run drops future `INFO` and `DEBUG` messages. If you may need them after the run, keep recording them and filter the Logs tab in MotionView instead. [Configuration](./Configuration.md?id=minimum-log-level)
 
 A direct log call can send a live message before `start()` if terminal output is enabled and the viewer is listening. The SD file opens during `start()`, so put a startup confirmation after that call if it needs to appear in the file. Direct logs still follow these rules while the periodic logger task is paused. [SD Logging](./SDLogging.md)
 
@@ -80,6 +80,6 @@ if (!odomReady()) {
 
 **I see warnings but no startup or debug messages.** Check `setMinLogLevel(...)` and the Logs tab's filter. For messages from MVLib itself, check `setLogSystemInfo(true)` too.
 
-**I see a message live but it is missing from the SD file.** Confirm the SD file opened and the call happened after `start()`. [SD troubleshooting](./SDLogging.md#troubleshooting)
+**I see a message live but it is missing from the SD file.** Confirm the SD file opened and the call happened after `start()`. [SD troubleshooting](./SDLogging.md?id=troubleshooting)
 
 **The log says the clamp closed, but it was still open.** Check where the message is written. A message next to the motor or solenoid command only confirms the command ran. Use distinct messages for the command and for a later sensor confirmation so the timeline shows where the two diverged.

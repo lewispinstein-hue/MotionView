@@ -5,11 +5,11 @@ This doc will cover what features are available in the Viewing mode of MotionVie
 
 | Section | Description |
 | - | - |
-| [Live Streaming](#live-streaming) | Connecting and using the Live Streaming feature |
-| [Timeline](#timeline) | Using the Timeline |
-| [Logs](#logs) | Viewing and filtering logs |
-| [Watches](#watches) | Viewing and filtering watches |
-| [Waypoints](#waypoints) | Viewing and filtering waypoints |
+| [Live Streaming](?id=live-streaming) | Connecting and using the Live Streaming feature |
+| [Timeline](?id=timeline) | Using the Timeline |
+| [Logs](?id=logs) | Viewing and filtering logs |
+| [Watches](?id=watches) | Viewing and filtering watches |
+| [Waypoints](?id=waypoints) | Viewing and filtering waypoints |
 
 ---
 
