@@ -361,6 +361,7 @@ export async function runPersistenceRegressions(server) {
       app.start = async () => {};
       app.core.telemetry = {
         appTelemetry: { exiting: async () => {} },
+        planningTelemetry: { sessionEnded: () => {} },
         telemetryClient: { flush: async () => {} },
       };
       const checkpoints = [];

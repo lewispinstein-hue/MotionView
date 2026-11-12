@@ -15,6 +15,7 @@ import { runPlanningExportConfigurationTests } from "./planning_export_configura
 import { runPlanningMinSpeedTests } from "./planning_min_speed_cases.mjs";
 import { runPlanningNativeControllerTests } from "./planning_native_controller_cases.mjs";
 import { runPlanningDrivetrainResponseTests } from "./planning_drivetrain_response_cases.mjs";
+import { runPlanningTelemetryTests } from "./planning_telemetry_cases.mjs";
 
 function format(value, decimals = 3) {
   const fixed = Number(value).toFixed(decimals);
@@ -702,6 +703,7 @@ try {
   await runPlanningMinSpeedTests(server);
   await runPlanningNativeControllerTests(server);
   await runPlanningDrivetrainResponseTests(server);
+  await runPlanningTelemetryTests(server);
   await runPlanningSwingTemplateTests(server);
   await runPlanningVexcodeTests(server);
   console.log("Planning template and motion regression tests passed.");

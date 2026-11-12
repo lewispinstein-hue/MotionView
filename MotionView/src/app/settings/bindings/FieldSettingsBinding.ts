@@ -11,7 +11,7 @@ import { requestDrawAll } from "../../../render/renderScheduler";
 import type { SettingsDom } from "../SettingsDom";
 import type { SettingsFeature } from "../SettingsFeature";
 import type { MotionViewSettings } from "../settingsTypes";
-import { viewingTelemetry } from "../../../telemetry/createTelemetry";
+import { settingsTelemetry } from "../../../telemetry/createTelemetry";
 
 function number(value: unknown, fallback: number): number {
   const parsed = Number(value);
@@ -49,7 +49,7 @@ export class FieldSettingsBinding {
     );
     this.field.events.fieldImageLoaded.subscribe(
       ({ fieldKey }) =>
-        void viewingTelemetry.fieldImageLoaded({ field: fieldKey }),
+        void settingsTelemetry.fieldImageLoaded(fieldKey),
     );
     this.dom.fieldCompetition.addEventListener("change", () =>
       this.settings.update({
@@ -124,10 +124,7 @@ export class FieldSettingsBinding {
       const accepted = await this.field.loadRobotImageFromFile(file);
       if (!accepted) return;
       this.captureRobotImage();
-      void viewingTelemetry.robotImageUploaded({
-        image_type: file.type,
-        image_bytes: file.size,
-      });
+      void settingsTelemetry.robotImageUploaded(file.type, file.size);
     } catch (error) {
       console.error("Error loading robot image:", error);
     } finally {
@@ -169,10 +166,7 @@ export class FieldSettingsBinding {
         },
         "system",
       );
-      void viewingTelemetry.customFieldImageUploaded({
-        image_type: file.type,
-        image_bytes: file.size,
-      });
+      void settingsTelemetry.customFieldImageUploaded(file.type, file.size);
     } catch (error) {
       console.error("Error loading custom field image:", error);
     } finally {

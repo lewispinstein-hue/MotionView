@@ -3,6 +3,7 @@ import { createServer } from "vite";
 import { runLiveShutdownRegressions } from "./live_shutdown_regressions.mjs";
 import { runReleaseRegressions } from "./release_regressions.mjs";
 import { runPersistenceRegressions } from "./persistence_regressions.mjs";
+import { runSettingsTelemetryTests } from "./settings_telemetry_cases.mjs";
 import { runLiveResumeRegressions } from "./live_resume_regressions.mjs";
 
 const server = await createServer({
@@ -550,6 +551,7 @@ try {
   await runLiveResumeRegressions(server);
   await runReleaseRegressions(server);
   await runPersistenceRegressions(server);
+  await runSettingsTelemetryTests(server);
   console.log("Live-stream regression tests passed.");
 } finally {
   if (originalRequestAnimationFrame)

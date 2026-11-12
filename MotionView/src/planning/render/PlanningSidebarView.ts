@@ -716,7 +716,6 @@ export class PlanningSidebarView {
     });
     if (!result) return;
     this.planning.objects.add({ name: result.name });
-    void planningTelemetry.objectCreated(this.planning.telemetryProperties());
   }
 
   private async removeObject(id: string): Promise<void> {
@@ -729,18 +728,7 @@ export class PlanningSidebarView {
       }))
     )
       return;
-    const nodes = this.planning.paths.items.reduce(
-      (count, path) =>
-        count + path.nodes.filter((node) => node.objectId === id).length,
-      0,
-    );
     this.planning.objects.remove(id);
-    void planningTelemetry.objectRemoved(
-      this.planning.telemetryProperties({
-        removed_methods: object.methods.length,
-        removed_nodes: nodes,
-      }),
-    );
   }
 
   private async addMethod(objectId: string): Promise<void> {
@@ -756,7 +744,6 @@ export class PlanningSidebarView {
     });
     if (!result) return;
     this.planning.objects.addMethod(objectId, result);
-    void planningTelemetry.methodCreated(this.planning.telemetryProperties());
   }
 
   async editMethod(objectId: string, methodId: string): Promise<void> {
@@ -777,12 +764,6 @@ export class PlanningSidebarView {
     )
       return;
     this.planning.objects.updateMethod(objectId, methodId, result);
-    void planningTelemetry.methodUpdated(
-      this.planning.telemetryProperties({
-        method_name_changed: result.name !== previousName,
-        method_code_changed: result.code !== previousCode,
-      }),
-    );
   }
 
   private async removeMethod(
@@ -807,9 +788,6 @@ export class PlanningSidebarView {
     )
       return;
     this.planning.objects.removeMethod(objectId, methodId);
-    void planningTelemetry.methodRemoved(
-      this.planning.telemetryProperties({ removed_nodes: nodes }),
-    );
   }
 
   private async editTemplate(): Promise<void> {
@@ -831,16 +809,16 @@ export class PlanningSidebarView {
     });
     if (!result?.templateConfiguration) return;
     this.planning.setTemplateConfiguration(result.templateConfiguration);
-    if (JSON.stringify(previous) !== JSON.stringify(this.planning.motionTemplates))
-      void planningTelemetry.templateUpdated(
-        this.planning.telemetryProperties(),
-      );
   }
 
   private async copyCode(): Promise<void> {
     const data = this.planning.exportData();
     const code = generatePlanningCode(this.planning);
     if (!code) {
+      planningTelemetry.codeExportBlocked(this.planning.telemetryProperties({
+        export_surface: "clipboard",
+        reason: data.waypoints.length < 2 ? "too_few_waypoints" : "no_generated_code",
+      }));
       setStatus(
         "Add at least two waypoints and a template before copying code.",
       );
@@ -852,12 +830,15 @@ export class PlanningSidebarView {
       setStatus(
         `Copied generated code for ${data.waypoints.length} waypoint${data.waypoints.length === 1 ? "" : "s"}.`,
       );
-      void planningTelemetry.templateExported(
+      planningTelemetry.codeExported(
         this.planning.telemetryProperties({
           export_surface: "clipboard",
         }),
       );
     } catch (error) {
+      planningTelemetry.codeExportBlocked(this.planning.telemetryProperties({
+        export_surface: "clipboard", reason: "clipboard_write_failed",
+      }));
       setStatus(
         `Failed to copy code: ${error instanceof Error ? error.message : String(error)}`,
       );

@@ -1,4 +1,5 @@
 import type { PlanningEvents } from "./planningEvents";
+import { planningTelemetry } from "../telemetry/createTelemetry";
 import type { PlanningSession } from "./planningSession";
 import type { PlanningNodeView, PlanningWaypoint } from "./planningTypes";
 import { PlanningSegment } from "./planningSegments";
@@ -80,7 +81,11 @@ export class PlanningProjection {
   ) {
     this.#worker = new PlanningSimulationWorker(
       (job, result) => this.acceptSimulation(job, result),
-      (job) => {
+      (job, reason) => {
+        planningTelemetry.simulationFailed(
+          job.startedAt, job.request.waypoints.length,
+          job.request.configuration.previewModel, reason,
+        );
         if (job.signature !== this.#inputSignature) return;
         this.#pending = false;
         this.#error = "Preview unavailable";
@@ -188,6 +193,16 @@ export class PlanningProjection {
     result: PlanningSimulationResult,
   ): void {
     const current = job.signature === this.#inputSignature;
+    const outcome = current && !this.session.isRouteEditing
+      ? !result.complete ? "incomplete"
+        : result.sections.some((section) => section.outcome === "stalled") ? "stalled"
+        : result.sections.some((section) => section.outcome === "missed") ? "missed"
+        : result.sections.some((section) => section.outcome === "completed") ? "completed"
+        : "reached"
+      : null;
+    planningTelemetry.simulationFinished(
+      job.startedAt, job.request.waypoints.length, outcome,
+    );
     // During an active drag, show successive completed previews while a newer
     // request is being coalesced. Cancelled drags and other paths cannot leak in.
     if (
@@ -274,12 +289,16 @@ export class PlanningProjection {
       signature,
       pathId: this.session.activePathId,
       generation: this.#generation,
+      startedAt: performance.now(),
       request: {
         waypoints: structuredClone(live.waypoints),
         configuration: live.configuration,
         templateLibrary: live.templateLibrary,
       },
     };
+    planningTelemetry.simulationRequested(
+      live.waypoints.length, live.configuration.previewModel,
+    );
     if (typeof Worker === "undefined" || live.waypoints.length < 2) {
       this.acceptSimulation(
         job,

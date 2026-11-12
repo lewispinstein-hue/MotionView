@@ -1,7 +1,6 @@
 import { editPlanningNode } from "../planningNodeEditor";
 import { getMode } from "../../app/modeController";
 import { requestDrawAll } from "../../render/renderScheduler";
-import { planningTelemetry } from "../../telemetry/createTelemetry";
 import type { PlanningDialogs } from "../PlanningDialogs";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningFeature } from "../PlanningFeature";
@@ -510,11 +509,8 @@ export class PlanningTimelineView {
         );
         if (node) {
           this.planning.selection.selectNode(node.id);
-          void planningTelemetry.timelineNodeCreated(this.planning.telemetryProperties());
         }
-      } else if (this.planning.timeline.moveMany(drag.nodeIds, drop.beforeWaypoint, drop.index)) {
-        void planningTelemetry.timelineNodeMoved(this.planning.telemetryProperties());
-      }
+      } else this.planning.timeline.moveMany(drag.nodeIds, drop.beforeWaypoint, drop.index);
     }
     this.cancelDrag();
   }

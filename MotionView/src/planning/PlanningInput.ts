@@ -8,7 +8,6 @@ import {
 import type { FieldRenderer } from "../render/field";
 import { requestDrawAll } from "../render/renderScheduler";
 import { currentUnitsToInches } from "../shared/units";
-import { planningTelemetry } from "../telemetry/createTelemetry";
 import type { PlanningDialogs } from "./PlanningDialogs";
 import type { PlanningFeature } from "./PlanningFeature";
 
@@ -79,11 +78,7 @@ export class PlanningInput {
       const nodeIds = this.planning.selection.selectedNodeIds;
       if (nodeIds.size) {
         event.preventDefault();
-        if (this.planning.timeline.removeMany(nodeIds)) {
-          void planningTelemetry.timelineNodeRemoved(
-            this.planning.telemetryProperties(),
-          );
-        }
+        this.planning.timeline.removeMany(nodeIds);
         return true;
       }
       if (this.planning.selection.waypointIndices.size) {

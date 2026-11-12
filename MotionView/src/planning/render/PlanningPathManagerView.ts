@@ -5,6 +5,7 @@ import type { PlanningDialogs } from "../PlanningDialogs";
 import type { PlanningDom } from "../PlanningDom";
 import type { PlanningFeature } from "../PlanningFeature";
 import type { PlanningRotationDirection } from "../PlanningRoute";
+import { planningTelemetry } from "../../telemetry/createTelemetry";
 
 function pathActionIcon(svg: string): string {
   return svg
@@ -33,6 +34,7 @@ export class PlanningPathManagerView {
     });
     this.dom.createPath.addEventListener("click", () => {
       this.planning.paths.add();
+      planningTelemetry.pathCreated();
     });
     this.dom.mirrorLeftRight.addEventListener("click", () =>
       this.mirror("left-right"),
@@ -125,7 +127,12 @@ export class PlanningPathManagerView {
       derive.setAttribute("aria-label", derive.title);
       derive.addEventListener("click", (event) => {
         event.stopPropagation();
-        this.planning.paths.derive(path.id);
+        if (this.planning.paths.derive(path.id))
+          planningTelemetry.pathDerived({
+            source_waypoints: path.waypoints.length,
+            source_nodes: path.nodes.length,
+            path_count_after: this.planning.paths.items.length,
+          });
       });
 
       const remove = document.createElement("button");
@@ -155,15 +162,17 @@ export class PlanningPathManagerView {
   }
 
   private mirror(direction: "left-right" | "top-bottom"): void {
-    this.planning.paths.mirror(direction, (point) =>
+    const changed = this.planning.paths.mirror(direction, (point) =>
       this.planning.projection.constrain(point),
     );
+    if (changed) planningTelemetry.pathTransformed();
   }
 
   private rotate(direction: PlanningRotationDirection): void {
     const rotated = this.planning.paths.rotate(direction, (point) =>
       this.planning.projection.constrainToBounds(point),
     );
+    if (rotated) planningTelemetry.pathTransformed();
     if (!rotated) setStatus("The rotated path would extend beyond the field bounds.");
   }
 

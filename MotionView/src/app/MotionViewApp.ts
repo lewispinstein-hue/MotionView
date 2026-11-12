@@ -91,6 +91,9 @@ export class MotionViewApp {
     this.#finalizePromise = (async () => {
       try {
         await this.start();
+        this.core.telemetry.planningTelemetry.sessionEnded(
+          this.planning.telemetrySessionProperties(),
+        );
         await this.core.telemetry.appTelemetry.exiting(properties);
         await this.core.telemetry.telemetryClient.flush({
           maxAttempts: 1,

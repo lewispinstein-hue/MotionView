@@ -180,6 +180,12 @@ export class PlanningCodeExportDialog {
       !isTauriRuntime() ||
       (this.target === "project" && !this.#projectPath)
     ) {
+      planningTelemetry.codeExportBlocked(this.planning.telemetryProperties({
+        export_surface: "file",
+        reason: !isTauriRuntime() ? "desktop_required"
+          : !code ? this.planning.route.length < 2 ? "too_few_waypoints" : "no_generated_code"
+          : !path ? "missing_destination" : "missing_project",
+      }));
       this.updateValidation();
       return;
     }
@@ -226,12 +232,15 @@ export class PlanningCodeExportDialog {
       this.dom.codeExportValidation.textContent = "";
       setStatus("Planning code exported.");
       this.emitChanged();
-      void planningTelemetry.templateExported(
+      planningTelemetry.codeExported(
         this.planning.telemetryProperties({
           export_surface: "file",
         }),
       );
     } catch (error) {
+      planningTelemetry.codeExportBlocked(this.planning.telemetryProperties({
+        export_surface: "file", reason: "file_write_failed",
+      }));
       this.dom.codeExportSuccess.textContent = `Failed to export file: ${error instanceof Error ? error.message : String(error)}`;
       this.dom.codeExportSuccess.classList.add("isError");
       this.dom.codeExportSuccess.hidden = false;

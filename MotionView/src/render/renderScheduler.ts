@@ -1,3 +1,6 @@
+import { getMode } from "../app/modeController";
+import { planningTelemetry } from "../telemetry/createTelemetry";
+
 export interface RenderSchedulerCallbacks {
   drawField(): void;
 }
@@ -30,9 +33,12 @@ export function registerPlanningRenderLayer(layer: PlanningRenderLayer): void {
 }
 
 export function drawAllNow(): void {
+  const planning = getMode() === "planning";
+  const startedAt = planning ? performance.now() : 0;
   callbacks?.drawField();
   viewingLayer?.drawTimeline();
   planningLayer?.drawTimeline();
+  if (planning) planningTelemetry.recordRender(performance.now() - startedAt);
 }
 
 export function requestDrawAll(): void {

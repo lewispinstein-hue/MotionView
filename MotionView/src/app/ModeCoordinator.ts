@@ -2,7 +2,7 @@ import type { MotionViewApp } from "./MotionViewApp";
 import type { FieldRenderer } from "../render/field";
 import type { PlanningLayoutView } from "../planning/render/PlanningLayoutView";
 import type { ViewingLayoutView } from "../viewing/render/ViewingLayoutView";
-import { appTelemetry } from "../telemetry/createTelemetry";
+import { appTelemetry, planningTelemetry } from "../telemetry/createTelemetry";
 
 export class ModeCoordinator {
   #bound = false;
@@ -15,7 +15,9 @@ export class ModeCoordinator {
   bind(): void {
     if (this.#bound) return;
     this.#bound = true;
+    planningTelemetry.setLagContext(() => this.app.planning.telemetryLagContext());
     this.app.core.mode.subscribeMode((mode) => {
+      planningTelemetry.modeChanged(mode);
       document.body.classList.toggle("mode-planning", mode === "planning");
       if (mode === "planning") {
         this.app.viewing.playback.pause();

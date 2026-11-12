@@ -1,9 +1,11 @@
 import type { PlanningSimulationRequest, PlanningSimulationResult } from "./planningSimulationTypes";
+import type { PlanningSimulationFailure } from "../telemetry/planningTelemetry";
 
 export interface PlanningSimulationJob {
   readonly signature: string;
   readonly pathId: string;
   readonly generation: number;
+  readonly startedAt: number;
   readonly request: PlanningSimulationRequest;
 }
 
@@ -16,7 +18,7 @@ export class PlanningSimulationWorker {
 
   constructor(
     private readonly completed: (job: PlanningSimulationJob, result: PlanningSimulationResult) => void,
-    private readonly failed: (job: PlanningSimulationJob) => void,
+    private readonly failed: (job: PlanningSimulationJob, reason: PlanningSimulationFailure) => void,
   ) {}
 
   request(job: PlanningSimulationJob, seed: PlanningSimulationResult): void {
@@ -47,7 +49,7 @@ export class PlanningSimulationWorker {
           } else {
             this.#worker = null;
             worker.terminate();
-            this.failed(finished);
+            this.failed(finished, "missing_result");
           }
           this.dispatch();
         };
@@ -56,7 +58,7 @@ export class PlanningSimulationWorker {
           const failed = this.#running;
           this.#running = null; this.#worker = null;
           worker.terminate();
-          this.failed(failed);
+          this.failed(failed, "worker_error");
           this.dispatch();
         };
       }
@@ -66,7 +68,7 @@ export class PlanningSimulationWorker {
     } catch {
       this.#running = null;
       this.#worker?.terminate(); this.#worker = null;
-      this.failed(job);
+      this.failed(job, "dispatch_error");
       this.dispatch();
     }
   }

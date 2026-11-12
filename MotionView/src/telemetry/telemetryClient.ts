@@ -130,6 +130,18 @@ export class TelemetryClient {
     }
   }
 
+  /** Persist an automatic event immediately for the bounded app-exit flush. */
+  queueAutomatic(event: TelemetryEventName, properties: TelemetryProperties = {}): boolean {
+    if (!this.enabled()) return false;
+    this.queue.enqueue({
+      event,
+      properties: withViewerSessionId(properties, this.viewerSessionId),
+      createdAt: new Date().toISOString(),
+      explicitUserAction: false,
+    });
+    return true;
+  }
+
   private async initializeAnalytics(): Promise<void> {
     if (!this.enabled() || this.analyticsInitialized) return;
     if (this.analyticsInitialization) return this.analyticsInitialization;

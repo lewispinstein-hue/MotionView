@@ -1,5 +1,7 @@
 import type { ViewingFeature } from "../../../viewing/ViewingFeature";
-import { getUnitsToInchesFactor, setCurrentUnits } from "../../../shared/units";
+import { getUnitsToInchesFactor, normalizeUnits, setCurrentUnits } from "../../../shared/units";
+import { settingsTelemetry } from "../../../telemetry/createTelemetry";
+import type { SettingsTelemetry } from "../../../telemetry/settingsTelemetry";
 import type { SettingsDom } from "../SettingsDom";
 import type { SettingsFeature } from "../SettingsFeature";
 import type { MotionViewSettings } from "../settingsTypes";
@@ -10,6 +12,7 @@ export class ViewingSettingsBinding {
     private readonly settings: SettingsFeature,
     private readonly viewing: ViewingFeature,
     private readonly dom: SettingsDom,
+    private readonly telemetry: SettingsTelemetry = settingsTelemetry,
   ) {}
 
   bind(): void {
@@ -35,6 +38,20 @@ export class ViewingSettingsBinding {
     bind(this.dom.offsetTheta, "offTheta");
     bind(this.dom.minimumSpeed, "minSpeed");
     bind(this.dom.maximumSpeed, "maxSpeed");
+    for (const input of [this.dom.units, this.dom.sidebarUnits])
+      input?.addEventListener("change", () =>
+        void this.telemetry.unitsChanged(normalizeUnits(this.settings.current.units)),
+      );
+    for (const input of [this.dom.minimumSpeed, this.dom.maximumSpeed])
+      input?.addEventListener("change", () => {
+        const settings = this.settings.current;
+        const min = Number(settings.minSpeed);
+        const max = Number(settings.maxSpeed);
+        void this.telemetry.speedNormalizationChanged(
+          Number.isFinite(min) ? min : null,
+          Number.isFinite(max) ? max : null,
+        );
+      });
   }
   applyAll(): void {
     this.apply(

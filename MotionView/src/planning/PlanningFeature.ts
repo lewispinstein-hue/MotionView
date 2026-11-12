@@ -10,6 +10,8 @@ import { PlanningTimeline } from "./planningTimelineDomain";
 import { PlanningSession } from "./planningSession";
 import type { PlanMotionTemplates, PlanWaypointIndicatorIcon } from "../state/models";
 import { normalizeMotionTemplates } from "./planningMotions";
+import { isBoomerangWaypoint } from "./planningSegments";
+import type { PlanningLagContext } from "../telemetry/planningTelemetry";
 import {
   normalizePlanningTemplateConfiguration,
   planningTemplateLanguage,
@@ -216,10 +218,45 @@ export class PlanningFeature {
   ): PlanningTelemetrySnapshot {
     return {
       plan_waypoints: this.route.length,
+      plan_paths: this.paths.items.length,
       plan_objects: this.objects.length,
       plan_methods: this.objects.methodCount,
       plan_nodes: this.timeline.length,
+      export_library: this.templateConfiguration.library,
+      export_language: planningTemplateLanguage(this.templateConfiguration),
+      simulator_model: this.simulationConfiguration.previewModel,
       ...extra,
+    };
+  }
+
+  telemetrySessionProperties(): Record<string, unknown> {
+    return {
+      plan_paths: this.paths.items.length,
+      plan_objects: this.objects.length,
+      plan_methods: this.objects.methodCount,
+      plan_waypoints_total: this.paths.items.reduce(
+        (count, path) => count + path.waypoints.length, 0,
+      ),
+      plan_nodes_total: this.paths.items.reduce(
+        (count, path) => count + path.nodes.length, 0,
+      ),
+    };
+  }
+
+  telemetryLagContext(): PlanningLagContext {
+    const movements = new Set<string>();
+    let leadWaypoints = 0;
+    for (const point of this.route.waypoints.slice(0, -1)) {
+      if (point.lead !== undefined) leadWaypoints += 1;
+      if (point.motions?.length) {
+        for (const motion of point.motions) movements.add(motion.type);
+      } else movements.add(isBoomerangWaypoint(point) ? "boomerang" : "forward");
+    }
+    return {
+      plan_waypoints: this.route.length,
+      simulator_model: this.simulationConfiguration.previewModel,
+      movement_types: [...movements].sort(),
+      lead_waypoints: leadWaypoints,
     };
   }
 

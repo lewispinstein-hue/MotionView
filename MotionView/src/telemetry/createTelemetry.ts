@@ -3,6 +3,7 @@ import { ExportTelemetry } from "./exportTelemetry";
 import { FeedbackTelemetry } from "./feedbackTelemetry";
 import { LiveTelemetry } from "./liveTelemetry";
 import { PlanningTelemetry } from "./planningTelemetry";
+import { SettingsTelemetry } from "./settingsTelemetry";
 import { TelemetryClient } from "./telemetryClient";
 import { ViewingTelemetry } from "./viewingTelemetry";
 
@@ -15,6 +16,7 @@ export type {
 export const telemetryClient = new TelemetryClient();
 export const appTelemetry = new AppTelemetry(telemetryClient);
 export const planningTelemetry = new PlanningTelemetry(telemetryClient);
+export const settingsTelemetry = new SettingsTelemetry(telemetryClient);
 export const viewingTelemetry = new ViewingTelemetry(telemetryClient);
 export const liveTelemetry = new LiveTelemetry(telemetryClient);
 export const exportTelemetry = new ExportTelemetry(telemetryClient);

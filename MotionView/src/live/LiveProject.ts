@@ -1,4 +1,6 @@
 import type { BridgeService } from "../app/BridgeService";
+import { settingsTelemetry } from "../telemetry/createTelemetry";
+import type { SettingsTelemetry } from "../telemetry/settingsTelemetry";
 import type { LiveEvents } from "./LiveEvents";
 import type {
   LiveProjectStatus,
@@ -19,6 +21,7 @@ export class LiveProject {
   constructor(
     private readonly bridge: BridgeService,
     private readonly events: LiveEvents,
+    private readonly telemetry: SettingsTelemetry = settingsTelemetry,
   ) {}
 
   get path(): string {
@@ -144,20 +147,41 @@ export class LiveProject {
   }
 
   async discover(): Promise<readonly string[]> {
-    if (!(await this.bridge.waitUntilReady())) {
-      this.events.notice.emit({ kind: "error", message: "Backend not ready." });
+    try {
+      if (!(await this.bridge.waitUntilReady())) {
+        void this.telemetry.prosProjectAutoDetectFailed("bridge_unavailable");
+        this.events.notice.emit({ kind: "error", message: "Backend not ready." });
+        return [];
+      }
+      const response =
+        await this.bridge.get<ProsDiscoveryResponse>("/api/pros-dir/auto");
+      if (!response.ok) {
+        void this.telemetry.prosProjectAutoDetectFailed(
+          response.status ? "request_failed" : "bridge_unavailable",
+          response.status,
+        );
+        this.events.notice.emit({
+          kind: "error",
+          message: response.json?.status || "Auto-detect failed.",
+        });
+        return [];
+      }
+      if (!response.json?.ok || !Array.isArray(response.json.candidates)) {
+        void this.telemetry.prosProjectAutoDetectFailed(
+          response.json?.ok === false ? "bridge_error" : "invalid_response",
+        );
+        this.events.notice.emit({
+          kind: "error",
+          message: response.json?.status || "Auto-detect failed.",
+        });
+        return [];
+      }
+      return response.json.candidates;
+    } catch {
+      void this.telemetry.prosProjectAutoDetectFailed("request_failed");
+      this.events.notice.emit({ kind: "error", message: "Auto-detect failed." });
       return [];
     }
-    const response =
-      await this.bridge.get<ProsDiscoveryResponse>("/api/pros-dir/auto");
-    if (!response.ok || !response.json?.ok) {
-      this.events.notice.emit({
-        kind: "error",
-        message: response.json?.status || "Auto-detect failed.",
-      });
-      return [];
-    }
-    return response.json.candidates ?? [];
   }
 
   private normalizePath(path: string): string {

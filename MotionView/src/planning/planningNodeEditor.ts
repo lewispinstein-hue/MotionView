@@ -1,4 +1,3 @@
-import { planningTelemetry } from "../telemetry/createTelemetry";
 import type { PlanningDialogs } from "./PlanningDialogs";
 import type { PlanningFeature } from "./PlanningFeature";
 import { getPlanNodeEffectiveMethod } from "./planningObjects";
@@ -23,12 +22,5 @@ export async function editPlanningNode(
     code: method.code,
   });
   if (!result) return;
-  const changed = planning.timeline.setCodeOverride(nodeId, result.code);
-  if (changed.changed)
-    void planningTelemetry.timelineNodeUpdated(
-      planning.telemetryProperties({
-        node_override_created: !changed.hadOverride && changed.hasOverride,
-        node_override_cleared: changed.hadOverride && !changed.hasOverride,
-      }),
-    );
+  planning.timeline.setCodeOverride(nodeId, result.code);
 }

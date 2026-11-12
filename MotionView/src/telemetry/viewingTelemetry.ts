@@ -15,20 +15,6 @@ export class ViewingTelemetry {
     return this.telemetry.capture("failed_file_load", properties);
   }
 
-  fieldImageLoaded(properties: TelemetryProperties = {}) {
-    return this.telemetry.capture("field_image_loaded", properties, {
-      debounceMs: 1500,
-    });
-  }
-
-  customFieldImageUploaded(properties: TelemetryProperties = {}) {
-    return this.telemetry.capture("custom_field_image_uploaded", properties);
-  }
-
-  robotImageUploaded(properties: TelemetryProperties = {}) {
-    return this.telemetry.capture("robot_image_uploaded", properties);
-  }
-
   floatingInfoToggled(
     properties: TelemetryProperties = {},
     options: TelemetryCaptureOptions = { debounceMs: 1000 },
