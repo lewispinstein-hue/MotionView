@@ -157,14 +157,10 @@ function rewriteProjectPageLinks() {
     return;
   }
 
-  document.querySelectorAll('.sidebar-nav a').forEach(function (link) {
+  document.querySelectorAll('.sidebar-nav a, .markdown-section a').forEach(function (link) {
     let href = link.getAttribute('href');
 
-    if (!href || href.startsWith('http') || href.startsWith(basePath)) {
-      return;
-    }
-
-    if (href.startsWith('/')) {
+    if (href && href.startsWith('/') && !href.startsWith('//') && !href.startsWith(basePath)) {
       link.setAttribute('href', basePath.replace(/\/$/, '') + href);
     }
   });
@@ -634,14 +630,15 @@ window.$docsify = {
   name: 'MotionView Docs',
   repo: 'lewispinstein-hue/MotionView',
   routerMode: 'history',
-  loadSidebar: '_sidebar.md?v=2026-09-14-planning-mode-v5',
+  relativePath: true,
+  loadSidebar: '_sidebar.md?v=2026-09-14-planning-mode-v6',
   alias: {
     '/': '/Home.md',
     '/README': '/Home.md',
     '/README.md': '/Home.md',
     '/.*/README': '/Home.md',
     '/.*/README.md': '/Home.md',
-    '/.*/_sidebar.md': '/_sidebar.md?v=2026-09-14-planning-mode-v5'
+    '/.*/_sidebar.md': '/_sidebar.md?v=2026-09-14-planning-mode-v6'
   },
   subMaxLevel: 0,
   auto2top: true,

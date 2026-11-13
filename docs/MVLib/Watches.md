@@ -58,7 +58,7 @@ The override changes the severity of a sample the watch is due to report. After 
 - Use `PREDICATE(v > 2000)` with an `int32_t` getter. The macro gives you an `int32_t` named `v`.
 - For other types, use `mvlib::asPredicate<T>(...)` with a lambda that returns `bool`, or assign a matching lambda directly to `.predicate`. Keep an alternate name within the same 23-character live display limit as the main name.
 
-See the current, temperature, and boolean examples below. [Threshold examples](?id=flag-readings-above-a-threshold)
+See the current, temperature, and boolean examples below. [Threshold examples](#flag-readings-above-a-threshold)
 
 ## `WatchHandle`
 

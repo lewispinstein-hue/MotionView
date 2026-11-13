@@ -67,7 +67,7 @@ Use `pause()` when you want to suspend periodic work across the whole logger. Wh
 
 Use qualified names such as `mvlib::LogLevel` and pass timing values in milliseconds. For shorthand, define `MVLIB_USE_SIMPLES` before the first inclusion of `mvlib/api.hpp`. This enables names such as `LogLevel` and `WatchMode` and time literals such as `1_mvS` and `250_mvMs`.
 
-### Attach odometry to see the robot's path
+### Attach odometry to see the robot's path :id=attach-odometry-to-see-the-robots-path
 
 Logs and watches work with or without odometry. Pose updates and waypoint reach checks need a working pose source. Include only the adapter for your odometry library and call `mvlib::setOdom(...)` after your normal odometry setup, before `logger.start()`. Keep the object you pass to MVLib alive for as long as the logger uses it.
 
