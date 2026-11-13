@@ -4329,29 +4329,68 @@ body:not(.mode-planning) #rightPlanning {
   gap: 6px;
 }
 
-#planTemplateGroupBody[hidden] {
+.planWaypointCodeToggle,
+.isWaypointEditor .planTemplateCodeSection .settingsGroupHeader {
   display: none;
 }
 
-.planWaypointCodeToggle:not([hidden]) {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.isWaypointEditor .planTemplateCodeSection {
   padding: 0;
+}
+
+.isWaypointEditor .planWaypointCodeToggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
   border: 0;
+  border-radius: 8px;
   background: transparent;
+  text-align: left;
+}
+
+.isWaypointEditor .planWaypointCodeToggle:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.isWaypointEditor .planTemplateCodeDisclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 190ms ease;
+}
+
+.isWaypointEditor .planWaypointCodeToggle[aria-expanded="true"] + .planTemplateCodeDisclosure {
+  grid-template-rows: 1fr;
+}
+
+.isWaypointEditor .planTemplateCodeClip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.isWaypointEditor .planTemplateCodeSection .settingsGroupBody {
+  margin-top: 0;
+  padding: 0 10px 10px;
 }
 
 .planWaypointCodeToggle svg {
   width: 18px;
   height: 18px;
+  margin-left: auto;
   transform: rotate(-90deg);
+  transition: transform 190ms ease;
 }
 
 .planWaypointCodeToggle[aria-expanded="true"] svg {
   transform: rotate(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .isWaypointEditor .planTemplateCodeDisclosure,
+  .planWaypointCodeToggle svg {
+    transition: none;
+  }
 }
 
 .hasMotionPreview .planTemplateInput {

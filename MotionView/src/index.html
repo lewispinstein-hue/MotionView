@@ -1051,45 +1051,50 @@
               <svg aria-hidden="true" focusable="false"><use href="./assets/svg/planning/waypointBoomerang.svg#icon-waypointBoomerang"></use></svg>
             </button>
           </div>
-          <div class="settingsSection settingsGroup">
+          <div class="settingsSection settingsGroup planTemplateCodeSection">
             <div class="settingsGroupHeader">
               <div class="settingsGroupIcon">&lt;/&gt;</div>
               <div id="planTemplateGroupTitle" class="settingsGroupTitle" style="font-size: 20px;">Planning Export
                 Template</div>
-              <button id="btnPlanWaypointCodeToggle" class="settingsGroupTitle planWaypointCodeToggle" type="button"
-                aria-expanded="false" aria-controls="planTemplateGroupBody" hidden>
-                Waypoint Code
-                <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-                  <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                </svg>
-              </button>
             </div>
-            <div id="planTemplateGroupBody" class="settingsGroupBody">
-              <div id="planTemplateNameField" hidden>
-                <label class="fieldLabel" for="planTemplateNameInput">Name</label>
-                <label id="planTemplateNameDescription" class="settingsDescription" for="planTemplateNameInput">Method
-                  name</label>
-                <input id="planTemplateNameInput" type="text" class="settingsInput" maxlength="25" autocomplete="off"
-                  spellcheck="false" />
-              </div>
-              <div id="planSwingDriveSideFields" class="planSwingDriveSideFields" hidden>
-                <div>
-                  <label class="fieldLabel" for="planSwingLeftDriveSide">Locked Left</label>
-                  <input id="planSwingLeftDriveSide" type="text" class="settingsInput" spellcheck="false" autocomplete="off" />
+            <button id="btnPlanWaypointCodeToggle" class="settingsGroupTitle planWaypointCodeToggle" type="button"
+              aria-expanded="false" aria-controls="planTemplateGroupBody">
+              <span class="settingsGroupIcon" aria-hidden="true">&lt;/&gt;</span>
+              <span>Waypoint Code</span>
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+            </button>
+            <div id="planTemplateGroupBody" class="planTemplateCodeDisclosure">
+              <div class="planTemplateCodeClip">
+                <div class="settingsGroupBody">
+                  <div id="planTemplateNameField" hidden>
+                    <label class="fieldLabel" for="planTemplateNameInput">Name</label>
+                    <label id="planTemplateNameDescription" class="settingsDescription" for="planTemplateNameInput">Method
+                      name</label>
+                    <input id="planTemplateNameInput" type="text" class="settingsInput" maxlength="25" autocomplete="off"
+                      spellcheck="false" />
+                  </div>
+                  <div id="planSwingDriveSideFields" class="planSwingDriveSideFields" hidden>
+                    <div>
+                      <label class="fieldLabel" for="planSwingLeftDriveSide">Locked Left</label>
+                      <input id="planSwingLeftDriveSide" type="text" class="settingsInput" spellcheck="false" autocomplete="off" />
+                    </div>
+                    <div>
+                      <label class="fieldLabel" for="planSwingRightDriveSide">Locked Right</label>
+                      <input id="planSwingRightDriveSide" type="text" class="settingsInput" spellcheck="false" autocomplete="off" />
+                    </div>
+                  </div>
+                  <label id="planTemplateDescription" class="settingsDescription" for="planTemplateInput">Available
+                    placeholders: <code>${x}</code>,
+                    <code>${y}</code>,
+                    <code>${theta}</code>, <code>${distance}</code>, <code>${iteration}</code>,
+                    <code>${speed}</code>, and <code>${forwards}</code>.</label>
+                  <textarea id="planTemplateInput" class="settingsInput planTemplateInput" spellcheck="false"
+                    placeholder="moveToPoint(${x}, ${y}, ${theta});"></textarea>
+                  <div id="planTemplateValidation" class="templateModalValidation" hidden></div>
                 </div>
-                <div>
-                  <label class="fieldLabel" for="planSwingRightDriveSide">Locked Right</label>
-                  <input id="planSwingRightDriveSide" type="text" class="settingsInput" spellcheck="false" autocomplete="off" />
-                </div>
               </div>
-              <label id="planTemplateDescription" class="settingsDescription" for="planTemplateInput">Available
-                placeholders: <code>${x}</code>,
-                <code>${y}</code>,
-                <code>${theta}</code>, <code>${distance}</code>, <code>${iteration}</code>,
-                <code>${speed}</code>, and <code>${forwards}</code>.</label>
-              <textarea id="planTemplateInput" class="settingsInput planTemplateInput" spellcheck="false"
-                placeholder="moveToPoint(${x}, ${y}, ${theta});"></textarea>
-              <div id="planTemplateValidation" class="templateModalValidation" hidden></div>
             </div>
           </div>
           <div class="exportFooter">

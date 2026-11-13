@@ -82,7 +82,7 @@ export class PlanningMotionEditorView {
 
   bind(): void {
     this.dom.waypointCodeToggle.addEventListener("click", () =>
-      this.setCodeExpanded(this.dom.templateGroupBody.hasAttribute("hidden")),
+      this.setCodeExpanded(this.dom.templateGroupBody.inert),
     );
     this.dom.templateCode.addEventListener("input", () => {
       if (this.#mode !== "templates" || !this.#templateConfiguration) return;
@@ -120,10 +120,9 @@ export class PlanningMotionEditorView {
     this.#selectedId = this.#selection?.motions[0]?.id ?? null;
     this.#selectedTemplate = "forward";
     this.dom.templateModal.classList.add("hasMotionPreview");
+    this.dom.templateModal.classList.toggle("isWaypointEditor", this.editingWaypoint);
     this.dom.motionPreview.hidden = false;
     this.dom.templateIndicatorPicker.hidden = true;
-    this.dom.templateGroupTitle.hidden = this.editingWaypoint;
-    this.dom.waypointCodeToggle.hidden = !this.editingWaypoint;
     this.setCodeExpanded(!this.editingWaypoint);
     this.dom.templateConfirm.textContent = "Confirm";
     this.render();
@@ -137,9 +136,7 @@ export class PlanningMotionEditorView {
     this.dom.swingDriveSideFields.hidden = true;
     this.dom.motionPreview.replaceChildren();
     this.dom.motionPreview.hidden = true;
-    this.dom.templateModal.classList.remove("hasMotionPreview");
-    this.dom.templateGroupTitle.hidden = false;
-    this.dom.waypointCodeToggle.hidden = true;
+    this.dom.templateModal.classList.remove("hasMotionPreview", "isWaypointEditor");
     this.setCodeExpanded(true);
     this.dom.templateCode.disabled = false;
     this.dom.templateCode.hidden = false;
@@ -148,7 +145,9 @@ export class PlanningMotionEditorView {
   }
 
   private setCodeExpanded(expanded: boolean): void {
-    this.dom.templateGroupBody.hidden = !expanded;
+    if (!expanded && this.dom.templateGroupBody.contains(document.activeElement))
+      this.dom.waypointCodeToggle.focus();
+    this.dom.templateGroupBody.inert = !expanded;
     this.dom.waypointCodeToggle.setAttribute("aria-expanded", String(expanded));
   }
 
