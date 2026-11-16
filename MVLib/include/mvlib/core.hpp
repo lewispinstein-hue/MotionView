@@ -50,7 +50,7 @@
 #include <utility>
 #include <vector>
 
-#define MVLIB_VERSION 30'00'02 // 3.0.2
+#define MVLIB_VERSION 30'00'01 // 3.0.1
 
 namespace mvlib {
 /**
