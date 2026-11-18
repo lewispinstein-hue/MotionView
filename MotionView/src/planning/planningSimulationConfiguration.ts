@@ -17,6 +17,7 @@ function isControllerModel(value: unknown): value is PlanningControllerModel {
   return PLANNING_SIMULATION_MODELS.some(([id]) => id === value);
 }
 export const PLANNING_MOTOR_WATTS = { min: 22, max: 88, step: 5.5 } as const;
+export const JAR_TIMEOUT_LIMITS_MS = { min: 0, max: 10_000 } as const;
 export const PLANNING_PID_ROLES = [
   "lateralPID",
   "angularPID",
@@ -50,6 +51,9 @@ export interface PlanningSimulationConfiguration {
   readonly horizontalDrift: number;
   readonly jarSetback: number;
   readonly jarHeadingMaxVoltage: number;
+  readonly jarDriveTimeoutMs: number;
+  readonly jarTurnTimeoutMs: number;
+  readonly jarSwingTimeoutMs: number;
   readonly vexTurnConstant: number;
   readonly vexTurnThreshold: number;
 }
@@ -67,6 +71,9 @@ type LibraryTuning = Pick<
   | "turnBias"
   | "jarSetback"
   | "jarHeadingMaxVoltage"
+  | "jarDriveTimeoutMs"
+  | "jarTurnTimeoutMs"
+  | "jarSwingTimeoutMs"
   | "vexTurnConstant"
   | "vexTurnThreshold"
 >;
@@ -74,6 +81,8 @@ type LibraryTuning = Pick<
 // Drift and disabled slew are nominal robot assumptions, not recommended tuning.
 const COMMON_TUNING = {
   jarSetback: 0, jarHeadingMaxVoltage: 12, vexTurnConstant: 1, vexTurnThreshold: 1,
+  // JAR's default_constants() exit conditions, also used by odom_constants().
+  jarDriveTimeoutMs: 5000, jarTurnTimeoutMs: 3000, jarSwingTimeoutMs: 3000,
 };
 const LIBRARY_DEFAULTS: Record<PlanningControllerModel, LibraryTuning> = {
   lemlib: {
@@ -204,6 +213,7 @@ export function normalizePlanningSimulationConfiguration(
     previewModel === fallback.previewModel
       ? fallback
       : LIBRARY_DEFAULTS[previewModel];
+  const { min: minJarTimeout, max: maxJarTimeout } = JAR_TIMEOUT_LIMITS_MS;
   const angularPID = normalizePID(value.angularPID, fallback.angularPID);
   const initialized =
     typeof value.separatePIDsInitialized === "boolean"
@@ -281,6 +291,9 @@ export function normalizePlanningSimulationConfiguration(
     ),
     jarSetback: bounded(value.jarSetback, defaults.jarSetback, 0, 100),
     jarHeadingMaxVoltage: bounded(value.jarHeadingMaxVoltage, defaults.jarHeadingMaxVoltage, 0, 12),
+    jarDriveTimeoutMs: bounded(value.jarDriveTimeoutMs, defaults.jarDriveTimeoutMs, minJarTimeout, maxJarTimeout),
+    jarTurnTimeoutMs: bounded(value.jarTurnTimeoutMs, defaults.jarTurnTimeoutMs, minJarTimeout, maxJarTimeout),
+    jarSwingTimeoutMs: bounded(value.jarSwingTimeoutMs, defaults.jarSwingTimeoutMs, minJarTimeout, maxJarTimeout),
     vexTurnConstant: bounded(value.vexTurnConstant, defaults.vexTurnConstant, 0.01, 10),
     vexTurnThreshold: bounded(value.vexTurnThreshold, defaults.vexTurnThreshold, 0.1, 15),
   };

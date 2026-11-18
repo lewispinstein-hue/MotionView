@@ -12,11 +12,16 @@ const ROLLING_RESISTANCE = 0.025;
 const STATIC_RESISTANCE = 0.035;
 const SUBSTEP = 0.002;
 const MOTOR_RESPONSE_SECONDS = 0.02;
-// Nominal response for LemLib's open-loop motor commands. Yaw includes the
-// rotating drivetrain load and wheel scrub in addition to chassis inertia.
-const LEMLIB_MOTOR_RESPONSE_SECONDS = 0.085;
-const LEMLIB_YAW_INERTIA_MULTIPLIER = 3;
-const LEMLIB_YAW_DAMPING = 3;
+// Nominal LemLib response. Voltage reductions and reversals take effect
+// faster than applying power to build speed. Retain extra yaw inertia and
+// wheel scrub so near-target steering does not become an undamped oscillation.
+const LEMLIB_DRIVE_RAMP_SECONDS = 0.05;
+const LEMLIB_BRAKING_RESPONSE_SECONDS = 0.018;
+const LEMLIB_YAW_INERTIA_MULTIPLIER = 2.25;
+const LEMLIB_YAW_DAMPING = 1.5;
+const MOTOR_RESPONSE = 1 - Math.exp(-SUBSTEP / MOTOR_RESPONSE_SECONDS);
+const LEMLIB_DRIVE_RAMP = 1 - Math.exp(-SUBSTEP / LEMLIB_DRIVE_RAMP_SECONDS);
+const LEMLIB_BRAKING_RESPONSE = 1 - Math.exp(-SUBSTEP / LEMLIB_BRAKING_RESPONSE_SECONDS);
 
 /** Maximize pairs of 11W motors, then fill the remaining power with 5.5W motors. */
 export function inferPlanningDriveMotors(watts: number) {
@@ -144,8 +149,12 @@ export class PlanningPreviewDrivetrain {
     const yawInertiaMultiplier = openLoop ? LEMLIB_YAW_INERTIA_MULTIPLIER : 1;
     const inertia = (mass * width * width * yawInertiaMultiplier) / 6;
     const yawDamping = openLoop ? LEMLIB_YAW_DAMPING : 0;
-    const responseSeconds = openLoop ? LEMLIB_MOTOR_RESPONSE_SECONDS : MOTOR_RESPONSE_SECONDS;
-    const response = 1 - Math.exp(-SUBSTEP / responseSeconds);
+    const responseFor = (current: number, requested: number) => {
+      if (!openLoop) return MOTOR_RESPONSE;
+      const buildingPower =
+        current * requested >= 0 && Math.abs(requested) > Math.abs(current);
+      return buildingPower ? LEMLIB_DRIVE_RAMP : LEMLIB_BRAKING_RESPONSE;
+    };
     const pivotInertia = inertia + (mass * width * width) / 4;
     if (heldSide && heldSide !== this.#heldSide) {
       const sign = heldSide === "left" ? -1 : 1;
@@ -182,8 +191,10 @@ export class PlanningPreviewDrivetrain {
     for (let substep = 0; substep < 5; substep++) {
       const oldLinear = this.#linearVelocity,
         oldAngular = this.#angularVelocity;
-      this.#leftResponse += (leftPower - this.#leftResponse) * response;
-      this.#rightResponse += (rightPower - this.#rightResponse) * response;
+      this.#leftResponse +=
+        (leftPower - this.#leftResponse) * responseFor(this.#leftResponse, leftPower);
+      this.#rightResponse +=
+        (rightPower - this.#rightResponse) * responseFor(this.#rightResponse, rightPower);
       const leftForce = force(
         this.#leftResponse,
         oldLinear + (oldAngular * width) / 2,

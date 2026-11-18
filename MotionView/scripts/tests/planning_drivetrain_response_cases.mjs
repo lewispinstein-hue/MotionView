@@ -30,6 +30,22 @@ export async function runPlanningDrivetrainResponseTests(server) {
     "editing the motion invalidates the cached preset timeout");
 
   const motions = (...types) => types.map(type => ({ id: type, type }));
+  const shortRoute = [
+    { x: 64, y: 0, theta: 270, forwards: true, motions: motions("forward") },
+    { x: 47, y: 11, theta: 0, lead: .6, motions: motions("boomerang", "rotate") },
+    { x: 46.5, y: 18.5, theta: 0, forwards: false, motions: motions("forward", "rotate") },
+    { x: 47, y: 3, theta: 315, motions: motions("forward", "rotate") },
+    { x: 26.5, y: 20, theta: 315, forwards: true, motions: motions("forward", "rotate") },
+    { x: 42, y: 23, theta: 90 },
+  ];
+  const shortPreview = simulate({ ...request, waypoints: shortRoute });
+  assert.ok(shortPreview.complete && shortPreview.duration < 7,
+    "LemLib braking does not double the ETA on a route with short, consecutive motions");
+  const firstTarget = shortRoute[1];
+  const firstEnd = shortPreview.sections[0].samples.at(-1);
+  assert.ok(Math.hypot(firstEnd.x - firstTarget.x, firstEnd.y - firstTarget.y) < 1.25,
+    "the first straight brakes without a large endpoint offset");
+
   const oscillatingRoute = [
     { x: 0, y: 0, theta: 0, lead: .638, forwards: true, motions: motions("boomerang", "rotate") },
     { x: 37, y: 40.5, theta: 110, lead: .465, forwards: false, minSpeed: 20, motions: motions("boomerang") },

@@ -72,6 +72,31 @@ export async function runPlanningNativeControllerTests(server) {
   assert.notDeepEqual(run("jar-template", "forward").sections[0].samples,
     run("jar-template", "forward", {}, {}, { jarHeadingMaxVoltage: 4 }).sections[0].samples);
 
+  const jarDefaults = normalize({ library: "jar-template" });
+  assert.deepEqual(
+    [jarDefaults.jarDriveTimeoutMs, jarDefaults.jarTurnTimeoutMs, jarDefaults.jarSwingTimeoutMs],
+    [5000, 3000, 3000],
+  );
+  const shortJarTimeouts = { jarDriveTimeoutMs: 100, jarTurnTimeoutMs: 150, jarSwingTimeoutMs: 200 };
+  for (const [type, expectedTime] of [["forward", .11], ["boomerang", .11], ["rotate", .16], ["swing", .21]]) {
+    const motion = run("jar-template", type, {}, {}, shortJarTimeouts).sections[0].motions[0];
+    assert.equal(motion.outcome, "missed");
+    near(motion.endTime - motion.startTime, expectedTime);
+  }
+  const stationaryTurn = { turnPID: { kP: 0, kI: 0, kD: 0 }, separatePIDsInitialized: true };
+  const timeoutTurn = run("jar-template", "rotate", {}, {}, { ...stationaryTurn, jarTurnTimeoutMs: 1250 });
+  assert.equal(timeoutTurn.sections[0].motions[0].outcome, "missed");
+  near(timeoutTurn.sections[0].motions[0].endTime, 1.26);
+  const noTimeout = run("jar-template", "rotate", {}, {}, { ...stationaryTurn, jarTurnTimeoutMs: 0 });
+  assert.equal(noTimeout.sections[0].motions[0].outcome, "stalled");
+  const customJar = simulate({
+    configuration: normalize({ library: "custom", previewModel: "jar-template", ...shortJarTimeouts }),
+    waypoints: route("rotate"),
+  });
+  near(customJar.sections[0].motions[0].endTime, .16);
+  assert.deepEqual(run("ez-template", "rotate", {}, {}, shortJarTimeouts).sections[0].samples,
+    run("ez-template", "rotate").sections[0].samples);
+
   for (const forwards of [true, false]) {
     const reversed = run("vexcode", "forward", { forwards }, { x: 24, y: 0, theta: 0 });
     const p = reversed.sections[0].samples.at(-1);
@@ -113,6 +138,11 @@ export async function runPlanningNativeControllerTests(server) {
     assert.equal(planning.history.redo(), true);
     assert.equal(planning.paths.activeId, path);
     assert.equal(planning.simulationConfiguration.previewModel, model);
+    if (model === "jar-template") {
+      const originalCode = generatePlanningCode(planning);
+      planning.setSimulationConfiguration({ jarDriveTimeoutMs: 6400, jarTurnTimeoutMs: 0 });
+      assert.equal(generatePlanningCode(planning), originalCode);
+    }
     const serializer = new MotionViewDocumentSerializer({ planning,
       viewing: { data: { poses: [], watches: [], logs: [], waypoints: [] } }, version: "test" });
     for (const data of [JSON.parse(serializer.savedPaths()), serializer.exportPayload("planning", "Native model", {})]) {

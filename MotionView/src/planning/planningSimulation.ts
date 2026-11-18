@@ -55,9 +55,15 @@ function motionsOf(
       ], model === "vexcode" ? "vexcode-cpp" : library);
 }
 function motionTimeoutMs(request: PlanningSimulationRequest, motion: Readonly<PlanWaypointMotion>): number | undefined {
+  const config = request.configuration;
+  if (config.previewModel === "jar-template") {
+    const timeout = motion.type === "rotate" ? config.jarTurnTimeoutMs
+      : motion.type === "swing" ? config.jarSwingTimeoutMs : config.jarDriveTimeoutMs;
+    return timeout || undefined; // JAR uses zero for an unlimited motion.
+  }
   // The built-in LemLib command has a known timeout. Overrides can use a
   // different one, and their source is intentionally opaque to the preview.
-  if (request.configuration.previewModel === "lemlib" && request.templateLibrary === "lemlib" &&
+  if (config.previewModel === "lemlib" && request.templateLibrary === "lemlib" &&
       motion.overrideCode === undefined) {
     return LEMLIB_PLANNING_TIMEOUT_MS[motion.type];
   }
@@ -151,8 +157,11 @@ export function simulatePlanningRoute(
     const movement: number[] = [], rotation: number[] = [];
     let moved = 0, turned = 0;
     const timeout = motionTimeoutMs(request, motion);
+    const hasJarTimeout = model === "jar-template" && timeout !== undefined;
     for (let step = 0; step < MAX_MOTION_STEPS; step++) {
-      if (timeout !== undefined && step * SIMULATION_TIME_STEP * 1000 >= timeout) {
+      const elapsedMs = step * (SIMULATION_TIME_STEP * 1000);
+      // JAR checks the timeout after strictly more than the configured time.
+      if (timeout !== undefined && (hasJarTimeout ? elapsedMs > timeout : elapsedMs >= timeout)) {
         result = { outcome: "missed" };
         break;
       }
@@ -206,7 +215,8 @@ export function simulatePlanningRoute(
         }
         break;
       }
-      if (movement.length === STANDSTILL_WINDOW && moved < 0.05 && turned < Math.PI / 720) {
+      // With a JAR timeout set, a stopped robot still waits for its PID exit.
+      if (!hasJarTimeout && movement.length === STANDSTILL_WINDOW && moved < 0.05 && turned < Math.PI / 720) {
         result = { outcome: "stalled" };
         break;
       }

@@ -4256,6 +4256,38 @@ body:not(.mode-planning) #rightPlanning {
   font-size: 12px;
 }
 
+.planWaypointTimeouts,
+.planWaypointTimeoutFields {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 12px;
+}
+
+.planWaypointTimeoutFields label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.planWaypointTimeoutInput {
+  width: 62px;
+  min-height: 32px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  appearance: textfield;
+}
+
+.planWaypointTimeoutInput::-webkit-inner-spin-button,
+.planWaypointTimeoutInput::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .planMotionSwap {
   display: grid;
   place-items: center;
@@ -4519,7 +4551,7 @@ body:not(.mode-planning) #rightPlanning {
 }
 
 @media (pointer: coarse) {
-  .planMotionChoice, .planMotionSwap {
+  .planMotionChoice, .planMotionSwap, .planWaypointTimeoutInput {
     min-height: 44px;
   }
   .planMotionSwap {

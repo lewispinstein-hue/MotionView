@@ -3,12 +3,13 @@ import type { PlanMotionTemplates, PlanWaypointIndicatorIcon, PlanWaypointMotion
 import type { PlanningDom } from "../PlanningDom";
 import { createWaypointIndicatorIcon, getWaypointIndicatorTooltip } from "../planningIndicators";
 import { createDefaultMotionTemplates, MAX_WAYPOINT_MOTIONS, PLANNING_MOTION_TYPES } from "../planningMotions";
-import { PlanningMotionSelection } from "../planningMotionSelection";
+import { PlanningMotionSelection, type PlanningMotionDraft } from "../planningMotionSelection";
 import { PlanningMotionCodeEditor } from "./PlanningMotionCodeEditor";
 import {
   editPlanningMotionTemplate,
   editPlanningSwingDriveSide,
   isPlanningTemplateLibrary,
+  LEMLIB_PLANNING_TIMEOUT_MS,
   normalizePlanningTemplateConfiguration,
   type PlanningTemplateConfiguration,
   type PlanningTemplateLibrary,
@@ -38,6 +39,8 @@ export interface PlanningMotionEditorResult {
 }
 
 const MOTIONS = PLANNING_MOTION_TYPES;
+const MIN_TIMEOUT_MS = 100;
+const MAX_TIMEOUT_MS = 10_000;
 
 /** Owns motion selection and code drafts until Confirm. */
 export class PlanningMotionEditorView {
@@ -49,6 +52,7 @@ export class PlanningMotionEditorView {
   #selectedId: string | null = null;
   #forwards = true;
   #selectedTemplate: PlanWaypointIndicatorIcon = "forward";
+  readonly #timeoutDrafts = new Map<string, number>();
   readonly #codePreview: PlanningMotionCodeEditor;
 
 
@@ -132,6 +136,7 @@ export class PlanningMotionEditorView {
     this.#mode = null;
     this.#selection = null;
     this.#templateConfiguration = null;
+    this.#timeoutDrafts.clear();
     this.dom.templateLibrary.hidden = true;
     this.dom.swingDriveSideFields.hidden = true;
     this.dom.motionPreview.replaceChildren();
@@ -266,6 +271,55 @@ export class PlanningMotionEditorView {
       }
       this.dom.motionPreview.appendChild(side);
     }
+    if (this.#waypointLibrary === "lemlib")
+      this.dom.motionPreview.appendChild(this.createTimeoutRow(selection.motions));
+  }
+
+  private createTimeoutRow(motions: readonly Readonly<PlanningMotionDraft>[]): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "planWaypointDirection planWaypointTimeouts";
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", "Timeouts");
+    row.title = "Timeout edits are kept only while this dialog is open.";
+    const heading = document.createElement("span");
+    heading.className = "planWaypointDirectionLabel";
+    heading.textContent = "Timeouts";
+    row.appendChild(heading);
+
+    const fields = document.createElement("div");
+    fields.className = "planWaypointTimeoutFields";
+    for (const { id, type } of motions) {
+      const name = MOTIONS.find((entry) => entry.type === type)!.name;
+      const defaultTimeout = LEMLIB_PLANNING_TIMEOUT_MS[type];
+      const label = document.createElement("label");
+      label.textContent = name;
+      const input = document.createElement("input");
+      input.className = "settingsInput planWaypointTimeoutInput";
+      input.type = "number";
+      input.inputMode = "numeric";
+      input.min = String(MIN_TIMEOUT_MS);
+      input.max = String(MAX_TIMEOUT_MS);
+      input.step = "1";
+      input.value = String(this.#timeoutDrafts.get(id) ?? defaultTimeout);
+      input.placeholder = String(defaultTimeout);
+      input.setAttribute("aria-label", `${name} timeout in milliseconds`);
+      input.addEventListener("input", () => {
+        const value = input.valueAsNumber;
+        if (Number.isFinite(value)) {
+          const bounded = Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, Math.round(value)));
+          this.#timeoutDrafts.set(id, bounded);
+        } else {
+          this.#timeoutDrafts.delete(id);
+        }
+      });
+      input.addEventListener("blur", () => {
+        input.value = String(this.#timeoutDrafts.get(id) ?? defaultTimeout);
+      });
+      label.appendChild(input);
+      fields.appendChild(label);
+    }
+    row.appendChild(fields);
+    return row;
   }
 
   private createDirectionToggle(): HTMLElement {

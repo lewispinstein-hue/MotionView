@@ -1,6 +1,6 @@
 import type { PlanningFeature } from "../PlanningFeature";
 import { getCurrentUnits } from "../../shared/units";
-import { applyPlanningLibraryPreset, normalizePlanningMotorWatts, PLANNING_MOTOR_WATTS, PLANNING_SIMULATION_MODELS,
+import { applyPlanningLibraryPreset, normalizePlanningMotorWatts, JAR_TIMEOUT_LIMITS_MS, PLANNING_MOTOR_WATTS, PLANNING_SIMULATION_MODELS,
   type PlanningControllerModel, type PlanningPIDRole, type PlanningSimulationConfiguration,
   type PlanningSimulationLibrary } from "../planningSimulationConfiguration";
 import { simulationInputNumber, simulationInputUnit, type SimulationInputDimension } from "./planningSimulationInputUnits";
@@ -28,6 +28,11 @@ const LIBRARY_FIELDS: readonly NumberField[] = [
   { key: "vexTurnConstant", label: "Turn constant", min: .01, max: 10, model: "vexcode" },
   { key: "vexTurnThreshold", label: "Turn threshold (°)", min: .1, max: 15, model: "vexcode" },
 ];
+const JAR_TIMEOUT_FIELDS: readonly NumberField[] = [
+  { key: "jarDriveTimeoutMs", label: "Drive timeout", ...JAR_TIMEOUT_LIMITS_MS },
+  { key: "jarTurnTimeoutMs", label: "Turn timeout", ...JAR_TIMEOUT_LIMITS_MS },
+  { key: "jarSwingTimeoutMs", label: "Swing timeout", ...JAR_TIMEOUT_LIMITS_MS },
+];
 const PID_ROWS: readonly [PlanningPIDRole, string, readonly PlanningControllerModel[]][] = [
   ["lateralPID", "Linear PID", ["lemlib", "ez-template", "jar-template"]], ["angularPID", "Angular PID", ["lemlib"]],
   ["pointSteeringPID", "Point steering PID", ["ez-template", "jar-template"]], ["boomerangSteeringPID", "Boomerang steering PID", ["ez-template"]],
@@ -43,6 +48,7 @@ export class PlanningSimulationSettingsView {
   #preset!: HTMLSelectElement;
   #model!: HTMLSelectElement;
   #customDescription!: HTMLParagraphElement;
+  #jarTimeoutSettings!: HTMLDivElement;
   constructor(private readonly planning: PlanningFeature, private readonly content: HTMLElement) {}
   bind(): void {
     this.build(); this.render(true);
@@ -57,6 +63,7 @@ export class PlanningSimulationSettingsView {
     this.#units = units;
     this.#preset.value = config.library; this.#model.value = config.previewModel;
     this.#model.disabled = config.library !== "custom";
+    this.#jarTimeoutSettings.hidden = config.previewModel !== "jar-template";
     this.#customDescription.hidden = !["custom", "jar-template", "vexcode"].includes(config.previewModel);
     this.#customDescription.textContent = config.previewModel === "jar-template"
       ? "JAR uses voltage-based Linear, Heading, Turn and Swing PID gains. Travel direction is chosen automatically. Preview follows JAR's target-plane and settling rules."
@@ -128,8 +135,17 @@ export class PlanningSimulationSettingsView {
     this.group("Library tuning");
     const library = this.grid(); this.content.appendChild(library);
     for (const field of LIBRARY_FIELDS) this.addField(library, field);
+    this.#jarTimeoutSettings = document.createElement("div");
+    this.group("JAR-Template timeouts (ms)", this.#jarTimeoutSettings);
+    const timeouts = this.grid();
+    for (const field of JAR_TIMEOUT_FIELDS) this.addField(timeouts, field);
+    const timeoutHint = document.createElement("p");
+    timeoutHint.className = "settingsDescription";
+    timeoutHint.textContent = "Drive timeout applies to Straight and Boomerang. Use 0 to disable a timeout.";
+    this.#jarTimeoutSettings.append(timeouts, timeoutHint);
+    this.content.appendChild(this.#jarTimeoutSettings);
     const note = document.createElement("p"); note.className = "settingsDescription";
-    note.textContent = "Presets reset library tuning while preserving robot specifications and every PID value. Physical assumptions and stopping rules use built-in defaults. These settings do not change exported code.";
+    note.textContent = "Presets reset library tuning while preserving robot specifications and every PID value. Physical assumptions and settling rules use built-in defaults. These settings do not change exported code.";
     this.content.appendChild(note);
   }
   private commit(key: string, input: HTMLInputElement): void {
@@ -163,7 +179,7 @@ export class PlanningSimulationSettingsView {
     label.append(name, input); parent.appendChild(label); this.#inputs.set(key, input);
   }
   private grid(): HTMLElement { const grid = document.createElement("div"); grid.className = "planSimulationFields"; return grid; }
-  private group(title: string): void { const h = document.createElement("h4"); h.textContent = title; this.content.appendChild(h); }
+  private group(title: string, parent = this.content): void { const h = document.createElement("h4"); h.textContent = title; parent.appendChild(h); }
   private select(parent: HTMLElement, title: string, values: readonly (readonly [string, string])[]): HTMLSelectElement {
     const label = document.createElement("label"); label.className = "planSimulationField"; label.textContent = title;
     const select = document.createElement("select"); select.className = "settingsSelect";
