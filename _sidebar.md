@@ -7,8 +7,9 @@
     - [Settings](/docs/MotionView/ViewingMode/Settings.md)
   - Planning Mode
     - [Planning Mode](/docs/MotionView/PlanningMode/PlanningMode)
-    - [Planning Mode Template](/docs/MotionView/PlanningMode/PlanningExportTemplate.md)
-    - [Planning Simulator](/docs/MotionView/PlanningMode/PlanningSimulatorSetup.md)
+    - [Export Template](/docs/MotionView/PlanningMode/PlanningExportTemplate.md)
+    - [Simulator Setup](/docs/MotionView/PlanningMode/PlanningSimulatorSetup.md)
+    - [Simulator](/docs/MotionView/PlanningMode/PlanningSimulator.md)
   - [Keybinds](/docs/MotionView/Keybinds.md)
   - Setup
     - [Installing on macOS](/docs/MotionView/InstallingMacOS.md)
