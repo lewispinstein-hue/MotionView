@@ -371,6 +371,7 @@ export class PlanningFieldView {
       }
       if (!this.planning.selection.isWaypointSelected(hit))
         this.planning.selection.selectWaypoint(hit);
+      else this.planning.playback.inspectWaypoint(hit);
       const world = this.field.screenToWorld(point.x, point.y);
       this.#dragStart = world;
       this.#dragStartScreen = point;
